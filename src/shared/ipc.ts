@@ -17,6 +17,9 @@ export const IPC = {
   captureStatus: "capture:status",
   /** renderer → main: names seen before, for attendee autocomplete. */
   attendeesList: "attendees:list",
+  /** renderer → main: window buttons in the title bar we draw ourselves. */
+  windowMinimise: "window:minimise",
+  windowToggleMaximise: "window:toggle-maximise",
 } as const;
 
 export interface ShowPayload {
@@ -55,6 +58,8 @@ export interface CaptureApi {
   painted: (token: number) => void;
   change: (payload: CapturePayload) => void;
   close: () => void;
+  minimise: () => void;
+  toggleMaximise: () => void;
   knownAttendees: () => Promise<string[]>;
 }
 

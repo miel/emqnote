@@ -3,6 +3,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { LinkPrompt } from "./LinkPrompt.js";
+import { TitleBar } from "./TitleBar.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
 
@@ -20,12 +21,14 @@ export function Capture(): React.ReactElement {
     lastLatencyMs: null,
     savedAs: null,
   });
-  const [linkOpen, setLinkOpen] = useState(false);
+  const [link, setLink] = useState<{ href: string } | null>(null);
   const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
 
-  // Held in a ref so the debounced sender never closes over a stale header.
+  // Held in refs so the listeners below never close over stale values.
   const headerRef = useRef(header);
   headerRef.current = header;
+  const linkOpenRef = useRef(false);
+  linkOpenRef.current = link !== null;
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,7 +81,7 @@ export function Capture(): React.ReactElement {
     const stopReset = window.emqnote.onReset(() => {
       editor.current?.reset();
       setHeader(freshHeader());
-      setLinkOpen(false);
+      setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
       void window.emqnote.knownAttendees().then(setKnownAttendees);
     });
@@ -95,6 +98,10 @@ export function Capture(): React.ReactElement {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const mod = event.metaKey || event.ctrlKey;
+
+      // While the link box is open it owns the keyboard. Otherwise Ctrl+Shift+G threw
+      // focus back into the note and left the box hanging there.
+      if (linkOpenRef.current) return;
 
       // Ctrl+Enter saves and closes, the same gesture that sends a message in
       // Outlook. Escape used to do this and should not: it is reflexive, and a note is
@@ -125,6 +132,8 @@ export function Capture(): React.ReactElement {
 
   return (
     <div className="window">
+      <TitleBar onClose={() => window.emqnote.close()} />
+
       <HeaderBlock
         values={header}
         onChange={onHeaderChange}
@@ -135,19 +144,19 @@ export function Capture(): React.ReactElement {
       <Editor
         ref={editor}
         onChange={onDocChange}
-        onLinkRequested={() => {
-          if (editor.current?.hasSelection() === true) setLinkOpen(true);
-        }}
+        onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
       />
 
-      {linkOpen && (
+      {link !== null && (
         <LinkPrompt
+          initialHref={link.href}
           onApply={(href) => {
             editor.current?.applyLink(href);
-            setLinkOpen(false);
+            setLink(null);
+            editor.current?.focus();
           }}
           onCancel={() => {
-            setLinkOpen(false);
+            setLink(null);
             editor.current?.focus();
           }}
         />

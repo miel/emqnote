@@ -43,12 +43,25 @@ export function outlookKeymap(openLinkPrompt: () => void): Record<string, Comman
     "Mod-Shift-l": toggleBulletList,
     "Mod-Shift-o": toggleOrderedList,
 
+    // Word uses Ctrl+Alt+1/2/3 for headings, but on Windows Ctrl+Alt *is* AltGr, and
+    // on a Dutch layout that combination types characters instead. Ctrl+1..6 is the
+    // reliable form; the Word bindings stay as aliases for the muscle memory.
+    "Mod-1": setHeading(1),
+    "Mod-2": setHeading(2),
+    "Mod-3": setHeading(3),
+    "Mod-4": setHeading(4),
+    "Mod-5": setHeading(5),
+    "Mod-6": setHeading(6),
     "Mod-Alt-1": setHeading(1),
     "Mod-Alt-2": setHeading(2),
     "Mod-Alt-3": setHeading(3),
     "Mod-Alt-4": setHeading(4),
     "Mod-Alt-5": setHeading(5),
     "Mod-Alt-6": setHeading(6),
+
+    // Ctrl+Shift+N is Chromium's "new incognito window" and never reaches the page.
+    // Ctrl+0 reads as "heading zero" and is free.
+    "Mod-0": setParagraph,
     "Mod-Shift-n": setParagraph,
 
     "Mod-m": indent,

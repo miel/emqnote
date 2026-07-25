@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
-import { applyLink } from "./commands.js";
+import { applyLink, linkAt, selectLink } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
 
 export interface EditorHandle {
@@ -9,7 +9,14 @@ export interface EditorHandle {
   /** Clears the document. Called on hide, never on show — see the note below. */
   reset: () => void;
   getDoc: () => PMNode | null;
-  hasSelection: () => boolean;
+  /**
+   * Prepares a link edit and reports the address already there.
+   *
+   * Returns null when there is nothing to link: no selection and no link at the caret.
+   * When the caret sits inside a link, the whole link is selected first, so applying
+   * the new address replaces all of it rather than splitting it in two.
+   */
+  beginLinkEdit: () => { href: string } | null;
   applyLink: (href: string) => void;
 }
 
@@ -75,9 +82,17 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       );
     },
     getDoc: () => view.current?.state.doc ?? null,
-    hasSelection: () => {
+    beginLinkEdit: () => {
       const current = view.current;
-      return current !== null && !current.state.selection.empty;
+      if (current === null) return null;
+
+      const existing = linkAt(current.state);
+      if (existing !== null) {
+        selectLink(existing)(current.state, current.dispatch);
+        return { href: existing.href };
+      }
+
+      return current.state.selection.empty ? null : { href: "" };
     },
     applyLink: (href: string) => {
       const current = view.current;

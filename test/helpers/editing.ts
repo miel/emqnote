@@ -61,6 +61,29 @@ export function stateSelecting(markdown: string, needle: string): EditorState {
   });
 }
 
+/**
+ * A state whose caret sits on an empty paragraph directly after the given markdown —
+ * exactly where you land after pressing Enter twice to leave a list.
+ */
+export function stateOnEmptyLineAfter(markdown: string): EditorState {
+  const parsed = docFromMarkdown(markdown);
+  const blocks: PMNode[] = [];
+  parsed.forEach((child) => blocks.push(child));
+  blocks.push(schema.nodes.paragraph!.create());
+
+  const doc = schema.nodes.doc!.create(null, blocks);
+  return EditorState.create({
+    schema,
+    doc,
+    selection: TextSelection.create(doc, doc.content.size - 1),
+  });
+}
+
+/** Types text at the caret, so a command's result can be filled in and inspected. */
+export function type(state: EditorState, text: string): EditorState {
+  return state.apply(state.tr.insertText(text));
+}
+
 export function run(state: EditorState, command: Command): EditorState {
   let next = state;
   command(state, (transaction) => {

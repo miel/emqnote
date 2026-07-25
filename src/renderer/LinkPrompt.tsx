@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 interface Props {
+  /** The address already on this link, empty when creating a new one. */
+  initialHref: string;
   onApply: (href: string) => void;
   onCancel: () => void;
 }
@@ -12,9 +14,9 @@ interface Props {
  * interruption this app exists to avoid. Type, press Enter, carry on. An empty value
  * removes the link again.
  */
-export function LinkPrompt({ onApply, onCancel }: Props): React.ReactElement {
+export function LinkPrompt({ initialHref, onApply, onCancel }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
-  const [href, setHref] = useState("");
+  const [href, setHref] = useState(initialHref);
 
   useEffect(() => {
     input.current?.focus();
@@ -23,7 +25,7 @@ export function LinkPrompt({ onApply, onCancel }: Props): React.ReactElement {
 
   return (
     <div className="link-prompt">
-      <label htmlFor="link-href">Link</label>
+      <label htmlFor="link-href">{initialHref === "" ? "Link" : "Edit link"}</label>
       <input
         id="link-href"
         ref={input}
@@ -31,6 +33,10 @@ export function LinkPrompt({ onApply, onCancel }: Props): React.ReactElement {
         placeholder="https://…  (empty removes the link)"
         onChange={(event) => setHref(event.target.value)}
         onKeyDown={(event) => {
+          // The prompt owns the keyboard while it is open; nothing here should reach
+          // the note underneath.
+          event.stopPropagation();
+
           if (event.key === "Enter") {
             event.preventDefault();
             onApply(href.trim());

@@ -88,6 +88,62 @@ function wrap(mark: Mark, children: ExtPhrasing[]): ExtPhrasing {
   }
 }
 
+function textValue(node: ExtPhrasing | undefined): string | null {
+  return node !== undefined && node.type === "text"
+    ? (node as { value: string }).value
+    : null;
+}
+
+/**
+ * Moves whitespace out from under a mark before wrapping.
+ *
+ * Markdown emphasis cannot start or end on a space: `**Havinga **` is not bold at all.
+ * mdast-util-to-markdown works around that by writing `**Havinga&#x20;**`, and then
+ * has to encode the character that follows too — which is where
+ * `> **Havinga&#x20;**&#x69;s a bullet list` came from. Both are correct markdown and
+ * both are unreadable.
+ *
+ * Selecting a word by double-clicking usually takes the trailing space with it, so
+ * this is not an edge case; it is what happens when you bold a word with the mouse.
+ * The space belongs outside the emphasis, where it reads as what it is.
+ */
+function wrapWithoutEdgeWhitespace(mark: Mark, inner: ExtPhrasing[]): ExtPhrasing[] {
+  // Inline code is literal: its content must survive exactly as typed.
+  if (mark.type.name === "code" || inner.length === 0) return [wrap(mark, inner)];
+
+  const children = [...inner];
+  const before: ExtPhrasing[] = [];
+  const after: ExtPhrasing[] = [];
+
+  const first = textValue(children[0]);
+  if (first !== null) {
+    const leading = first.length - first.trimStart().length;
+    if (leading > 0) {
+      before.push({ type: "text", value: first.slice(0, leading) } as PhrasingContent);
+      children[0] = {
+        type: "text",
+        value: first.slice(leading),
+      } as PhrasingContent;
+    }
+  }
+
+  const lastIndex = children.length - 1;
+  const last = textValue(children[lastIndex]);
+  if (last !== null) {
+    const trimmed = last.trimEnd();
+    if (trimmed.length < last.length) {
+      after.push({ type: "text", value: last.slice(trimmed.length) } as PhrasingContent);
+      children[lastIndex] = { type: "text", value: trimmed } as PhrasingContent;
+    }
+  }
+
+  // The mark covered nothing but whitespace; there is no emphasis to write.
+  const remaining = children.filter((child) => textValue(child) !== "");
+  if (remaining.length === 0) return [...before, ...after];
+
+  return [...before, wrap(mark, remaining), ...after];
+}
+
 function inlineToMdast(nodes: PMNode[], active: Mark[]): ExtPhrasing[] {
   const result: ExtPhrasing[] = [];
   let index = 0;
@@ -125,9 +181,8 @@ function inlineToMdast(nodes: PMNode[], active: Mark[]): ExtPhrasing[] {
     let end = index;
     while (end < nodes.length && hasMark(nodes[end]!, outermost)) end += 1;
 
-    result.push(
-      wrap(outermost, inlineToMdast(nodes.slice(index, end), [...active, outermost])),
-    );
+    const inner = inlineToMdast(nodes.slice(index, end), [...active, outermost]);
+    result.push(...wrapWithoutEdgeWhitespace(outermost, inner));
     index = end;
   }
 
@@ -271,8 +326,37 @@ function blockToMdast(node: PMNode): RootContent | null {
   }
 }
 
+/**
+ * Does this node hold anything worth writing?
+ *
+ * Text counts, and so does anything atomic — an image or an attachment has no text but
+ * is certainly content.
+ */
+function hasContent(node: PMNode): boolean {
+  if (node.textContent.trim() !== "") return true;
+
+  let found = false;
+  node.descendants((child) => {
+    if (found) return false;
+    if (child.isAtom && !child.isText) found = true;
+    return !found;
+  });
+  return found;
+}
+
+/**
+ * A list in which every item is empty is left over from editing, not something anyone
+ * typed. Writing it out produces a lone `1)` in the file — with that marker rather than
+ * `1.` because mdast alternates markers to keep two adjacent lists apart, which makes
+ * the artefact look even stranger than it is.
+ */
+function isEmptyList(node: PMNode): boolean {
+  return LIST_TYPES.has(node.type.name) && !hasContent(node);
+}
+
 function blocksToMdast(nodes: PMNode[]): RootContent[] {
   return nodes
+    .filter((node) => !isEmptyList(node))
     .map((node) => blockToMdast(node))
     .filter((node): node is RootContent => node !== null);
 }

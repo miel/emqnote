@@ -5,6 +5,7 @@ import { knownAttendees, rememberAttendees } from "./attendees.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
   createCaptureWindow,
+  getCaptureWindow,
   hideCaptureWindow,
   sendStatus,
   setBlurHandler,
@@ -212,6 +213,15 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.captureClose, () => {
     hideCaptureWindow();
+  });
+
+  ipcMain.on(IPC.windowMinimise, () => getCaptureWindow()?.minimize());
+
+  ipcMain.on(IPC.windowToggleMaximise, () => {
+    const target = getCaptureWindow();
+    if (target === undefined || target === null) return;
+    if (target.isMaximized()) target.unmaximize();
+    else target.maximize();
   });
 
   ipcMain.handle(IPC.attendeesList, () => knownAttendees());

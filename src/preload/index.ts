@@ -7,7 +7,7 @@ import {
 } from "../shared/ipc.js";
 
 /**
- * The renderer gets exactly these seven things and nothing else. The sandbox stays on
+ * The renderer gets exactly these nine things and nothing else. The sandbox stays on
  * and contextIsolation stays on; there is no reason a note window should be able to
  * reach Node.
  */
@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   painted: (token: number) => ipcRenderer.send(IPC.capturePainted, token),
   change: (payload: CapturePayload) => ipcRenderer.send(IPC.captureChange, payload),
   close: () => ipcRenderer.send(IPC.captureClose),
+  minimise: () => ipcRenderer.send(IPC.windowMinimise),
+  toggleMaximise: () => ipcRenderer.send(IPC.windowToggleMaximise),
   knownAttendees: () => ipcRenderer.invoke(IPC.attendeesList) as Promise<string[]>,
 });

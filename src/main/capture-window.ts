@@ -25,7 +25,9 @@ export function createCaptureWindow(): BrowserWindow {
     show: false,
     frame: false,
     resizable: true,
-    skipTaskbar: true,
+    // The note window belongs in Alt+Tab. It stays open until dismissed, so treating
+    // it as a transient popup that cannot be switched back to was simply wrong.
+    skipTaskbar: false,
     // Not always on top. The window stays open until you dismiss it, so pinning it
     // above everything else would mean it permanently covers whatever you switch to.
     alwaysOnTop: false,

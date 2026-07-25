@@ -50,6 +50,16 @@ export function HeaderBlock({
   const [editingTime, setEditingTime] = useState(false);
   const timeInput = useRef<HTMLInputElement>(null);
 
+  /**
+   * The attendee field keeps its own raw text while you type.
+   *
+   * It used to derive its value from the array on every keystroke, which meant a space
+   * or a comma was parsed away the instant it was typed: "Jan" + space became ["Jan"]
+   * became "Jan", with the space gone. Two names could never be entered at all. The
+   * text is only split into names when the field is left.
+   */
+  const [attendeeText, setAttendeeText] = useState<string | null>(null);
+
   useEffect(() => {
     if (editingTime) timeInput.current?.focus();
   }, [editingTime]);
@@ -60,11 +70,25 @@ export function HeaderBlock({
 
   const isMeeting = values.kind === "meeting";
 
-  // Enter and Tab both move on into the note; the header should never be a place you
-  // get stuck when all you want is to type.
+  // Comma and semicolon both separate; Outlook uses semicolons, so fingers expect it.
+  const parseAttendees = (text: string): string[] =>
+    text
+      .split(/[,;]/)
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+
+  const commitAttendees = (): void => {
+    if (attendeeText === null) return;
+    set("attendees", parseAttendees(attendeeText));
+    setAttendeeText(null);
+  };
+
+  // Enter moves on into the note; the header should never be a place you get stuck
+  // when all you want is to type.
   const leaveOnEnter = (event: React.KeyboardEvent): void => {
     if (event.key === "Enter") {
       event.preventDefault();
+      commitAttendees();
       onLeave();
     }
   };
@@ -135,18 +159,11 @@ export function HeaderBlock({
           />
           <input
             className="attendees"
-            placeholder="Attendees, comma separated"
+            placeholder="Attendees, separated by , or ;"
             list="known-attendees"
-            value={values.attendees.join(", ")}
-            onChange={(event) =>
-              set(
-                "attendees",
-                event.target.value
-                  .split(",")
-                  .map((name) => name.trim())
-                  .filter((name) => name !== ""),
-              )
-            }
+            value={attendeeText ?? values.attendees.join(", ")}
+            onChange={(event) => setAttendeeText(event.target.value)}
+            onBlur={commitAttendees}
             onKeyDown={leaveOnEnter}
           />
           <datalist id="known-attendees">

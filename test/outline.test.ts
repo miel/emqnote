@@ -6,7 +6,14 @@ import {
   toggleBulletList,
   toggleOrderedList,
 } from "../src/renderer/editor/commands.js";
-import { markdownOf, pressEnter, run, stateAt } from "./helpers/editing.js";
+import {
+  markdownOf,
+  pressEnter,
+  run,
+  stateAt,
+  stateOnEmptyLineAfter,
+  type,
+} from "./helpers/editing.js";
 
 /**
  * The acceptance criterion of phase 2, and the reason the project exists.
@@ -31,6 +38,32 @@ describe("Tab and Shift+Tab", () => {
   it("does nothing at the first item, which has nothing to nest under", () => {
     const state = stateAt("- One\n- Two\n", "On");
     expect(markdownOf(run(state, tabIndent))).toBe("- One\n- Two\n");
+  });
+
+  it("always consumes the key inside a list, even when it cannot indent", () => {
+    // Pressing Tab twice used to walk the caret out of the note and into the header
+    // fields: the second press failed, returned false, and the browser moved focus.
+    let consumed = false;
+    const state = stateAt("- One\n- Two\n", "On");
+    consumed = tabIndent(state, () => {});
+    expect(consumed).toBe(true);
+
+    consumed = tabOutdent(stateAt("Gewone alinea\n", "alinea"), () => {});
+    expect(consumed).toBe(true);
+  });
+
+  it("indents an empty line after a list into that list item", () => {
+    // Finish a bullet, press Enter twice to leave the list, then Tab: the paragraph
+    // belongs under that bullet. That is the "paragraph indented beneath a bullet"
+    // shape the design document calls the ordinary way work notes are written, and
+    // there was simply no key for it.
+    let state = stateOnEmptyLineAfter("- Budget is akkoord\n");
+    state = run(state, tabIndent);
+    state = type(state, "Bevestigd door Els.");
+
+    expect(markdownOf(state)).toBe(
+      "- Budget is akkoord\n\n  Bevestigd door Els.\n",
+    );
   });
 
   it("still works six levels down", () => {
