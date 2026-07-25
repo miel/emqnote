@@ -85,8 +85,12 @@ export async function runSelfTest(rounds: number): Promise<void> {
     missed,
     p50: Number(result.p50.toFixed(1)),
     p95: Number(result.p95.toFixed(1)),
+    p99: Number(result.p99.toFixed(1)),
     max: Number(result.max.toFixed(1)),
     withinBudget: result.withinBudget,
+    // Where the slow ones sat. A stall in round 1 is warm-up; a stall in round 37 is
+    // something happening on the machine, and the difference decides what to do next.
+    worst: result.worst,
     savedAs: saved,
   };
 
@@ -110,7 +114,8 @@ export async function runSelfTest(rounds: number): Promise<void> {
     detail:
       `p50 ${result.p50.toFixed(0)} ms\n` +
       `p95 ${result.p95.toFixed(0)} ms\n` +
-      `max ${result.max.toFixed(0)} ms\n` +
+      `p99 ${result.p99.toFixed(0)} ms\n` +
+      `slowest: ${result.worst.map((o) => `round ${o.round} at ${o.ms} ms`).join(", ")}\n` +
       `missed ${missed}\n` +
       `note written: ${saved ?? "no"}\n\n` +
       `Full result: ${resultFile}`,
@@ -166,6 +171,26 @@ const TYPE_SCRIPT = `
   })()
 `;
 
+/**
+ * Waits for the note to appear rather than sleeping a fixed amount.
+ *
+ * The write is debounced and queued, so how long it takes depends on the machine. A
+ * fixed wait passed at ten rounds and failed at fifty, which is the worst kind of test:
+ * one that reports a problem that is not there.
+ */
+async function waitForNote(inbox: string, timeoutMs: number): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    const found = existsSync(inbox)
+      ? readdirSync(inbox).filter((name) => name.endsWith(".md"))
+      : [];
+
+    if (found.length > 0 || Date.now() > deadline) return found;
+    await sleep(100);
+  }
+}
+
 async function typeSampleNote(window: BrowserWindow): Promise<string> {
   const result = (await window.webContents.executeJavaScript(TYPE_SCRIPT)) as string;
   await sleep(400);
@@ -200,12 +225,9 @@ async function captureRealNote(): Promise<string | null> {
   console.log(`--- editor content after typing ---\n${typed}`);
 
   hideCaptureWindow();
-  await sleep(900);
 
   const inbox = join(vault, INBOX);
-  const written = existsSync(inbox)
-    ? readdirSync(inbox).filter((name) => name.endsWith(".md"))
-    : [];
+  const written = await waitForNote(inbox, 4000);
 
   if (written.length !== 1) {
     console.error(`[selftest] expected one note in the Inbox, found ${written.length}`);

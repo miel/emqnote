@@ -103,16 +103,23 @@ export function showCaptureWindow(): void {
   }
 
   // Windows will not let a background process take the foreground on request. Raising
-  // the window as always-on-top and dropping that again a moment later is the standard
-  // way around it, without leaving the window pinned above everything afterwards.
-  target.setAlwaysOnTop(true);
-  target.show();
-  target.moveTop();
-  target.focus();
-  setTimeout(() => {
-    if (!target.isDestroyed()) target.setAlwaysOnTop(false);
-  }, 250);
+  // the window as always-on-top wins that argument; the flag is dropped again as soon
+  // as the window actually has focus, so it does not stay pinned above everything.
+  //
+  // This used to be cleared on a 250 ms timer, which was worse than it looked: the
+  // window is shown far more often than every 250 ms, so a timer from one appearance
+  // would fire during the next and fight it. That is the most likely explanation for
+  // the one 814 ms outlier in an otherwise flat run of fifty. An event beats a guess.
+  if (!target.isVisible()) {
+    target.setAlwaysOnTop(true);
+    target.once("focus", () => {
+      if (!target.isDestroyed()) target.setAlwaysOnTop(false);
+    });
+    target.show();
+    target.moveTop();
+  }
 
+  target.focus();
   target.webContents.send(IPC.captureShow, { token } satisfies ShowPayload);
 }
 

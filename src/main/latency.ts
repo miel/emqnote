@@ -64,13 +64,22 @@ async function log(at: Date, elapsedMs: number): Promise<void> {
   }
 }
 
+export interface Outlier {
+  /** Which appearance this was, counting from one. */
+  round: number;
+  ms: number;
+}
+
 export interface LatencyStats {
   count: number;
   p50: number;
   p95: number;
+  p99: number;
   max: number;
   last: number | null;
   withinBudget: boolean;
+  /** The slowest few, with their position — a stall in round 1 means something else than one in round 37. */
+  worst: Outlier[];
 }
 
 function percentile(sorted: number[], fraction: number): number {
@@ -82,13 +91,21 @@ function percentile(sorted: number[], fraction: number): number {
 export function stats(): LatencyStats {
   const sorted = [...samples].sort((a, b) => a - b);
   const p95 = percentile(sorted, 0.95);
+
+  const worst = samples
+    .map((ms, index) => ({ round: index + 1, ms: Number(ms.toFixed(1)) }))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, 3);
+
   return {
     count: samples.length,
     p50: percentile(sorted, 0.5),
     p95,
+    p99: percentile(sorted, 0.99),
     max: sorted[sorted.length - 1] ?? 0,
     last: samples[samples.length - 1] ?? null,
     withinBudget: samples.length === 0 || p95 <= LATENCY_BUDGET_MS,
+    worst,
   };
 }
 
