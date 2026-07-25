@@ -1,11 +1,11 @@
 /**
- * Schrijft `build/icon.png`, waar electron-builder de .icns en .ico van maakt.
+ * Writes `build/icon.png`, from which electron-builder derives the .icns and .ico.
  *
  *   npm run icons
  *
- * De PNG wordt hier met de hand gecodeerd in plaats van met een beeldbibliotheek. Dat
- * scheelt een afhankelijkheid voor iets wat één keer per project verandert, en het
- * houdt het icoon in de broncode in plaats van als binair bestand in de repository.
+ * The PNG is encoded by hand rather than with an image library. That saves a
+ * dependency for something that changes once per project, and it keeps the icon in
+ * source rather than as a binary file in the repository.
  */
 import { deflateSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -50,13 +50,13 @@ function encodePng(rgba: Uint8Array, size: number): Buffer {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(size, 0);
   header.writeUInt32BE(size, 4);
-  header[8] = 8; // bits per kanaal
-  header[9] = 6; // kleurtype: RGBA
+  header[8] = 8; // bits per channel
+  header[9] = 6; // colour type: RGBA
   header[10] = 0; // deflate
-  header[11] = 0; // standaard filtering
-  header[12] = 0; // niet interlaced
+  header[11] = 0; // default filtering
+  header[12] = 0; // not interlaced
 
-  // Elke rij krijgt een filterbyte; 0 betekent "geen filter".
+  // Every row gets a filter byte; 0 means "no filter".
   const raw = Buffer.alloc(size * (size * 4 + 1));
   for (let row = 0; row < size; row += 1) {
     const target = row * (size * 4 + 1);
@@ -80,4 +80,4 @@ const pixels = drawGlyph(SIZE, { r: 110, g: 168, b: 254 });
 mkdirSync("build", { recursive: true });
 writeFileSync("build/icon.png", encodePng(pixels, SIZE));
 
-console.log(`build/icon.png geschreven (${SIZE}x${SIZE})`);
+console.log(`build/icon.png written (${SIZE}x${SIZE})`);

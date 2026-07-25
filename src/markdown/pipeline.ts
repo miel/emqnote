@@ -7,9 +7,9 @@ import type { Options as StringifyOptions } from "remark-stringify";
 import type { Handle, State, Info } from "mdast-util-to-markdown";
 
 /**
- * Elke schrijfoptie staat hier expliciet, ook waar die toevallig gelijk is aan de
- * standaard. De rondgang moet bytegelijk zijn; een gewijzigde standaardwaarde in een
- * nieuwe versie van remark mag niet stilletjes het hele corpus laten mislukken.
+ * Every write option is spelled out here, including the ones that happen to match the
+ * default. The round trip has to be byte-identical; a changed default in a future
+ * version of remark must not quietly break the whole corpus.
  */
 const STRINGIFY_OPTIONS: StringifyOptions = {
   bullet: "-",
@@ -23,13 +23,13 @@ const STRINGIFY_OPTIONS: StringifyOptions = {
   ruleRepetition: 3,
   ruleSpaces: false,
   setext: false,
-  // 'one' laat de inhoud op de kolom van het opsommingsteken beginnen: 2 spaties na
-  // "- ", 3 na "1. ", 4 na "10. ". Precies wat 03-markdown-dialect.md voorschrijft.
+  // 'one' starts continuation content at the marker's content column: 2 spaces after
+  // "- ", 3 after "1. ", 4 after "10. ". Exactly what 03-markdown-dialect.md requires.
   listItemIndent: "one",
   incrementListMarker: true,
-  // Altijd de [tekst](url)-vorm, ook voor e-mailadressen en kale URL's. Eén vorm voor
-  // elke link is voorspelbaarder dan een mengeling van <url> en [tekst](url), en het
-  // is wat een WYSIWYG-editor sowieso produceert.
+  // Always the [text](url) form, including for email addresses and bare URLs. One form
+  // for every link is more predictable than a mixture of <url> and [text](url), and it
+  // is what a WYSIWYG editor produces anyway.
   resourceLink: true,
   quote: '"',
 };
@@ -69,14 +69,14 @@ const DELIMITER: Record<string, string> = {
 };
 
 /**
- * Eigen tabel-handler in plaats van die van remark-gfm, om twee redenen.
+ * A custom table handler instead of remark-gfm's, for two reasons.
  *
- * De scheidingsrij wordt `---` en niet het minimale `-`, zodat een tabel er hetzelfde
- * uitziet als wat Obsidian en zowat elk ander gereedschap schrijft — anders herschrijft
- * een bezoek aan Obsidian elke tabel in de vault.
+ * The delimiter row becomes `---` rather than the minimal `-`, so a table looks like
+ * what Obsidian and virtually every other tool writes — otherwise a single visit to
+ * Obsidian would rewrite every table in the vault.
  *
- * En cellen worden níét met spaties uitgelijnd op de breedste kolom: dan herschrijft
- * één gewijzigde cel de hele tabel en is de diff onleesbaar.
+ * And cells are not padded to align with the widest column: that way one changed cell
+ * rewrites the entire table and every diff becomes unreadable.
  */
 const table: Handle = (node, _parent, state, info) => {
   const rows = (node as { children: { children: { children: unknown[] }[] }[] }).children;
@@ -89,7 +89,7 @@ const table: Handle = (node, _parent, state, info) => {
     return state
       .containerPhrasing(cell as never, { ...info, before: "|", after: "|" })
       .replace(/\|/g, "\\|")
-      // Een harde regelovergang bestaat in een GFM-cel alleen als <br>.
+      // A hard line break only exists as <br> inside a GFM cell.
       .replace(/\\?\r?\n/g, "<br>");
   };
 
@@ -114,8 +114,8 @@ const table: Handle = (node, _parent, state, info) => {
 
 export const stringifyOptions: StringifyOptions = {
   ...STRINGIFY_OPTIONS,
-  // `Handlers` kent alleen de knooptypen van mdast zelf; onze vier uitbreidingen
-  // bestaan daar per definitie niet in. De cast is precies zo breed als nodig.
+  // `Handlers` only knows mdast's own node types; our four extensions cannot exist
+  // there by definition. The cast is exactly as wide as it needs to be.
   handlers: { underline, highlight, wikiEmbed, wikiLink, table } as StringifyOptions["handlers"],
 };
 
@@ -127,7 +127,7 @@ export const readProcessor = unified()
 
 export const writeProcessor = unified()
   .use(remarkStringify, stringifyOptions)
-  // tablePipeAlign: false houdt tabellen smal — anders herschrijft één gewijzigde cel
-  // de hele tabel en wordt elke diff onleesbaar.
+  // tablePipeAlign: false keeps tables narrow — otherwise one changed cell rewrites the
+  // whole table and every diff becomes unreadable.
   .use(remarkGfm, { tablePipeAlign: false, tableCellPadding: true })
   .freeze();

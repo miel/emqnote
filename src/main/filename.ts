@@ -2,17 +2,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Bestandsnamen volgens 02-technisch-ontwerp.md §4.1.
+ * File names per 02-technisch-ontwerp.md §4.1.
  *
- * De regels zijn streng omdat Windows dat is: tekens die macOS accepteert maken een
- * bestand daar onbereikbaar, en een naam die op een spatie of punt eindigt wordt stil
- * afgekapt. Een notitie die op de Mac prima wordt weggeschreven en op de werkmachine
- * niet te openen is, is een fout die je pas een week later merkt.
+ * The rules are strict because Windows is: characters macOS accepts make a file
+ * unreachable there, and a name ending in a space or a dot is silently truncated. A
+ * note that writes fine on the Mac and cannot be opened on the work machine is the
+ * kind of bug you only notice a week later.
  */
 
 const ILLEGAL = /[\\/:*?"<>|]/g;
 
-/** Namen die Windows voor apparaten gebruikt, met of zonder extensie. */
+/** Names Windows reserves for devices, with or without an extension. */
 const RESERVED = new Set([
   "con", "prn", "aux", "nul",
   "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
@@ -22,8 +22,8 @@ const RESERVED = new Set([
 export const MAX_TITLE_LENGTH = 80;
 
 /**
- * Stuurtekens eruit. Uitgeschreven als lus in plaats van als tekenklasse, zodat er
- * geen onzichtbare bytes in de broncode terechtkomen.
+ * Strip control characters. Written as a loop rather than a character class so that no
+ * invisible bytes end up in the source code.
  */
 function stripControlCharacters(value: string): string {
   let result = "";
@@ -45,20 +45,20 @@ export function sanitiseTitle(title: string): string {
     clean = clean.slice(0, MAX_TITLE_LENGTH).trimEnd();
   }
 
-  // Windows verwijdert een punt of spatie aan het eind zonder iets te zeggen, waarna
-  // het bestand niet meer te vinden is onder de naam die wij denken te hebben gebruikt.
+  // Windows drops a trailing dot or space without saying anything, after which the
+  // file can no longer be found under the name we think we used.
   clean = clean.replace(/[. ]+$/, "");
 
   if (RESERVED.has(clean.toLowerCase())) clean = `${clean}_`;
 
-  return clean === "" ? "Zonder titel" : clean;
+  return clean === "" ? "Untitled" : clean;
 }
 
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-/** `2026-07-25 1432` — sorteert chronologisch in elke bestandsbeheerder. */
+/** `2026-07-25 1432` — sorts chronologically in any file browser. */
 export function timestampPrefix(when: Date): string {
   return (
     `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ` +
@@ -71,9 +71,9 @@ export function noteFileName(title: string, when: Date): string {
 }
 
 /**
- * Zoekt een naam die nog niet bestaat, door er ` (2)`, ` (3)` … achter te zetten.
- * Overschrijven is nooit een optie: twee notities in dezelfde minuut met dezelfde
- * eerste regel is zeldzaam, maar er eentje van kwijtraken is onvergeeflijk.
+ * Finds a name that does not exist yet by appending ` (2)`, ` (3)` and so on.
+ * Overwriting is never an option: two notes in the same minute with the same first
+ * line is rare, but losing one of them is unforgivable.
  */
 export function uniquePath(directory: string, fileName: string): string {
   const candidate = join(directory, fileName);
@@ -88,7 +88,7 @@ export function uniquePath(directory: string, fileName: string): string {
   return join(directory, `${base} (${Date.now()}).md`);
 }
 
-/** ISO 8601 met tijdzone-offset, zoals de frontmatter voorschrijft. */
+/** ISO 8601 with a timezone offset, as the frontmatter spec requires. */
 export function isoWithOffset(when: Date): string {
   const offsetMinutes = -when.getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";

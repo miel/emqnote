@@ -2,20 +2,20 @@ import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 
 /**
- * Alles wordt gebundeld; er hoeft geen node_modules mee.
+ * Everything is bundled; no node_modules needs to ship.
  *
- * Dat houdt de uitgepakte map zelfstandig — precies wat je wilt als je hem via
- * OneDrive naar een werkmachine kopieert waar je niets mag installeren — en het
- * omzeilt de ESM/CJS-resolutie waar remark en prosemirror anders tegenaan lopen.
+ * That keeps the unpacked folder self-contained — exactly what you want when copying
+ * it over OneDrive to a work machine where you cannot install anything — and it side-
+ * steps the ESM/CJS resolution that remark and prosemirror otherwise run into.
  *
- * **Let op:** electron-vite externaliseert standaard álles wat in `dependencies` van
- * package.json staat. Dat is de reden dat die lijst daar leeg is en de bouwpakketten
- * in `devDependencies` staan. `external` hieronder is de tweede grendel op dezelfde
- * deur, en `npm run check:bundle` is de derde: die faalt als er tóch een bare import
- * in de bundel belandt.
+ * **Note:** electron-vite externalises *everything* listed in package.json's
+ * `dependencies` by default. That is why that list is empty and the build packages
+ * live in `devDependencies`. The `external` below is the second lock on the same door,
+ * and `npm run check:bundle` is the third: it fails if a bare import ends up in the
+ * bundle after all.
  *
- * Het preload-script blijft CJS: een sandboxed preload kan geen ESM laden, en de
- * sandbox willen we aan houden.
+ * The preload script stays CJS: a sandboxed preload cannot load ESM, and we want to
+ * keep the sandbox on.
  */
 export default defineConfig({
   main: {

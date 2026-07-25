@@ -4,9 +4,9 @@ import { MARK_NESTING_ORDER } from "./schema.js";
 import type { ExtPhrasing } from "./mdast-ext.js";
 
 /**
- * ProseMirror kent marks als een ongeordende verzameling per tekstknoop; markdown is
- * een boom. Deze module bouwt die boom, met een vaste nestvolgorde
- * (`MARK_NESTING_ORDER`) zodat hetzelfde document altijd dezelfde markdown oplevert.
+ * ProseMirror stores marks as an unordered set per text node; markdown is a tree. This
+ * module builds that tree using a fixed nesting order (`MARK_NESTING_ORDER`), so the
+ * same document always produces the same markdown.
  */
 
 function markPriority(mark: Mark): number {
@@ -95,7 +95,7 @@ function inlineToMdast(nodes: PMNode[], active: Mark[]): ExtPhrasing[] {
       markPriority(mark) < markPriority(best) ? mark : best,
     );
 
-    // Inline-code kan in markdown geen andere opmaak bevatten: de inhoud is letterlijk.
+    // Inline code cannot contain other formatting in markdown: its content is literal.
     if (outermost.type.name === "code") {
       let value = "";
       let end = index;
@@ -133,16 +133,16 @@ function inlineChildren(node: PMNode): PhrasingContent[] {
 const LIST_TYPES = new Set(["bulletList", "orderedList"]);
 
 /**
- * Is dit lijstitem "los" — moeten zijn blokken door lege regels worden gescheiden?
+ * Is this list item "loose" — do its blocks need blank lines between them?
  *
- * CommonMark kent losheid alleen als eigenschap van de brontekst, niet van de
- * documentstructuur, en ProseMirror bewaart die eigenschap niet. De serializer moet
- * hem dus afleiden, en die afleiding is de norm: een item is los zodra het ná de
- * eerste alinea nog iets anders bevat dan een geneste lijst.
+ * CommonMark treats looseness as a property of the source text, not of the document
+ * structure, and ProseMirror does not preserve it. The serializer therefore has to
+ * derive it, and that derivation is the norm: an item is loose as soon as it contains
+ * anything other than a nested list after its first paragraph.
  *
- * Daarmee blijft `- punt` met een sublijst eronder strak — de gewone outline-vorm —
- * terwijl een tweede alinea, tabel of codeblok wél lege regels krijgt, wat markdown
- * op die plek ook echt nodig heeft.
+ * This keeps `- point` with a sublist underneath tight — the ordinary outline shape —
+ * while a second paragraph, table or code block does get blank lines, which markdown
+ * genuinely needs in those positions.
  */
 function isSpreadItem(item: PMNode): boolean {
   const children = childrenOf(item);
@@ -162,8 +162,8 @@ function listToMdast(node: PMNode, ordered: boolean): RootContent {
   const items = childrenOf(node).map(listItemToMdast);
   const spread = items.some((item) => (item as { spread?: boolean }).spread === true);
 
-  // CommonMark kent losheid per lijst, niet per item: is één item los, dan krijgen
-  // alle items lege regels ertussen. Anders is de rondgang niet stabiel.
+  // CommonMark scopes looseness to the list, not the item: if one item is loose, every
+  // item gets blank lines between them. Otherwise the round trip is not stable.
   return {
     type: "list",
     ordered,

@@ -1,9 +1,9 @@
 import type { PhrasingContent } from "mdast";
 
 /**
- * Vier knooptypen die mdast zelf niet kent, maar die in het emqnote-dialect wel bestaan.
- * Ze worden na het parsen toegevoegd (zie `normalizePhrasing`) en bij het schrijven
- * afgehandeld door eigen handlers in de serializer.
+ * Four node types that mdast does not know about, but which do exist in the emqnote
+ * dialect. They are added after parsing (see `normalizePhrasing`) and handled on write
+ * by custom handlers in the serializer.
  */
 
 export interface UnderlineNode {

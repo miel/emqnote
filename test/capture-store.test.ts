@@ -20,8 +20,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe("een capture bewaren", () => {
-  it("schrijft naar de Inbox met het tijdstip in de naam", async () => {
+describe("saving a capture", () => {
+  it("writes to the Inbox with the timestamp in the name", async () => {
     const session = beginSession();
     session.text = "Kickoff project Alpha\n\nEls zit voor.";
 
@@ -35,7 +35,7 @@ describe("een capture bewaren", () => {
     );
   });
 
-  it("levert een notitie op die door de eigen parser wordt herkend", async () => {
+  it("produces a note our own parser recognises", async () => {
     const session = beginSession();
     session.text = "Overleg\n\nEerste punt.\nTweede regel.";
 
@@ -49,7 +49,7 @@ describe("een capture bewaren", () => {
     expect(note.doc.textContent).toContain("Eerste punt.");
   });
 
-  it("schrijft niets als er alleen witruimte staat", async () => {
+  it("writes nothing when there is only whitespace", async () => {
     const session = beginSession();
     session.text = "   \n\n  \n";
 
@@ -59,9 +59,9 @@ describe("een capture bewaren", () => {
     expect(result.path).toBeNull();
   });
 
-  it("raakt het bestand niet aan als de inhoud niet is veranderd", async () => {
-    // Besluit B10: verreweg de meeste OneDrive-conflictkopieën ontstaan doordat een
-    // app bestanden herschrijft die de gebruiker niet heeft gewijzigd.
+  it("does not touch the file when the content has not changed", async () => {
+    // Decision B10: by far the most OneDrive conflict copies come from an app
+    // rewriting files the user never changed.
     const session = beginSession();
     session.text = "Niets veranderd";
 
@@ -75,9 +75,9 @@ describe("een capture bewaren", () => {
     expect(statSync(first.path!).mtimeMs).toBe(before);
   });
 
-  it("blijft in hetzelfde bestand schrijven als de eerste regel verandert", async () => {
-    // Hernoemen tijdens het typen zou een spoor van halve bestanden achterlaten;
-    // hernoemen is werk voor het hoofdvenster in fase 4.
+  it("keeps writing to the same file when the first line changes", async () => {
+    // Renaming while you type would leave a trail of half-finished files; renaming is
+    // work for the main window in phase 4.
     const session = beginSession();
     session.text = "Eerste poging";
     const first = await writeSession(session, vault);
@@ -90,7 +90,7 @@ describe("een capture bewaren", () => {
     expect(readFileSync(first.path!, "utf8")).toContain("title: Toch een andere titel");
   });
 
-  it("botst niet met een bestaande notitie van dezelfde minuut", async () => {
+  it("does not collide with an existing note from the same minute", async () => {
     const one = beginSession();
     one.text = "Zelfde titel";
     const two = beginSession();

@@ -1,29 +1,29 @@
-/** Het contract tussen main en renderer. Beide kanten importeren dit bestand. */
+/** The contract between main and renderer. Both sides import this file. */
 
 export const IPC = {
-  /** main → renderer: het venster is getoond, zet de cursor klaar. */
+  /** main → renderer: the window is showing, put the caret in place. */
   captureShow: "capture:show",
-  /** renderer → main: er is een frame getekend ná het zetten van de cursor. */
+  /** renderer → main: a frame was painted after the caret was placed. */
   capturePainted: "capture:painted",
-  /** renderer → main: de tekst is gewijzigd. */
+  /** renderer → main: the text changed. */
   captureChange: "capture:change",
-  /** renderer → main: sluiten (Esc of Ctrl+W). */
+  /** renderer → main: close (Esc or Ctrl+W). */
   captureClose: "capture:close",
-  /** main → renderer: begin met een schone lei. */
+  /** main → renderer: start again with a clean slate. */
   captureReset: "capture:reset",
-  /** main → renderer: statusregel bijwerken. */
+  /** main → renderer: update the status bar. */
   captureStatus: "capture:status",
 } as const;
 
 export interface ShowPayload {
-  /** Merkteken om deze vertoning te koppelen aan de meting ervan. */
+  /** Marker tying this appearance to its measurement. */
   token: number;
 }
 
 export interface StatusPayload {
-  /** Laatst gemeten hotkey → cursor, in milliseconden. */
+  /** Last measured hotkey-to-caret time, in milliseconds. */
   lastLatencyMs: number | null;
-  /** Pad van het bestand waarin deze notitie wordt bewaard, zodra dat vaststaat. */
+  /** Path of the file holding this note, once it is decided. */
   savedAs: string | null;
 }
 

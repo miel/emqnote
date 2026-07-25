@@ -7,7 +7,7 @@ export interface Settings {
   vaultPath: string | null;
   hotkey: string;
   openAtLogin: boolean;
-  /** Waarschuwing over Files On-Demand is getoond; niet elke start opnieuw zeuren. */
+  /** The Files On-Demand warning has been shown; do not nag on every start. */
   filesOnDemandWarned: boolean;
 }
 
@@ -38,8 +38,8 @@ export function loadSettings(): Settings {
     cache = defaults();
   }
 
-  // Voor tests en de zelftest: een vault meegeven zonder de echte instellingen aan te
-  // raken, zodat een meetsessie nooit in je eigen notities schrijft.
+  // For tests and the self-test: point at a vault without touching the real settings,
+  // so a measurement run can never write into your own notes.
   const override = process.env.EMQNOTE_VAULT;
   if (override !== undefined && override !== "") cache.vaultPath = override;
 
@@ -53,8 +53,8 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   const path = settingsFile();
   mkdirSync(app.getPath("userData"), { recursive: true });
 
-  // Ook instellingen atomair: een half geschreven settings.json bij een crash zou
-  // betekenen dat de app de volgende keer zijn vault niet meer weet te vinden.
+  // Settings are written atomically too: a half-written settings.json after a crash
+  // would mean the app no longer knows where its vault is.
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, "utf8");
   renameSync(temporary, path);

@@ -6,10 +6,10 @@ directories:
   output: release
   buildResources: build
 
-# Het main-proces én de renderer worden volledig gebundeld (zie
-# electron.vite.config.ts), dus er is bij het draaien niets uit node_modules nodig.
-# electron-builder neemt de productie-afhankelijkheden anders alsnog mee; die
-# uitsluiting scheelt hier zo'n 10 MB aan dode last.
+# Main, preload and renderer are all fully bundled (see electron.vite.config.ts), so
+# nothing from node_modules is needed at runtime. electron-builder would otherwise pull
+# the production dependencies in anyway; excluding them saves around 10 MB of dead
+# weight here.
 files:
   - out/**/*
   - package.json
@@ -17,8 +17,8 @@ files:
 
 asar: true
 
-# Chromium levert 56 talen mee. Voor één gebruiker die Nederlands en Engels leest is
-# dat onnodig gewicht in een zip die over OneDrive naar de werkmachine gaat.
+# Chromium ships 56 locales. For one user who reads Dutch and English that is needless
+# weight in a zip that travels over OneDrive to the work machine.
 electronLanguages:
   - en-US
   - nl
@@ -28,15 +28,15 @@ mac:
   target:
     - target: zip
       arch: [arm64]
-  # Een menubalk-app zonder dock-pictogram. Zonder deze vlag verschijnt emqnote in de
-  # dock en in de vensterschakelaar, wat voor een tray-app alleen maar in de weg zit.
+  # A menu bar app without a dock icon. Without this flag emqnote shows up in the dock
+  # and the app switcher, which for a tray app is only in the way.
   extendInfo:
     LSUIElement: true
 
 win:
-  # Bewust géén installer. Zonder adminrechten is een installer alleen maar een extra
-  # hindernis; een uitgepakte map die je vanaf OneDrive start is het minst kwetsbaar
-  # voor bedrijfsbeleid. Zie 02-technisch-ontwerp.md §9.
+  # Deliberately no installer. Without admin rights an installer is just another
+  # hurdle; an unpacked folder you start from OneDrive is the least vulnerable to
+  # corporate policy. See 02-technisch-ontwerp.md §9.
   target:
     - target: zip
       arch: [x64]

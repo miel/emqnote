@@ -88,9 +88,9 @@ function inlineToPM(nodes: ExtPhrasing[], marks: readonly Mark[]): PMNode[] {
         );
         break;
 
-      // Let op de `marks` als derde argument: ook een atoom draagt de opmaak waarin
-      // het staat. Zonder dat breekt <u>tekst ![[plaatje.png]] tekst</u> bij het
-      // terugschrijven op in drie stukken.
+      // Note the `marks` third argument: an atom carries the formatting it sits in
+      // too. Without it, <u>text ![[image.png]] text</u> breaks into three pieces on
+      // the way back out.
       case "break":
         result.push(schema.nodes.hardBreak!.create(null, null, marks as Mark[]));
         break;
@@ -126,8 +126,8 @@ function inlineToPM(nodes: ExtPhrasing[], marks: readonly Mark[]): PMNode[] {
         break;
 
       case "html":
-        // Ruwe inline-HTML die we niet kennen blijft letterlijk staan; wegdoen zou
-        // inhoud verliezen, en interpreteren zou raden zijn.
+        // Raw inline HTML we do not recognise is kept verbatim; dropping it would lose
+        // content, and interpreting it would be guessing.
         result.push(...text(node.value, marks));
         break;
 
@@ -222,8 +222,8 @@ function blockToPM(node: BlockNode | RootContent): PMNode[] {
     case "table":
       return [tableToPM(node)];
 
-    // Definities en voetnoten horen niet in het dialect; ze worden niet geproduceerd
-    // en bij het lezen genegeerd in plaats van dat ze de parse laten falen.
+    // Definitions and footnotes are not part of the dialect; they are never produced,
+    // and on read they are ignored rather than failing the parse.
     case "definition":
     case "footnoteDefinition":
       return [];
@@ -237,7 +237,7 @@ function blocksToPM(nodes: BlockNode[]): PMNode[] {
   return nodes.flatMap((node) => blockToPM(node));
 }
 
-/** Zet een mdast-boom (zonder frontmatter) om naar een ProseMirror-document. */
+/** Converts an mdast tree (without frontmatter) into a ProseMirror document. */
 export function mdastToDoc(root: Root): PMNode {
   const blocks = root.children
     .filter((child) => child.type !== "yaml")

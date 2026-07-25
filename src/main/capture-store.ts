@@ -10,12 +10,12 @@ import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 import { INBOX } from "./vault.js";
 
 /**
- * Het bewaren van één capture-sessie.
+ * Persisting a single capture session.
  *
- * Drie dingen liggen hier vast, en alle drie volgen ze uit 05-besluitenlog.md B10:
- * er wordt pas geschreven bij rust, er wordt atomair geschreven, en er wordt niet
- * geschreven als er niets is veranderd. Samen is dat de goedkoopste
- * conflictpreventie die er is voor een vault op OneDrive.
+ * Three things are fixed here, and all three follow from 05-besluitenlog.md B10:
+ * writing only happens once typing has settled, writing is atomic, and nothing is
+ * written when nothing changed. Together that is the cheapest conflict prevention
+ * available for a vault on OneDrive.
  */
 
 const WRITE_DEBOUNCE_MS = 800;
@@ -23,7 +23,7 @@ const WRITE_DEBOUNCE_MS = 800;
 export interface CaptureSession {
   createdAt: Date;
   text: string;
-  /** Wordt bij de eerste echte schrijfactie bepaald en daarna niet meer gewijzigd. */
+  /** Decided on the first real write and never changed afterwards. */
   path: string | null;
   lastWritten: string | null;
 }
@@ -46,7 +46,7 @@ function buildFrontmatter(session: CaptureSession, title: string): Frontmatter {
   return frontmatter;
 }
 
-/** Atomair: eerst een tijdelijk bestand, dan hernoemen. OneDrive ziet nooit een halve notitie. */
+/** Atomic: temporary file first, then rename. OneDrive never sees half a note. */
 async function writeAtomic(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
@@ -60,12 +60,11 @@ export interface WriteResult {
 }
 
 /**
- * Schrijft de notitie weg, tenzij er niets te schrijven valt.
+ * Writes the note, unless there is nothing to write.
  *
- * De bestandsnaam wordt één keer bepaald, bij de eerste schrijfactie. Verandert de
- * eerste regel daarna nog, dan blijft het bestand staan waar het staat: hernoemen
- * tijdens het typen zou een spoor van halve bestanden achterlaten, en verplaatsen en
- * hernoemen is werk voor het hoofdvenster (fase 4).
+ * The file name is decided once, on the first write. If the first line changes after
+ * that, the file stays where it is: renaming while you type would leave a trail of
+ * half-finished files, and moving and renaming is work for the main window (phase 4).
  */
 export async function writeSession(
   session: CaptureSession,
@@ -96,8 +95,7 @@ export async function writeSession(
 }
 
 /**
- * Houdt de schrijfacties van één sessie bij: uitgesteld tijdens het typen, onmiddellijk
- * bij het sluiten.
+ * Tracks the writes of a single session: deferred while typing, immediate on close.
  */
 export class CaptureWriter {
   private session = beginSession();
@@ -120,15 +118,15 @@ export class CaptureWriter {
     this.timer = setTimeout(() => void this.flush(), WRITE_DEBOUNCE_MS);
   }
 
-  /** Schrijft nu. Aanroepen bij verlies van focus, bij sluiten en bij afsluiten. */
+  /** Writes now. Call on loss of focus, on close and on quit. */
   async flush(): Promise<WriteResult> {
     this.cancelTimer();
 
     const vault = this.vault();
     if (vault === null) return { path: null, written: false };
 
-    // Schrijfacties in de rij houden, zodat een snelle Esc na een tik niet met de
-    // uitgestelde schrijfactie kan kruisen.
+    // Queue the writes so a quick Escape right after a keystroke cannot race the
+    // deferred write.
     this.queue = this.queue.then(async () => {
       const result = await writeSession(this.session, vault);
       if (result.written) this.onWritten(result);

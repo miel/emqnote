@@ -2,13 +2,13 @@ import type { PhrasingContent } from "mdast";
 import type { ExtPhrasing } from "./mdast-ext.js";
 
 /**
- * Na het parsen door remark bestaan onderstrepen, markeren en wikilinks nog niet als
- * knoop: `<u>` is een los stukje ruwe HTML, `==tekst==` is gewone tekst en `[[Notitie]]`
- * ook. Deze pass maakt er echte knopen van.
+ * After remark has parsed, underline, highlight and wikilinks do not exist as nodes
+ * yet: `<u>` is a loose fragment of raw HTML, and `==text==` and `[[Note]]` are plain
+ * text. This pass turns them into real nodes.
  *
- * De pass werkt op het niveau van een kinderrij, niet per tekstknoop, omdat een
- * markering zich over meerdere knopen kan uitstrekken: in `==een **vet** woord==` staan
- * de twee `==` in verschillende tekstknopen.
+ * It operates on a row of children rather than on a single text node, because a
+ * highlight can span several nodes: in `==a **bold** word==` the two `==` markers end
+ * up in different text nodes.
  */
 
 type Marker =
@@ -22,7 +22,7 @@ const BREAK_HTML = /^<br\s*\/?>$/i;
 const UNDERLINE_OPEN = /^<u>$/i;
 const UNDERLINE_CLOSE = /^<\/u>$/i;
 
-/** `![[bestand.png]]`, `[[Notitie]]` of `[[Notitie|alias]]` */
+/** `![[file.png]]`, `[[Note]]` or `[[Note|alias]]` */
 const WIKI = /(!)?\[\[([^\]|]+?)(?:\|([^\]]*?))?\]\]/;
 
 function isWhitespace(char: string | undefined): boolean {
@@ -30,12 +30,11 @@ function isWhitespace(char: string | undefined): boolean {
 }
 
 /**
- * Splitst een tekstknoop in tekst, wikilinks en markeer-tekens.
+ * Splits a text node into text, wikilinks and highlight markers.
  *
- * De flankeringsregel voor `==` is dezelfde als die van vergelijkbare
- * markdown-uitbreidingen: een openend `==` mag niet door witruimte worden gevolgd, een
- * sluitend `==` niet door witruimte worden voorafgegaan. Daardoor blijft `als a == b`
- * gewone tekst.
+ * The flanking rule for `==` matches comparable markdown extensions: an opening `==`
+ * may not be followed by whitespace, and a closing `==` may not be preceded by it.
+ * That keeps `if a == b` plain text.
  */
 function tokenizeText(value: string): Token[] {
   const tokens: Token[] = [];
@@ -139,7 +138,7 @@ function isMarker(token: Token): token is Marker {
   );
 }
 
-/** Een marker die geen partner heeft gevonden, wordt alsnog gewone tekst. */
+/** A marker that never found a partner falls back to being plain text. */
 function markerAsText(marker: Marker): ExtPhrasing {
   const value =
     marker.type === "__markerHighlight"
@@ -167,7 +166,7 @@ function fold(tokens: Token[]): ExtPhrasing[] {
       token.type === "__markerHighlight" ? "__markerHighlight" : "__markerUnderlineClose";
 
     if (token.type === "__markerUnderlineClose") {
-      // Sluiting zonder opening.
+      // A closer without an opener.
       result.push(markerAsText(token));
       index += 1;
       continue;
@@ -200,17 +199,17 @@ function fold(tokens: Token[]): ExtPhrasing[] {
 }
 
 /**
- * Voegt aangrenzende tekstknopen samen. Dit gebeurt zowel vóór als ná het tokeniseren,
- * en om verschillende redenen.
+ * Merges adjacent text nodes. This happens both before and after tokenising, for
+ * different reasons.
  *
- * Vooraf, omdat remark tekst rond een ontsnapt teken in losse knopen kan opsplitsen.
- * Zou je dan per knoop scannen, dan hangt het van die willekeurige opdeling af of
- * `[[Notitie]]` wel of niet als wikilink wordt herkend.
+ * Before, because remark can split the text around an escaped character into separate
+ * nodes. Scanning per node would make recognition of `[[Note]]` depend on that
+ * arbitrary split.
  *
- * Achteraf, omdat een niet-gepaarde marker weer gewone tekst wordt en dan naast andere
- * tekst komt te staan.
+ * After, because an unpaired marker turns back into plain text and then ends up next
+ * to other text.
  *
- * Kopieert in plaats van te muteren: de invoer is de mdast-boom van de aanroeper.
+ * Copies rather than mutates: the input is the caller's mdast tree.
  */
 function mergeText(nodes: ExtPhrasing[]): ExtPhrasing[] {
   const merged: ExtPhrasing[] = [];

@@ -7,9 +7,9 @@ import { showCaptureWindow } from "./capture-window.js";
 let tray: Tray | null = null;
 
 /**
- * Het tray-icoon wordt berekend in plaats van uit een bestand geladen. Zie
- * `src/shared/glyph.ts` voor waarom: één vorm die op 16, 22 en 32 pixels scherp is en
- * op macOS meekleurt met de menubalk, is eenvoudiger te berekenen dan te beheren.
+ * The tray icon is computed rather than loaded from a file. See `src/shared/glyph.ts`
+ * for why: one shape that stays crisp at 16, 22 and 32 pixels and adapts to a light or
+ * dark menu bar on macOS is easier to compute than to maintain.
  */
 function trayIcon(): NativeImage {
   const template = process.platform === "darwin";
@@ -35,20 +35,20 @@ export function buildTrayMenu(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: "Nieuwe notitie",
+        label: "New note",
         accelerator: settings.hotkey,
         click: () => showCaptureWindow(),
       },
       { type: "separator" },
       {
-        label: vault === null ? "Geen vault gevonden" : `Vault: ${vault}`,
+        label: vault === null ? "No vault found" : `Vault: ${vault}`,
         enabled: vault !== null,
         click: () => {
           if (vault !== null) void shell.openPath(vault);
         },
       },
       {
-        label: "Starten bij inloggen",
+        label: "Start at login",
         type: "checkbox",
         checked: settings.openAtLogin,
         click: (item) => {
@@ -60,11 +60,11 @@ export function buildTrayMenu(): void {
       { type: "separator" },
       { label: describeStats(), enabled: false },
       {
-        label: "Latency-log openen",
+        label: "Open latency log",
         click: () => void shell.openPath(app.getPath("userData")),
       },
       { type: "separator" },
-      { label: "emqnote afsluiten", click: () => app.quit() },
+      { label: "Quit emqnote", click: () => app.quit() },
     ]),
   );
 }
@@ -74,8 +74,8 @@ export function createTray(): Tray {
   tray.setToolTip("emqnote");
   buildTrayMenu();
 
-  // Op Windows is links klikken op een tray-icoon de verwachte manier om iets te
-  // openen; op macOS opent links klikken het menu, dus daar niet.
+  // On Windows, left-clicking a tray icon is the expected way to open something; on
+  // macOS a left click opens the menu, so not there.
   if (process.platform === "win32") {
     tray.on("click", () => showCaptureWindow());
   }

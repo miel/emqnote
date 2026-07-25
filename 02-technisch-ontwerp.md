@@ -109,9 +109,9 @@ Windows.
 <OneDrive>/emqnote/
 ├── 00 Inbox/
 │   └── _incoming/              ← afleverpunt voor e-mail-ingest
-├── 10 Projecten/<Klant>/<Project>/…
-├── 20 Onderwerpen/
-├── 90 Archief/
+├── 10 Projects/<Klant>/<Project>/…
+├── 20 Areas/
+├── 90 Archive/
 │   └── Mail-import/JJJJ/
 ├── _attachments/JJJJ/MM/
 │   └── 2026-07-25-1432-schermafbeelding.png
@@ -390,7 +390,7 @@ juist wilde vermijden. Alleen als 1 en 2 allebei geblokkeerd blijken, en dan met
 
 Dezelfde route, andere hoeveelheid. Een Outlook-macro dumpt de volledige map
 'Notes to self' als `.eml` in `_incoming_bulk/`. Een aparte importmodus verwerkt die
-naar `90 Archief/Mail-import/JJJJ/` met de oorspronkelijke datum in bestandsnaam en
+naar `90 Archive/Mail-import/JJJJ/` met de oorspronkelijke datum in bestandsnaam en
 frontmatter, `source: import`, en een voortgangsbalk.
 
 Alles wat de import doet, gebruikt code die er al is: `postal-mime`, de plak-pijplijn,

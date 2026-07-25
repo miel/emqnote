@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
 
 /**
- * De renderer krijgt precies deze zes dingen en verder niets. De sandbox blijft aan,
- * contextIsolation blijft aan; er is geen enkele reden waarom een notitievenster bij
- * Node zou moeten kunnen.
+ * The renderer gets exactly these six things and nothing else. The sandbox stays on
+ * and contextIsolation stays on; there is no reason a note window should be able to
+ * reach Node.
  */
 function subscribe<T>(channel: string, handler: (payload: T) => void): () => void {
   const listener = (_event: unknown, payload: T): void => handler(payload);

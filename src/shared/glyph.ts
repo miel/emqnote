@@ -1,12 +1,12 @@
 /**
- * Het merkteken van emqnote, als pixels berekend in plaats van als bestand.
+ * The emqnote mark, computed as pixels rather than shipped as a file.
  *
- * Een tray-icoon moet er scherp uitzien op 16, 22 en 32 pixels, en op macOS ook nog
- * meekleuren met een lichte of donkere menubalk. Dat is met één PNG lastig en met een
- * handvol PNG's onhandig; berekenen is hier eenvoudiger dan beheren.
+ * A tray icon has to look crisp at 16, 22 and 32 pixels, and on macOS it also has to
+ * adapt to a light or dark menu bar. That is awkward with one PNG and unwieldy with a
+ * handful of them; computing it is simpler than maintaining it.
  *
- * De vorm: een afgeronde rechthoek met drie uitgespaarde tekstregels, waarvan de
- * onderste korter is. Herkenbaar als notitie, ook op 16 pixels.
+ * The shape: a rounded rectangle with three cut-out text lines, the bottom one shorter.
+ * Recognisable as a note even at 16 pixels.
  */
 
 function roundedRectDistance(
@@ -27,7 +27,7 @@ function roundedRectDistance(
   return outside + inside - radius;
 }
 
-/** Randverzachting: 1 volledig binnen, 0 volledig buiten, daartussen een halve pixel. */
+/** Antialiasing: 1 fully inside, 0 fully outside, half a pixel of transition between. */
 function coverage(distance: number): number {
   return Math.min(Math.max(0.5 - distance, 0), 1);
 }
@@ -39,10 +39,10 @@ export interface Rgb {
 }
 
 /**
- * Tekent het merkteken als RGBA-buffer, rij voor rij van boven naar beneden.
+ * Draws the mark as an RGBA buffer, row by row from top to bottom.
  *
- * @param size lengte van een zijde in pixels
- * @param color kleur van de vorm; de uitsparingen worden doorzichtig
+ * @param size length of one side in pixels
+ * @param color colour of the shape; the cut-outs become transparent
  */
 export function drawGlyph(size: number, color: Rgb): Uint8Array {
   const pixels = new Uint8Array(size * size * 4);
@@ -51,7 +51,7 @@ export function drawGlyph(size: number, color: Rgb): Uint8Array {
   const half = size * 0.4;
   const radius = size * 0.13;
 
-  // Drie tekstregels: de onderste korter, zodat het geen streepjescode wordt.
+  // Three text lines: the bottom one shorter, so it does not read as a barcode.
   const lines = [
     { y: size * 0.36, halfWidth: size * 0.23 },
     { y: size * 0.5, halfWidth: size * 0.23 },
@@ -97,7 +97,7 @@ export function drawGlyph(size: number, color: Rgb): Uint8Array {
   return pixels;
 }
 
-/** Electron's createFromBitmap verwacht BGRA in plaats van RGBA. */
+/** Electron's createFromBitmap expects BGRA rather than RGBA. */
 export function rgbaToBgra(rgba: Uint8Array): Buffer {
   const bgra = Buffer.allocUnsafe(rgba.length);
   for (let offset = 0; offset < rgba.length; offset += 4) {

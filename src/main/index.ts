@@ -22,13 +22,13 @@ import {
   VAULT_FOLDER_NAME,
 } from "./vault.js";
 
-// Windows: Roaming AppData kan door een bedrijfsprofiel worden gesynchroniseerd, en
-// dat is precies wat we niet willen voor een index en vensterstaat. Moet vóór 'ready'.
+// Windows: Roaming AppData can be synchronised by a corporate profile, which is exactly
+// what we do not want for an index and window state. Must happen before 'ready'.
 if (process.platform === "win32" && process.env.LOCALAPPDATA !== undefined) {
   app.setPath("userData", join(process.env.LOCALAPPDATA, "emqnote"));
 }
 
-// Eén residente instantie. Een tweede aanroep opent gewoon het capture-venster.
+// One resident instance. A second launch simply opens the capture window.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -50,14 +50,14 @@ const writer = new CaptureWriter(
 async function main(): Promise<void> {
   await app.whenReady();
 
-  // Menubalk-app: geen dock-pictogram, geen vensterschakelaar. Het hoofdvenster van
-  // fase 4 zet dit tijdelijk terug wanneer het geopend wordt.
+  // Menu bar app: no dock icon, no app switcher entry. The main window in phase 4 will
+  // temporarily restore this when it opens.
   if (process.platform === "darwin") app.setActivationPolicy("accessory");
 
   const selfTestRounds = Number(process.env.EMQNOTE_SELFTEST ?? "0");
   const settings = loadSettings();
 
-  // Een meetsessie hoort geen opstartitem achter te laten op de machine waarop hij draait.
+  // A measurement run has no business leaving a login item on the machine it runs on.
   if (selfTestRounds === 0) {
     app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
   }
@@ -88,11 +88,11 @@ function registerHotkey(): void {
   if (!registered) {
     dialog.showMessageBox({
       type: "warning",
-      title: "Sneltoets niet beschikbaar",
-      message: `De sneltoets ${hotkey} is al door een ander programma bezet.`,
+      title: "Shortcut unavailable",
+      message: `The shortcut ${hotkey} is already taken by another program.`,
       detail:
-        "emqnote draait wel, maar je kunt het venster alleen via het tray-icoon " +
-        "openen. Kies een andere sneltoets in settings.json.",
+        "emqnote is running, but you can only open the window from the tray icon. " +
+        "Pick a different shortcut in settings.json.",
     });
   }
 }
@@ -113,11 +113,11 @@ async function prepareVault(): Promise<void> {
 }
 
 /**
- * Vraagt waar de vault komt.
+ * Asks where the vault goes.
  *
- * Zijn er meerdere zakelijke OneDrives — twee werkgevers, twee tenants — dan is er
- * geen goede gok, want de vault op de verkeerde tenant zetten betekent werkinhoud op
- * de verkeerde plek. Dan liever één keer vragen.
+ * With more than one business OneDrive — two employers, two tenants — there is no good
+ * guess, because putting the vault on the wrong tenant means work content in the wrong
+ * place. Better to ask once.
  */
 async function askForVault(): Promise<string | null> {
   const candidates = findOneDriveCandidates();
@@ -126,12 +126,12 @@ async function askForVault(): Promise<string | null> {
     const labels = candidates.map(tenantLabel);
     const answer = await dialog.showMessageBox({
       type: "question",
-      title: "Op welke OneDrive komt je vault?",
-      message: "Er staan meerdere zakelijke OneDrives op deze machine.",
+      title: "Which OneDrive should hold your vault?",
+      message: "There is more than one business OneDrive on this machine.",
       detail:
-        "Kies de tenant waar je werknotities horen. De vault komt in een map " +
-        `'${VAULT_FOLDER_NAME}' daarbinnen.`,
-      buttons: [...labels, "Andere map kiezen…"],
+        "Pick the tenant your work notes belong to. The vault goes into a " +
+        `'${VAULT_FOLDER_NAME}' folder inside it.`,
+      buttons: [...labels, "Choose another folder…"],
       cancelId: labels.length,
       defaultId: 0,
     });
@@ -141,8 +141,8 @@ async function askForVault(): Promise<string | null> {
   }
 
   const choice = await dialog.showOpenDialog({
-    title: "Waar komt je vault?",
-    message: "Kies de map waarin je notities moeten komen.",
+    title: "Where should your vault go?",
+    message: "Pick the folder your notes should live in.",
     defaultPath: candidates[0],
     properties: ["openDirectory", "createDirectory"],
   });
@@ -151,9 +151,9 @@ async function askForVault(): Promise<string | null> {
 }
 
 /**
- * OneDrive's Files On-Demand laat bestanden als lege plaatshouder achter. Een controle
- * vooraf is goedkoper dan een zoekfunctie die er stilletjes naast zit — maar het blijft
- * een beste inschatting, dus `unknown` is een geldige uitkomst en houdt niets tegen.
+ * OneDrive's Files On-Demand leaves files behind as empty placeholders. Checking up
+ * front is cheaper than a search function that is quietly wrong — but it stays a best
+ * guess, so `unknown` is a valid outcome and holds nothing up.
  */
 async function warnAboutFilesOnDemand(vault: string): Promise<void> {
   if (loadSettings().filesOnDemandWarned) return;
@@ -163,8 +163,8 @@ async function warnAboutFilesOnDemand(vault: string): Promise<void> {
 
   await dialog.showMessageBox({
     type: "warning",
-    title: "Zet de vault op altijd beschikbaar",
-    message: "Je vault staat op Files On-Demand.",
+    title: "Make the vault always available",
+    message: "Your vault is set to Files On-Demand.",
     detail: FILES_ON_DEMAND_INSTRUCTION,
   });
 
@@ -183,7 +183,7 @@ function registerIpc(): void {
 
     if (elapsed > LATENCY_BUDGET_MS) {
       console.warn(
-        `[latency] ${elapsed.toFixed(1)} ms — boven het budget van ${LATENCY_BUDGET_MS} ms`,
+        `[latency] ${elapsed.toFixed(1)} ms — over the ${LATENCY_BUDGET_MS} ms budget`,
       );
     }
   });
@@ -198,7 +198,7 @@ function registerIpc(): void {
 }
 
 app.on("window-all-closed", () => {
-  // Een residente app blijft draaien als het venster dicht is; dat ís de opzet.
+  // A resident app keeps running when its window is closed; that is the whole point.
 });
 
 app.on("will-quit", () => {

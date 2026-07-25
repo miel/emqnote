@@ -7,20 +7,19 @@ import { loadSettings } from "./settings.js";
 import { INBOX } from "./vault.js";
 
 /**
- * Meet het acceptatiecriterium van fase 1: hotkey → knipperende cursor onder 80 ms.
+ * Measures the acceptance criterion of phase 1: hotkey to blinking caret under 80 ms.
  *
- *   EMQNOTE_SELFTEST=50 EMQNOTE_VAULT=/pad/naar/tijdelijk npm start
+ *   EMQNOTE_SELFTEST=50 EMQNOTE_VAULT=/path/to/temp npm start
  *
- * De meting begint waar de sneltoets binnenkomt, in `showCaptureWindow`, en eindigt
- * wanneer de renderer meldt dat er ná het zetten van de cursor een frame is getekend.
- * Wat hier níét in zit is het OS dat de sneltoets aflevert; dat is een handeling van
- * de vensterbeheerder die we niet kunnen instrumenteren. Alles wat wij zelf doen zit
- * er wel in.
+ * The measurement starts where the shortcut arrives, in `showCaptureWindow`, and ends
+ * when the renderer reports that a frame was painted after the caret was placed. What
+ * it does *not* include is the OS delivering the shortcut; that is a window manager
+ * action we cannot instrument. Everything we do ourselves is in there.
  */
 
 let resolvePaint: (() => void) | null = null;
 
-/** Aangeroepen door de IPC-handler zodra de renderer een frame heeft getekend. */
+/** Called by the IPC handler as soon as the renderer has painted a frame. */
 export function notifyPainted(): void {
   const resolve = resolvePaint;
   resolvePaint = null;
@@ -48,7 +47,7 @@ function sleep(ms: number): Promise<void> {
 export async function runSelfTest(rounds: number): Promise<void> {
   const window = getCaptureWindow();
   if (window === null) {
-    console.error("[zelftest] geen capture-venster");
+    console.error("[selftest] no capture window");
     app.exit(1);
     return;
   }
@@ -59,8 +58,8 @@ export async function runSelfTest(rounds: number): Promise<void> {
     );
   }
 
-  // Even laten bezinken: de eerste vertoning van een venster kost het OS altijd wat
-  // extra, en dat zegt niets over het dagelijks gebruik van een residente app.
+  // Let things settle: the first time a window is shown always costs the OS a little
+  // extra, and that says nothing about daily use of a resident app.
   await sleep(1000);
   showCaptureWindow();
   await waitForPaint(5000);
@@ -82,13 +81,13 @@ export async function runSelfTest(rounds: number): Promise<void> {
     JSON.stringify(
       {
         budgetMs: LATENCY_BUDGET_MS,
-        rondes: rounds,
-        gemist: missed,
+        rounds,
+        missed,
         p50: Number(result.p50.toFixed(1)),
         p95: Number(result.p95.toFixed(1)),
         max: Number(result.max.toFixed(1)),
-        binnenBudget: result.withinBudget,
-        bewaardAls: saved,
+        withinBudget: result.withinBudget,
+        savedAs: saved,
       },
       null,
       2,
@@ -98,19 +97,19 @@ export async function runSelfTest(rounds: number): Promise<void> {
   app.exit(result.withinBudget && missed === 0 && saved !== null ? 0 : 1);
 }
 
-const PROEFTEKST = [
-  "Zelftest fase 1",
+const SAMPLE_TEXT = [
+  "Self-test phase 1",
   "",
-  "Eerste regel van de toelichting.",
-  "Tweede regel, zachte overgang.",
+  "First line of the note.",
+  "Second line, soft break.",
   "",
-  "Een tweede alinea.",
+  "A second paragraph.",
 ].join("\n");
 
 /**
- * Typt daadwerkelijk in de textarea en sluit het venster, zodat de hele keten wordt
- * afgelegd: toetsaanslag → React → IPC → serializer uit fase 0 → atomair bestand.
- * Alleen zo weet je dat het opslaan werkt en niet alleen dat de functies bestaan.
+ * Actually types into the textarea and closes the window, so the whole chain is
+ * exercised: keystroke, React, IPC, the phase 0 serializer, atomic file write. Only
+ * that way do you know saving works, rather than that the functions exist.
  */
 async function captureRealNote(): Promise<string | null> {
   const window = getCaptureWindow();
@@ -126,7 +125,7 @@ async function captureRealNote(): Promise<string | null> {
       const setValue = Object.getOwnPropertyDescriptor(
         HTMLTextAreaElement.prototype, 'value',
       ).set;
-      setValue.call(field, ${JSON.stringify(PROEFTEKST)});
+      setValue.call(field, ${JSON.stringify(SAMPLE_TEXT)});
       field.dispatchEvent(new Event('input', { bubbles: true }));
       return field.value.length;
     })()
@@ -141,11 +140,11 @@ async function captureRealNote(): Promise<string | null> {
     : [];
 
   if (written.length !== 1) {
-    console.error(`[zelftest] verwachtte één notitie in de Inbox, vond er ${written.length}`);
+    console.error(`[selftest] expected one note in the Inbox, found ${written.length}`);
     return null;
   }
 
-  console.log("--- geschreven notitie ---");
+  console.log("--- written note ---");
   console.log(readFileSync(join(inbox, written[0]!), "utf8"));
 
   return written[0]!;

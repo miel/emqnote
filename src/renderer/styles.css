@@ -1,22 +1,22 @@
 :root {
-  --achtergrond: #1e1f22;
-  --oppervlak: #26282c;
-  --rand: #33363b;
-  --tekst: #e8e9ec;
-  --gedempt: #8b9099;
+  --background: #1e1f22;
+  --surface: #26282c;
+  --border: #33363b;
+  --text: #e8e9ec;
+  --muted: #8b9099;
   --accent: #6ea8fe;
-  --waarschuwing: #e8a33d;
+  --warning: #e8a33d;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --achtergrond: #fbfbfc;
-    --oppervlak: #ffffff;
-    --rand: #dfe1e5;
-    --tekst: #1b1c1f;
-    --gedempt: #6b7079;
+    --background: #fbfbfc;
+    --surface: #ffffff;
+    --border: #dfe1e5;
+    --text: #1b1c1f;
+    --muted: #6b7079;
     --accent: #1a63d8;
-    --waarschuwing: #9a6200;
+    --warning: #9a6200;
   }
 }
 
@@ -32,39 +32,39 @@ body,
 }
 
 body {
-  background: var(--achtergrond);
-  color: var(--tekst);
+  background: var(--background);
+  color: var(--text);
   font-family:
     "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
   font-size: 15px;
   overflow: hidden;
 }
 
-.venster {
+.window {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border: 1px solid var(--rand);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  background: var(--achtergrond);
+  background: var(--background);
 }
 
-/* De titelbalk is de sleepgreep; het venster heeft geen systeemrand. */
-.titelbalk {
+/* The title bar is the drag handle; the window has no system frame. */
+.titlebar {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  background: var(--oppervlak);
-  border-bottom: 1px solid var(--rand);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  color: var(--gedempt);
+  color: var(--muted);
   user-select: none;
 }
 
-.tijdstip {
+.timestamp {
   font-variant-numeric: tabular-nums;
 }
 
@@ -72,7 +72,7 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.tekst {
+.editor {
   flex: 1;
   width: 100%;
   padding: 16px 18px;
@@ -86,33 +86,33 @@ body {
   line-height: 1.55;
 }
 
-.tekst::placeholder {
-  color: var(--gedempt);
+.editor::placeholder {
+  color: var(--muted);
 }
 
-.statusbalk {
+.statusbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 14px;
-  background: var(--oppervlak);
-  border-top: 1px solid var(--rand);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
   font-size: 11px;
-  color: var(--gedempt);
+  color: var(--muted);
 }
 
-.bestand {
+.filename {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.meting {
+.latency {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.meting[data-boven-budget="true"] {
-  color: var(--waarschuwing);
+.latency[data-over-budget="true"] {
+  color: var(--warning);
 }

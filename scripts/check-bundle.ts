@@ -1,33 +1,33 @@
 /**
- * Controleert dat de gebouwde bundels niets uit node_modules verwachten.
+ * Verifies the built bundles expect nothing from node_modules.
  *
  *   npm run check:bundle
  *
- * Waarom dit bestaat: electron-vite externaliseert standaard álles wat in
- * `dependencies` van package.json staat. Het pakket bevat dan een
- * `import ... from "prosemirror-model"` zonder dat die map is meegeleverd, en de app
- * valt bij het starten om met ERR_MODULE_NOT_FOUND.
+ * Why this exists: electron-vite externalises *everything* listed in package.json's
+ * `dependencies` by default. The package then contains an
+ * `import ... from "prosemirror-model"` without that folder being shipped, and the app
+ * dies on startup with ERR_MODULE_NOT_FOUND.
  *
- * Dat is precies één keer gebeurd, en het viel niet op omdat de verpakte app werd
- * getest vanuit de projectmap — waar node_modules toevallig wél stond. Deze controle
- * is statisch en snel, en vangt het af zonder dat er een venster open hoeft.
+ * That happened exactly once, and it went unnoticed because the packaged app was
+ * tested from the project directory — where node_modules happened to be present. This
+ * check is static and fast, and catches it without a window having to open.
  *
- * De imports worden met een echte ESM-parser gelezen en niet met een reguliere
- * expressie: de eerste versie sloeg alarm op een `import {unified} from 'unified'` in
- * een JSDoc-commentaar.
+ * Imports are read with a real ESM parser rather than a regular expression: the first
+ * version raised the alarm on an `import {unified} from 'unified'` inside a JSDoc
+ * comment.
  */
 import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { init, parse } from "es-module-lexer";
 
-/** Alleen deze mogen ongebundeld blijven: Electron zelf en de Node-ingebouwden. */
+/** Only these may stay unbundled: Electron itself and the Node built-ins. */
 const ALLOWED = new Set([
   "electron",
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
 ]);
 
-/** Voor scoped pakketten telt scope plus naam als eenheid. */
+/** For scoped packages, scope plus name is the unit that counts. */
 function packageRoot(specifier: string): string {
   return specifier.startsWith("@")
     ? specifier.split("/").slice(0, 2).join("/")
@@ -58,9 +58,9 @@ function externalsInEsm(source: string): Set<string> {
 }
 
 /**
- * Het preload-script is CJS en dus niet met de ESM-parser te lezen. Het is een handvol
- * regels waarin alleen `require("electron")` hoort voor te komen; commentaarblokken
- * gaan er eerst uit zodat een JSDoc-voorbeeld niet meetelt.
+ * The preload script is CJS and therefore not readable with the ESM parser. It is a
+ * handful of lines in which only `require("electron")` should appear; comment blocks
+ * are stripped first so a JSDoc example does not count.
  */
 function externalsInCjs(source: string): Set<string> {
   const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -86,22 +86,22 @@ for (const [path, scan] of [
 ] as const) {
   const source = read(path);
   if (source === null) {
-    console.error(`✗ ${path} bestaat niet — is er wel gebouwd?`);
+    console.error(`✗ ${path} does not exist — has it been built?`);
     failures += 1;
     continue;
   }
 
   const external = scan(source);
   if (external.size === 0) {
-    console.log(`✓ ${path} is zelfstandig`);
+    console.log(`✓ ${path} is self-contained`);
     continue;
   }
 
   console.error(
-    `✗ ${path} verwacht node_modules bij het draaien: ${[...external].sort().join(", ")}`,
+    `✗ ${path} expects node_modules at runtime: ${[...external].sort().join(", ")}`,
   );
   console.error(
-    "  Zet die pakketten in devDependencies, of neem ze bewust mee in electron-builder.yml.",
+    "  Move those packages to devDependencies, or ship them deliberately via electron-builder.yml.",
   );
   failures += 1;
 }

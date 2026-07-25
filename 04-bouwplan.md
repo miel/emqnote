@@ -187,7 +187,7 @@ repo; ze dienen ook fase 6.
 - Verwerking van `00 Inbox/_incoming/`: `postal-mime`, dan de plak-pijplijn uit fase 3
 - Bijlagen naar `_attachments/`, `cid:`-afbeeldingen omgezet
 - Power Automate-flow inrichten (of de Outlook-macro als terugval)
-- Importmodus voor de bulkmigratie naar `90 Archief/Mail-import/JJJJ/`
+- Importmodus voor de bulkmigratie naar `90 Archive/Mail-import/JJJJ/`
 - Eenmalige Outlook-macro die de map 'Notes to self' als `.eml` dumpt
 
 **Acceptatie:**

@@ -266,7 +266,7 @@ afhankelijkheid.
 ## B16 — Volledige migratie, niet een schone start
 
 **Genomen.** De hele map 'Notes to self' wordt eenmalig geïmporteerd naar
-`90 Archief/Mail-import/JJJJ/`.
+`90 Archive/Mail-import/JJJJ/`.
 
 **Waarom.** Een lege app is een app die nog niets teruggeeft. Met de volledige
 geschiedenis erin is zoeken vanaf dag één nuttiger dan Outlook-zoeken — en dat is precies

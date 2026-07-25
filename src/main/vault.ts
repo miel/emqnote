@@ -7,33 +7,38 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 
 export const VAULT_FOLDER_NAME = "emqnote";
+
+/**
+ * The folders the app creates itself. Everything else in the vault — `10 Projects`,
+ * `20 Areas`, `90 Archive` — is yours to arrange; the app never enforces a structure
+ * it does not need.
+ */
 export const INBOX = "00 Inbox";
 export const INCOMING = join(INBOX, "_incoming");
 export const ATTACHMENTS = "_attachments";
 export const TEMPLATES = "_templates";
 
 /**
- * Welke zakelijke OneDrive-mappen staan er op deze machine?
+ * Which business OneDrive folders are on this machine?
  *
- * Op Windows zet de OneDrive-client omgevingsvariabelen: `OneDriveCommercial` voor een
- * zakelijke tenant, `OneDrive` voor wat er actief is.
+ * On Windows the OneDrive client sets environment variables: `OneDriveCommercial` for
+ * a work tenant, `OneDrive` for whichever is active.
  *
- * Op macOS staat een zakelijke OneDrive sinds Big Sur onder
- * `~/Library/CloudStorage/OneDrive-<Tenant>`; oudere opzetten gebruiken nog
- * `~/OneDrive - <Tenant>` in de thuismap.
+ * On macOS a work OneDrive lives under `~/Library/CloudStorage/OneDrive-<Tenant>` since
+ * Big Sur; older setups still use `~/OneDrive - <Tenant>` in the home directory.
  *
- * Er wordt bewust een lijst teruggegeven en geen enkele keuze. Wie bij twee werkgevers
- * of twee tenants hoort, heeft twee zakelijke OneDrives, en dan is er geen goede
- * gok: de vault op de verkeerde tenant zetten betekent werkinhoud op de verkeerde
- * plek. Bij twijfel vraagt de app het.
+ * This deliberately returns a list and makes no choice. Anyone working for two
+ * employers or across two tenants has two business OneDrives, and then there is no
+ * good guess: putting the vault on the wrong tenant means work content in the wrong
+ * place. When in doubt, the app asks.
  */
 export function findOneDriveCandidates(): string[] {
   const found: string[] = [];
 
   const add = (path: string): void => {
     if (!existsSync(path)) return;
-    // Gedeelde SharePoint-bibliotheken zijn geen persoonlijke OneDrive, en een
-    // persoonlijke OneDrive is geen werkomgeving. Allebei niet wat we zoeken.
+    // Shared SharePoint libraries are not a personal OneDrive, and a personal OneDrive
+    // is not a work environment. Neither is what we are looking for.
     if (/SharedLibraries/i.test(path)) return;
     if (/personal/i.test(path)) return;
     if (!found.includes(path)) found.push(path);
@@ -54,8 +59,8 @@ export function findOneDriveCandidates(): string[] {
     }
   }
 
-  // De oude locatie in de thuismap wijst vaak naar dezelfde tenant als hierboven.
-  // Alleen meenemen wanneer die tenant nog niet gevonden is.
+  // The old location in the home directory usually points at the same tenant as above.
+  // Only include it when that tenant has not been found yet.
   const knownTenants = found.map((path) =>
     path.replace(/.*OneDrive-/, "").replace(/[^a-z0-9]/gi, "").toLowerCase(),
   );
@@ -71,19 +76,19 @@ export function findOneDriveCandidates(): string[] {
   return found;
 }
 
-/** Alleen een pad als er precies één zakelijke OneDrive is; anders moet er gekozen worden. */
+/** Only returns a path when there is exactly one business OneDrive; otherwise ask. */
 export function defaultVaultPath(): string | null {
   const candidates = findOneDriveCandidates();
   return candidates.length === 1 ? join(candidates[0]!, VAULT_FOLDER_NAME) : null;
 }
 
-/** Toont een tenant leesbaar, voor de keuzedialoog. */
+/** Renders a tenant readably, for the chooser dialog. */
 export function tenantLabel(oneDriveRoot: string): string {
   const base = oneDriveRoot.split(/[\\/]/).pop() ?? oneDriveRoot;
   return base.replace(/^OneDrive\s*-\s*/, "").replace(/^OneDrive-/, "");
 }
 
-/** Maakt de mappen die de app zelf nodig heeft. De rest is van de gebruiker. */
+/** Creates the folders the app itself needs. The rest belongs to the user. */
 export function ensureVaultLayout(vault: string): void {
   for (const folder of [INBOX, INCOMING, ATTACHMENTS, TEMPLATES]) {
     mkdirSync(join(vault, folder), { recursive: true });
@@ -116,18 +121,18 @@ function sampleFiles(directory: string, limit: number): string[] {
 }
 
 /**
- * Staat de vault op "altijd behouden op dit apparaat"?
+ * Is the vault set to "always keep on this device"?
  *
- * OneDrive's Files On-Demand laat bestanden als lege plaatshouder op schijf staan. Een
- * indexer die zo'n bestand leest krijgt niets terug, of veroorzaakt een blokkerende
- * download van honderden bestanden. Dit is een controle vooraf, geen garantie: de
- * uitkomst `unknown` is een geldig antwoord en mag nooit iets tegenhouden.
+ * OneDrive's Files On-Demand leaves files on disk as empty placeholders. An indexer
+ * reading such a file gets nothing back, or triggers a blocking download of hundreds
+ * of files. This is a check up front, not a guarantee: `unknown` is a valid outcome
+ * and must never block anything.
  */
 export async function checkFilesOnDemand(vault: string): Promise<OnDemandState> {
   if (!existsSync(vault)) return "unknown";
 
   if (process.platform === "darwin") {
-    // Een niet-gehydrateerd bestand heeft wel een omvang maar geen blokken op schijf.
+    // A dataless file reports a size but occupies no blocks on disk.
     const files = sampleFiles(vault, 40);
     if (files.length === 0) return "unknown";
     for (const file of files) {
@@ -142,7 +147,7 @@ export async function checkFilesOnDemand(vault: string): Promise<OnDemandState> 
   }
 
   if (process.platform === "win32") {
-    // attrib toont U voor losgemaakt (mag worden opgeruimd) en P voor vastgezet.
+    // attrib shows U for unpinned (may be evicted) and P for pinned.
     try {
       const { stdout } = await run("attrib", [join(vault, "*"), "/s"], {
         windowsHide: true,
@@ -164,9 +169,9 @@ export async function checkFilesOnDemand(vault: string): Promise<OnDemandState> 
 
 export const FILES_ON_DEMAND_INSTRUCTION =
   process.platform === "win32"
-    ? "Klik in Verkenner met rechts op de map emqnote en kies " +
-      "'Altijd behouden op dit apparaat'. Anders staan er lege plaatshouders op " +
-      "schijf en kan emqnote je notities niet lezen of doorzoeken."
-    : "Klik in Finder met rechts op de map emqnote en kies " +
-      "'Altijd op dit apparaat behouden'. Anders staan er lege plaatshouders op " +
-      "schijf en kan emqnote je notities niet lezen of doorzoeken.";
+    ? "Right-click the emqnote folder in Explorer and choose " +
+      "'Always keep on this device'. Otherwise the folder holds empty placeholders " +
+      "and emqnote cannot read or search your notes."
+    : "Right-click the emqnote folder in Finder and choose " +
+      "'Always Keep on This Device'. Otherwise the folder holds empty placeholders " +
+      "and emqnote cannot read or search your notes.";

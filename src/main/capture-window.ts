@@ -7,13 +7,13 @@ import { beginMeasurement } from "./latency.js";
 const here = fileURLToPath(new URL(".", import.meta.url));
 
 /**
- * Het capture-venster wordt bij het starten aangemaakt en gerenderd, en daarna
- * verborgen gehouden in plaats van vernietigd.
+ * The capture window is created and rendered at startup, then kept hidden rather than
+ * destroyed.
  *
- * Dat is de hele truc achter "near-instant": de hotkey doet niets anders dan `show()`
- * en `focus()`. Er wordt niets geladen, niets opgebouwd, niets gescand. Precies wat
- * Outlook feitelijk ook doet — dat venster is er alleen maar snel omdat het programma
- * al draait.
+ * That is the whole trick behind "near-instant": the hotkey does nothing but `show()`
+ * and `focus()`. Nothing is loaded, nothing is built, nothing is scanned. It is what
+ * Outlook effectively does too — that window is only fast because the program is
+ * already running.
  */
 
 let window: BrowserWindow | null = null;
@@ -33,15 +33,15 @@ export function createCaptureWindow(): BrowserWindow {
       preload: join(here, "../preload/index.cjs"),
       contextIsolation: true,
       sandbox: true,
-      // Chromium zet verborgen vensters in slaapstand. Dat is precies verkeerd voor
-      // een venster dat alleen bestaat om onmiddellijk te kunnen verschijnen.
+      // Chromium puts hidden windows to sleep. That is exactly wrong for a window
+      // whose only purpose is to appear instantly.
       backgroundThrottling: false,
     },
   });
 
   created.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  // Klikken buiten het venster is hetzelfde als sluiten: opslaan en wegwezen.
+  // Clicking outside the window means the same as closing it: save and get out of the way.
   created.on("blur", () => {
     if (created.isVisible()) hideCaptureWindow();
   });
@@ -69,12 +69,12 @@ export function setHideHandler(handler: HideHandler): void {
 }
 
 /**
- * Toont het venster en start de meting.
+ * Shows the window and starts the measurement.
  *
- * De volgorde is bewust: eerst het venster naar voren, dan pas het bericht naar de
- * renderer. Op Windows mag een achtergrondproces de voorgrond niet zomaar overnemen;
- * omdat de aanroep uit een global shortcut komt staat het OS het meestal wel toe, en
- * `moveTop` dekt de gevallen waarin het toch tegenstribbelt af.
+ * The order is deliberate: window to the front first, only then the message to the
+ * renderer. On Windows a background process may not simply take the foreground;
+ * because the call originates from a global shortcut the OS usually permits it, and
+ * `moveTop` covers the cases where it still resists.
  */
 export function showCaptureWindow(): void {
   const target = window;
@@ -83,8 +83,8 @@ export function showCaptureWindow(): void {
   const token = beginMeasurement();
 
   if (process.platform === "darwin") {
-    // Een menubalk-app heeft geen dock-pictogram en krijgt daardoor niet vanzelf
-    // toetsenbordfocus.
+    // A menu bar app has no dock icon and therefore does not receive keyboard focus
+    // on its own.
     app.focus({ steal: true });
   }
 

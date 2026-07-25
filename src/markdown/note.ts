@@ -17,7 +17,7 @@ export interface Note {
 
 const EMPTY_FRONTMATTER: Frontmatter = { title: "", type: "quick", created: "" };
 
-/** Leest een `.md`-bestand uit de vault als notitie. */
+/** Reads a `.md` file from the vault as a note. */
 export function parseNote(markdown: string): Note {
   const root = readProcessor.parse(markdown) as Root;
 
@@ -42,13 +42,13 @@ function isEmptyDoc(doc: PMNode): boolean {
   );
 }
 
-/** Schrijft de body van een notitie; eindigt op een regeleinde, of is leeg. */
+/** Writes a note's body; ends with a newline, or is empty. */
 export function serializeBody(doc: PMNode): string {
   if (isEmptyDoc(doc)) return "";
   return writeProcessor.stringify(docToMdast(doc) as never);
 }
 
-/** Schrijft een notitie als `.md`-bestand: frontmatter, lege regel, body. */
+/** Writes a note as a `.md` file: frontmatter, blank line, body. */
 export function serializeNote(note: Note): string {
   const frontmatter = serializeFrontmatter(note.frontmatter);
   const body = serializeBody(note.doc);
@@ -60,11 +60,11 @@ export function emptyDoc(): PMNode {
 }
 
 /**
- * Maakt een document van platte tekst: een lege regel begint een nieuwe alinea, een
- * enkele regelovergang wordt een zachte overgang binnen dezelfde alinea.
+ * Builds a document from plain text: a blank line starts a new paragraph, a single
+ * line break becomes a soft break inside the same paragraph.
  *
- * Nodig zolang het capture-venster nog een textarea is. Zodra de echte editor er staat
- * (fase 2) levert die rechtstreeks een ProseMirror-document en verdwijnt dit weg.
+ * Needed for as long as the capture window is still a textarea. Once the real editor
+ * is in place (phase 2) it produces a ProseMirror document directly and this goes away.
  */
 export function docFromPlainText(text: string): PMNode {
   const normalised = text.replace(/\r\n?/g, "\n").trim();
@@ -84,7 +84,7 @@ export function docFromPlainText(text: string): PMNode {
   return schema.nodes.doc!.create(null, paragraphs);
 }
 
-/** De eerste niet-lege regel; dat is wat de titel van een snelle notitie wordt. */
+/** The first non-empty line; that becomes the title of a quick note. */
 export function firstLine(text: string): string {
   for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
     const trimmed = line.trim();

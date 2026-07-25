@@ -79,7 +79,7 @@ Alles landt in `00 Inbox/`. Op een rustig moment open je het hoofdvenster en ver
 je notities naar de projectmappen — vaak meerdere niveaus diep, per klant en project.
 
 Verplaatsen gaat via een "verplaats naar…"-actie met fuzzy zoeken over de hele
-mappenboom: je typt `alph rap` en krijgt `10 Projecten/Klant X/Project Alpha/Rapportage`.
+mappenboom: je typt `alph rap` en krijgt `10 Projects/Klant X/Project Alpha/Rapportage`.
 Slepen in de boom kan ook.
 
 Verplaatsen mag nooit iets breken. Omdat verwijzingen naar bijlagen wikilinks zijn
@@ -116,7 +116,7 @@ ooit niet start, of geblokkeerd wordt, of je zit op een vreemde machine — je k
 nog vastleggen, en het komt goed terecht.
 
 Daarnaast wordt je **bestaande** map 'Notes to self' eenmalig volledig geïmporteerd naar
-`90 Archief/Mail-import/JJJJ/`, met de oorspronkelijke datum. Je begint dus niet met een
+`90 Archive/Mail-import/JJJJ/`, met de oorspronkelijke datum. Je begint dus niet met een
 lege app maar met je hele geschiedenis, doorzoekbaar.
 
 ## 4. De editor
@@ -188,9 +188,9 @@ ervóór. Concreet betekent dat:
 
 ```
 00 Inbox/            alles komt hier binnen
-10 Projecten/        <Klant>/<Project>/… — zelf beheerd, meerdere niveaus diep
-20 Onderwerpen/      wat langer meegaat dan een project
-90 Archief/          afgerond, plus de eenmalige mail-import
+10 Projects/         <Klant>/<Project>/… — zelf beheerd, meerdere niveaus diep
+20 Areas/            wat langer meegaat dan een project
+90 Archive/          afgerond, plus de eenmalige mail-import
 _attachments/        alle afbeeldingen en bijlagen, per jaar/maand
 _templates/          sjablonen die je zelf kunt aanpassen
 ```

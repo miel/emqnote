@@ -3,11 +3,12 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * De meting die fase 1 moet aantonen: van global hotkey tot een getekend venster met
- * een knipperende cursor, onder de 80 milliseconden.
+ * The measurement phase 1 has to demonstrate: from global hotkey to a painted window
+ * with a blinking caret, under 80 milliseconds.
  *
- * Dit is geen achteraf-optimalisatie maar een acceptatiecriterium. Zit dit getal er nu
- * al boven, dan is dat een architectuurprobleem — geen kwestie van later wat bijschaven.
+ * This is not an afterthought optimisation but an acceptance criterion. If the number
+ * is already above budget now, that is an architectural problem — not something to
+ * shave down later.
  */
 
 export const LATENCY_BUDGET_MS = 80;
@@ -28,7 +29,7 @@ export function beginMeasurement(): number {
   nextToken += 1;
   pending.set(token, { startedAt: process.hrtime.bigint(), at: new Date() });
 
-  // Een venster dat nooit meldt dat het geverfd is, mag geen geheugen vasthouden.
+  // A window that never reports having painted must not hold on to memory.
   setTimeout(() => pending.delete(token), 10_000);
 
   return token;
@@ -59,7 +60,7 @@ async function log(at: Date, elapsedMs: number): Promise<void> {
       "utf8",
     );
   } catch {
-    // Meten mag nooit de reden zijn dat het vastleggen van een notitie mislukt.
+    // Measuring must never be the reason capturing a note fails.
   }
 }
 
@@ -93,7 +94,7 @@ export function stats(): LatencyStats {
 
 export function describeStats(): string {
   const current = stats();
-  if (current.count === 0) return "Latency: nog niet gemeten";
+  if (current.count === 0) return "Latency: not measured yet";
   return (
     `Latency: p50 ${current.p50.toFixed(0)} ms, ` +
     `p95 ${current.p95.toFixed(0)} ms, ` +

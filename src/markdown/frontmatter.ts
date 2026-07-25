@@ -13,11 +13,11 @@ export interface Frontmatter {
   attachments?: string[];
   tags?: string[];
   source?: NoteSource;
-  /** Velden die wij niet kennen — bijvoorbeeld door Obsidian toegevoegd. Blijven behouden. */
+  /** Fields we do not know about — added by Obsidian, for instance. Preserved as-is. */
   extra?: Record<string, unknown>;
 }
 
-/** Vaste volgorde. Niet alfabetisch, niet naar invoervolgorde — vast, voor leesbare diffs. */
+/** Fixed order. Not alphabetical, not insertion order — fixed, for readable diffs. */
 const FIELD_ORDER = [
   "title",
   "type",
@@ -34,15 +34,15 @@ const ARRAY_FIELDS = new Set(["attendees", "attachments", "tags"]);
 
 const MAX_INLINE_ARRAY_WIDTH = 100;
 
-/** Tekens waarmee een YAML-scalar niet mag beginnen zonder aanhalingstekens. */
+/** Characters a YAML scalar may not start with unless it is quoted. */
 const LEADING_INDICATORS = new Set([
   "-", "?", ":", ",", "[", "]", "{", "}", "#", "&", "*", "!",
   "|", ">", "'", '"', "%", "@", "`",
 ]);
 
 /**
- * Zou deze string bij het teruglezen iets anders worden dan een string?
- * `true`, `12`, `null`, `~` en consorten moeten daarom aanhalingstekens krijgen.
+ * Would this string come back as something other than a string?
+ * `true`, `12`, `null`, `~` and friends therefore need quoting.
  */
 function reparsesAsNonString(value: string): boolean {
   if (value === "") return true;
@@ -57,8 +57,8 @@ function needsQuotes(value: string): boolean {
   if (value === "") return true;
   if (value !== value.trim()) return true;
   if (LEADING_INDICATORS.has(value[0]!)) return true;
-  // Alleen dubbele punt *gevolgd door een spatie* breekt YAML — daardoor blijven
-  // tijdstempels als 2026-07-25T14:32:00+02:00 onaangehaald.
+  // Only a colon *followed by a space* breaks YAML, which is what keeps timestamps
+  // like 2026-07-25T14:32:00+02:00 unquoted.
   if (value.includes(": ") || value.endsWith(":")) return true;
   if (value.includes(" #")) return true;
   if (value.includes("\n")) return true;
@@ -73,7 +73,7 @@ function emitScalar(value: string): string {
   return needsQuotes(value) ? quote(value) : value;
 }
 
-/** In een inline-array is een komma of sluithaak óók een probleem. */
+/** Inside an inline array a comma or bracket is a problem too. */
 function emitInlineItem(value: string): string {
   if (needsQuotes(value) || /[,[\]{}]/.test(value)) return quote(value);
   return value;
@@ -91,8 +91,8 @@ function emitUnknown(key: string, value: unknown): string[] {
   }
   if (value === null || value === undefined) return [];
   if (typeof value === "object") {
-    // Geneste structuren komen in onze eigen notities niet voor; als Obsidian er een
-    // toevoegt geven we hem ongewijzigd terug via de JSON-achtige flow-notatie.
+    // Nested structures do not occur in our own notes; if Obsidian adds one we hand it
+    // back unchanged using the JSON-like flow notation.
     return [`${key}: ${JSON.stringify(value)}`];
   }
   if (typeof value === "string") return [`${key}: ${emitScalar(value)}`];
@@ -100,8 +100,8 @@ function emitUnknown(key: string, value: unknown): string[] {
 }
 
 /**
- * Schrijft frontmatter deterministisch: vaste veldvolgorde, lege velden weggelaten.
- * Inclusief de `---`-afbakening en het afsluitende regeleinde.
+ * Writes frontmatter deterministically: fixed field order, empty fields omitted.
+ * Includes the `---` delimiters and the closing newline.
  */
 export function serializeFrontmatter(frontmatter: Frontmatter): string {
   const lines: string[] = ["---"];

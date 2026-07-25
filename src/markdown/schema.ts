@@ -2,15 +2,15 @@ import { Schema } from "prosemirror-model";
 import type { MarkSpec, NodeSpec } from "prosemirror-model";
 
 /**
- * Het ProseMirror-schema van emqnote, één-op-één afgeleid van 03-markdown-dialect.md.
+ * The ProseMirror schema of emqnote, derived one-to-one from 03-markdown-dialect.md.
  *
- * De twee dingen die dit schema anders maken dan een standaard-schema, en die de
- * aanleiding voor het hele project waren:
+ * Two things set this schema apart from a stock one, and both are the reason the
+ * project exists at all:
  *
- *  1. `listItem` accepteert blok-inhoud (`paragraph block+`), niet alleen inline.
- *     Daarmee kan een alinea, tabel of geneste lijst ónder een bullet hangen.
- *  2. `underline` en `highlight` bestaan als mark, omdat markdown ze niet kent maar
- *     het dagelijkse Outlook-gebruik ze wel gebruikt.
+ *  1. `listItem` accepts block content (`paragraph block*`), not just inline content.
+ *     That is what lets a paragraph, table or nested list hang underneath a bullet.
+ *  2. `underline` and `highlight` exist as marks, because markdown does not have them
+ *     while everyday use in Outlook does.
  */
 
 const nodes: Record<string, NodeSpec> = {
@@ -36,7 +36,7 @@ const nodes: Record<string, NodeSpec> = {
     defining: true,
   },
 
-  /** Ruwe HTML op blokniveau — in de praktijk een tabel met samengevoegde cellen. */
+  /** Raw block-level HTML — in practice a table with merged cells. */
   htmlBlock: {
     group: "block",
     content: "text*",
@@ -57,19 +57,19 @@ const nodes: Record<string, NodeSpec> = {
 
   listItem: {
     content: "paragraph block*",
-    // null = geen takenlijst-item; true/false = aangevinkt of niet
+    // null = not a task list item; true/false = checked or unchecked
     attrs: { checked: { default: null } },
     defining: true,
   },
 
   /**
-   * GFM-tabel. De eerste rij is altijd de koprij; een aparte koprij-node zou een
-   * onderscheid introduceren dat markdown zelf niet maakt.
+   * A GFM table. The first row is always the header row; a separate header node would
+   * introduce a distinction that markdown itself does not make.
    */
   table: {
     group: "block",
     content: "tableRow+",
-    // per kolom: "left" | "right" | "center" | null
+    // per column: "left" | "right" | "center" | null
     attrs: { align: { default: [] } },
     isolating: true,
   },
@@ -82,7 +82,7 @@ const nodes: Record<string, NodeSpec> = {
 
   hardBreak: { group: "inline", inline: true, selectable: false },
 
-  /** Externe afbeelding: ![alt](url). Bijlagen gebruiken wikiEmbed. */
+  /** An external image: ![alt](url). Attachments use wikiEmbed instead. */
   image: {
     group: "inline",
     inline: true,
@@ -94,7 +94,7 @@ const nodes: Record<string, NodeSpec> = {
     },
   },
 
-  /** ![[bestand.png]] — een bijlage uit _attachments/, opgelost op naam. */
+  /** ![[file.png]] — an attachment from _attachments/, resolved by name. */
   wikiEmbed: {
     group: "inline",
     inline: true,
@@ -103,7 +103,7 @@ const nodes: Record<string, NodeSpec> = {
     attrs: { target: { default: "" } },
   },
 
-  /** [[Notitie]] of [[Notitie|alias]] */
+  /** [[Note]] or [[Note|alias]] */
   wikiLink: {
     group: "inline",
     inline: true,
@@ -128,12 +128,12 @@ const marks: Record<string, MarkSpec> = {
 export const schema = new Schema({ nodes, marks });
 
 /**
- * Nestvolgorde bij het schrijven van markdown, van buiten naar binnen.
+ * Nesting order when writing markdown, from outermost to innermost.
  *
- * Deze volgorde is willekeurig gekozen maar ligt vást: marks zijn in ProseMirror een
- * ongeordende verzameling, terwijl markdown een boom is. Zonder een vaste volgorde
- * zou `**<u>x</u>**` en `<u>**x**</u>` allebei kunnen ontstaan uit hetzelfde document,
- * en is de rondgang niet bytegelijk.
+ * The order itself is arbitrary but it is *fixed*: in ProseMirror marks are an
+ * unordered set, while markdown is a tree. Without a fixed order the same document
+ * could produce both `**<u>x</u>**` and `<u>**x**</u>`, and the round trip would not
+ * be byte-identical.
  */
 export const MARK_NESTING_ORDER = [
   "link",

@@ -3,8 +3,8 @@ import type { StatusPayload } from "../shared/ipc.js";
 
 const LATENCY_BUDGET_MS = 80;
 
-function nu(): string {
-  return new Date().toLocaleString("nl-NL", {
+function now(): string {
+  return new Date().toLocaleString(undefined, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -19,15 +19,15 @@ export function Capture(): React.ReactElement {
     lastLatencyMs: null,
     savedAs: null,
   });
-  const [tijdstip, setTijdstip] = useState(nu);
+  const [timestamp, setTimestamp] = useState(now);
 
   useEffect(() => {
     const stopShow = window.emqnote.onShow(({ token }) => {
-      setTijdstip(nu());
+      setTimestamp(now());
       textarea.current?.focus();
 
-      // Twee frames wachten: het eerste wordt gepland, ná het tweede staat er echt
-      // iets op het scherm. Pas dan is "hotkey tot knipperende cursor" eerlijk gemeten.
+      // Wait two frames: the first is only scheduled, after the second something is
+      // actually on screen. Only then is "hotkey to blinking caret" measured honestly.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => window.emqnote.painted(token));
       });
@@ -35,7 +35,7 @@ export function Capture(): React.ReactElement {
 
     const stopReset = window.emqnote.onReset(() => {
       if (textarea.current !== null) textarea.current.value = "";
-      setStatus((vorige) => ({ ...vorige, savedAs: null }));
+      setStatus((previous) => ({ ...previous, savedAs: null }));
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
@@ -47,45 +47,43 @@ export function Capture(): React.ReactElement {
     };
   }, []);
 
-  const bijToets = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    const sluiten =
+  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    const closing =
       event.key === "Escape" || (event.key === "w" && (event.metaKey || event.ctrlKey));
-    if (sluiten) {
+    if (closing) {
       event.preventDefault();
       window.emqnote.close();
     }
   };
 
-  const bovenBudget =
+  const overBudget =
     status.lastLatencyMs !== null && status.lastLatencyMs > LATENCY_BUDGET_MS;
 
   return (
-    <div className="venster">
-      <div className="titelbalk">
-        <span className="tijdstip">{tijdstip}</span>
-        <span className="hint">Esc bewaart en sluit</span>
+    <div className="window">
+      <div className="titlebar">
+        <span className="timestamp">{timestamp}</span>
+        <span className="hint">Esc saves and closes</span>
       </div>
 
       <textarea
         ref={textarea}
-        className="tekst"
-        placeholder="Typ maar."
+        className="editor"
+        placeholder="Just type."
         spellCheck={false}
         autoFocus
-        onKeyDown={bijToets}
+        onKeyDown={onKeyDown}
         onChange={(event) => window.emqnote.change(event.target.value)}
       />
 
-      <div className="statusbalk">
-        <span className="bestand">
+      <div className="statusbar">
+        <span className="filename">
           {status.savedAs === null
-            ? "Nog niets bewaard"
-            : `Bewaard als ${status.savedAs.split(/[\\/]/).pop()}`}
+            ? "Nothing saved yet"
+            : `Saved as ${status.savedAs.split(/[\\/]/).pop()}`}
         </span>
-        <span className="meting" data-boven-budget={bovenBudget}>
-          {status.lastLatencyMs === null
-            ? ""
-            : `${status.lastLatencyMs.toFixed(0)} ms`}
+        <span className="latency" data-over-budget={overBudget}>
+          {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
         </span>
       </div>
     </div>
