@@ -95,3 +95,22 @@ describe("lists left behind by editing", () => {
     expect(serializeBody(body(quote))).toBe("> Citaat\n");
   });
 });
+
+describe("blank lines left at the end", () => {
+  it("does not write trailing empty paragraphs", () => {
+    // Pressing Enter a few times to get out of a list leaves empty paragraphs behind.
+    // They are residue, not content, and the dialect forbids trailing blank lines.
+    const result = serializeBody(
+      body(para(schema.text("Tekst")), paragraph!.create(), paragraph!.create()),
+    );
+    expect(result).toBe("Tekst\n");
+  });
+
+  it("keeps an empty paragraph that sits between two blocks", () => {
+    // Only the trailing ones are residue; a deliberate gap in the middle stays.
+    const result = serializeBody(
+      body(para(schema.text("Een")), paragraph!.create(), para(schema.text("Twee"))),
+    );
+    expect(result).toBe("Een\n\n\n\nTwee\n");
+  });
+});

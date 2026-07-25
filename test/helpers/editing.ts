@@ -3,7 +3,7 @@ import { EditorState, TextSelection, type Command } from "prosemirror-state";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { schema } from "../../src/markdown/schema.js";
 import { parseNote, serializeBody } from "../../src/markdown/index.js";
-import { enter } from "../../src/renderer/editor/commands.js";
+import { backspace, enter } from "../../src/renderer/editor/commands.js";
 
 /**
  * Editing tests run against `EditorState` rather than a mounted view: commands are
@@ -84,13 +84,32 @@ export function type(state: EditorState, text: string): EditorState {
   return state.apply(state.tr.insertText(text));
 }
 
+/** Caret at the very start of the given text — where Backspace behaves specially. */
+export function stateAtStartOf(markdown: string, needle: string): EditorState {
+  const doc = docFromMarkdown(markdown);
+  const at = caretAfter(doc, needle) - needle.length;
+  return EditorState.create({
+    schema,
+    doc,
+    selection: TextSelection.create(doc, at),
+  });
+}
+
+/**
+ * Applies a command, accumulating every transaction it dispatches.
+ *
+ * A command may dispatch more than once — `exitList` lifts repeatedly — and each of
+ * those is computed against the state left by the previous one, exactly as the editor
+ * view would have it.
+ */
 export function run(state: EditorState, command: Command): EditorState {
   let next = state;
   command(state, (transaction) => {
-    next = state.apply(transaction);
+    next = next.apply(transaction);
   });
   return next;
 }
 
-/** The Enter binding as the keymap actually wires it. */
+/** The Enter and Backspace bindings as the keymap actually wires them. */
 export const pressEnter = chainCommands(enter, baseKeymap.Enter!);
+export const pressBackspace = chainCommands(backspace, baseKeymap.Backspace!);

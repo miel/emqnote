@@ -156,14 +156,74 @@ export const tabOutdent: Command = (state, dispatch) => {
   return true;
 };
 
+/** Is the caret on an empty block that is directly inside a list item? */
+function onEmptyListItem(state: EditorState): boolean {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parent.content.size !== 0) return false;
+
+  const itemDepth = $from.depth - 1;
+  return itemDepth >= 1 && $from.node(itemDepth).type === listItem;
+}
+
 /**
- * Enter. Inside a list this splits the item; on an empty item `splitListItem` lifts it
- * one level instead, and at the top level that leaves the list altogether — exactly
- * the behaviour Word and Outlook have.
+ * Leaves the list entirely and starts an ordinary paragraph.
+ *
+ * `splitListItem` promotes an empty item one level instead, so escaping a list nested
+ * three deep took three presses of Enter and felt like the list refusing to end. One
+ * press now ends it from any depth. Nothing is lost: Shift+Tab still promotes a level
+ * at a time, and that is the key for it.
+ *
+ * Implemented as repeated lifts rather than one hand-built step: lifting a list item
+ * correctly — closing the list, rejoining what is left, moving the children — is
+ * exactly the fiddly work `liftListItem` already does well.
+ */
+export const exitList: Command = (state, dispatch) => {
+  if (!isInList(state) || !onEmptyListItem(state)) return false;
+  if (dispatch === undefined) return true;
+
+  let current = state;
+  for (let guard = 0; guard < 12 && isInList(current); guard += 1) {
+    let next: EditorState | null = null;
+    const lifted = liftListItem(listItem!)(current, (tr) => {
+      next = current.apply(tr);
+      dispatch(tr);
+    });
+    if (!lifted || next === null) break;
+    current = next;
+  }
+
+  return true;
+};
+
+/**
+ * Enter. Inside a list this splits the item; on an empty item it ends the list.
  */
 export const enter: Command = (state, dispatch) => {
+  if (exitList(state, dispatch)) return true;
   if (isInList(state)) return splitListItem(listItem!)(state, dispatch);
   return false;
+};
+
+/**
+ * Backspace at the very start of a list item promotes it, and at the top level takes
+ * it out of the list.
+ *
+ * The default was `joinBackward`, which merged the item into the *previous item* as a
+ * second paragraph: the text stayed indented, the bullet disappeared and the caret
+ * ended up somewhere that belonged to neither item. Backspace at the start of a line
+ * should undo structure, not quietly restructure two of them.
+ */
+export const backspace: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parentOffset !== 0) return false;
+
+  const itemDepth = $from.depth - 1;
+  if (itemDepth < 1 || $from.node(itemDepth).type !== listItem) return false;
+
+  // Only the first block of the item; further down, Backspace is ordinary joining.
+  if ($from.index(itemDepth) !== 0) return false;
+
+  return liftListItem(listItem!)(state, dispatch);
 };
 
 /** Shift+Enter: a soft break inside the same paragraph or list item. */

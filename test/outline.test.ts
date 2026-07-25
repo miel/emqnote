@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  backspace,
   softBreak,
   tabIndent,
   tabOutdent,
@@ -8,9 +9,11 @@ import {
 } from "../src/renderer/editor/commands.js";
 import {
   markdownOf,
+  pressBackspace,
   pressEnter,
   run,
   stateAt,
+  stateAtStartOf,
   stateOnEmptyLineAfter,
   type,
 } from "./helpers/editing.js";
@@ -125,18 +128,48 @@ describe("Enter", () => {
     expect(markdownOf(run(state, pressEnter))).toBe("- One\n-\n");
   });
 
-  it("outdents on an empty item instead of nesting deeper", () => {
-    // Enter once for a fresh item at level two, Enter again on that empty item to
-    // step back out to level one — the way Word and Outlook behave.
+  it("ends the list from an empty item, in one press", () => {
+    // Not one level at a time. Escaping a list nested three deep used to take three
+    // presses and felt like the list refusing to end. Shift+Tab is the key for
+    // promoting a single level, so nothing is lost.
+    // The file shows just the list: you are now on an empty paragraph below it, and
+    // an empty paragraph at the end is residue rather than content.
     const state = stateAt("- One\n  - Two\n", "Two");
     const afterFirst = run(state, pressEnter);
-    expect(markdownOf(run(afterFirst, pressEnter))).toBe("- One\n  - Two\n-\n");
+    expect(markdownOf(run(afterFirst, pressEnter))).toBe("- One\n  - Two\n");
   });
 
-  it("leaves the list at the top level", () => {
+  it("ends the list at the top level too", () => {
     const state = stateAt("- One\n", "One");
     const afterFirst = run(state, pressEnter);
-    expect(markdownOf(run(afterFirst, pressEnter))).toBe("- One\n\n");
+    expect(markdownOf(run(afterFirst, pressEnter))).toBe("- One\n");
+  });
+
+  it("ends a list nested three deep in one press", () => {
+    const deep = "- One\n  - Two\n    - Three\n";
+    const blank = run(stateAt(deep, "Three"), pressEnter);
+    expect(markdownOf(run(blank, pressEnter))).toBe(deep);
+  });
+});
+
+describe("Backspace at the start of a list item", () => {
+  it("promotes a nested item rather than merging it into the one above", () => {
+    // The default joined the item into the previous one as a second paragraph: the
+    // text stayed indented, the bullet vanished, and the caret sat in neither item.
+    const state = stateAtStartOf("- One\n  - Two\n", "Two");
+    expect(markdownOf(run(state, pressBackspace))).toBe("- One\n- Two\n");
+  });
+
+  it("takes a top-level item out of the list", () => {
+    const state = stateAtStartOf("- One\n- Two\n", "Two");
+    expect(markdownOf(run(state, pressBackspace))).toBe("- One\n\nTwo\n");
+  });
+
+  it("does not claim the key in the middle of a line", () => {
+    // Deleting a character is native browser behaviour rather than a command, so the
+    // point here is only that our handler declines and lets it through.
+    const state = stateAt("- One\n- Two\n", "Tw");
+    expect(backspace(state, () => {})).toBe(false);
   });
 });
 

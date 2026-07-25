@@ -1,4 +1,4 @@
-import { app, dialog, globalShortcut, ipcMain } from "electron";
+import { app, dialog, globalShortcut, ipcMain, Menu } from "electron";
 import { join } from "node:path";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownAttendees, rememberAttendees } from "./attendees.js";
@@ -71,6 +71,7 @@ async function main(): Promise<void> {
   const selfTestRounds = launch.selfTestRounds;
   const settings = loadSettings();
 
+  installMinimalMenu();
   registerIpc();
   createCaptureWindow();
 
@@ -96,6 +97,35 @@ async function main(): Promise<void> {
   await prepareVault();
 
   if (selfTestRounds > 0) await runSelfTest(selfTestRounds);
+}
+
+/**
+ * Replaces Electron's default application menu with only the clipboard roles.
+ *
+ * That default menu is invisible on a frameless window but its accelerators are not:
+ * it binds Ctrl+M to Minimise, which is why indenting inside a list minimised the
+ * whole window. It also claims Ctrl+R for reload and Ctrl+Shift+I for developer tools.
+ * The Edit roles have to stay, because on macOS the menu is what makes Cmd+C and
+ * Cmd+V work at all.
+ */
+function installMinimalMenu(): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "pasteAndMatchStyle" },
+          { role: "selectAll" },
+        ],
+      },
+    ]),
+  );
 }
 
 function registerHotkey(): void {

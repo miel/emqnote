@@ -2,6 +2,7 @@ import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { redo, undo } from "prosemirror-history";
 import type { Command } from "prosemirror-state";
 import {
+  backspace,
   enter,
   indent,
   outdent,
@@ -79,6 +80,7 @@ export function outlookKeymap(openLinkPrompt: () => void): Record<string, Comman
 
     Enter: chainCommands(enter, baseKeymap.Enter!),
     "Shift-Enter": softBreak,
+    Backspace: chainCommands(backspace, baseKeymap.Backspace!),
 
     "Mod-z": undo,
     "Mod-Shift-z": redo,

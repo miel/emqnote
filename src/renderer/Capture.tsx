@@ -159,6 +159,11 @@ export function Capture(): React.ReactElement {
             setLink(null);
             editor.current?.focus();
           }}
+          onApplyAndClose={(href) => {
+            editor.current?.applyLink(href);
+            setLink(null);
+            window.emqnote.close();
+          }}
         />
       )}
 

@@ -5,6 +5,8 @@ interface Props {
   initialHref: string;
   onApply: (href: string) => void;
   onCancel: () => void;
+  /** Ctrl+Enter: apply the link and then close the note, as it does everywhere else. */
+  onApplyAndClose: (href: string) => void;
 }
 
 /**
@@ -14,7 +16,12 @@ interface Props {
  * interruption this app exists to avoid. Type, press Enter, carry on. An empty value
  * removes the link again.
  */
-export function LinkPrompt({ initialHref, onApply, onCancel }: Props): React.ReactElement {
+export function LinkPrompt({
+  initialHref,
+  onApply,
+  onCancel,
+  onApplyAndClose,
+}: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
   const [href, setHref] = useState(initialHref);
 
@@ -32,9 +39,19 @@ export function LinkPrompt({ initialHref, onApply, onCancel }: Props): React.Rea
         value={href}
         placeholder="https://…  (empty removes the link)"
         onChange={(event) => setHref(event.target.value)}
+        // Clicking anywhere else puts the prompt away. It used to sit there until a
+        // key was pressed, which left the window looking stuck.
+        onBlur={() => onCancel()}
         onKeyDown={(event) => {
-          // The prompt owns the keyboard while it is open; nothing here should reach
-          // the note underneath.
+          // Ctrl+Enter keeps its meaning everywhere, including here: apply the link,
+          // then save and close the note.
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            onApplyAndClose(href.trim());
+            return;
+          }
+
+          // Otherwise the prompt owns the keyboard; nothing here reaches the note.
           event.stopPropagation();
 
           if (event.key === "Enter") {

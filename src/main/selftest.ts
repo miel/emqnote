@@ -107,6 +107,23 @@ export async function runSelfTest(rounds: number): Promise<void> {
     // Reporting must not be the reason a measurement run fails.
   }
 
+  // Only when there is no console to have read the JSON already. A packaged Windows
+  // app has none, which is why the dialog exists — but shown unconditionally it turns
+  // an automated run into one that waits forever for a click.
+  if (!process.stdout.isTTY) {
+    await showSummary(result, rounds, missed, saved, resultFile);
+  }
+
+  app.exit(result.withinBudget && missed === 0 && saved !== null ? 0 : 1);
+}
+
+async function showSummary(
+  result: ReturnType<typeof stats>,
+  rounds: number,
+  missed: number,
+  saved: string | null,
+  resultFile: string,
+): Promise<void> {
   await dialog.showMessageBox({
     type: result.withinBudget && saved !== null ? "info" : "warning",
     title: "emqnote self-test",
@@ -121,8 +138,6 @@ export async function runSelfTest(rounds: number): Promise<void> {
       `Full result: ${resultFile}`,
     buttons: ["Close"],
   });
-
-  app.exit(result.withinBudget && missed === 0 && saved !== null ? 0 : 1);
 }
 
 /**

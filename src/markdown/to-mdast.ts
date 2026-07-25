@@ -361,6 +361,21 @@ function blocksToMdast(nodes: PMNode[]): RootContent[] {
     .filter((node): node is RootContent => node !== null);
 }
 
+/**
+ * Empty paragraphs at the very end are the residue of pressing Enter a few times, not
+ * something anyone meant to write. Left in, they become blank lines at the end of the
+ * file, which the dialect forbids.
+ */
+function withoutTrailingBlanks(blocks: PMNode[]): PMNode[] {
+  const kept = [...blocks];
+  while (kept.length > 0) {
+    const last = kept[kept.length - 1]!;
+    if (last.type.name !== "paragraph" || last.content.size !== 0) break;
+    kept.pop();
+  }
+  return kept;
+}
+
 export function docToMdast(doc: PMNode): Root {
-  return { type: "root", children: blocksToMdast(childrenOf(doc)) };
+  return { type: "root", children: blocksToMdast(withoutTrailingBlanks(childrenOf(doc))) };
 }
