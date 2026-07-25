@@ -1,0 +1,378 @@
+# emqnote — het markdown-dialect
+
+Dit document is een **specificatie**, geen toelichting. Het legt precies vast wat er in
+een `.md`-bestand in de vault mag staan en hoe de serializer schrijft. Het is de
+maatstaf voor de rondgang-testsuite uit fase 0.
+
+Uitgangspunt: **CommonMark + GFM**, aangevuld met een klein aantal Obsidian-compatibele
+uitbreidingen. Alles wat hier staat moet correct tonen in Obsidian, want dat is het
+noodluik.
+
+---
+
+## 1. Bestandsvorm
+
+| | |
+|---|---|
+| Tekencodering | UTF-8, zonder BOM |
+| Regeleinden | `\n` (LF), ook op Windows |
+| Slot | Precies één `\n` aan het eind van het bestand |
+| Witruimte | Geen spaties aan het eind van een regel, behalve nooit |
+| Blokscheiding | Precies één lege regel tussen blokken op hetzelfde niveau |
+
+## 2. Frontmatter
+
+Altijd aanwezig, altijd als eerste, YAML tussen `---`.
+
+```yaml
+---
+title: Kickoff project Alpha
+type: meeting
+created: 2026-07-25T14:32:00+02:00
+modified: 2026-07-25T15:10:00+02:00
+location: Teams
+attendees: [Jan de Vries, Els Bakker]
+attachments: ["2026-07-25-1432-agenda.pdf"]
+tags: [klantx, offerte]
+source: manual
+---
+```
+
+**Verplicht:** `title`, `type`, `created`
+**Optioneel:** de rest
+
+Regels:
+
+- Veldvolgorde ligt vast, precies zoals hierboven. Niet alfabetisch, niet naar
+  invoervolgorde — vast. Dat maakt diffs leesbaar en de rondgang deterministisch.
+- Lege velden worden **weggelaten**, niet als `location:` of `location: ""` geschreven.
+- `type`: `quick` of `meeting`
+- `source`: `manual`, `email` of `import`
+- Tijdstempels: ISO 8601 met tijdzone-offset. Nooit UTC-Z, want dan klopt het niet meer
+  bij het teruglezen van een notitie uit de zomer in de winter.
+- Lijsten inline (`[a, b]`) zolang ze op één regel passen onder 100 tekens, anders als
+  blok met `- `.
+- Aanhalingstekens (dubbel) worden gezet wanneer de waarde:
+  - leeg is, of met witruimte begint of eindigt;
+  - begint met een YAML-aanduidend teken (`-`, `?`, `:`, `,`, `[`, `]`, `{`, `}`, `#`,
+    `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%`, `@`, `` ` ``);
+  - een dubbele punt **gevolgd door een spatie** bevat, of op een dubbele punt eindigt;
+  - een spatie gevolgd door `#` bevat;
+  - bij het teruglezen iets anders dan een string zou worden (`true`, `12`, `null`).
+
+  Let op de derde regel: alleen `: ` breekt YAML, een kale dubbele punt niet. Daardoor
+  blijft `created: 2026-07-25T14:32:00+02:00` onaangehaald, terwijl
+  `title: "Stuurgroep: kwartaalrapportage"` wél aanhalingstekens krijgt.
+
+- In een inline-array krijgt een waarde ook aanhalingstekens als er een komma of een
+  haakje in zit.
+
+## 3. Blokken
+
+### 3.1 Koppen
+
+ATX, altijd. Nooit setext (`====`). Niveau 1 tot en met 6.
+
+```markdown
+## Besluiten
+```
+
+De titel van de notitie staat in de frontmatter, niet als `#` bovenaan. Een `#` in de
+tekst is dus altijd een echte kop binnen de notitie.
+
+### 3.2 Alinea's
+
+Platte tekst. Een enkele `\n` binnen een alinea bestaat niet — een alinea is één regel,
+hoe lang ook. Geen regelafbreking op 80 tekens; dat maakt diffs onleesbaar zodra je één
+woord toevoegt.
+
+### 3.3 Zachte regelovergang
+
+`Shift+Enter` in de editor wordt een **backslash aan het regeleinde** (CommonMark):
+
+```markdown
+Aanwezig namens ons:\
+Jan, Els en Ruben
+```
+
+Bij het **lezen** worden ook `<br>` en twee spaties aan het regeleinde geaccepteerd —
+die komen uit Obsidian of uit geplakte HTML. Bij het **schrijven** altijd de backslash.
+
+### 3.4 Lijsten — het belangrijkste onderdeel
+
+**Markers:** `-` voor opsommingen (nooit `*` of `+`). `1.` `2.` `3.` voor nummering,
+met de werkelijke doorlopende nummers, niet overal `1.`.
+
+**Inspringing is de inhoudskolom van het bovenliggende item.** Dus:
+
+- na `- ` → 2 spaties
+- na `1. ` → 3 spaties
+- na `10. ` → 4 spaties
+
+Dit is CommonMark-conform en toont correct in Obsidian. Vaste inspringing van 2 of 4
+spaties is dat níét zodra je een genummerde lijst nest.
+
+**Gemengde niveaus:**
+
+```markdown
+1. Voorbereiding
+   - Offerte nalezen
+   - Deelnemerslijst controleren
+     1. Ruben ontbreekt nog
+     2. Els heeft afgezegd
+2. Uitvoering
+```
+
+**Alinea's onder een bullet** — de vorm waar Obsidian op stukliep. Een lege regel,
+daarna de alinea op de inhoudskolom:
+
+```markdown
+- Budget is akkoord
+
+  Bevestigd door Els in de stuurgroep van 12 juni. De formele goedkeuring komt
+  via de gebruikelijke route.
+
+  Aandachtspunt: het bedrag is exclusief de meerwerkpost.
+
+- Planning nog niet
+```
+
+**Takenlijsten** (GFM):
+
+```markdown
+- [ ] Offerte versturen
+- [x] Agenda rondsturen
+```
+
+**Losse tegenover strakke lijsten.** CommonMark kent losheid alleen als eigenschap van
+de bróntekst, en ProseMirror bewaart die niet. De serializer moet hem dus afleiden, en
+die afleiding ís de norm:
+
+> Een lijstitem is **los** zodra het ná de eerste alinea nog iets anders bevat dan een
+> geneste lijst. Is één item in een lijst los, dan is de hele lijst los.
+
+Een los item krijgt lege regels tussen zijn eigen blokken; een losse lijst krijgt lege
+regels tussen álle items, ook de korte. Daarmee blijft de gewone outline-vorm — een
+bullet met een sublijst eronder — strak:
+
+```markdown
+- Bevinding
+  - Detail
+  - Nog een detail
+- Volgende bevinding
+```
+
+terwijl een tweede alinea, tabel of codeblok wél lege regels krijgt, wat markdown daar
+ook echt nodig heeft om niet als voortzetting van de vorige regel te worden gelezen.
+
+### 3.5 Tabellen
+
+GFM-tabellen. Kolommen worden **niet** uitgelijnd met opvulspaties — dat geeft enorme
+diffs bij één gewijzigde cel.
+
+```markdown
+| Onderwerp | Eigenaar | Datum |
+| --- | --- | --- |
+| Offerte | Jan | 2026-08-01 |
+```
+
+De scheidingsrij is altijd minstens drie streepjes (`---`), niet het minimaal
+toegestane enkele streepje. Dat is wat Obsidian en zowat elk ander gereedschap
+schrijft; met één streepje zou een bezoek aan Obsidian elke tabel in de vault
+herschrijven.
+
+Uitlijning per kolom via `:---`, `:---:`, `---:` wanneer die is ingesteld.
+
+Een zachte regelovergang bestaat in een GFM-cel niet; die wordt daar `<br>`.
+
+**Samengevoegde cellen kan GFM niet uitdrukken.** Zo'n tabel — die komt voor bij plakken
+uit Outlook — blijft een HTML-`<table>` in het bestand. Obsidian toont die correct.
+
+### 3.6 Codeblokken
+
+Altijd afgebakend met backticks, nooit met inspringing (die botst met lijsten).
+Taalaanduiding als bekend. De afbakening is drie backticks, of langer wanneer de inhoud
+zelf drie backticks bevat.
+
+Inline-code krijgt precies zoveel backticks als nodig, en géén opvulspaties tenzij de
+inhoud zelf met een backtick begint of eindigt: `` ``tekst met een ` erin`` ``.
+
+### 3.7 Citaten en scheidingslijn
+
+```markdown
+> Citaat uit de mail van Jan.
+```
+
+Scheidingslijn: `---` op een eigen regel, met een lege regel ervoor en erna. Nooit `***`
+of `___`.
+
+## 4. Inline-opmaak
+
+| Wat | Schrijfwijze | Ook geaccepteerd bij lezen |
+|---|---|---|
+| Vet | `**tekst**` | `__tekst__`, `<b>`, `<strong>` |
+| Cursief | `*tekst*` | `_tekst_`, `<i>`, `<em>` |
+| **Onderstreept** | `<u>tekst</u>` | — |
+| **Markeren** | `==tekst==` | `<mark>tekst</mark>` |
+| Doorhalen | `~~tekst~~` | `<s>`, `<del>` |
+| Code | `` `tekst` `` | — |
+| Link | `[tekst](https://…)` | `<https://…>`, kale URL |
+
+Onderstrepen en markeren zijn de reden dat dit dialect inline HTML respectievelijk een
+Obsidian-uitbreiding toestaat: **markdown kent ze niet**, en ze zitten wel in het
+dagelijkse gebruik uit Outlook. Tekstkleur wordt bewust *niet* ondersteund — dat is
+presentatie, niet betekenis, en het maakt bestanden onleesbaar.
+
+**Nestvolgorde.** ProseMirror kent opmaak als een ongeordende verzameling per teken;
+markdown is een boom. Bij het schrijven wordt daarom altijd dezelfde volgorde
+aangehouden, van buiten naar binnen:
+
+> link → markeren → onderstrepen → vet → cursief → doorhalen → code
+
+Dus `==<u>**tekst**</u>==`, nooit `**<u>==tekst==</u>**`. Zonder een vaste volgorde zou
+hetzelfde document twee verschillende bestanden kunnen opleveren en is de rondgang niet
+bytegelijk.
+
+**Markeren en flankering.** Een openend `==` mag niet door witruimte worden gevolgd, een
+sluitend `==` niet door witruimte worden voorafgegaan. Daardoor blijft `als a == b`
+gewone tekst.
+
+## 5. Verwijzingen
+
+### 5.1 Bijlagen
+
+```markdown
+![[2026-07-25-1432-schermafbeelding.png]]
+```
+
+Alleen de bestandsnaam, **geen pad**. Obsidian lost wikilinks vault-breed op naam op,
+dus een notitie verplaatsen breekt de verwijzing niet. De tijdstempel-prefix garandeert
+dat namen uniek zijn.
+
+Niet-afbeeldingen als gewone wikilink:
+
+```markdown
+[[2026-07-25-1432-offerte.pdf]]
+```
+
+### 5.2 Notities onderling
+
+```markdown
+[[2026-07-25 1432 Kickoff project Alpha]]
+```
+
+Met alias:
+
+```markdown
+[[2026-07-25 1432 Kickoff project Alpha|de kickoff]]
+```
+
+### 5.3 Externe links
+
+Altijd de vorm `[tekst](url)`, ook voor e-mailadressen en ook waar markdown de kortere
+`<url>` toestaat. Eén vorm voor elke link is voorspelbaarder dan een mengeling, en het
+is wat een WYSIWYG-editor sowieso produceert:
+
+```markdown
+[jan.devries@example.com](mailto:jan.devries@example.com)
+```
+
+## 6. Ontsnappen
+
+De serializer ontsnapt met een backslash, en alleen waar het echt nodig is:
+
+- Aan het begin van een regel: `#`, `>`, `-`, `+`, `1.` (bij een cijfer gevolgd door
+  punt en spatie), `|`
+- In de tekst: `*`, `_`, `` ` ``, `[`, `]`, `<`, `~~` — maar alleen wanneer de reeks
+  anders als opmaak zou worden gelezen. Een losse `*` midden in een woord wordt niet
+  ontsnapt; dat geeft alleen maar ruis in het bestand.
+- Een backslash in de tekst wordt zelf ontsnapt zodra er een leesteken op volgt
+  (`pad\*naam` wordt `pad\\\*naam`), maar niet voor een letter (`pad\naar` blijft
+  staan) — daar kan hij geen kwaad.
+- In tabelcellen: `|` wordt `\|`
+
+## 7. Wat níét is toegestaan
+
+| | Waarom |
+|---|---|
+| Setext-koppen (`====` onder de tekst) | Twee manieren voor hetzelfde |
+| Ingesprongen codeblokken | Botsen met lijstinspringing |
+| Referentiestijl-links (`[a][1]`) | Rondgang wordt onstabiel |
+| Tekstkleur, lettertype, lettergrootte | Presentatie, geen betekenis |
+| HTML behalve `<u>`, `<br>`, `<mark>`, `<table>`-familie | Houdt bestanden leesbaar |
+| Harde regelafbreking op kolombreedte | Onleesbare diffs |
+| Volgnummers `1.` voor elk item | Onleesbaar als je het bestand rauw bekijkt |
+
+## 8. De rondgang-eis
+
+Dit is de bindende regel van fase 0 en van elke wijziging daarna:
+
+> Voor elk bestand in het testcorpus geldt:
+> **lezen → ProseMirror-document → schrijven** levert **byte-identiek** hetzelfde
+> bestand op.
+
+En omgekeerd:
+
+> **Document → schrijven → lezen** levert een document op dat structureel gelijk is aan
+> het origineel.
+
+Het testcorpus bevat minstens deze gevallen, elk als eigen bestand:
+
+1. Alleen frontmatter, lege body
+2. Alle inline-opmaak in één alinea, inclusief geneste combinaties
+3. Onderstreept en gemarkeerd door elkaar met vet en cursief
+4. Opsomming, zes niveaus diep
+5. Genummerde lijst, zes niveaus diep
+6. Gemengde bullets en nummering, wisselend per niveau
+7. Nummering die doorloopt boven de 9 (inspringing wordt dan 4 spaties)
+8. Alinea's onder een bullet, meerdere per item
+9. Een tabel binnen een lijstitem
+10. Een afbeelding binnen een geneste lijst
+11. Losse tegenover strakke lijst
+12. Takenlijst met gemengde status
+13. GFM-tabel met alle uitlijningen
+14. HTML-tabel met samengevoegde cellen
+15. Codeblok met backticks in de inhoud
+16. Citaat met een lijst erin
+17. Zachte regelovergangen in een alinea en in een lijstitem
+18. Tekens die ontsnapt moeten worden, in alle posities, inclusief backslashes
+19. Nederlandse diakritieken, emoji, en tekens buiten de BMP
+20. Zeer lange alinea zonder regelafbreking
+21. Wikilinks, ingesloten bijlagen, aliassen, externe links
+22. Een notitie met alle frontmatter-velden gevuld
+23. Een notitie met alleen de verplichte velden
+24. Realistische vergadernotitie, ~2 A4, zoals hij ze werkelijk schrijft
+25. Realistische geplakte Outlook-mail, na conversie
+
+Punt 24 en 25 zijn geen randgevallen maar het dagelijks gebruik. Als die twee niet
+byte-stabiel zijn, is de rest academisch.
+
+Het corpus staat in `test/corpus/`. Elk bestand is met de hand geschreven en ís de
+specificatie: wijkt de uitvoer af, dan is er één van beide fout, en dat onderscheid is
+een besluit — geen reden om de test te versoepelen.
+
+```bash
+npm test
+```
+
+Om te zien hoe de serializer een bestand zou schrijven, met de afwijkingen erbij:
+
+```bash
+npm run canonical -- test/corpus/24-vergadernotitie.md
+```
+
+## 9. Bekende beperkingen
+
+Deze gevallen ronden niet af zoals een argeloze lezer zou verwachten. Ze zijn bewust
+geaccepteerd en staan vastgelegd in `test/beperkingen.test.ts`, zodat ze zichtbaar
+blijven in plaats van te sluimeren.
+
+| Geschreven | Wordt | Waarom |
+|---|---|---|
+| `\[\[geen wikilink]]` | een wikilink | De ontsnapping is bij het parsen al verdwenen; de scanner ziet geen verschil meer met een echte verwijzing |
+| `\=\=geen markering\=\=` | een markering | Zelfde oorzaak |
+
+Beide oplossen vraagt om positiebewust parseren — terugkijken in de brontekst om te zien
+of een teken ontsnapt was. Dat is een aanzienlijke complicatie voor gevallen die in
+werknotities vrijwel niet voorkomen. De flankeringsregel voor `==` vangt bovendien de
+enige variant die in de praktijk wél voorkomt: `als a == b` blijft gewoon tekst.
