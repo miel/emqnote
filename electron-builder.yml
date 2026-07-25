@@ -1,0 +1,45 @@
+appId: nl.emqnote.app
+productName: emqnote
+copyright: Emiel
+
+directories:
+  output: release
+  buildResources: build
+
+# Het main-proces én de renderer worden volledig gebundeld (zie
+# electron.vite.config.ts), dus er is bij het draaien niets uit node_modules nodig.
+# electron-builder neemt de productie-afhankelijkheden anders alsnog mee; die
+# uitsluiting scheelt hier zo'n 10 MB aan dode last.
+files:
+  - out/**/*
+  - package.json
+  - "!node_modules/**/*"
+
+asar: true
+
+# Chromium levert 56 talen mee. Voor één gebruiker die Nederlands en Engels leest is
+# dat onnodig gewicht in een zip die over OneDrive naar de werkmachine gaat.
+electronLanguages:
+  - en-US
+  - nl
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: zip
+      arch: [arm64]
+  # Een menubalk-app zonder dock-pictogram. Zonder deze vlag verschijnt emqnote in de
+  # dock en in de vensterschakelaar, wat voor een tray-app alleen maar in de weg zit.
+  extendInfo:
+    LSUIElement: true
+
+win:
+  # Bewust géén installer. Zonder adminrechten is een installer alleen maar een extra
+  # hindernis; een uitgepakte map die je vanaf OneDrive start is het minst kwetsbaar
+  # voor bedrijfsbeleid. Zie 02-technisch-ontwerp.md §9.
+  target:
+    - target: zip
+      arch: [x64]
+
+linux:
+  target: []

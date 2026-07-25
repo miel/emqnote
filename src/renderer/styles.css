@@ -1,0 +1,118 @@
+:root {
+  --achtergrond: #1e1f22;
+  --oppervlak: #26282c;
+  --rand: #33363b;
+  --tekst: #e8e9ec;
+  --gedempt: #8b9099;
+  --accent: #6ea8fe;
+  --waarschuwing: #e8a33d;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --achtergrond: #fbfbfc;
+    --oppervlak: #ffffff;
+    --rand: #dfe1e5;
+    --tekst: #1b1c1f;
+    --gedempt: #6b7079;
+    --accent: #1a63d8;
+    --waarschuwing: #9a6200;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--achtergrond);
+  color: var(--tekst);
+  font-family:
+    "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  overflow: hidden;
+}
+
+.venster {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--rand);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--achtergrond);
+}
+
+/* De titelbalk is de sleepgreep; het venster heeft geen systeemrand. */
+.titelbalk {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--oppervlak);
+  border-bottom: 1px solid var(--rand);
+  font-size: 12px;
+  color: var(--gedempt);
+  user-select: none;
+}
+
+.tijdstip {
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  -webkit-app-region: no-drag;
+}
+
+.tekst {
+  flex: 1;
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.tekst::placeholder {
+  color: var(--gedempt);
+}
+
+.statusbalk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px;
+  background: var(--oppervlak);
+  border-top: 1px solid var(--rand);
+  font-size: 11px;
+  color: var(--gedempt);
+}
+
+.bestand {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meting {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.meting[data-boven-budget="true"] {
+  color: var(--waarschuwing);
+}

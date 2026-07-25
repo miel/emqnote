@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -11,7 +11,15 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "jsx": "react-jsx",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts",
+    "electron.vite.config.ts"
+  ]
 }

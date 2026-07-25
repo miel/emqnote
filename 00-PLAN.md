@@ -32,30 +32,43 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 
 ## Stand van zaken
 
-**Fase 0 is af.** Parser, serializer en het testcorpus van 25 bestanden staan er; de
-rondgang is bytegelijk in beide richtingen.
+| Fase | Stand |
+|---|---|
+| −1 Go/no-go | Ongetekende Electron-app start op de werkmachine |
+| 0 Markdown-rondgang | Bytegelijk in beide richtingen, 25 corpusbestanden |
+| 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
+| 2 Editor | Volgende |
+
+Gemeten latency van de verpakte macOS-app: **p50 11 ms, p95 22 ms, max 30 ms** over
+50 rondes, tegen een budget van 80 ms.
 
 ```bash
-npm test
+npm test          # 100 tests
+npm run typecheck
+npm run dev       # draaien tijdens ontwikkelen
+npm run pack:mac  # verpakte app in release/
 ```
 
-Code in `src/markdown/`, corpus in `test/corpus/`, bekende beperkingen vastgelegd in
-`test/beperkingen.test.ts`. Om te zien hoe de serializer een bestand zou schrijven:
+Twee handige haakjes:
 
 ```bash
 npm run canonical -- test/corpus/24-vergadernotitie.md
+EMQNOTE_SELFTEST=50 EMQNOTE_VAULT=/tmp/proef npm start
 ```
+
+De zelftest meet 50 keer hotkey → getekende cursor, typt daarna echt een notitie in het
+venster en controleert dat er een correct bestand in de Inbox belandt. Hij eindigt met
+een exitcode, dus hij kan zo in CI.
 
 ## Wat er nu moet gebeuren
 
-1. **Go/no-go-test op de werkmachine** — zie [04-bouwplan.md](04-bouwplan.md#fase--1--go-no-go).
-   Kun je een ongetekende, portable Electron-app starten? AppLocker of WDAC kan dat
-   blokkeren, ook zónder installatie. Dit weten kost tien minuten en verandert
-   desnoods de hele aanpak. **Dit blokkeert fase 1.**
-2. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365 (voor het
-   e-mail-vangnet). Terugval staat klaar, dus dit blokkeert niets.
-3. **Fase 1** — de residente Electron-schil: tray, global hotkey, voorgeladen verborgen
-   capture-venster, opslaan naar de Inbox. Kan pas na punt 1.
+1. **Kiezen op welke OneDrive de vault komt.** Op de Mac Mini staan twee zakelijke
+   tenants — Futureproof Group en MKB Fonds — plus gedeelde bibliotheken. De app raadt
+   niet en vraagt het bij de eerste start.
+2. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365, voor het
+   e-mail-vangnet in fase 6. Terugval staat klaar, dus dit blokkeert niets.
+3. **Fase 2** — de echte editor: TipTap met Outlook-sneltoetsen, outline-gedrag en het
+   kopblok met *snel* ↔ *vergadering*.
 
 ## Wat expliciet géén onderdeel is
 

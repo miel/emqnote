@@ -58,3 +58,37 @@ export function serializeNote(note: Note): string {
 export function emptyDoc(): PMNode {
   return schema.nodes.doc!.create(null, [schema.nodes.paragraph!.create()]);
 }
+
+/**
+ * Maakt een document van platte tekst: een lege regel begint een nieuwe alinea, een
+ * enkele regelovergang wordt een zachte overgang binnen dezelfde alinea.
+ *
+ * Nodig zolang het capture-venster nog een textarea is. Zodra de echte editor er staat
+ * (fase 2) levert die rechtstreeks een ProseMirror-document en verdwijnt dit weg.
+ */
+export function docFromPlainText(text: string): PMNode {
+  const normalised = text.replace(/\r\n?/g, "\n").trim();
+  if (normalised === "") return emptyDoc();
+
+  const paragraphs = normalised.split(/\n{2,}/).map((block) => {
+    const content: PMNode[] = [];
+
+    block.split("\n").forEach((line, index) => {
+      if (index > 0) content.push(schema.nodes.hardBreak!.create());
+      if (line !== "") content.push(schema.text(line));
+    });
+
+    return schema.nodes.paragraph!.create(null, content);
+  });
+
+  return schema.nodes.doc!.create(null, paragraphs);
+}
+
+/** De eerste niet-lege regel; dat is wat de titel van een snelle notitie wordt. */
+export function firstLine(text: string): string {
+  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed !== "") return trimmed;
+  }
+  return "";
+}

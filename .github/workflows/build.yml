@@ -1,0 +1,59 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  controle:
+    name: Tests en typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  bouwen:
+    name: ${{ matrix.naam }}
+    needs: controle
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            naam: macOS (arm64)
+            commando: pack:mac
+            artefact: emqnote-macos-arm64
+          - os: windows-latest
+            naam: Windows (x64)
+            commando: pack:win
+            artefact: emqnote-windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run icons
+      - run: npm run ${{ matrix.commando }}
+        env:
+          # Geen ondertekening. De Windows-zip is bewust een uitgepakte map die je
+          # zonder adminrechten kunt starten; zie 02-technisch-ontwerp.md paragraaf 9.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artefact }}
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 30
