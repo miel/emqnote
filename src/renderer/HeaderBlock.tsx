@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NoteKind } from "../shared/ipc.js";
+import { isoWithOffset } from "../shared/time.js";
 
 export interface HeaderValues {
   kind: NoteKind;
@@ -96,7 +97,7 @@ export function HeaderBlock({
             className="created"
             type="datetime-local"
             value={asLocalInput(values.created)}
-            onChange={(event) => set("created", new Date(event.target.value).toISOString())}
+            onChange={(event) => set("created", isoWithOffset(new Date(event.target.value)))}
             onBlur={() => setEditingTime(false)}
             onKeyDown={leaveOnEnter}
           />

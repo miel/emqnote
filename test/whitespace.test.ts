@@ -3,6 +3,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../src/markdown/schema.js";
 import { serializeBody } from "../src/markdown/index.js";
 import { readLaunchOptions } from "../src/main/launch-options.js";
+import { isoWithOffset } from "../src/shared/time.js";
 
 const NBSP = String.fromCharCode(160);
 
@@ -53,6 +54,22 @@ describe("trailing whitespace", () => {
 
   it("does not touch a paragraph that was already clean", () => {
     expect(serializeBody(paragraph("Niets aan de hand"))).toBe("Niets aan de hand\n");
+  });
+});
+
+describe("timestamps", () => {
+  it("writes an offset, never a Z", () => {
+    // The header block used Date.toISOString() when you changed the date by hand,
+    // which produced UTC with milliseconds — a value the dialect does not allow, and
+    // one that reads back an hour or two off.
+    const result = isoWithOffset(new Date(2026, 6, 25, 14, 32, 0));
+    expect(result).toMatch(/^2026-07-25T14:32:00[+-]\d{2}:\d{2}$/);
+    expect(result).not.toContain("Z");
+    expect(result).not.toContain(".");
+  });
+
+  it("keeps the wall-clock time it was given", () => {
+    expect(isoWithOffset(new Date(2026, 0, 3, 9, 5, 7))).toMatch(/^2026-01-03T09:05:07/);
   });
 });
 

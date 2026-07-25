@@ -4,26 +4,13 @@ import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { LinkPrompt } from "./LinkPrompt.js";
 import type { StatusPayload } from "../shared/ipc.js";
+import { isoWithOffset } from "../shared/time.js";
 
 const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
 
-/** ISO 8601 with a timezone offset, matching what the frontmatter expects. */
-function isoNow(): string {
-  const now = new Date();
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  const offsetMinutes = -now.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const absolute = Math.abs(offsetMinutes);
-  return (
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
-    `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
-  );
-}
-
 function freshHeader(): HeaderValues {
-  return { kind: "quick", subject: "", created: isoNow(), location: "", attendees: [] };
+  return { kind: "quick", subject: "", created: isoWithOffset(new Date()), location: "", attendees: [] };
 }
 
 export function Capture(): React.ReactElement {

@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+export { isoWithOffset } from "../shared/time.js";
+
 /**
  * File names per 02-technisch-ontwerp.md §4.1.
  *
@@ -88,14 +90,3 @@ export function uniquePath(directory: string, fileName: string): string {
   return join(directory, `${base} (${Date.now()}).md`);
 }
 
-/** ISO 8601 with a timezone offset, as the frontmatter spec requires. */
-export function isoWithOffset(when: Date): string {
-  const offsetMinutes = -when.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const absolute = Math.abs(offsetMinutes);
-  return (
-    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
-    `T${pad(when.getHours())}:${pad(when.getMinutes())}:${pad(when.getSeconds())}` +
-    `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
-  );
-}
