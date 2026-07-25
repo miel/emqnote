@@ -7,28 +7,18 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && npm run check:bundle",
     "start": "electron-vite preview",
-    "pack:mac": "electron-vite build && electron-builder --mac --publish never",
-    "pack:win": "electron-vite build && electron-builder --win --publish never",
+    "pack:mac": "npm run build && electron-builder --mac --publish never",
+    "pack:win": "npm run build && electron-builder --win --publish never",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "check:bundle": "tsx scripts/check-bundle.ts",
     "canonical": "tsx scripts/canonical.ts",
     "icons": "tsx scripts/make-icons.ts"
   },
-  "dependencies": {
-    "mdast-util-to-markdown": "^2.1.2",
-    "prosemirror-model": "^1.24.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "remark-frontmatter": "^5.0.0",
-    "remark-gfm": "^4.0.1",
-    "remark-parse": "^11.0.0",
-    "remark-stringify": "^11.0.0",
-    "unified": "^11.0.5",
-    "yaml": "^2.7.1"
-  },
+  "//dependencies": "Leeg, en dat is opzet. Main, preload en renderer worden alle drie volledig gebundeld, dus er is bij het draaien niets uit node_modules nodig. Alles wat hier zou staan wordt door electron-vite juist NIET gebundeld maar geëxternaliseerd, en ontbreekt dan in het pakket. Komt er ooit een native module bij (better-sqlite3 in fase 5), dan hoort die hier wél te staan en moet electron-builder hem meenemen.",
   "devDependencies": {
     "@types/mdast": "^4.0.4",
     "@types/node": "^22.13.0",
@@ -38,8 +28,19 @@
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "es-module-lexer": "^2.3.1",
+    "mdast-util-to-markdown": "^2.1.2",
+    "prosemirror-model": "^1.24.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
     "tsx": "^4.23.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "unified": "^11.0.5",
+    "vitest": "^3.0.5",
+    "yaml": "^2.7.1"
   }
 }

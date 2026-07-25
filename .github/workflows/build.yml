@@ -19,6 +19,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # Bouwt en controleert meteen dat de bundels niets uit node_modules verwachten.
+      # Dat is een snel signaal: zonder deze stap valt zoiets pas op als je het
+      # verpakte artefact op een andere machine start.
+      - run: npm run build
 
   bouwen:
     name: ${{ matrix.naam }}
