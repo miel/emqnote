@@ -1,4 +1,4 @@
-import { app, type BrowserWindow } from "electron";
+import { app, dialog, type BrowserWindow } from "electron";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCaptureWindow, hideCaptureWindow, showCaptureWindow } from "./capture-window.js";
@@ -92,18 +92,30 @@ export async function runSelfTest(rounds: number): Promise<void> {
 
   console.log(JSON.stringify(summary, null, 2));
 
-  // A packaged Windows app has no console, so stdout goes nowhere there. Writing the
-  // summary next to latency.log is the only way the result is actually readable on the
-  // machine that matters most.
+  // A packaged Windows app has no console, so stdout goes nowhere there. The file and
+  // the dialog below are the only way the result is readable on the machine that
+  // matters most — and without them a run looks exactly like nothing happening.
+  let resultFile = "";
   try {
-    writeFileSync(
-      join(app.getPath("userData"), "selftest-result.json"),
-      `${JSON.stringify(summary, null, 2)}\n`,
-      "utf8",
-    );
+    resultFile = join(app.getPath("userData"), "selftest-result.json");
+    writeFileSync(resultFile, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   } catch {
     // Reporting must not be the reason a measurement run fails.
   }
+
+  await dialog.showMessageBox({
+    type: result.withinBudget && saved !== null ? "info" : "warning",
+    title: "emqnote self-test",
+    message: `${rounds} rounds, budget ${LATENCY_BUDGET_MS} ms`,
+    detail:
+      `p50 ${result.p50.toFixed(0)} ms\n` +
+      `p95 ${result.p95.toFixed(0)} ms\n` +
+      `max ${result.max.toFixed(0)} ms\n` +
+      `missed ${missed}\n` +
+      `note written: ${saved ?? "no"}\n\n` +
+      `Full result: ${resultFile}`,
+    buttons: ["Close"],
+  });
 
   app.exit(result.withinBudget && missed === 0 && saved !== null ? 0 : 1);
 }

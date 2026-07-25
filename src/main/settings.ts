@@ -1,6 +1,7 @@
 import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readLaunchOptions } from "./launch-options.js";
 import { defaultVaultPath } from "./vault.js";
 
 export interface Settings {
@@ -40,8 +41,8 @@ export function loadSettings(): Settings {
 
   // For tests and the self-test: point at a vault without touching the real settings,
   // so a measurement run can never write into your own notes.
-  const override = process.env.EMQNOTE_VAULT;
-  if (override !== undefined && override !== "") cache.vaultPath = override;
+  const override = readLaunchOptions().vaultOverride;
+  if (override !== null) cache.vaultPath = override;
 
   return cache;
 }

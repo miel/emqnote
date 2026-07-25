@@ -15,7 +15,6 @@ export interface EditorHandle {
 
 interface Props {
   onChange: (doc: PMNode) => void;
-  onEscape: () => void;
   onLinkRequested: () => void;
 }
 
@@ -28,7 +27,7 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onEscape, onLinkRequested },
+  { onChange, onLinkRequested },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -36,8 +35,8 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
-  const handlers = useRef({ onChange, onEscape, onLinkRequested });
-  handlers.current = { onChange, onEscape, onLinkRequested };
+  const handlers = useRef({ onChange, onLinkRequested });
+  handlers.current = { onChange, onLinkRequested };
 
   useEffect(() => {
     if (host.current === null) return;
@@ -51,14 +50,9 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         created.updateState(next);
         if (transaction.docChanged) handlers.current.onChange(next.doc);
       },
-      handleKeyDown(_editorView, event) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          handlers.current.onEscape();
-          return true;
-        }
-        return false;
-      },
+      // Escape deliberately does nothing here. It is far too easy to hit by reflex,
+      // and losing a half-typed note to a stray keypress is unforgivable. Dismissing
+      // is Ctrl+Enter, handled at window level.
       attributes: { class: "editor-content", spellcheck: "false" },
     });
 

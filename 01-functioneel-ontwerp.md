@@ -51,9 +51,15 @@ Boven de tekst staat een smal kopblok met **datum/tijd** (automatisch ingevuld, 
 overschrijfbaar) en **onderwerp**. Het onderwerp mag leeg blijven; dan wordt de eerste
 regel van de tekst de titel.
 
-Je sluit het venster (Esc of Ctrl+W). De notitie is opgeslagen in `00 Inbox/`. Er
-verschijnt geen bevestiging, geen dialoog, geen "weet je het zeker". Opslaan gebeurt
-ook al tijdens het typen, zodat een crash of een dichtgeklapte laptop niets kost.
+Je sluit het venster met **Ctrl+Enter** — hetzelfde gebaar waarmee je in Outlook een
+bericht verstuurt. De notitie is opgeslagen in `00 Inbox/`. Er verschijnt geen
+bevestiging, geen dialoog, geen "weet je het zeker". Opslaan gebeurt ook al tijdens het
+typen, zodat een crash of een dichtgeklapte laptop niets kost.
+
+Wegklikken sluit het venster **niet**. Je tabt naar Teams om iets op te zoeken en komt
+terug bij je notitie zoals je hem achterliet; wat er stond is intussen weggeschreven.
+Esc doet bewust niets: die toets zit te veel in de vingers om er een halve notitie mee
+te kunnen verliezen.
 
 **Acceptatie:** van hotkey tot knipperende cursor minder dan 80 ms. Van gedachte tot
 vastgelegd zonder één beslissing.

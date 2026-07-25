@@ -120,6 +120,13 @@ body {
   border-color: var(--accent) !important;
 }
 
+.dismiss-hint {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  padding-right: 2px;
+}
+
 .location {
   flex: 0 0 32%;
 }

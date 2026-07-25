@@ -26,7 +26,9 @@ export function createCaptureWindow(): BrowserWindow {
     frame: false,
     resizable: true,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    // Not always on top. The window stays open until you dismiss it, so pinning it
+    // above everything else would mean it permanently covers whatever you switch to.
+    alwaysOnTop: false,
     title: "emqnote",
     backgroundColor: "#1e1f22",
     webPreferences: {
@@ -41,14 +43,14 @@ export function createCaptureWindow(): BrowserWindow {
 
   created.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  // Clicking outside the window means the same as closing it: save and get out of the way.
+  // Switching away saves, it does not close.
   //
-  // Except during a self-test. Synthetic key events do not carry real focus with them,
-  // so the window would blur and hide itself halfway through typing — and the failure
-  // would look like a broken editor rather than a test artefact.
-  const selfTesting = Number(process.env.EMQNOTE_SELFTEST ?? "0") > 0;
+  // The first version hid the window on blur, and that was wrong: you alt-tab to look
+  // something up during a meeting and your notes vanish. A note window stays open
+  // until you say otherwise — Outlook's new-message window works exactly this way, and
+  // that window is the thing being replaced.
   created.on("blur", () => {
-    if (!selfTesting && created.isVisible()) hideCaptureWindow();
+    if (created.isVisible()) onBlur();
   });
 
   const devServer = process.env.ELECTRON_RENDERER_URL;
@@ -66,11 +68,18 @@ export function getCaptureWindow(): BrowserWindow | null {
   return window;
 }
 
-type HideHandler = () => void;
-let onHide: HideHandler = () => {};
+type Handler = () => void;
 
-export function setHideHandler(handler: HideHandler): void {
+let onHide: Handler = () => {};
+let onBlur: Handler = () => {};
+
+export function setHideHandler(handler: Handler): void {
   onHide = handler;
+}
+
+/** Called when the window loses focus: save what is there, keep the note open. */
+export function setBlurHandler(handler: Handler): void {
+  onBlur = handler;
 }
 
 /**
@@ -93,9 +102,16 @@ export function showCaptureWindow(): void {
     app.focus({ steal: true });
   }
 
+  // Windows will not let a background process take the foreground on request. Raising
+  // the window as always-on-top and dropping that again a moment later is the standard
+  // way around it, without leaving the window pinned above everything afterwards.
+  target.setAlwaysOnTop(true);
   target.show();
   target.moveTop();
   target.focus();
+  setTimeout(() => {
+    if (!target.isDestroyed()) target.setAlwaysOnTop(false);
+  }, 250);
 
   target.webContents.send(IPC.captureShow, { token } satisfies ShowPayload);
 }

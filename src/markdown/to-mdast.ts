@@ -24,10 +24,24 @@ function hasMark(node: PMNode, mark: Mark): boolean {
   return node.marks.some((candidate) => sameMark(candidate, mark));
 }
 
+/**
+ * Non-breaking spaces come in uninvited.
+ *
+ * `contenteditable` inserts U+00A0 to stop a trailing space from collapsing, and
+ * pasted Outlook HTML is full of `&nbsp;`. Neither is intentional, and both show up as
+ * a stray invisible character when the file is opened in any other editor. They become
+ * ordinary spaces on the way out.
+ */
+const NON_BREAKING_SPACE = String.fromCharCode(160);
+
+function normaliseText(value: string): string {
+  return value.split(NON_BREAKING_SPACE).join(" ");
+}
+
 function leafToMdast(node: PMNode): ExtPhrasing | null {
   switch (node.type.name) {
     case "text":
-      return { type: "text", value: node.text ?? "" } as PhrasingContent;
+      return { type: "text", value: normaliseText(node.text ?? "") } as PhrasingContent;
     case "hardBreak":
       return { type: "break" } as PhrasingContent;
     case "image":
@@ -126,8 +140,36 @@ function childrenOf(node: PMNode): PMNode[] {
   return children;
 }
 
+/**
+ * Drops whitespace at the very end of a block.
+ *
+ * A stray space there is invisible in the editor but not on disk: two of them are a
+ * hard line break in markdown, and 03-markdown-dialect.md forbids trailing whitespace
+ * outright. Typing a space before pressing Enter should not quietly change what the
+ * file means.
+ */
+function trimBlockEnd(children: ExtPhrasing[]): ExtPhrasing[] {
+  const trimmed = [...children];
+
+  while (trimmed.length > 0) {
+    const last = trimmed[trimmed.length - 1]!;
+    if (last.type !== "text") break;
+
+    const value = (last as { value: string }).value.replace(/[ \t]+$/, "");
+    if (value === "") {
+      trimmed.pop();
+      continue;
+    }
+
+    trimmed[trimmed.length - 1] = { type: "text", value } as PhrasingContent;
+    break;
+  }
+
+  return trimmed;
+}
+
 function inlineChildren(node: PMNode): PhrasingContent[] {
-  return inlineToMdast(childrenOf(node), []) as PhrasingContent[];
+  return trimBlockEnd(inlineToMdast(childrenOf(node), [])) as PhrasingContent[];
 }
 
 const LIST_TYPES = new Set(["bulletList", "orderedList"]);

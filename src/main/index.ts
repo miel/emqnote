@@ -7,11 +7,13 @@ import {
   createCaptureWindow,
   hideCaptureWindow,
   sendStatus,
+  setBlurHandler,
   setHideHandler,
   showCaptureWindow,
 } from "./capture-window.js";
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
 import { notifyPainted, runSelfTest } from "./selftest.js";
+import { readLaunchOptions } from "./launch-options.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
 import {
@@ -29,11 +31,20 @@ if (process.platform === "win32" && process.env.LOCALAPPDATA !== undefined) {
   app.setPath("userData", join(process.env.LOCALAPPDATA, "emqnote"));
 }
 
+const launch = readLaunchOptions();
+
 // One resident instance. A second launch simply opens the capture window.
-if (!app.requestSingleInstanceLock()) {
+//
+// A self-test is the exception: it has to be able to run while the everyday instance
+// is resident, otherwise it would quietly hand off to that instance and appear to do
+// nothing at all — which is exactly what happened the first time it was tried on
+// Windows. It runs on its own vault and exits when done.
+if (launch.selfTestRounds === 0 && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => showCaptureWindow());
+  if (launch.selfTestRounds === 0) {
+    app.on("second-instance", () => showCaptureWindow());
+  }
   void main();
 }
 
@@ -56,22 +67,29 @@ async function main(): Promise<void> {
   // temporarily restore this when it opens.
   if (process.platform === "darwin") app.setActivationPolicy("accessory");
 
-  const selfTestRounds = Number(process.env.EMQNOTE_SELFTEST ?? "0");
+  const selfTestRounds = launch.selfTestRounds;
   const settings = loadSettings();
-
-  // A measurement run has no business leaving a login item on the machine it runs on.
-  if (selfTestRounds === 0) {
-    app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
-  }
 
   registerIpc();
   createCaptureWindow();
-  createTray();
-  registerHotkey();
+
+  // A measurement run leaves the machine as it found it: no login item, no second tray
+  // icon next to the one already there, and no fight over the global shortcut with the
+  // instance that is already running.
+  if (selfTestRounds === 0) {
+    app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
+    createTray();
+    registerHotkey();
+  }
 
   setHideHandler(() => {
     writer.finish();
     lastSavedAs = null;
+  });
+
+  // Switching away is not closing: write what is there and leave the note open.
+  setBlurHandler(() => {
+    void writer.flush();
   });
 
   await prepareVault();

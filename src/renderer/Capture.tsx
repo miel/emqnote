@@ -109,7 +109,10 @@ export function Capture(): React.ReactElement {
     const onKeyDown = (event: KeyboardEvent): void => {
       const mod = event.metaKey || event.ctrlKey;
 
-      if (mod && event.key.toLowerCase() === "w") {
+      // Ctrl+Enter saves and closes, the same gesture that sends a message in
+      // Outlook. Escape used to do this and should not: it is reflexive, and a note is
+      // too easy to lose that way.
+      if (mod && (event.key === "Enter" || event.key.toLowerCase() === "w")) {
         event.preventDefault();
         window.emqnote.close();
         return;
@@ -145,7 +148,6 @@ export function Capture(): React.ReactElement {
       <Editor
         ref={editor}
         onChange={onDocChange}
-        onEscape={() => window.emqnote.close()}
         onLinkRequested={() => {
           if (editor.current?.hasSelection() === true) setLinkOpen(true);
         }}

@@ -45,7 +45,7 @@ max 58 ms** over 30 rondes, tegen een budget van 80 ms. Op Windows ligt het hoge
 de eerste vertoning na het starten kostte daar 112 ms, daarna 77 en 52 ms.
 
 ```bash
-npm test          # 133 tests
+npm test          # 144 tests
 npm run typecheck
 npm run dev       # draaien tijdens ontwikkelen
 npm run pack:mac  # verpakte app in release/
@@ -55,7 +55,13 @@ Twee handige haakjes:
 
 ```bash
 npm run canonical -- test/corpus/24-vergadernotitie.md
-EMQNOTE_SELFTEST=50 EMQNOTE_VAULT=/tmp/proef npm start
+```
+
+De zelftest draait op de verpakte app, met vlaggen in plaats van omgevingsvariabelen —
+`set` werkt alleen in cmd en PowerShell doet er stilzwijgend niets mee:
+
+```bash
+emqnote.exe --selftest=50 --vault=%TEMP%\emqnote-proef
 ```
 
 De zelftest meet 50 keer hotkey → getekende cursor, typt daarna echt een notitie in het

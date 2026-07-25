@@ -119,6 +119,8 @@ export function HeaderBlock({
         >
           Meeting
         </button>
+
+        <span className="dismiss-hint">Ctrl+Enter closes</span>
       </div>
 
       {isMeeting && (
