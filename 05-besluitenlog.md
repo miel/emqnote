@@ -29,7 +29,7 @@ dingen in te bouwen die het onderscheid moeten maken. De baten van een fork — 
 functionaliteit meekrijgen — zitten juist in de functionaliteit die *niet* gewenst is
 ("te veel app").
 
-**Wel hergebruiken, geen wiel opnieuw:** TipTap/ProseMirror voor de editor, `remark`
+**Wel hergebruiken, geen wiel opnieuw:** ProseMirror voor de editor, `remark`
 voor markdown, `rehype` voor HTML, SQLite FTS5 voor zoeken, `postal-mime` voor e-mail.
 
 ---
@@ -276,12 +276,40 @@ De kosten zijn laag omdat het dezelfde code gebruikt als B6 en B11.
 
 ---
 
+## B17 — ProseMirror rechtstreeks, geen TipTap
+
+**Genomen** op 25 juli 2026, tijdens fase 2. De editor draait op ProseMirror zelf.
+
+**Overwogen:** TipTap, zoals het technisch ontwerp oorspronkelijk voorschreef.
+
+**Waarom niet.** TipTap bouwt zijn schema op uit extensies. Dat zou een *tweede*
+schemadefinitie betekenen naast `src/markdown/schema.ts` — precies wat B6 verbiedt.
+Twee definities drijven uit elkaar, en die afdrijving verschijnt als een notitie die
+anders wordt opgeslagen dan hij is getypt. Ze in de pas houden kost blijvend werk en
+een test die niets toevoegt behalve het bewaken van een probleem dat je ook gewoon niet
+hoeft te hebben.
+
+Daar komt bij dat de twee dingen waarvoor je TipTap zou willen — het lijstgedrag en de
+Outlook-keymap — hier juist volledig eigen zijn. Van het standaardgedrag zou vrijwel
+alles worden overschreven, dus de winst is klein en de laag eronder is dezelfde.
+
+**Bijvangst:** minder in de renderer-bundel, en dat telt. Die bundel is de
+belangrijkste kostenpost bij het opstarten, en op Windows is de latency krapper dan op
+de Mac.
+
+**Prijs:** wat TipTap kant-en-klaar levert — bubble menus, een tabel-extensie,
+samenwerkingshooks — moet hier zelf. Voor tabellen betekent dat `prosemirror-tables`,
+en dat komt pas in fase 3 aan de orde bij het plakken.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
 |---|---|
-| Mag een ongetekende Electron-app draaien op de werkmachine? | Fase −1 — kan de hele aanpak veranderen |
-| Is Power Automate beschikbaar? | Fase −1 — terugval staat klaar, blokkeert niets |
+| ~~Mag een ongetekende Electron-app draaien op de werkmachine?~~ | Ja — bevestigd op 25 juli 2026 |
+| Is Power Automate beschikbaar? | Fase 6 — terugval staat klaar, blokkeert niets |
+| Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 3 — het grootste onbekende stuk werk |
 | Blijft het bij twee notitietypen? | Na zes weken gebruik — B13 |

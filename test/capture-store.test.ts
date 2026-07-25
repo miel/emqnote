@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { beginSession, writeSession } from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
+import { paragraphs, payload } from "./helpers/doc.js";
 
 let vault: string;
 
@@ -23,12 +24,11 @@ function sleep(ms: number): Promise<void> {
 describe("saving a capture", () => {
   it("writes to the Inbox with the timestamp in the name", async () => {
     const session = beginSession();
-    session.text = "Kickoff project Alpha\n\nEls zit voor.";
+    session.payload = payload(paragraphs("Kickoff project Alpha", "Els zit voor."));
 
     const result = await writeSession(session, vault);
 
     expect(result.written).toBe(true);
-    expect(result.path).not.toBeNull();
     expect(result.path!).toContain(join(vault, INBOX));
     expect(basename(result.path!)).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{4} Kickoff project Alpha\.md$/,
@@ -37,7 +37,7 @@ describe("saving a capture", () => {
 
   it("produces a note our own parser recognises", async () => {
     const session = beginSession();
-    session.text = "Overleg\n\nEerste punt.\nTweede regel.";
+    session.payload = payload(paragraphs("Overleg", "Eerste punt."));
 
     const { path } = await writeSession(session, vault);
     const note = parseNote(readFileSync(path!, "utf8"));
@@ -49,9 +49,53 @@ describe("saving a capture", () => {
     expect(note.doc.textContent).toContain("Eerste punt.");
   });
 
-  it("writes nothing when there is only whitespace", async () => {
+  it("prefers the subject over the first line", async () => {
     const session = beginSession();
-    session.text = "   \n\n  \n";
+    session.payload = payload(paragraphs("Just a first line"), {
+      subject: "Stuurgroep Alpha",
+    });
+
+    const { path } = await writeSession(session, vault);
+
+    expect(basename(path!)).toContain("Stuurgroep Alpha");
+    expect(readFileSync(path!, "utf8")).toContain("title: Stuurgroep Alpha");
+  });
+
+  it("records location and attendees for a meeting", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Besluit genomen."), {
+      kind: "meeting",
+      subject: "Stuurgroep",
+      location: "Teams",
+      attendees: ["Jan de Vries", "Els Bakker"],
+    });
+
+    const result = await writeSession(session, vault);
+    const note = parseNote(readFileSync(result.path!, "utf8"));
+
+    expect(note.frontmatter.type).toBe("meeting");
+    expect(note.frontmatter.location).toBe("Teams");
+    expect(note.frontmatter.attendees).toEqual(["Jan de Vries", "Els Bakker"]);
+    expect(result.attendees).toEqual(["Jan de Vries", "Els Bakker"]);
+  });
+
+  it("leaves meeting fields out of a quick note", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Snelle gedachte"), {
+      location: "Teams",
+      attendees: ["Iemand"],
+    });
+
+    const { path } = await writeSession(session, vault);
+    const contents = readFileSync(path!, "utf8");
+
+    expect(contents).not.toContain("location:");
+    expect(contents).not.toContain("attendees:");
+  });
+
+  it("writes nothing when there is no title and no text", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("", "   "));
 
     const result = await writeSession(session, vault);
 
@@ -63,7 +107,7 @@ describe("saving a capture", () => {
     // Decision B10: by far the most OneDrive conflict copies come from an app
     // rewriting files the user never changed.
     const session = beginSession();
-    session.text = "Niets veranderd";
+    session.payload = payload(paragraphs("Niets veranderd"));
 
     const first = await writeSession(session, vault);
     const before = statSync(first.path!).mtimeMs;
@@ -75,14 +119,14 @@ describe("saving a capture", () => {
     expect(statSync(first.path!).mtimeMs).toBe(before);
   });
 
-  it("keeps writing to the same file when the first line changes", async () => {
+  it("keeps writing to the same file when the title changes", async () => {
     // Renaming while you type would leave a trail of half-finished files; renaming is
     // work for the main window in phase 4.
     const session = beginSession();
-    session.text = "Eerste poging";
+    session.payload = payload(paragraphs("Eerste poging"));
     const first = await writeSession(session, vault);
 
-    session.text = "Toch een andere titel";
+    session.payload = payload(paragraphs("Toch een andere titel"));
     const second = await writeSession(session, vault);
 
     expect(second.path).toBe(first.path);
@@ -92,9 +136,9 @@ describe("saving a capture", () => {
 
   it("does not collide with an existing note from the same minute", async () => {
     const one = beginSession();
-    one.text = "Zelfde titel";
+    one.payload = payload(paragraphs("Zelfde titel"));
     const two = beginSession();
-    two.text = "Zelfde titel";
+    two.payload = payload(paragraphs("Zelfde titel"));
     two.createdAt = one.createdAt;
 
     const first = await writeSession(one, vault);

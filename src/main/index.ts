@@ -1,6 +1,7 @@
 import { app, dialog, globalShortcut, ipcMain } from "electron";
 import { join } from "node:path";
-import { IPC } from "../shared/ipc.js";
+import { IPC, type CapturePayload } from "../shared/ipc.js";
+import { knownAttendees, rememberAttendees } from "./attendees.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
   createCaptureWindow,
@@ -43,6 +44,7 @@ const writer = new CaptureWriter(
   () => loadSettings().vaultPath,
   (result) => {
     lastSavedAs = result.path;
+    rememberAttendees(result.attendees);
     sendStatus({ lastLatencyMs: lastLatency, savedAs: lastSavedAs });
   },
 );
@@ -68,10 +70,8 @@ async function main(): Promise<void> {
   registerHotkey();
 
   setHideHandler(() => {
-    void writer.flush().then(() => {
-      writer.reset();
-      lastSavedAs = null;
-    });
+    writer.finish();
+    lastSavedAs = null;
   });
 
   await prepareVault();
@@ -188,13 +188,15 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.on(IPC.captureChange, (_event, text: string) => {
-    writer.update(text);
+  ipcMain.on(IPC.captureChange, (_event, payload: CapturePayload) => {
+    writer.update(payload);
   });
 
   ipcMain.on(IPC.captureClose, () => {
     hideCaptureWindow();
   });
+
+  ipcMain.handle(IPC.attendeesList, () => knownAttendees());
 }
 
 app.on("window-all-closed", () => {

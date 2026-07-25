@@ -1,5 +1,5 @@
-import { app } from "electron";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { app, type BrowserWindow } from "electron";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCaptureWindow, hideCaptureWindow, showCaptureWindow } from "./capture-window.js";
 import { LATENCY_BUDGET_MS, stats } from "./latency.js";
@@ -77,39 +77,104 @@ export async function runSelfTest(rounds: number): Promise<void> {
   const saved = await captureRealNote();
 
   const result = stats();
-  console.log(
-    JSON.stringify(
-      {
-        budgetMs: LATENCY_BUDGET_MS,
-        rounds,
-        missed,
-        p50: Number(result.p50.toFixed(1)),
-        p95: Number(result.p95.toFixed(1)),
-        max: Number(result.max.toFixed(1)),
-        withinBudget: result.withinBudget,
-        savedAs: saved,
-      },
-      null,
-      2,
-    ),
-  );
+  const summary = {
+    platform: `${process.platform} ${process.arch}`,
+    when: new Date().toISOString(),
+    budgetMs: LATENCY_BUDGET_MS,
+    rounds,
+    missed,
+    p50: Number(result.p50.toFixed(1)),
+    p95: Number(result.p95.toFixed(1)),
+    max: Number(result.max.toFixed(1)),
+    withinBudget: result.withinBudget,
+    savedAs: saved,
+  };
+
+  console.log(JSON.stringify(summary, null, 2));
+
+  // A packaged Windows app has no console, so stdout goes nowhere there. Writing the
+  // summary next to latency.log is the only way the result is actually readable on the
+  // machine that matters most.
+  try {
+    writeFileSync(
+      join(app.getPath("userData"), "selftest-result.json"),
+      `${JSON.stringify(summary, null, 2)}\n`,
+      "utf8",
+    );
+  } catch {
+    // Reporting must not be the reason a measurement run fails.
+  }
 
   app.exit(result.withinBudget && missed === 0 && saved !== null ? 0 : 1);
 }
 
-const SAMPLE_TEXT = [
-  "Self-test phase 1",
+/**
+ * Types into the editor from inside the page.
+ *
+ * Not via `webContents.sendInputEvent`: ProseMirror reads text input from `beforeinput`
+ * and composition events, which Chromium does not synthesise for injected key events —
+ * the characters simply never arrive. `execCommand("insertText")` does go down that
+ * path, and a dispatched `keydown` is exactly what prosemirror-keymap listens for.
+ */
+const TYPE_SCRIPT = `
+  (async () => {
+    const editor = document.querySelector('.editor-content');
+    if (editor === null) return 'no editor';
+    editor.focus();
+
+    const settle = () => new Promise((done) => setTimeout(done, 40));
+
+    // Character by character, because ProseMirror's input rules fire per text input.
+    // Inserting "- " in one go is reconciled as a DOM mutation and never triggers the
+    // rule that turns it into a bullet.
+    const text = async (value) => {
+      for (const character of value) {
+        document.execCommand('insertText', false, character);
+        await new Promise((done) => setTimeout(done, 12));
+      }
+      await settle();
+    };
+
+    const key = (name) => {
+      editor.dispatchEvent(new KeyboardEvent('keydown', {
+        key: name, code: name, bubbles: true, cancelable: true,
+      }));
+      return settle();
+    };
+
+    await text('Self-test phase 2');
+    await key('Enter');
+    await text('- ');
+    await text('First point');
+    await key('Enter');
+    await key('Tab');
+    await text('Nested point');
+
+    return editor.innerText;
+  })()
+`;
+
+async function typeSampleNote(window: BrowserWindow): Promise<string> {
+  const result = (await window.webContents.executeJavaScript(TYPE_SCRIPT)) as string;
+  await sleep(400);
+  return result;
+}
+
+/** What the note has to look like once the keystrokes below have been typed. */
+const EXPECTED_BODY = [
+  "Self-test phase 2",
   "",
-  "First line of the note.",
-  "Second line, soft break.",
-  "",
-  "A second paragraph.",
+  "- First point",
+  "  - Nested point",
 ].join("\n");
 
 /**
- * Actually types into the textarea and closes the window, so the whole chain is
- * exercised: keystroke, React, IPC, the phase 0 serializer, atomic file write. Only
- * that way do you know saving works, rather than that the functions exist.
+ * Types a real note with real key events and closes the window.
+ *
+ * Driving this with keyboard input rather than by setting a value is the point: it
+ * exercises the whole chain — key event, ProseMirror keymap, the "- " autoformat rule,
+ * Tab indentation, React, IPC, the phase-0 serializer, atomic file write. If the
+ * outline behaviour breaks in a packaged build, this is what notices.
  */
 async function captureRealNote(): Promise<string | null> {
   const window = getCaptureWindow();
@@ -119,20 +184,11 @@ async function captureRealNote(): Promise<string | null> {
   showCaptureWindow();
   await waitForPaint(5000);
 
-  await window.webContents.executeJavaScript(`
-    (() => {
-      const field = document.querySelector('textarea');
-      const setValue = Object.getOwnPropertyDescriptor(
-        HTMLTextAreaElement.prototype, 'value',
-      ).set;
-      setValue.call(field, ${JSON.stringify(SAMPLE_TEXT)});
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-      return field.value.length;
-    })()
-  `);
+  const typed = await typeSampleNote(window);
+  console.log(`--- editor content after typing ---\n${typed}`);
 
   hideCaptureWindow();
-  await sleep(800);
+  await sleep(900);
 
   const inbox = join(vault, INBOX);
   const written = existsSync(inbox)
@@ -144,8 +200,14 @@ async function captureRealNote(): Promise<string | null> {
     return null;
   }
 
+  const contents = readFileSync(join(inbox, written[0]!), "utf8");
   console.log("--- written note ---");
-  console.log(readFileSync(join(inbox, written[0]!), "utf8"));
+  console.log(contents);
+
+  if (!contents.includes(EXPECTED_BODY)) {
+    console.error("[selftest] the note does not contain the expected outline");
+    return null;
+  }
 
   return written[0]!;
 }

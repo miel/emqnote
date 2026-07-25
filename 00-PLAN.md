@@ -37,13 +37,15 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | −1 Go/no-go | Ongetekende Electron-app start op de werkmachine |
 | 0 Markdown-rondgang | Bytegelijk in beide richtingen, 25 corpusbestanden |
 | 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
-| 2 Editor | Volgende |
+| 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
+| 3 Plakken en afbeeldingen | Volgende |
 
-Gemeten latency van de verpakte macOS-app: **p50 11 ms, p95 22 ms, max 30 ms** over
-50 rondes, tegen een budget van 80 ms.
+Gemeten latency van de verpakte macOS-app mét editor: **p50 26 ms, p95 43 ms,
+max 58 ms** over 30 rondes, tegen een budget van 80 ms. Op Windows ligt het hoger —
+de eerste vertoning na het starten kostte daar 112 ms, daarna 77 en 52 ms.
 
 ```bash
-npm test          # 100 tests
+npm test          # 133 tests
 npm run typecheck
 npm run dev       # draaien tijdens ontwikkelen
 npm run pack:mac  # verpakte app in release/
@@ -67,8 +69,18 @@ een exitcode, dus hij kan zo in CI.
    niet en vraagt het bij de eerste start.
 2. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365, voor het
    e-mail-vangnet in fase 6. Terugval staat klaar, dus dit blokkeert niets.
-3. **Fase 2** — de echte editor: TipTap met Outlook-sneltoetsen, outline-gedrag en het
-   kopblok met *snel* ↔ *vergadering*.
+3. **Een echte serie metingen op Windows.** Drie regels uit het log is te weinig om
+   iets van te vinden. Draai de zelftest daar en lees `selftest-result.json`:
+
+   ```
+   set EMQNOTE_SELFTEST=50
+   set EMQNOTE_VAULT=%TEMP%\emqnote-proef
+   emqnote.exe
+   ```
+
+   Het resultaat komt in `%LOCALAPPDATA%\emqnote\`, samen met `latency.log`.
+4. **Fase 3** — plakken uit Outlook op niveau, inclusief het reconstrueren van lijsten
+   uit `mso-list`-metadata, en afbeeldingen naar de bijlagemap.
 
 ## Wat expliciet géén onderdeel is
 

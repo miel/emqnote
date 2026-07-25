@@ -6,6 +6,7 @@
   --muted: #8b9099;
   --accent: #6ea8fe;
   --warning: #e8a33d;
+  --highlight: #6b5a1e;
 }
 
 @media (prefers-color-scheme: light) {
@@ -17,6 +18,7 @@
     --muted: #6b7079;
     --accent: #1a63d8;
     --warning: #9a6200;
+    --highlight: #fff2a8;
   }
 }
 
@@ -50,45 +52,261 @@ body {
   background: var(--background);
 }
 
-/* The title bar is the drag handle; the window has no system frame. */
-.titlebar {
+/* ---- header block ---- */
+
+.header {
   -webkit-app-region: drag;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--muted);
-  user-select: none;
+  padding: 6px 10px;
 }
 
-.timestamp {
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-row + .header-row {
+  margin-top: 6px;
+}
+
+.header input,
+.header button {
+  -webkit-app-region: no-drag;
+  font-family: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 4px 7px;
+}
+
+.header input:hover,
+.header button:hover {
+  border-color: var(--border);
+}
+
+.header input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--background);
+}
+
+.header input::placeholder {
+  color: var(--muted);
+}
+
+.subject {
+  flex: 1;
+  font-weight: 600;
+}
+
+.created {
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
 
-.hint {
-  -webkit-app-region: no-drag;
+.kind {
+  color: var(--muted);
+  cursor: pointer;
 }
+
+.kind-on {
+  color: var(--accent);
+  border-color: var(--accent) !important;
+}
+
+.location {
+  flex: 0 0 32%;
+}
+
+.attendees {
+  flex: 1;
+}
+
+/* ---- editor ---- */
 
 .editor {
   flex: 1;
-  width: 100%;
-  padding: 16px 18px;
-  border: 0;
+  overflow-y: auto;
+}
+
+.editor-content {
+  padding: 14px 18px 24px;
   outline: 0;
-  resize: none;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
   font-size: 16px;
   line-height: 1.55;
 }
 
-.editor::placeholder {
+.editor-content > :first-child {
+  margin-top: 0;
+}
+
+.editor-content p {
+  margin: 0 0 0.6em;
+}
+
+.editor-content h1,
+.editor-content h2,
+.editor-content h3,
+.editor-content h4,
+.editor-content h5,
+.editor-content h6 {
+  margin: 1.1em 0 0.4em;
+  line-height: 1.25;
+}
+
+.editor-content h1 {
+  font-size: 1.5em;
+}
+.editor-content h2 {
+  font-size: 1.28em;
+}
+.editor-content h3 {
+  font-size: 1.12em;
+}
+.editor-content h4,
+.editor-content h5,
+.editor-content h6 {
+  font-size: 1em;
+}
+
+/* Lists carry the whole project, so they get real attention: enough indentation to
+   read the structure at a glance, and tight spacing so a six-level outline still fits
+   on screen. */
+.editor-content ul,
+.editor-content ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.6em;
+}
+
+.editor-content li > ul,
+.editor-content li > ol {
+  margin-bottom: 0;
+}
+
+.editor-content li {
+  margin: 0.1em 0;
+}
+
+.editor-content li > p {
+  margin: 0 0 0.3em;
+}
+
+.editor-content li[data-checked] {
+  list-style: none;
+  position: relative;
+}
+
+.editor-content li[data-checked]::before {
+  content: "☐";
+  position: absolute;
+  left: -1.25em;
   color: var(--muted);
 }
+
+.editor-content li[data-checked="true"]::before {
+  content: "☑";
+  color: var(--accent);
+}
+
+.editor-content blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.editor-content pre {
+  margin: 0 0 0.6em;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+}
+
+.editor-content code {
+  font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+}
+
+.editor-content p code,
+.editor-content li code {
+  padding: 1px 4px;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.editor-content mark {
+  background: var(--highlight);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.editor-content a {
+  color: var(--accent);
+}
+
+.editor-content table {
+  border-collapse: collapse;
+  margin: 0 0 0.6em;
+}
+
+.editor-content td {
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+}
+
+.editor-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.editor-content .wiki-embed,
+.editor-content .wiki-link {
+  color: var(--accent);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+
+/* ---- link prompt ---- */
+
+.link-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.link-prompt label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.link-prompt input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 4px 7px;
+  outline: none;
+}
+
+/* ---- status bar ---- */
 
 .statusbar {
   display: flex;

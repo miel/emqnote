@@ -87,7 +87,7 @@ zit, is dat een architectuurprobleem — niet iets wat je later "optimaliseert".
 
 **Werk:**
 
-- TipTap met het schema uit fase 0
+- ProseMirror op het schema uit fase 0, zonder tweede schemadefinitie
 - Outlook-keymap, per platform de juiste modifier
 - Lijstgedrag: `Tab`/`Shift+Tab` ongeacht cursorpositie, `Enter` op leeg item springt
   uit, `Shift+Enter` zachte regelovergang

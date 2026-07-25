@@ -42,8 +42,13 @@ export function createCaptureWindow(): BrowserWindow {
   created.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
   // Clicking outside the window means the same as closing it: save and get out of the way.
+  //
+  // Except during a self-test. Synthetic key events do not carry real focus with them,
+  // so the window would blur and hide itself halfway through typing — and the failure
+  // would look like a broken editor rather than a test artefact.
+  const selfTesting = Number(process.env.EMQNOTE_SELFTEST ?? "0") > 0;
   created.on("blur", () => {
-    if (created.isVisible()) hideCaptureWindow();
+    if (!selfTesting && created.isVisible()) hideCaptureWindow();
   });
 
   const devServer = process.env.ELECTRON_RENDERER_URL;

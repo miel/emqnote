@@ -1,11 +1,8 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import {
-  docFromPlainText,
-  firstLine,
-  serializeNote,
-  type Frontmatter,
-} from "../markdown/index.js";
+import type { Node as PMNode } from "prosemirror-model";
+import { schema, serializeNote, type Frontmatter } from "../markdown/index.js";
+import type { CapturePayload } from "../shared/ipc.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 import { INBOX } from "./vault.js";
 
@@ -22,26 +19,59 @@ const WRITE_DEBOUNCE_MS = 800;
 
 export interface CaptureSession {
   createdAt: Date;
-  text: string;
+  payload: CapturePayload | null;
   /** Decided on the first real write and never changed afterwards. */
   path: string | null;
   lastWritten: string | null;
 }
 
 export function beginSession(): CaptureSession {
-  return { createdAt: new Date(), text: "", path: null, lastWritten: null };
+  return { createdAt: new Date(), payload: null, path: null, lastWritten: null };
 }
 
-function buildFrontmatter(session: CaptureSession, title: string): Frontmatter {
+/** The first non-empty line of the body, used when no subject was given. */
+function firstLineOf(doc: PMNode): string {
+  let found = "";
+  doc.descendants((node) => {
+    if (found !== "") return false;
+    if (node.isTextblock) {
+      const text = node.textContent.trim();
+      if (text !== "") found = text;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+function buildFrontmatter(
+  payload: CapturePayload,
+  doc: PMNode,
+  createdFallback: Date,
+): Frontmatter | null {
+  const subject = payload.subject.trim();
+  const title = subject === "" ? firstLineOf(doc) : subject;
+  if (title === "") return null;
+
   const frontmatter: Frontmatter = {
     title,
-    type: "quick",
-    created: isoWithOffset(session.createdAt),
+    type: payload.kind,
+    created: payload.created === "" ? isoWithOffset(createdFallback) : payload.created,
     source: "manual",
   };
 
   const modified = isoWithOffset(new Date());
   if (modified !== frontmatter.created) frontmatter.modified = modified;
+
+  if (payload.kind === "meeting") {
+    const location = payload.location.trim();
+    if (location !== "") frontmatter.location = location;
+
+    const attendees = payload.attendees
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    if (attendees.length > 0) frontmatter.attendees = attendees;
+  }
 
   return frontmatter;
 }
@@ -57,41 +87,56 @@ async function writeAtomic(path: string, contents: string): Promise<void> {
 export interface WriteResult {
   path: string | null;
   written: boolean;
+  /** Names in this note, so the caller can remember them for autocomplete. */
+  attendees: string[];
 }
+
+const NOTHING: WriteResult = { path: null, written: false, attendees: [] };
+
+/**
+ * This module deliberately imports nothing from Electron. Writing a note is plain file
+ * logic, and keeping it that way means it can be tested directly instead of behind a
+ * mocked runtime — which is exactly where the rules from B10 need to be pinned down.
+ */
 
 /**
  * Writes the note, unless there is nothing to write.
  *
- * The file name is decided once, on the first write. If the first line changes after
- * that, the file stays where it is: renaming while you type would leave a trail of
+ * The file name is decided once, on the first write. If the title changes after that,
+ * the file stays where it is: renaming while you type would leave a trail of
  * half-finished files, and moving and renaming is work for the main window (phase 4).
  */
 export async function writeSession(
   session: CaptureSession,
   vault: string,
 ): Promise<WriteResult> {
-  const title = firstLine(session.text);
-  if (title === "") return { path: session.path, written: false };
+  const payload = session.payload;
+  if (payload === null) return { ...NOTHING, path: session.path };
 
-  const contents = serializeNote({
-    frontmatter: buildFrontmatter(session, title),
-    doc: docFromPlainText(session.text),
-  });
+  const doc = schema.nodeFromJSON(payload.doc);
+  const frontmatter = buildFrontmatter(payload, doc, session.createdAt);
+  if (frontmatter === null) return { ...NOTHING, path: session.path };
+
+  const contents = serializeNote({ frontmatter, doc });
 
   if (session.path !== null && session.lastWritten === contents) {
-    return { path: session.path, written: false };
+    return { ...NOTHING, path: session.path };
   }
 
   if (session.path === null) {
     const inbox = join(vault, INBOX);
     await mkdir(inbox, { recursive: true });
-    session.path = uniquePath(inbox, noteFileName(title, session.createdAt));
+    session.path = uniquePath(inbox, noteFileName(frontmatter.title, session.createdAt));
   }
 
   await writeAtomic(session.path, contents);
   session.lastWritten = contents;
 
-  return { path: session.path, written: true };
+  return {
+    path: session.path,
+    written: true,
+    attendees: frontmatter.attendees ?? [],
+  };
 }
 
 /**
@@ -100,35 +145,50 @@ export async function writeSession(
 export class CaptureWriter {
   private session = beginSession();
   private timer: NodeJS.Timeout | null = null;
-  private queue: Promise<WriteResult> = Promise.resolve({ path: null, written: false });
+  private queue: Promise<WriteResult> = Promise.resolve(NOTHING);
 
   constructor(
     private readonly vault: () => string | null,
     private readonly onWritten: (result: WriteResult) => void,
   ) {}
 
-  reset(): void {
-    this.cancelTimer();
-    this.session = beginSession();
-  }
-
-  update(text: string): void {
-    this.session.text = text;
+  update(payload: CapturePayload): void {
+    this.session.payload = payload;
     this.cancelTimer();
     this.timer = setTimeout(() => void this.flush(), WRITE_DEBOUNCE_MS);
   }
 
-  /** Writes now. Call on loss of focus, on close and on quit. */
+  /**
+   * Closes the current note: write it out, and start a fresh one.
+   *
+   * The session is swapped *before* the write is awaited, and that ordering is the
+   * whole point. Resetting after the write completes leaves a window in which the next
+   * note is typed into the session that is on its way out — and then the first few
+   * keystrokes of the new note land in the old file, or a second file appears for what
+   * should have been one note. Reopening the window quickly is exactly the sort of
+   * thing this app invites, so that window has to be closed.
+   */
+  finish(): Promise<WriteResult> {
+    const finished = this.session;
+    this.session = beginSession();
+    this.cancelTimer();
+    return this.enqueue(finished);
+  }
+
+  /** Writes the current note without ending it. Used on quit. */
   async flush(): Promise<WriteResult> {
     this.cancelTimer();
+    return this.enqueue(this.session);
+  }
 
+  private enqueue(session: CaptureSession): Promise<WriteResult> {
     const vault = this.vault();
-    if (vault === null) return { path: null, written: false };
+    if (vault === null) return Promise.resolve(NOTHING);
 
     // Queue the writes so a quick Escape right after a keystroke cannot race the
     // deferred write.
     this.queue = this.queue.then(async () => {
-      const result = await writeSession(this.session, vault);
+      const result = await writeSession(session, vault);
       if (result.written) this.onWritten(result);
       return result;
     });

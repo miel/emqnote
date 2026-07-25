@@ -1,8 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
+import {
+  IPC,
+  type CapturePayload,
+  type ShowPayload,
+  type StatusPayload,
+} from "../shared/ipc.js";
 
 /**
- * The renderer gets exactly these six things and nothing else. The sandbox stays on
+ * The renderer gets exactly these seven things and nothing else. The sandbox stays on
  * and contextIsolation stays on; there is no reason a note window should be able to
  * reach Node.
  */
@@ -19,6 +24,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   onStatus: (handler: (payload: StatusPayload) => void) =>
     subscribe<StatusPayload>(IPC.captureStatus, handler),
   painted: (token: number) => ipcRenderer.send(IPC.capturePainted, token),
-  change: (text: string) => ipcRenderer.send(IPC.captureChange, text),
+  change: (payload: CapturePayload) => ipcRenderer.send(IPC.captureChange, payload),
   close: () => ipcRenderer.send(IPC.captureClose),
+  knownAttendees: () => ipcRenderer.invoke(IPC.attendeesList) as Promise<string[]>,
 });

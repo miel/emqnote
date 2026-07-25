@@ -11,21 +11,39 @@ import type { MarkSpec, NodeSpec } from "prosemirror-model";
  *     That is what lets a paragraph, table or nested list hang underneath a bullet.
  *  2. `underline` and `highlight` exist as marks, because markdown does not have them
  *     while everyday use in Outlook does.
+ *
+ * The `toDOM` and `parseDOM` specs are here because this is *also* the editor schema.
+ * Keeping one schema for both the file format and the editing surface is the whole
+ * point of decision B6: two definitions would drift, and the drift would show up as a
+ * note that saves differently from how it was typed.
  */
 
 const nodes: Record<string, NodeSpec> = {
   doc: { content: "block+" },
 
-  paragraph: { group: "block", content: "inline*" },
+  paragraph: {
+    group: "block",
+    content: "inline*",
+    parseDOM: [{ tag: "p" }],
+    toDOM: () => ["p", 0],
+  },
 
   heading: {
     group: "block",
     content: "inline*",
     attrs: { level: { default: 1 } },
     defining: true,
+    parseDOM: [1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { level } })),
+    toDOM: (node) => [`h${node.attrs.level as number}`, 0],
   },
 
-  blockquote: { group: "block", content: "block+", defining: true },
+  blockquote: {
+    group: "block",
+    content: "block+",
+    defining: true,
+    parseDOM: [{ tag: "blockquote" }],
+    toDOM: () => ["blockquote", 0],
+  },
 
   codeBlock: {
     group: "block",
@@ -34,6 +52,12 @@ const nodes: Record<string, NodeSpec> = {
     code: true,
     marks: "",
     defining: true,
+    parseDOM: [{ tag: "pre", preserveWhitespace: "full" }],
+    toDOM: (node) => [
+      "pre",
+      node.attrs.language === null ? {} : { "data-language": node.attrs.language },
+      ["code", 0],
+    ],
   },
 
   /** Raw block-level HTML — in practice a table with merged cells. */
@@ -43,16 +67,39 @@ const nodes: Record<string, NodeSpec> = {
     code: true,
     marks: "",
     defining: true,
+    toDOM: () => ["pre", { class: "html-block" }, ["code", 0]],
   },
 
-  horizontalRule: { group: "block" },
+  horizontalRule: {
+    group: "block",
+    parseDOM: [{ tag: "hr" }],
+    toDOM: () => ["hr"],
+  },
 
-  bulletList: { group: "block", content: "listItem+" },
+  bulletList: {
+    group: "block",
+    content: "listItem+",
+    parseDOM: [{ tag: "ul" }],
+    toDOM: () => ["ul", 0],
+  },
 
   orderedList: {
     group: "block",
     content: "listItem+",
     attrs: { start: { default: 1 } },
+    parseDOM: [
+      {
+        tag: "ol",
+        getAttrs: (dom) => ({
+          start: Number((dom as HTMLElement).getAttribute("start") ?? 1),
+        }),
+      },
+    ],
+    toDOM: (node) => [
+      "ol",
+      (node.attrs.start as number) === 1 ? {} : { start: node.attrs.start as number },
+      0,
+    ],
   },
 
   listItem: {
@@ -60,6 +107,12 @@ const nodes: Record<string, NodeSpec> = {
     // null = not a task list item; true/false = checked or unchecked
     attrs: { checked: { default: null } },
     defining: true,
+    parseDOM: [{ tag: "li" }],
+    toDOM: (node) => [
+      "li",
+      node.attrs.checked === null ? {} : { "data-checked": String(node.attrs.checked) },
+      0,
+    ],
   },
 
   /**
@@ -72,15 +125,29 @@ const nodes: Record<string, NodeSpec> = {
     // per column: "left" | "right" | "center" | null
     attrs: { align: { default: [] } },
     isolating: true,
+    toDOM: () => ["table", ["tbody", 0]],
   },
 
-  tableRow: { content: "tableCell+" },
+  tableRow: {
+    content: "tableCell+",
+    toDOM: () => ["tr", 0],
+  },
 
-  tableCell: { content: "inline*", isolating: true },
+  tableCell: {
+    content: "inline*",
+    isolating: true,
+    toDOM: () => ["td", 0],
+  },
 
   text: { group: "inline" },
 
-  hardBreak: { group: "inline", inline: true, selectable: false },
+  hardBreak: {
+    group: "inline",
+    inline: true,
+    selectable: false,
+    parseDOM: [{ tag: "br" }],
+    toDOM: () => ["br"],
+  },
 
   /** An external image: ![alt](url). Attachments use wikiEmbed instead. */
   image: {
@@ -92,6 +159,24 @@ const nodes: Record<string, NodeSpec> = {
       alt: { default: null },
       title: { default: null },
     },
+    parseDOM: [
+      {
+        tag: "img[src]",
+        getAttrs: (dom) => ({
+          src: (dom as HTMLElement).getAttribute("src"),
+          alt: (dom as HTMLElement).getAttribute("alt"),
+          title: (dom as HTMLElement).getAttribute("title"),
+        }),
+      },
+    ],
+    toDOM: (node) => [
+      "img",
+      {
+        src: node.attrs.src as string,
+        alt: (node.attrs.alt as string | null) ?? undefined,
+        title: (node.attrs.title as string | null) ?? undefined,
+      },
+    ],
   },
 
   /** ![[file.png]] — an attachment from _attachments/, resolved by name. */
@@ -101,6 +186,11 @@ const nodes: Record<string, NodeSpec> = {
     draggable: true,
     atom: true,
     attrs: { target: { default: "" } },
+    toDOM: (node) => [
+      "span",
+      { class: "wiki-embed", "data-target": node.attrs.target as string },
+      node.attrs.target as string,
+    ],
   },
 
   /** [[Note]] or [[Note|alias]] */
@@ -109,6 +199,11 @@ const nodes: Record<string, NodeSpec> = {
     inline: true,
     atom: true,
     attrs: { target: { default: "" }, alias: { default: null } },
+    toDOM: (node) => [
+      "span",
+      { class: "wiki-link", "data-target": node.attrs.target as string },
+      (node.attrs.alias as string | null) ?? (node.attrs.target as string),
+    ],
   },
 };
 
@@ -116,13 +211,55 @@ const marks: Record<string, MarkSpec> = {
   link: {
     attrs: { href: { default: "" }, title: { default: null } },
     inclusive: false,
+    parseDOM: [
+      {
+        tag: "a[href]",
+        getAttrs: (dom) => ({
+          href: (dom as HTMLElement).getAttribute("href"),
+          title: (dom as HTMLElement).getAttribute("title"),
+        }),
+      },
+    ],
+    toDOM: (mark) => [
+      "a",
+      {
+        href: mark.attrs.href as string,
+        title: (mark.attrs.title as string | null) ?? undefined,
+      },
+      0,
+    ],
   },
-  highlight: {},
-  underline: {},
-  strong: {},
-  em: {},
-  strike: {},
-  code: { code: true, excludes: "_" },
+  highlight: {
+    parseDOM: [{ tag: "mark" }],
+    toDOM: () => ["mark", 0],
+  },
+  underline: {
+    parseDOM: [{ tag: "u" }, { style: "text-decoration=underline" }],
+    toDOM: () => ["u", 0],
+  },
+  strong: {
+    parseDOM: [
+      { tag: "strong" },
+      { tag: "b" },
+      { style: "font-weight=bold" },
+      { style: "font-weight=700" },
+    ],
+    toDOM: () => ["strong", 0],
+  },
+  em: {
+    parseDOM: [{ tag: "em" }, { tag: "i" }, { style: "font-style=italic" }],
+    toDOM: () => ["em", 0],
+  },
+  strike: {
+    parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }],
+    toDOM: () => ["s", 0],
+  },
+  code: {
+    code: true,
+    excludes: "_",
+    parseDOM: [{ tag: "code" }],
+    toDOM: () => ["code", 0],
+  },
 };
 
 export const schema = new Schema({ nodes, marks });

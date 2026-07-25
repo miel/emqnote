@@ -26,8 +26,8 @@ Eén pad, één testsuite.
 | Laag | Keuze | Waarom |
 |---|---|---|
 | Schil | **Electron** + TypeScript | Eén Chromium op Windows én macOS — zie §2.1 |
-| UI | React | Ecosysteem rond TipTap |
-| Editor | **TipTap 3** (ProseMirror) | Volwassen, aanpasbaar schema en keymap |
+| UI | React | Alleen voor het kopblok en de vensterschil |
+| Editor | **ProseMirror** rechtstreeks | Eén schema voor bestandsformaat én editor — zie B17 |
 | Markdown | Eigen serializer/parser op `remark`/`mdast` | Het dialect is te specifiek voor een kant-en-klare |
 | HTML-normalisatie | `rehype` + eigen regels | AST-gebaseerd, testbaar, deelbaar met de e-mail-import |
 | Index | **SQLite FTS5** via `better-sqlite3` | Synchroon, snel, geen serverproces |
@@ -76,7 +76,7 @@ Draait continu, ook als er geen venster zichtbaar is.
 
 ### 3.2 Renderer-processen
 
-- **Capture-venster** — voorgeladen, verborgen, met een lege TipTap-instantie die al
+- **Capture-venster** — voorgeladen, verborgen, met een lege editor-instantie die al
   gemonteerd is. Tonen kost alleen nog `show()`.
 - **Hoofdvenster** — mappenboom, notitielijst, editor. Wordt lui aangemaakt bij eerste
   gebruik.
@@ -216,7 +216,9 @@ Daarom:
 
 ### 6.1 Schema
 
-Uitgangspunt is het TipTap StarterKit, met deze aanpassingen:
+Het schema uit `src/markdown/schema.ts` is óók het schema van de editor; er is geen
+tweede definitie. Het bevat daarom naast de markdown-structuur ook `toDOM` en
+`parseDOM`. De kern:
 
 - `listItem` accepteert **blok-inhoud** (`paragraph block*`), niet alleen inline. Dit is
   de technische voorwaarde voor "alinea's ingesprongen onder een bullet" en voor geneste
@@ -230,7 +232,7 @@ Uitgangspunt is het TipTap StarterKit, met deze aanpassingen:
 ### 6.2 Keymap
 
 De Outlook-sneltoetsen uit [01-functioneel-ontwerp.md](01-functioneel-ontwerp.md#42-sneltoetsen-letterlijk-die-van-outlook)
-worden als TipTap-extensie geïmplementeerd, met per platform de juiste modifier.
+worden als ProseMirror-keymap geïmplementeerd, met per platform de juiste modifier.
 
 Lijstgedrag, aandachtspunt per punt:
 

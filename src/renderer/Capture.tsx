@@ -1,30 +1,84 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Node as PMNode } from "prosemirror-model";
+import { Editor, type EditorHandle } from "./editor/Editor.js";
+import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
+import { LinkPrompt } from "./LinkPrompt.js";
 import type { StatusPayload } from "../shared/ipc.js";
 
 const LATENCY_BUDGET_MS = 80;
+const CHANGE_DEBOUNCE_MS = 300;
 
-function now(): string {
-  return new Date().toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/** ISO 8601 with a timezone offset, matching what the frontmatter expects. */
+function isoNow(): string {
+  const now = new Date();
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  const offsetMinutes = -now.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absolute = Math.abs(offsetMinutes);
+  return (
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
+    `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
+  );
+}
+
+function freshHeader(): HeaderValues {
+  return { kind: "quick", subject: "", created: isoNow(), location: "", attendees: [] };
 }
 
 export function Capture(): React.ReactElement {
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<EditorHandle>(null);
+  const [header, setHeader] = useState<HeaderValues>(freshHeader);
   const [status, setStatus] = useState<StatusPayload>({
     lastLatencyMs: null,
     savedAs: null,
   });
-  const [timestamp, setTimestamp] = useState(now);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
+
+  // Held in a ref so the debounced sender never closes over a stale header.
+  const headerRef = useRef(header);
+  headerRef.current = header;
+
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const send = useCallback((doc: PMNode) => {
+    const values = headerRef.current;
+    window.emqnote.change({
+      doc: doc.toJSON(),
+      kind: values.kind,
+      subject: values.subject,
+      created: values.created,
+      location: values.location,
+      attendees: values.attendees,
+    });
+  }, []);
+
+  const onDocChange = useCallback(
+    (doc: PMNode) => {
+      if (timer.current !== null) clearTimeout(timer.current);
+      timer.current = setTimeout(() => send(doc), CHANGE_DEBOUNCE_MS);
+    },
+    [send],
+  );
+
+  // A header change has to reach main too, otherwise a subject typed after the last
+  // keystroke in the body would never be saved.
+  const onHeaderChange = useCallback(
+    (values: HeaderValues) => {
+      setHeader(values);
+      headerRef.current = values;
+      const doc = editor.current?.getDoc();
+      if (doc !== null && doc !== undefined) send(doc);
+    },
+    [send],
+  );
 
   useEffect(() => {
+    void window.emqnote.knownAttendees().then(setKnownAttendees);
+
     const stopShow = window.emqnote.onShow(({ token }) => {
-      setTimestamp(now());
-      textarea.current?.focus();
+      editor.current?.focus();
 
       // Wait two frames: the first is only scheduled, after the second something is
       // actually on screen. Only then is "hotkey to blinking caret" measured honestly.
@@ -33,9 +87,13 @@ export function Capture(): React.ReactElement {
       });
     });
 
+    // Clearing happens on hide, while nobody is waiting — never on the way in.
     const stopReset = window.emqnote.onReset(() => {
-      if (textarea.current !== null) textarea.current.value = "";
+      editor.current?.reset();
+      setHeader(freshHeader());
+      setLinkOpen(false);
       setStatus((previous) => ({ ...previous, savedAs: null }));
+      void window.emqnote.knownAttendees().then(setKnownAttendees);
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
@@ -47,34 +105,64 @@ export function Capture(): React.ReactElement {
     };
   }, []);
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    const closing =
-      event.key === "Escape" || (event.key === "w" && (event.metaKey || event.ctrlKey));
-    if (closing) {
-      event.preventDefault();
-      window.emqnote.close();
-    }
-  };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const mod = event.metaKey || event.ctrlKey;
+
+      if (mod && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        window.emqnote.close();
+        return;
+      }
+
+      // Ctrl+Shift+G toggles the meeting block without reaching for the mouse.
+      if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        onHeaderChange({
+          ...headerRef.current,
+          kind: headerRef.current.kind === "meeting" ? "quick" : "meeting",
+        });
+        editor.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onHeaderChange]);
 
   const overBudget =
     status.lastLatencyMs !== null && status.lastLatencyMs > LATENCY_BUDGET_MS;
 
   return (
     <div className="window">
-      <div className="titlebar">
-        <span className="timestamp">{timestamp}</span>
-        <span className="hint">Esc saves and closes</span>
-      </div>
-
-      <textarea
-        ref={textarea}
-        className="editor"
-        placeholder="Just type."
-        spellCheck={false}
-        autoFocus
-        onKeyDown={onKeyDown}
-        onChange={(event) => window.emqnote.change(event.target.value)}
+      <HeaderBlock
+        values={header}
+        onChange={onHeaderChange}
+        knownAttendees={knownAttendees}
+        onLeave={() => editor.current?.focus()}
       />
+
+      <Editor
+        ref={editor}
+        onChange={onDocChange}
+        onEscape={() => window.emqnote.close()}
+        onLinkRequested={() => {
+          if (editor.current?.hasSelection() === true) setLinkOpen(true);
+        }}
+      />
+
+      {linkOpen && (
+        <LinkPrompt
+          onApply={(href) => {
+            editor.current?.applyLink(href);
+            setLinkOpen(false);
+          }}
+          onCancel={() => {
+            setLinkOpen(false);
+            editor.current?.focus();
+          }}
+        />
+      )}
 
       <div className="statusbar">
         <span className="filename">

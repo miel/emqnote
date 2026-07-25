@@ -58,37 +58,3 @@ export function serializeNote(note: Note): string {
 export function emptyDoc(): PMNode {
   return schema.nodes.doc!.create(null, [schema.nodes.paragraph!.create()]);
 }
-
-/**
- * Builds a document from plain text: a blank line starts a new paragraph, a single
- * line break becomes a soft break inside the same paragraph.
- *
- * Needed for as long as the capture window is still a textarea. Once the real editor
- * is in place (phase 2) it produces a ProseMirror document directly and this goes away.
- */
-export function docFromPlainText(text: string): PMNode {
-  const normalised = text.replace(/\r\n?/g, "\n").trim();
-  if (normalised === "") return emptyDoc();
-
-  const paragraphs = normalised.split(/\n{2,}/).map((block) => {
-    const content: PMNode[] = [];
-
-    block.split("\n").forEach((line, index) => {
-      if (index > 0) content.push(schema.nodes.hardBreak!.create());
-      if (line !== "") content.push(schema.text(line));
-    });
-
-    return schema.nodes.paragraph!.create(null, content);
-  });
-
-  return schema.nodes.doc!.create(null, paragraphs);
-}
-
-/** The first non-empty line; that becomes the title of a quick note. */
-export function firstLine(text: string): string {
-  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed !== "") return trimmed;
-  }
-  return "";
-}
