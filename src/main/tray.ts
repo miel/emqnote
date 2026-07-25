@@ -3,6 +3,7 @@ import { drawGlyph, rgbaToBgra } from "../shared/glyph.js";
 import { describeStats } from "./latency.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { showCaptureWindow } from "./capture-window.js";
+import { showLibraryWindow } from "./library-window.js";
 
 let tray: Tray | null = null;
 
@@ -38,6 +39,11 @@ export function buildTrayMenu(): void {
         label: "New note",
         accelerator: settings.hotkey,
         click: () => showCaptureWindow(),
+      },
+      {
+        label: "Browse notes…",
+        accelerator: "CommandOrControl+Shift+E",
+        click: () => showLibraryWindow(),
       },
       { type: "separator" },
       {

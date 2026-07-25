@@ -38,14 +38,15 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 0 Markdown-rondgang | Bytegelijk in beide richtingen, 25 corpusbestanden |
 | 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
 | 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
-| 3 Plakken en afbeeldingen | Volgende |
+| 3 Hoofdvenster | Mappenboom, notitielijst, lezen en bewerken, verplaatsen |
+| 4 Plakken en afbeeldingen | Volgende |
 
 Gemeten latency van de verpakte macOS-app mét editor: **p50 26 ms, p95 43 ms,
 max 58 ms** over 30 rondes, tegen een budget van 80 ms. Op Windows ligt het hoger —
 de eerste vertoning na het starten kostte daar 112 ms, daarna 77 en 52 ms.
 
 ```bash
-npm test          # 144 tests
+npm test          # 178 tests
 npm run typecheck
 npm run dev       # draaien tijdens ontwikkelen
 npm run pack:mac  # verpakte app in release/

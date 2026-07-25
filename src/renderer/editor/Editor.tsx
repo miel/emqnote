@@ -10,6 +10,12 @@ export interface EditorHandle {
   reset: () => void;
   getDoc: () => PMNode | null;
   /**
+   * Loads an existing note. Replaces the whole state, so undo history from the
+   * previous note cannot leak into this one — undoing your way back into a file you
+   * are no longer looking at would be a good way to corrupt it.
+   */
+  setDoc: (doc: PMNode) => void;
+  /**
    * Prepares a link edit and reports the address already there.
    *
    * Returns null when there is nothing to link: no selection and no link at the caret.
@@ -82,6 +88,13 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       );
     },
     getDoc: () => view.current?.state.doc ?? null,
+    setDoc: (doc: PMNode) => {
+      const current = view.current;
+      if (current === null) return;
+      current.updateState(
+        createEditorState(doc, () => handlers.current.onLinkRequested()),
+      );
+    },
     beginLinkEdit: () => {
       const current = view.current;
       if (current === null) return null;

@@ -40,7 +40,15 @@ export default defineConfig({
     root: "src/renderer",
     build: {
       minify: "esbuild",
-      rollupOptions: { input: "src/renderer/index.html" },
+      // Two windows, two entries. The capture window stays as small as it can be —
+      // it is the one that has to appear instantly — so the library window's tree,
+      // list and dialogs are not loaded into it.
+      rollupOptions: {
+        input: {
+          capture: "src/renderer/index.html",
+          library: "src/renderer/library.html",
+        },
+      },
     },
     plugins: [react()],
   },

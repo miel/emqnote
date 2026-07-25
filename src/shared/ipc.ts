@@ -1,3 +1,10 @@
+import type {
+  FolderNode,
+  NoteSummary,
+  OpenedNote,
+  SaveNoteRequest,
+} from "./vault-types.js";
+
 /** The contract between main and renderer. Both sides import this file. */
 
 export type NoteKind = "quick" | "meeting";
@@ -20,6 +27,20 @@ export const IPC = {
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
   windowToggleMaximise: "window:toggle-maximise",
+
+  /** The library window: browsing and tidying the vault. */
+  libraryOpen: "library:open",
+  libraryTree: "library:tree",
+  libraryNotes: "library:notes",
+  libraryOpenNote: "library:open-note",
+  librarySaveNote: "library:save-note",
+  libraryMoveNote: "library:move-note",
+  libraryRenameNote: "library:rename-note",
+  libraryTrashNote: "library:trash-note",
+  libraryCreateFolder: "library:create-folder",
+  libraryRevealNote: "library:reveal-note",
+  /** main → library renderer: the vault changed underneath, reload. */
+  libraryRefresh: "library:refresh",
 } as const;
 
 export interface ShowPayload {
@@ -51,6 +72,19 @@ export interface CapturePayload {
   attendees: string[];
 }
 
+export interface LibraryApi {
+  tree: () => Promise<FolderNode>;
+  notes: (folder: string) => Promise<NoteSummary[]>;
+  openNote: (path: string) => Promise<OpenedNote | null>;
+  saveNote: (request: SaveNoteRequest) => Promise<{ written: boolean; path: string }>;
+  moveNote: (path: string, folder: string) => Promise<string>;
+  renameNote: (path: string, title: string) => Promise<string>;
+  trashNote: (path: string) => Promise<boolean>;
+  createFolder: (parent: string, name: string) => Promise<string>;
+  revealNote: (path: string) => void;
+  onRefresh: (handler: () => void) => () => void;
+}
+
 export interface CaptureApi {
   onShow: (handler: (payload: ShowPayload) => void) => () => void;
   onReset: (handler: () => void) => () => void;
@@ -61,6 +95,8 @@ export interface CaptureApi {
   minimise: () => void;
   toggleMaximise: () => void;
   knownAttendees: () => Promise<string[]>;
+  openLibrary: () => void;
+  library: LibraryApi;
 }
 
 declare global {

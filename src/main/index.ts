@@ -1,4 +1,4 @@
-import { app, dialog, globalShortcut, ipcMain, Menu } from "electron";
+import { app, dialog, globalShortcut, ipcMain, Menu, shell } from "electron";
 import { join } from "node:path";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownAttendees, rememberAttendees } from "./attendees.js";
@@ -14,6 +14,11 @@ import {
 } from "./capture-window.js";
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
 import { notifyPainted, runSelfTest } from "./selftest.js";
+import {
+  captureLibraryWindow,
+  getLibraryWindow,
+  showLibraryWindow,
+} from "./library-window.js";
 import { readLaunchOptions } from "./launch-options.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
@@ -25,6 +30,16 @@ import {
   tenantLabel,
   VAULT_FOLDER_NAME,
 } from "./vault.js";
+import {
+  createFolder,
+  moveNote,
+  openNote,
+  readFolderTree,
+  readNotesIn,
+  renameNote,
+  saveNote,
+} from "./vault-io.js";
+import type { SaveNoteRequest } from "../shared/vault-types.js";
 
 // Windows: Roaming AppData can be synchronised by a corporate profile, which is exactly
 // what we do not want for an index and window state. Must happen before 'ready'.
@@ -57,6 +72,10 @@ const writer = new CaptureWriter(
   (result) => {
     lastSavedAs = result.path;
     rememberAttendees(result.attendees);
+    const library = getLibraryWindow();
+    if (library !== null && !library.isDestroyed()) {
+      library.webContents.send(IPC.libraryRefresh);
+    }
     sendStatus({ lastLatencyMs: lastLatency, savedAs: lastSavedAs });
   },
 );
@@ -96,6 +115,17 @@ async function main(): Promise<void> {
 
   await prepareVault();
 
+  if (launch.openLibrary || launch.screenshot !== null) showLibraryWindow();
+
+  if (launch.screenshot !== null) {
+    const file = launch.screenshot;
+    setTimeout(() => {
+      void captureLibraryWindow(file, flagNote()).then((ok) => {
+        console.log(ok ? `screenshot written to ${file}` : "no library window to capture");
+        app.exit(ok ? 0 : 1);
+      });
+    }, 2500);
+  }
   if (selfTestRounds > 0) await runSelfTest(selfTestRounds);
 }
 
@@ -126,6 +156,12 @@ function installMinimalMenu(): void {
       },
     ]),
   );
+}
+
+/** Optional `--open-note=<part of a title>` so a screenshot can show a real note. */
+function flagNote(): string | undefined {
+  const match = process.argv.find((argument) => argument.startsWith("--open-note="));
+  return match?.slice("--open-note=".length);
 }
 
 function registerHotkey(): void {
@@ -255,6 +291,90 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.attendeesList, () => knownAttendees());
+
+  registerLibraryIpc();
+}
+
+/**
+ * Everything the library window asks for.
+ *
+ * Each handler resolves the vault fresh rather than capturing it, so changing the vault
+ * in settings takes effect without a restart. `withVault` also means a missing vault
+ * answers with something empty instead of throwing across the IPC boundary.
+ */
+function registerLibraryIpc(): void {
+  const vaultPath = (): string | null => loadSettings().vaultPath;
+
+  const notifyLibrary = (): void => {
+    const target = getLibraryWindow();
+    if (target !== null && !target.isDestroyed()) {
+      target.webContents.send(IPC.libraryRefresh);
+    }
+  };
+
+  ipcMain.on(IPC.libraryOpen, () => showLibraryWindow());
+
+  ipcMain.handle(IPC.libraryTree, () => {
+    const vault = vaultPath();
+    return vault === null
+      ? { path: "", name: "Vault", children: [], noteCount: 0 }
+      : readFolderTree(vault);
+  });
+
+  ipcMain.handle(IPC.libraryNotes, (_event, folder: string) => {
+    const vault = vaultPath();
+    return vault === null ? [] : readNotesIn(vault, folder);
+  });
+
+  ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? null : openNote(vault, path);
+  });
+
+  ipcMain.handle(IPC.librarySaveNote, (_event, request: SaveNoteRequest) => {
+    const vault = vaultPath();
+    if (vault === null) return { written: false, path: request.path };
+    return saveNote(vault, request);
+  });
+
+  ipcMain.handle(IPC.libraryMoveNote, (_event, path: string, folder: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    const moved = moveNote(vault, path, folder);
+    notifyLibrary();
+    return moved;
+  });
+
+  ipcMain.handle(IPC.libraryRenameNote, (_event, path: string, title: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    const renamed = renameNote(vault, path, title);
+    notifyLibrary();
+    return renamed;
+  });
+
+  ipcMain.handle(IPC.libraryTrashNote, async (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return false;
+    // The system trash, never an unlink: a note deleted by a misclick has to be
+    // recoverable without reaching for a backup.
+    await shell.trashItem(join(vault, path));
+    notifyLibrary();
+    return true;
+  });
+
+  ipcMain.handle(IPC.libraryCreateFolder, (_event, parent: string, name: string) => {
+    const vault = vaultPath();
+    if (vault === null) return parent;
+    const created = createFolder(vault, parent, name);
+    notifyLibrary();
+    return created;
+  });
+
+  ipcMain.on(IPC.libraryRevealNote, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault !== null) shell.showItemInFolder(join(vault, path));
+  });
 }
 
 app.on("window-all-closed", () => {
