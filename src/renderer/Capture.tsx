@@ -6,6 +6,7 @@ import { LinkPrompt } from "./LinkPrompt.js";
 import { TitleBar } from "./TitleBar.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
+import { useBootstrap } from "./useBootstrap.js";
 
 const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
@@ -15,6 +16,7 @@ function freshHeader(): HeaderValues {
 }
 
 export function Capture(): React.ReactElement {
+  const app = useBootstrap();
   const editor = useRef<EditorHandle>(null);
   const [header, setHeader] = useState<HeaderValues>(freshHeader);
   const [status, setStatus] = useState<StatusPayload>({
@@ -132,17 +134,20 @@ export function Capture(): React.ReactElement {
 
   return (
     <div className="window">
-      <TitleBar onClose={() => window.emqnote.close()} />
+      <TitleBar onClose={() => window.emqnote.close()} native={app.isMac} />
 
       <HeaderBlock
         values={header}
         onChange={onHeaderChange}
         knownAttendees={knownAttendees}
         onLeave={() => editor.current?.focus()}
+        locale={app.locale}
+        t={app.t}
       />
 
       <Editor
         ref={editor}
+        placeholder={app.t("capture.placeholder")}
         onChange={onDocChange}
         onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
       />
@@ -159,6 +164,7 @@ export function Capture(): React.ReactElement {
             setLink(null);
             editor.current?.focus();
           }}
+          t={app.t}
           onApplyAndClose={(href) => {
             editor.current?.applyLink(href);
             setLink(null);
@@ -170,8 +176,8 @@ export function Capture(): React.ReactElement {
       <div className="statusbar">
         <span className="filename">
           {status.savedAs === null
-            ? "Nothing saved yet"
-            : `Saved as ${status.savedAs.split(/[\\/]/).pop()}`}
+            ? app.t("capture.nothingSaved")
+            : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
         </span>
         <span className="latency" data-over-budget={overBudget}>
           {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}

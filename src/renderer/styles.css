@@ -407,3 +407,17 @@ body {
 .latency[data-over-budget="true"] {
   color: var(--warning);
 }
+
+/* macOS draws its own traffic lights in the inset title bar; leave room for them. */
+.titlebar-native {
+  padding-left: 78px;
+  justify-content: flex-start;
+}
+
+/* Placeholder for an empty editor, since contenteditable has none of its own. The
+   attribute is copied onto the content node by the view so CSS can reach it. */
+.editor .editor-content p:only-child:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}

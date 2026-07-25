@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("emqnote", {
   toggleMaximise: () => ipcRenderer.send(IPC.windowToggleMaximise),
   knownAttendees: () => ipcRenderer.invoke(IPC.attendeesList) as Promise<string[]>,
   openLibrary: () => ipcRenderer.send(IPC.libraryOpen),
+  bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
+  setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
+  setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),

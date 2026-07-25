@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n.js";
 import type {
   FolderNode,
   NoteSummary,
@@ -41,7 +42,18 @@ export const IPC = {
   libraryRevealNote: "library:reveal-note",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
+
+  /** Locale, platform and hotkey — everything a window needs before it draws. */
+  bootstrap: "app:bootstrap",
+  setLocale: "app:set-locale",
+  setHotkey: "app:set-hotkey",
 } as const;
+
+export interface Bootstrap {
+  locale: Locale;
+  platform: NodeJS.Platform;
+  hotkey: string;
+}
 
 export interface ShowPayload {
   /** Marker tying this appearance to its measurement. */
@@ -96,6 +108,9 @@ export interface CaptureApi {
   toggleMaximise: () => void;
   knownAttendees: () => Promise<string[]>;
   openLibrary: () => void;
+  bootstrap: () => Promise<Bootstrap>;
+  setLocale: (locale: Locale) => Promise<void>;
+  setHotkey: (hotkey: string) => Promise<boolean>;
   library: LibraryApi;
 }
 

@@ -6,6 +6,9 @@ interface Props {
   selected: string;
   onSelect: (path: string) => void;
   onCreateFolder: (parent: string) => void;
+  onOpenSettings: () => void;
+  newFolderLabel: string;
+  settingsLabel: string;
 }
 
 function Branch({
@@ -76,9 +79,24 @@ export function FolderTree({
   selected,
   onSelect,
   onCreateFolder,
+  onOpenSettings,
+  newFolderLabel,
+  settingsLabel,
 }: Props): React.ReactElement {
   return (
     <nav className="tree">
+      {/* Right-clicking a folder works too, but a button is the discoverable way —
+          "no option to create a new folder" was a fair complaint about a feature that
+          existed only as a hidden gesture. */}
+      <div className="tree-toolbar">
+        <button type="button" onClick={() => onCreateFolder(selected)}>
+          + {newFolderLabel}
+        </button>
+        <button type="button" title={settingsLabel} onClick={onOpenSettings}>
+          ⚙
+        </button>
+      </div>
+
       <ul>
         <Branch
           node={root}

@@ -9,9 +9,12 @@ import type {
 } from "../../shared/vault-types.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { LinkPrompt } from "../LinkPrompt.js";
+import { useBootstrap } from "../useBootstrap.js";
+import { Ask } from "./Ask.js";
 import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
+import { Settings } from "./Settings.js";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -31,7 +34,14 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   return sorted;
 }
 
+/** Which small dialog is open, if any. Only ever one at a time. */
+type Dialog =
+  | { kind: "rename"; initial: string }
+  | { kind: "newFolder"; parent: string }
+  | { kind: "delete"; title: string };
+
 export function Library(): React.ReactElement {
+  const app = useBootstrap();
   const editor = useRef<EditorHandle>(null);
 
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
@@ -41,6 +51,8 @@ export function Library(): React.ReactElement {
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
 
   const openRef = useRef<OpenedNote | null>(null);
@@ -130,22 +142,18 @@ export function Library(): React.ReactElement {
   const folders = useMemo(() => flatten(tree), [tree]);
   const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
 
-  const rename = async (): Promise<void> => {
+  const rename = async (title: string): Promise<void> => {
     const current = openRef.current;
     if (current === null) return;
 
-    const title = globalThis.prompt("New title", current.title);
-    if (title === null || title.trim() === "") return;
-
     await save();
-    const path = await window.emqnote.library.renameNote(current.path, title.trim());
+    const path = await window.emqnote.library.renameNote(current.path, title);
     await openNote(path);
   };
 
   const trash = async (): Promise<void> => {
     const current = openRef.current;
     if (current === null) return;
-    if (!globalThis.confirm(`Move "${current.title}" to the trash?`)) return;
 
     await window.emqnote.library.trashNote(current.path);
     setOpen(null);
@@ -159,12 +167,10 @@ export function Library(): React.ReactElement {
         root={tree}
         selected={folder}
         onSelect={setFolder}
-        onCreateFolder={(parent) => {
-          const name = globalThis.prompt(`New folder inside "${parent || "Vault"}"`);
-          if (name !== null && name.trim() !== "") {
-            void window.emqnote.library.createFolder(parent, name.trim());
-          }
-        }}
+        onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
+        onOpenSettings={() => setSettingsOpen(true)}
+        newFolderLabel={app.t("library.newFolder")}
+        settingsLabel={app.t("settings.title")}
       />
 
       <NoteList
@@ -173,15 +179,15 @@ export function Library(): React.ReactElement {
         sort={sort}
         onSort={setSort}
         onSelect={(path) => void openNote(path)}
+        locale={app.locale}
+        t={app.t}
       />
 
       <section className="reader">
         {open === null ? (
           <div className="reader-empty">
-            <p>Pick a note on the left.</p>
-            <p className="reader-hint">
-              Right-click a folder to make a new one inside it.
-            </p>
+            <p>{app.t("library.pick")}</p>
+            <p className="reader-hint">{app.t("library.pickHint")}</p>
           </div>
         ) : (
           <>
@@ -191,21 +197,30 @@ export function Library(): React.ReactElement {
                 <span className="reader-path">{open.path}</span>
               </div>
               <div className="reader-actions">
-                <span className="reader-state">{dirty ? "Saving…" : "Saved"}</span>
-                <button type="button" onClick={() => void rename()}>
-                  Rename
+                <span className="reader-state">
+                  {app.t(dirty ? "library.saving" : "library.saved")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDialog({ kind: "rename", initial: open.title })}
+                >
+                  {app.t("library.rename")}
                 </button>
                 <button type="button" onClick={() => setMoving(true)}>
-                  Move
+                  {app.t("library.move")}
                 </button>
                 <button
                   type="button"
                   onClick={() => window.emqnote.library.revealNote(open.path)}
                 >
-                  Reveal
+                  {app.t("library.reveal")}
                 </button>
-                <button type="button" className="danger" onClick={() => void trash()}>
-                  Delete
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => setDialog({ kind: "delete", title: open.title })}
+                >
+                  {app.t("library.delete")}
                 </button>
               </div>
             </header>
@@ -227,6 +242,7 @@ export function Library(): React.ReactElement {
                   setLink(null);
                   editor.current?.focus();
                 }}
+                t={app.t}
                 onApplyAndClose={(href) => {
                   editor.current?.applyLink(href);
                   setLink(null);
@@ -241,6 +257,7 @@ export function Library(): React.ReactElement {
         <MoveDialog
           folders={folders}
           current={folder}
+          t={app.t}
           onCancel={() => setMoving(false)}
           onMove={(target) => {
             setMoving(false);
@@ -251,6 +268,42 @@ export function Library(): React.ReactElement {
               await openNote(path);
             })();
           }}
+        />
+      )}
+
+      {dialog !== null && (
+        <Ask
+          title={
+            dialog.kind === "rename"
+              ? app.t("ask.renameTitle")
+              : dialog.kind === "newFolder"
+                ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
+                : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+          }
+          initial={dialog.kind === "delete" ? undefined : dialog.kind === "rename" ? dialog.initial : ""}
+          confirmLabel={dialog.kind === "delete" ? app.t("library.delete") : app.t("ask.ok")}
+          cancelLabel={app.t("ask.cancel")}
+          danger={dialog.kind === "delete"}
+          onCancel={() => setDialog(null)}
+          onConfirm={(value) => {
+            const current = dialog;
+            setDialog(null);
+            if (current.kind === "rename") void rename(value);
+            if (current.kind === "delete") void trash();
+            if (current.kind === "newFolder") {
+              void window.emqnote.library.createFolder(current.parent, value);
+            }
+          }}
+        />
+      )}
+
+      {settingsOpen && (
+        <Settings
+          locale={app.locale}
+          hotkey={app.hotkey}
+          t={app.t}
+          onChanged={() => void app.reload()}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
     </div>

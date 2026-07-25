@@ -5,6 +5,7 @@ interface Props {
   current: string;
   onMove: (folder: string) => void;
   onCancel: () => void;
+  t: (key: string) => string;
 }
 
 /**
@@ -39,6 +40,7 @@ export function MoveDialog({
   current,
   onMove,
   onCancel,
+  t,
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -52,7 +54,9 @@ export function MoveDialog({
       .map((folder) => ({ folder, rank: score(folder, query) }))
       .filter((entry): entry is { folder: string; rank: number } => entry.rank !== null)
       .sort((a, b) => b.rank - a.rank)
-      .slice(0, 12);
+      // Enough to scroll through when nothing is typed yet; the whole point of
+      // opening this is to see where a note could go.
+      .slice(0, 50);
   }, [folders, current, query]);
 
   useEffect(() => setActive(0), [query]);
@@ -68,7 +72,7 @@ export function MoveDialog({
         <input
           ref={input}
           value={query}
-          placeholder="Move to which folder?"
+          placeholder={t("library.moveWhere")}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
@@ -91,7 +95,7 @@ export function MoveDialog({
         />
 
         <ul className="palette-list">
-          {matches.length === 0 && <li className="palette-empty">No folder matches</li>}
+          {matches.length === 0 && <li className="palette-empty">{t("library.noFolderMatch")}</li>}
           {matches.map((entry, index) => (
             <li
               key={entry.folder}
@@ -99,7 +103,7 @@ export function MoveDialog({
               onMouseEnter={() => setActive(index)}
               onClick={() => choose(index)}
             >
-              {entry.folder === "" ? "Vault root" : entry.folder}
+              {entry.folder === "" ? t("library.vaultRoot") : entry.folder}
             </li>
           ))}
         </ul>

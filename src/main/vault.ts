@@ -18,6 +18,9 @@ export const INCOMING = join(INBOX, "_incoming");
 export const ATTACHMENTS = "_attachments";
 export const TEMPLATES = "_templates";
 
+/** Scaffolded once on a new vault; yours to rename or delete afterwards. */
+export const SUGGESTED_FOLDERS = ["10 Projects", "20 Areas", "90 Archive"];
+
 /**
  * Which business OneDrive folders are on this machine?
  *
@@ -92,6 +95,19 @@ export function tenantLabel(oneDriveRoot: string): string {
 export function ensureVaultLayout(vault: string): void {
   for (const folder of [INBOX, INCOMING, ATTACHMENTS, TEMPLATES]) {
     mkdirSync(join(vault, folder), { recursive: true });
+  }
+
+  // On a brand new vault, lay out the structure the design documents describe. Without
+  // it there is nowhere to move a note to and "Move" appears broken — which is exactly
+  // how it was reported. Only on first run: folders deleted later stay deleted.
+  const alreadyUsed = readdirSync(vault, { withFileTypes: true }).some(
+    (entry) => entry.isDirectory() && !entry.name.startsWith("_") && entry.name !== INBOX,
+  );
+
+  if (!alreadyUsed) {
+    for (const folder of SUGGESTED_FOLDERS) {
+      mkdirSync(join(vault, folder), { recursive: true });
+    }
   }
 }
 

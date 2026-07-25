@@ -90,6 +90,7 @@ export function getLibraryWindow(): BrowserWindow | null {
 export async function captureLibraryWindow(
   file: string,
   openNoteTitled?: string,
+  clickButton?: string,
 ): Promise<boolean> {
   const target = window;
   if (target === null || target.isDestroyed()) return false;
@@ -104,6 +105,18 @@ export async function captureLibraryWindow(
       })()
     `);
     await new Promise((done) => setTimeout(done, 900));
+  }
+
+  if (clickButton !== undefined) {
+    await target.webContents.executeJavaScript(`
+      (() => {
+        const buttons = [...document.querySelectorAll('button')];
+        const match = buttons.find((node) => node.textContent.trim() === ${JSON.stringify(clickButton)});
+        match?.click();
+        return match !== undefined;
+      })()
+    `);
+    await new Promise((done) => setTimeout(done, 600));
   }
 
   const image = await target.webContents.capturePage();

@@ -23,7 +23,12 @@ export function createCaptureWindow(): BrowserWindow {
     width: 720,
     height: 440,
     show: false,
-    frame: false,
+    // macOS gets its own traffic lights, inset into our title bar; every other
+    // platform gets the buttons the renderer draws. Nobody wants a Windows-shaped
+    // close button on a Mac.
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 9 } }
+      : { frame: false }),
     resizable: true,
     // The note window belongs in Alt+Tab. It stays open until dismissed, so treating
     // it as a transient popup that cannot be switched back to was simply wrong.

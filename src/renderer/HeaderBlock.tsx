@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { NoteKind } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
+import { formatDateTime, type Locale } from "../shared/i18n.js";
 
 export interface HeaderValues {
   kind: NoteKind;
@@ -15,22 +16,8 @@ interface Props {
   onChange: (values: HeaderValues) => void;
   knownAttendees: string[];
   onLeave: () => void;
-}
-
-/**
- * Shows the date and time in the local format, from an ISO value with an offset. The
- * stored value stays ISO; only what you read is localised.
- */
-function formatCreated(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  locale: Locale;
+  t: (key: string) => string;
 }
 
 /**
@@ -46,6 +33,8 @@ export function HeaderBlock({
   onChange,
   knownAttendees,
   onLeave,
+  locale,
+  t,
 }: Props): React.ReactElement {
   const [editingTime, setEditingTime] = useState(false);
   const timeInput = useRef<HTMLInputElement>(null);
@@ -109,7 +98,7 @@ export function HeaderBlock({
       <div className="header-row">
         <input
           className="subject"
-          placeholder={isMeeting ? "Meeting" : "Subject (optional)"}
+          placeholder={isMeeting ? t("capture.meeting") : t("capture.subject")}
           value={values.subject}
           onChange={(event) => set("subject", event.target.value)}
           onKeyDown={leaveOnEnter}
@@ -129,10 +118,10 @@ export function HeaderBlock({
           <button
             type="button"
             className="created"
-            title="Click to change the date and time"
+            title={t("capture.changeTime")}
             onClick={() => setEditingTime(true)}
           >
-            {formatCreated(values.created)}
+            {formatDateTime(locale, values.created)}
           </button>
         )}
 
@@ -142,24 +131,24 @@ export function HeaderBlock({
           title="Ctrl+Shift+G"
           onClick={() => set("kind", isMeeting ? "quick" : "meeting")}
         >
-          Meeting
+          {t("capture.meeting")}
         </button>
 
-        <span className="dismiss-hint">Ctrl+Enter closes</span>
+        <span className="dismiss-hint">{t("capture.dismiss")}</span>
       </div>
 
       {isMeeting && (
         <div className="header-row">
           <input
             className="location"
-            placeholder="Location"
+            placeholder={t("capture.location")}
             value={values.location}
             onChange={(event) => set("location", event.target.value)}
             onKeyDown={leaveOnEnter}
           />
           <input
             className="attendees"
-            placeholder="Attendees, separated by , or ;"
+            placeholder={t("capture.attendees")}
             list="known-attendees"
             value={attendeeText ?? values.attendees.join(", ")}
             onChange={(event) => setAttendeeText(event.target.value)}

@@ -1,12 +1,14 @@
 import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Locale } from "../shared/i18n.js";
 import { readLaunchOptions } from "./launch-options.js";
 import { defaultVaultPath } from "./vault.js";
 
 export interface Settings {
   vaultPath: string | null;
   hotkey: string;
+  locale: Locale;
   openAtLogin: boolean;
   /** The Files On-Demand warning has been shown; do not nag on every start. */
   filesOnDemandWarned: boolean;
@@ -18,6 +20,7 @@ function defaults(): Settings {
   return {
     vaultPath: defaultVaultPath(),
     hotkey: DEFAULT_HOTKEY,
+    locale: "en-US",
     openAtLogin: true,
     filesOnDemandWarned: false,
   };

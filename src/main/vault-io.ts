@@ -33,6 +33,8 @@ import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 /** Folders the app owns and the user should not be browsing into. */
 const HIDDEN_FOLDERS = new Set(["_attachments", "_templates", "_incoming", ".emqnote"]);
 
+/** `_trash` is hidden from the tree by default but is a real folder in the vault. */
+
 function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
@@ -264,6 +266,27 @@ export function renameNote(vault: string, notePath: string, title: string): stri
 
   writeAtomic(from, serializeNote(note));
   if (to !== from) renameSync(from, to);
+
+  return toPosix(relative(vault, to));
+}
+
+export const TRASH = "_trash";
+
+/**
+ * Moves a note to the vault's own trash folder rather than the system one.
+ *
+ * The system trash is the wrong place for a file inside a OneDrive folder: on Windows
+ * it lands in a per-drive recycle bin that OneDrive does not sync, so a note deleted on
+ * one machine is unrecoverable from the other. A `_trash` folder travels with the vault
+ * and can be emptied by hand whenever.
+ */
+export function trashNote(vault: string, notePath: string): string {
+  const from = join(vault, notePath);
+  const trashDirectory = join(vault, TRASH);
+  mkdirSync(trashDirectory, { recursive: true });
+
+  const to = uniquePath(trashDirectory, basename(notePath));
+  renameSync(from, to);
 
   return toPosix(relative(vault, to));
 }

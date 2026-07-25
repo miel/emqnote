@@ -38,8 +38,10 @@ import {
   readNotesIn,
   renameNote,
   saveNote,
+  trashNote,
 } from "./vault-io.js";
 import type { SaveNoteRequest } from "../shared/vault-types.js";
+import type { Locale } from "../shared/i18n.js";
 
 // Windows: Roaming AppData can be synchronised by a corporate profile, which is exactly
 // what we do not want for an index and window state. Must happen before 'ready'.
@@ -120,7 +122,7 @@ async function main(): Promise<void> {
   if (launch.screenshot !== null) {
     const file = launch.screenshot;
     setTimeout(() => {
-      void captureLibraryWindow(file, flagNote()).then((ok) => {
+      void captureLibraryWindow(file, flagNote(), flagButton()).then((ok) => {
         console.log(ok ? `screenshot written to ${file}` : "no library window to capture");
         app.exit(ok ? 0 : 1);
       });
@@ -162,6 +164,12 @@ function installMinimalMenu(): void {
 function flagNote(): string | undefined {
   const match = process.argv.find((argument) => argument.startsWith("--open-note="));
   return match?.slice("--open-note=".length);
+}
+
+/** Optional `--click-button=<label>` so a dialog can be photographed open. */
+function flagButton(): string | undefined {
+  const match = process.argv.find((argument) => argument.startsWith("--click-button="));
+  return match?.slice("--click-button=".length);
 }
 
 function registerHotkey(): void {
@@ -293,6 +301,44 @@ function registerIpc(): void {
   ipcMain.handle(IPC.attendeesList, () => knownAttendees());
 
   registerLibraryIpc();
+  registerAppIpc();
+}
+
+/** What a window needs before it can draw: language, platform and the shortcut. */
+function registerAppIpc(): void {
+  ipcMain.handle(IPC.bootstrap, () => {
+    const settings = loadSettings();
+    return {
+      locale: settings.locale,
+      platform: process.platform,
+      hotkey: settings.hotkey,
+    };
+  });
+
+  ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {
+    saveSettings({ locale });
+    buildTrayMenu();
+    for (const target of [getCaptureWindow(), getLibraryWindow()]) {
+      if (target !== null && !target.isDestroyed()) {
+        target.webContents.send(IPC.libraryRefresh);
+      }
+    }
+  });
+
+  ipcMain.handle(IPC.setHotkey, (_event, hotkey: string) => {
+    globalShortcut.unregisterAll();
+    const registered = globalShortcut.register(hotkey, () => showCaptureWindow());
+
+    if (!registered) {
+      // Put the old one back rather than leaving the app with no shortcut at all.
+      globalShortcut.register(loadSettings().hotkey, () => showCaptureWindow());
+      return false;
+    }
+
+    saveSettings({ hotkey });
+    buildTrayMenu();
+    return true;
+  });
 }
 
 /**
@@ -353,12 +399,13 @@ function registerLibraryIpc(): void {
     return renamed;
   });
 
-  ipcMain.handle(IPC.libraryTrashNote, async (_event, path: string) => {
+  ipcMain.handle(IPC.libraryTrashNote, (_event, path: string) => {
     const vault = vaultPath();
     if (vault === null) return false;
-    // The system trash, never an unlink: a note deleted by a misclick has to be
-    // recoverable without reaching for a backup.
-    await shell.trashItem(join(vault, path));
+    // The vault's own _trash folder, not the system one: a OneDrive file sent to the
+    // Windows recycle bin is not synced, so it would be gone from the other machine
+    // with no way back. _trash travels with the vault.
+    trashNote(vault, path);
     notifyLibrary();
     return true;
   });

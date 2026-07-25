@@ -1,5 +1,7 @@
 interface Props {
   onClose: () => void;
+  /** macOS draws its own traffic lights; we only fill the bar. */
+  native: boolean;
 }
 
 /**
@@ -10,11 +12,12 @@ interface Props {
  * and there was no visible way to close it. Closing is the same as Ctrl+Enter: it saves
  * and puts the note away.
  */
-export function TitleBar({ onClose }: Props): React.ReactElement {
+export function TitleBar({ onClose, native }: Props): React.ReactElement {
   return (
-    <div className="titlebar">
+    <div className={`titlebar${native ? " titlebar-native" : ""}`}>
       <span className="titlebar-name">emqnote</span>
 
+      {!native && (
       <div className="titlebar-buttons">
         <button
           type="button"
@@ -52,6 +55,7 @@ export function TitleBar({ onClose }: Props): React.ReactElement {
           </svg>
         </button>
       </div>
+      )}
     </div>
   );
 }

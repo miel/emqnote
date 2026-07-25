@@ -1,10 +1,46 @@
 /* The library window: folder tree, note list, note. */
 
+/* `minmax(0, …)` on every track: a grid item defaults to a minimum size of its own
+   content, so a long note title was pushing the third column wider than the window and
+   the whole layout jittered while resizing. */
 .library {
   display: grid;
-  grid-template-columns: 236px 300px 1fr;
+  grid-template-columns: minmax(0, 236px) minmax(0, 300px) minmax(0, 1fr);
   height: 100%;
+  overflow: hidden;
   background: var(--background);
+}
+
+.library > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+.tree-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.tree-toolbar button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: default;
+}
+
+.tree-toolbar button:first-child {
+  flex: 1;
+  text-align: left;
+}
+
+.tree-toolbar button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* ---- folder tree ---- */
@@ -192,17 +228,27 @@
   font-size: 12px;
 }
 
+/* Never wraps. The title and path used to fall onto extra lines as the window
+   narrowed, which made the header grow and shrink while dragging the edge. */
 .reader-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 12px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border);
 }
 
 .reader-titles {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.reader-path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reader-header h1 {
@@ -221,6 +267,8 @@
 .reader-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 
@@ -305,4 +353,108 @@
 
 .palette-empty {
   color: var(--muted);
+}
+
+/* ---- ask and settings dialogs ---- */
+
+.ask,
+.settings {
+  width: min(420px, 80vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+.ask-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.ask input,
+.settings select {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 9px;
+  outline: none;
+}
+
+.ask-buttons,
+.settings-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ask-buttons button,
+.settings-buttons button {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 14px;
+  cursor: default;
+}
+
+.ask-buttons .primary,
+.settings-buttons .primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ask-buttons .danger {
+  border-color: #c42b1c;
+  color: #c42b1c;
+}
+
+.settings h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.settings-row select {
+  width: auto;
+  min-width: 150px;
+}
+
+.settings-row button {
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  min-width: 200px;
+  cursor: default;
+}
+
+.settings-row .recording {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-warning {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--warning);
 }

@@ -7,6 +7,7 @@ interface Props {
   onCancel: () => void;
   /** Ctrl+Enter: apply the link and then close the note, as it does everywhere else. */
   onApplyAndClose: (href: string) => void;
+  t: (key: string) => string;
 }
 
 /**
@@ -21,6 +22,7 @@ export function LinkPrompt({
   onApply,
   onCancel,
   onApplyAndClose,
+  t,
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
   const [href, setHref] = useState(initialHref);
@@ -32,12 +34,12 @@ export function LinkPrompt({
 
   return (
     <div className="link-prompt">
-      <label htmlFor="link-href">{initialHref === "" ? "Link" : "Edit link"}</label>
+      <label htmlFor="link-href">{t(initialHref === "" ? "link.new" : "link.edit")}</label>
       <input
         id="link-href"
         ref={input}
         value={href}
-        placeholder="https://…  (empty removes the link)"
+        placeholder={t("link.placeholder")}
         onChange={(event) => setHref(event.target.value)}
         // Clicking anywhere else puts the prompt away. It used to sit there until a
         // key was pressed, which left the window looking stuck.

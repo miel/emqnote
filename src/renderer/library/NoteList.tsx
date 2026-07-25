@@ -1,4 +1,5 @@
 import type { NoteSummary, SortKey } from "../../shared/vault-types.js";
+import { formatListTime, type Locale } from "../../shared/i18n.js";
 
 interface Props {
   notes: NoteSummary[];
@@ -6,33 +7,11 @@ interface Props {
   sort: SortKey;
   onSort: (key: SortKey) => void;
   onSelect: (path: string) => void;
+  locale: Locale;
+  t: (key: string) => string;
 }
 
-function when(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "";
-
-  const today = new Date();
-  const sameDay =
-    parsed.getFullYear() === today.getFullYear() &&
-    parsed.getMonth() === today.getMonth() &&
-    parsed.getDate() === today.getDate();
-
-  return parsed.toLocaleString(undefined, {
-    day: sameDay ? undefined : "numeric",
-    month: sameDay ? undefined : "short",
-    year:
-      parsed.getFullYear() === today.getFullYear() || sameDay ? undefined : "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const SORTS: Array<{ key: SortKey; label: string }> = [
-  { key: "modified", label: "Modified" },
-  { key: "created", label: "Created" },
-  { key: "title", label: "Title" },
-];
+const SORTS: SortKey[] = ["modified", "created", "title"];
 
 export function NoteList({
   notes,
@@ -40,24 +19,26 @@ export function NoteList({
   sort,
   onSort,
   onSelect,
+  locale,
+  t,
 }: Props): React.ReactElement {
   return (
     <div className="notes">
       <div className="notes-header">
         <span className="notes-count">
           {notes.length === 0
-            ? "No notes"
-            : `${notes.length} note${notes.length === 1 ? "" : "s"}`}
+            ? t("library.noNotes")
+            : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
         </span>
         <div className="notes-sort">
-          {SORTS.map((option) => (
+          {SORTS.map((key) => (
             <button
-              key={option.key}
+              key={key}
               type="button"
-              className={sort === option.key ? "sort-on" : ""}
-              onClick={() => onSort(option.key)}
+              className={sort === key ? "sort-on" : ""}
+              onClick={() => onSort(key)}
             >
-              {option.label}
+              {t(`library.sort.${key}`)}
             </button>
           ))}
         </div>
@@ -73,7 +54,7 @@ export function NoteList({
             <div className="note-top">
               <span className="note-title">{note.title}</span>
               <span className="note-when">
-                {when(sort === "created" ? note.created : note.modified)}
+                {formatListTime(locale, sort === "created" ? note.created : note.modified)}
               </span>
             </div>
             <div className="note-excerpt">{note.excerpt}</div>

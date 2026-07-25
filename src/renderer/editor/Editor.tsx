@@ -29,6 +29,8 @@ export interface EditorHandle {
 interface Props {
   onChange: (doc: PMNode) => void;
   onLinkRequested: () => void;
+  /** Shown while the document is empty, via CSS. */
+  placeholder?: string;
 }
 
 /**
@@ -40,7 +42,7 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onLinkRequested },
+  { onChange, onLinkRequested, placeholder },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -66,7 +68,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       // Escape deliberately does nothing here. It is far too easy to hit by reflex,
       // and losing a half-typed note to a stray keypress is unforgivable. Dismissing
       // is Ctrl+Enter, handled at window level.
-      attributes: { class: "editor-content", spellcheck: "false" },
+      attributes: {
+        class: "editor-content",
+        spellcheck: "false",
+        ...(placeholder === undefined ? {} : { "data-placeholder": placeholder }),
+      },
     });
 
     view.current = created;
