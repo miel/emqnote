@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
-import type {
-  FolderNode,
-  NoteSummary,
-  OpenedNote,
-  SortKey,
+import {
+  selectionKey,
+  TRASH_FOLDER,
+  type Facets,
+  type FolderNode,
+  type NoteSummary,
+  type OpenedNote,
+  type Selection,
+  type SortKey,
 } from "../../shared/vault-types.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
+import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
 import { LinkPrompt } from "../LinkPrompt.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
@@ -19,9 +24,16 @@ import { Settings } from "./Settings.js";
 const SAVE_DEBOUNCE_MS = 800;
 
 const EMPTY_TREE: FolderNode = { path: "", name: "Vault", children: [], noteCount: 0 };
+const EMPTY_FACETS: Facets = { tags: [], people: [], available: true };
 
 function flatten(node: FolderNode): string[] {
   return [node.path, ...node.children.flatMap(flatten)];
+}
+
+/** The folder a note sits in; "" for the vault root. */
+function folderOf(notePath: string): string {
+  const cut = notePath.lastIndexOf("/");
+  return cut === -1 ? "" : notePath.slice(0, cut);
 }
 
 function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
@@ -45,8 +57,16 @@ export function Library(): React.ReactElement {
   const editor = useRef<EditorHandle>(null);
 
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
-  const [folder, setFolder] = useState("00 Inbox");
+  const [selection, setSelection] = useState<Selection>({ kind: "folder", path: "00 Inbox" });
+  /**
+   * The last folder that was selected, which is not always the current selection.
+   *
+   * "New folder" needs a parent, and a tag is not one. Remembering where you last were
+   * in the tree keeps that button working from a filter view instead of guessing.
+   */
+  const [lastFolder, setLastFolder] = useState("00 Inbox");
   const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   const [sort, setSort] = useState<SortKey>("modified");
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -54,6 +74,19 @@ export function Library(): React.ReactElement {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
+  const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
+
+  /**
+   * The editable frontmatter of the open note, held apart from `open`.
+   *
+   * Deliberately not folded into `open`: the effect below reloads the document into the
+   * editor whenever `open` changes, so putting header values there would rebuild the
+   * document on every keystroke in the attendee field and throw the caret away.
+   */
+  const [header, setHeader] = useState<HeaderValues | null>(null);
+  const headerRef = useRef<HeaderValues | null>(null);
+  headerRef.current = header;
 
   const openRef = useRef<OpenedNote | null>(null);
   openRef.current = open;
@@ -63,22 +96,55 @@ export function Library(): React.ReactElement {
     setTree(await window.emqnote.library.tree());
   }, []);
 
-  const loadNotes = useCallback(async (path: string) => {
-    setNotes(await window.emqnote.library.notes(path));
+  const loadNotes = useCallback(async (target: Selection) => {
+    setNotes(await window.emqnote.library.notes(target));
+  }, []);
+
+  /**
+   * True once a filter list has been unfolded.
+   *
+   * Keeps the lazy scan lazy. Without it, saving any note would rebuild the facets and
+   * so scan the whole vault, even for someone who never opens Tags or People at all.
+   */
+  const facetsWanted = useRef(false);
+
+  const loadFacets = useCallback(async () => {
+    facetsWanted.current = true;
+    setFacets(await window.emqnote.library.facets());
+  }, []);
+
+  /** Refreshes the lists only if they are being shown. */
+  const refreshFacets = useCallback(() => {
+    if (facetsWanted.current) void loadFacets();
+  }, [loadFacets]);
+
+  // The selection is an object, so it cannot be a dependency directly: a new one is
+  // built on every render and the effect would loop. Its key is stable.
+  const key = selectionKey(selection);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+
+  useEffect(() => {
+    // The same accumulators the capture window uses for its dropdowns. Not the vault
+    // scan: these are for typing into a field, where a stale-but-instant list beats a
+    // complete one that has to be waited for.
+    void window.emqnote.knownAttendees().then(setKnownAttendees);
+    void window.emqnote.knownTags().then(setKnownTags);
   }, []);
 
   useEffect(() => {
     void loadTree();
     const stop = window.emqnote.library.onRefresh(() => {
       void loadTree();
-      void loadNotes(folder);
+      void loadNotes(selectionRef.current);
+      refreshFacets();
     });
     return stop;
-  }, [loadTree, loadNotes, folder]);
+  }, [loadTree, loadNotes, refreshFacets]);
 
   useEffect(() => {
-    void loadNotes(folder);
-  }, [folder, loadNotes]);
+    void loadNotes(selectionRef.current);
+  }, [key, loadNotes]);
 
   /**
    * Writes the note being edited.
@@ -89,22 +155,31 @@ export function Library(): React.ReactElement {
    */
   const save = useCallback(async () => {
     const current = openRef.current;
+    const fields = headerRef.current;
     const doc = editor.current?.getDoc();
-    if (current === null || doc === null || doc === undefined) return;
+    if (current === null || fields === null || doc === null || doc === undefined) return;
 
     const result = await window.emqnote.library.saveNote({
       path: current.path,
+      // The title belongs to Rename, which renames the file with it. The header block
+      // in the reader deliberately has no subject field for that reason.
       title: current.title,
-      kind: current.kind,
-      created: current.created,
-      location: current.location,
-      attendees: current.attendees,
+      kind: fields.kind,
+      created: fields.created,
+      location: fields.location,
+      attendees: fields.attendees,
+      tags: fields.tags,
       doc: doc.toJSON(),
     });
 
     setDirty(false);
-    if (result.written) void loadNotes(folder);
-  }, [folder, loadNotes]);
+    // Editing the header — or an inline #tag in the body — changes what the list and the
+    // filters show, so both reload.
+    if (result.written) {
+      void loadNotes(selectionRef.current);
+      refreshFacets();
+    }
+  }, [loadNotes, refreshFacets]);
 
   const openNote = useCallback(
     async (path: string) => {
@@ -116,6 +191,18 @@ export function Library(): React.ReactElement {
 
       setOpen(loaded);
       openRef.current = loaded;
+
+      const fields: HeaderValues = {
+        kind: loaded.kind,
+        subject: loaded.title,
+        created: loaded.created,
+        location: loaded.location,
+        attendees: loaded.attendees,
+        tags: loaded.tags,
+      };
+      setHeader(fields);
+      headerRef.current = fields;
+
       setDirty(false);
     },
     [dirty, save],
@@ -129,6 +216,25 @@ export function Library(): React.ReactElement {
   }, [save]);
 
   /**
+   * A header edit saves on the same debounce as the body.
+   *
+   * The ref is set alongside the state because the timer below fires before React has
+   * re-rendered, and `save` reads the ref — without it the first keystroke after a
+   * change would write the previous value.
+   */
+  const onHeaderChange = useCallback(
+    (values: HeaderValues) => {
+      if (openRef.current === null) return;
+      setHeader(values);
+      headerRef.current = values;
+      setDirty(true);
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
+    },
+    [save],
+  );
+
+  /**
    * Loads the document into the editor once React has mounted it.
    *
    * Not straight after `setOpen`: the editor is rendered conditionally, so on the
@@ -139,7 +245,15 @@ export function Library(): React.ReactElement {
     editor.current?.setDoc(schema.nodeFromJSON(open.doc) as PMNode);
   }, [open]);
 
-  const folders = useMemo(() => flatten(tree), [tree]);
+  // The trash is not somewhere you move a note to on purpose — Delete is what puts a
+  // note there. Offering it in the move list made it look like an ordinary folder.
+  const folders = useMemo(
+    () =>
+      flatten(tree).filter(
+        (path) => path !== TRASH_FOLDER && !path.startsWith(`${TRASH_FOLDER}/`),
+      ),
+    [tree],
+  );
   const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
 
   const rename = async (title: string): Promise<void> => {
@@ -158,24 +272,37 @@ export function Library(): React.ReactElement {
     await window.emqnote.library.trashNote(current.path);
     setOpen(null);
     openRef.current = null;
-    void loadNotes(folder);
+    void loadNotes(selectionRef.current);
   };
 
   return (
     <div className="library">
       <FolderTree
         root={tree}
-        selected={folder}
-        onSelect={setFolder}
+        selected={selection}
+        facets={facets}
+        onSelect={(target) => {
+          setSelection(target);
+          if (target.kind === "folder") setLastFolder(target.path);
+        }}
+        onExpandFilters={() => void loadFacets()}
         onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
+        onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
         onOpenSettings={() => setSettingsOpen(true)}
         newFolderLabel={app.t("library.newFolder")}
         settingsLabel={app.t("settings.title")}
+        trashLabel={app.t("library.trash")}
+        tagsLabel={app.t("library.tags")}
+        peopleLabel={app.t("library.people")}
+        emptyLabel={app.t("library.filterEmpty")}
+        unavailableLabel={app.t("library.filterUnavailable")}
+        filterLabel={app.t("library.filterSearch")}
       />
 
       <NoteList
         notes={sorted}
         selected={open?.path ?? null}
+        showing={selection}
         sort={sort}
         onSort={setSort}
         onSelect={(path) => void openNote(path)}
@@ -225,6 +352,22 @@ export function Library(): React.ReactElement {
               </div>
             </header>
 
+            {/* The same block as the capture window, minus the subject and the kind
+                toggle. Fixing an attendee list or a date used to mean editing the file
+                by hand outside the app. */}
+            {header !== null && (
+              <HeaderBlock
+                variant="reader"
+                values={header}
+                onChange={onHeaderChange}
+                knownAttendees={knownAttendees}
+                knownTags={knownTags}
+                onLeave={() => editor.current?.focus()}
+                locale={app.locale}
+                t={app.t}
+              />
+            )}
+
             <Editor
               ref={editor}
               onChange={onDocChange}
@@ -256,7 +399,11 @@ export function Library(): React.ReactElement {
       {moving && open !== null && (
         <MoveDialog
           folders={folders}
-          current={folder}
+          // The folder the note is actually in, not the one selected on the left. With
+          // a tag selected there is no current folder at all, and even with a folder
+          // selected the open note may live somewhere else entirely — in which case the
+          // old code excluded the wrong one and offered the note its own folder.
+          current={folderOf(open.path)}
           t={app.t}
           onCancel={() => setMoving(false)}
           onMove={(target) => {
@@ -264,7 +411,12 @@ export function Library(): React.ReactElement {
             void (async () => {
               await save();
               const path = await window.emqnote.library.moveNote(open.path, target);
-              setFolder(target);
+              // Following the note to its new folder only makes sense when a folder is
+              // what you were looking at. From a tag view it would drop the filter.
+              if (selectionRef.current.kind === "folder") {
+                setSelection({ kind: "folder", path: target });
+                setLastFolder(target);
+              }
               await openNote(path);
             })();
           }}

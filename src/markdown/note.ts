@@ -17,6 +17,28 @@ export interface Note {
 
 const EMPTY_FRONTMATTER: Frontmatter = { title: "", type: "quick", created: "" };
 
+/** Frontmatter block at the very top of a file: `---`, YAML, `---`. */
+const FENCE = /^---\n([\s\S]*?)\n---\n?/;
+
+export interface SplitNote {
+  /** The YAML between the fences, without them. Empty when there is no frontmatter. */
+  yaml: string;
+  body: string;
+}
+
+/**
+ * Cuts a note file in two without parsing either half.
+ *
+ * For the cases that only want the frontmatter, or only want to scan the body text: a
+ * full `parseNote` builds an entire ProseMirror document, and building one of those per
+ * file to read a `title` out of it is the most expensive way to do the cheapest job.
+ */
+export function splitNote(markdown: string): SplitNote {
+  const match = FENCE.exec(markdown);
+  if (match === null) return { yaml: "", body: markdown };
+  return { yaml: match[1]!, body: markdown.slice(match[0]!.length) };
+}
+
 /** Reads a `.md` file from the vault as a note. */
 export function parseNote(markdown: string): Note {
   const root = readProcessor.parse(markdown) as Root;

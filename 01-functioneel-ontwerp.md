@@ -79,6 +79,48 @@ meeste aandacht (zie §4).
 Notitietype wordt onthouden als `type: meeting` in de frontmatter, zodat je later
 kunt zoeken op vergaderingen of op wie erbij was.
 
+### 3.2a Terugvinden dwars door de mappen heen: tags en personen
+
+Een map is één plek. Een notitie over klant X in `10 Projects` is onvindbaar vanuit
+`20 Areas`, en dat is precies het moment waarop je terugvalt op Outlook-zoeken.
+
+Onderin het linkerpaneel staan daarom twee lijsten, naast de prullenbak:
+
+- **Tags** — alles wat in het tagveld van het capture-venster is getypt, plus elke
+  `#tag` die ergens in een notitietekst staat. De twee worden samengevoegd; zie §3.8 van
+  [03-markdown-dialect.md](03-markdown-dialect.md) voor wat als tag telt.
+- **Personen** — de deelnemers uit de frontmatter van vergadernotities.
+
+Beide lijsten staan op aantal gesorteerd, druk gebruikt bovenaan, met een filterveldje
+zodra het er meer dan vijftien zijn. Kies je er een, dan toont de notitielijst alles uit
+de hele vault dat erbij hoort, met per notitie de map waar hij staat — want zonder dat is
+een lijst titels uit vijf verschillende mappen niet te lezen. De prullenbak telt niet
+mee: een weggegooide notitie hoort niet via zijn tag terug te komen.
+
+De lijsten worden pas opgebouwd wanneer je er een openklapt. Dat scheelt het doorlezen
+van de hele vault bij elke keer dat het bibliotheekvenster opengaat, en het houdt de
+capture-kant er volledig buiten.
+
+### 3.2b Een notitie bijwerken in het hoofdvenster
+
+Boven de tekst van de geopende notitie staat hetzelfde kopblok als in het
+capture-venster: datum en tijd, tags, en bij een vergadering ook locatie en aanwezigen.
+Een verkeerd gespelde naam of een vergeten tag is daarmee ter plekke te herstellen; tot
+nu toe kon dat alleen door het bestand buiten de app te openen.
+
+Twee dingen zitten er bewust *niet* in:
+
+- **Het onderwerpveld.** De titel wijzig je met *Hernoemen*, want die actie past ook de
+  bestandsnaam aan. Een tweede plek om hem te wijzigen zou de twee uit elkaar laten
+  lopen.
+- **De vergadering/snel-schakelaar.** Een vergadering terugzetten naar een snelle
+  notitie gooit locatie en aanwezigen weg. In het capture-venster is dat prima — je
+  schakelt vóór je typt — maar op een bestaande notitie is één misklik genoeg om een
+  deelnemerslijst kwijt te raken.
+
+Wijzigingen worden op dezelfde manier bewaard als de tekst: 800 ms na de laatste
+aanslag, en alleen wanneer de bytes werkelijk anders zijn (B10).
+
 ### 3.3 Opruimen: van Inbox naar project
 
 Alles landt in `00 Inbox/`. Op een rustig moment open je het hoofdvenster en verplaats

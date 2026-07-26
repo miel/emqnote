@@ -23,5 +23,6 @@ export function payload(
     created: overrides.created ?? "",
     location: overrides.location ?? "",
     attendees: overrides.attendees ?? [],
+    tags: overrides.tags ?? [],
   };
 }

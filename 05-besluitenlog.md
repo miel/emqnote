@@ -303,6 +303,79 @@ en dat komt pas in fase 3 aan de orde bij het plakken.
 
 ---
 
+## B18 — Eén global shortcut, en niet op Ctrl+Shift+Space
+
+**Genomen** op 26 juli 2026, na fase 3. De capture-hotkey is standaard `Ctrl+Shift+Y` /
+`Cmd+Shift+Y`. De bibliotheek krijgt géén eigen global shortcut: die opent vanuit het
+tray-menu en met `Mod+O` in het capture-venster.
+
+**Waarom geen tweede global.** Een global shortcut is een claim op de hele machine: elke
+andere app raakt die combinatie kwijt. Voor het capture-venster is dat de prijs waard —
+dat is het hele punt van de app, en het gaat om tientallen keren per dag. Voor het
+doorbladeren van de vault niet: dat is een bewuste, zeldzame handeling met twee ingangen
+die niets kosten.
+
+Het tray-menu adverteerde tot nu toe `Ctrl+Shift+E`. Een accelerator in een tray-menu
+wordt echter getekend en nooit geregistreerd, en het applicatiemenu is teruggebracht tot
+de klembordrollen — er werd dus niets geclaimd en er gebeurde ook niets. Het label is weg.
+
+**Waarom niet langer Ctrl+Shift+Space.** Dat is in Word, en daarmee in Outlook waarin
+gecomponeerd wordt, de harde spatie. Juist de app die vanuit Outlook wordt aangeroepen
+moet Outlook niets afnemen.
+
+**Afgewezen:** de hele familie `Ctrl+Alt+<letter>`. Op Windows is Ctrl+Alt gelijk aan
+AltGr, dus op een Nederlandse of US-International-indeling typt `Ctrl+Alt+E` een `€`.
+Verder `Cmd+Shift+A` (in Word: alles kapitalen), `Cmd+Shift+W` (botst met `Mod+W` in het
+capture-venster zelf), `Cmd+Shift+Q` (uitloggen op macOS) en `Cmd+Shift+1…6`
+(getalnotaties in Excel, koppen in de eigen editor).
+
+**Prijs:** `Ctrl+Shift+Y` heeft geen mnemoniek. Dat is bewust ingeruild tegen stilte: het
+is de enige kandidaat zonder botsing in Word, Outlook, Excel, Verkenner of de browsers.
+Op macOS claimt alleen de systeemdienst 'Maak nieuwe notitie' hem, en die wordt hier
+nooit gebruikt.
+
+---
+
+## B19 — Tags zijn tekst, geen bouwsteen
+
+**Genomen** op 26 juli 2026, na fase 3. Een `#tag` in de body blijft gewone tekst. Er komt
+géén tag-mark en géén tag-node in `src/markdown/schema.ts`. In ruil daarvoor krijgt de
+serializer één uitzondering: een `#` aan het begin van een regel wordt niet ontsnapt
+wanneer er onmiddellijk een tagnaam op volgt.
+
+**Waarom geen bouwsteen in het schema.** Een tag is geen structuur maar een *lexicale*
+eigenschap van gewone tekst — precies hoe Obsidian het ook modelleert, dat kent evenmin
+een tag-node en scant gewoon. In het schema zetten kost een mdast-uitbreiding, een
+scanner in `normalize-phrasing.ts`, een tak in `from-mdast.ts` en in `to-mdast.ts`, een
+stringify-handler, `toDOM`/`parseDOM`, en een plek in `MARK_NESTING_ORDER`. Het verandert
+bovendien de vorm van `CapturePayload.doc`, en dat is precies het contract waar het
+plakwerk van fase 3 tegenaan geschreven gaat worden.
+
+Het zou de rondgang ook niet béter maken maar slechter: een met de hand geschreven
+`\#tag` zou door de scanner alsnog tot tag worden gepromoveerd en als levende `#tag`
+worden teruggeschreven. Diezelfde beperking heeft de gekozen oplossing ook — maar zonder
+de zes bestanden.
+
+**Waarom de uitzondering op het ontsnappen dan wél moet.** `#` aan het begin van een regel
+werd tot nu toe altijd `\#`, omdat daar een ATX-kop zou kunnen beginnen. Voor Obsidian is
+`\#klantx` geen tag. Zonder de uitzondering zou de vault dus twee soorten tags bevatten —
+die middenin een regel werken en die vooraan niet — zonder dat er iets zichtbaar is dat
+het verschil verklaart. Dat botst frontaal met B7.
+
+Het kan geen kwaad omdat CommonMark een kop alleen leest wanneer er een spatie, een tab
+of het regeleinde op de hekjes volgt: `#klantx` op kolom 0 is hoe dan ook een alinea, dus
+het leest identiek terug. `\# Dit is geen kop` houdt zijn backslash, want daar staat een
+spatie achter het hekje.
+
+**Gemeten voordat het besluit viel:** de wijziging is tegen het hele corpus gedraaid en
+**geen van de 25 bestanden verandert**. Dat is wat het van een gok een besluit maakte.
+
+**Prijs:** `03-markdown-dialect.md` §3.1 en §6 moesten worden bijgesteld — de zin "een `#`
+in de tekst is dus altijd een echte kop" was niet meer waar. En er staat een beperking
+bij in §9.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

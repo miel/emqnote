@@ -5,7 +5,7 @@ import {
   type ShowPayload,
   type StatusPayload,
 } from "../shared/ipc.js";
-import type { SaveNoteRequest } from "../shared/vault-types.js";
+import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
 
 /**
  * The renderer gets exactly these nine things and nothing else. The sandbox stays on
@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   minimise: () => ipcRenderer.send(IPC.windowMinimise),
   toggleMaximise: () => ipcRenderer.send(IPC.windowToggleMaximise),
   knownAttendees: () => ipcRenderer.invoke(IPC.attendeesList) as Promise<string[]>,
+  knownTags: () => ipcRenderer.invoke(IPC.tagsList) as Promise<string[]>,
   openLibrary: () => ipcRenderer.send(IPC.libraryOpen),
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
@@ -37,7 +38,8 @@ contextBridge.exposeInMainWorld("emqnote", {
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
-    notes: (folder: string) => ipcRenderer.invoke(IPC.libraryNotes, folder),
+    notes: (selection: Selection) => ipcRenderer.invoke(IPC.libraryNotes, selection),
+    facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
     saveNote: (request: SaveNoteRequest) => ipcRenderer.invoke(IPC.librarySaveNote, request),
     moveNote: (path: string, folder: string) =>

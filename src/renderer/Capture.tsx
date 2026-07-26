@@ -12,7 +12,14 @@ const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
 
 function freshHeader(): HeaderValues {
-  return { kind: "quick", subject: "", created: isoWithOffset(new Date()), location: "", attendees: [] };
+  return {
+    kind: "quick",
+    subject: "",
+    created: isoWithOffset(new Date()),
+    location: "",
+    attendees: [],
+    tags: [],
+  };
 }
 
 export function Capture(): React.ReactElement {
@@ -25,6 +32,7 @@ export function Capture(): React.ReactElement {
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
 
   // Held in refs so the listeners below never close over stale values.
   const headerRef = useRef(header);
@@ -43,6 +51,7 @@ export function Capture(): React.ReactElement {
       created: values.created,
       location: values.location,
       attendees: values.attendees,
+      tags: values.tags,
     });
   }, []);
 
@@ -68,6 +77,7 @@ export function Capture(): React.ReactElement {
 
   useEffect(() => {
     void window.emqnote.knownAttendees().then(setKnownAttendees);
+    void window.emqnote.knownTags().then(setKnownTags);
 
     const stopShow = window.emqnote.onShow(({ token }) => {
       editor.current?.focus();
@@ -86,6 +96,7 @@ export function Capture(): React.ReactElement {
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
       void window.emqnote.knownAttendees().then(setKnownAttendees);
+      void window.emqnote.knownTags().then(setKnownTags);
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
@@ -111,6 +122,15 @@ export function Capture(): React.ReactElement {
       if (mod && (event.key === "Enter" || event.key.toLowerCase() === "w")) {
         event.preventDefault();
         window.emqnote.close();
+        return;
+      }
+
+      // Ctrl+O opens the library. Window-local on purpose: the library does not need a
+      // global shortcut of its own, and a second global claim would be taken away from
+      // every other app on the machine for something used a few times a day at most.
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        window.emqnote.openLibrary();
         return;
       }
 
@@ -140,6 +160,7 @@ export function Capture(): React.ReactElement {
         values={header}
         onChange={onHeaderChange}
         knownAttendees={knownAttendees}
+        knownTags={knownTags}
         onLeave={() => editor.current?.focus()}
         locale={app.locale}
         t={app.t}
@@ -179,6 +200,9 @@ export function Capture(): React.ReactElement {
             ? app.t("capture.nothingSaved")
             : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
         </span>
+        {/* Moved out of the header when the tag field took its place. A learn-once
+            hint belongs in the ambient chrome anyway, not in a row of fields. */}
+        <span className="dismiss-hint">{app.t("capture.dismiss")}</span>
         <span className="latency" data-over-budget={overBudget}>
           {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
         </span>

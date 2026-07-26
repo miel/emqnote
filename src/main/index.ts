@@ -1,7 +1,12 @@
 import { app, dialog, globalShortcut, ipcMain, Menu, shell } from "electron";
 import { join } from "node:path";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
-import { knownAttendees, rememberAttendees } from "./attendees.js";
+import {
+  knownAttendees,
+  knownTags,
+  rememberAttendees,
+  rememberTags,
+} from "./remembered.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
   createCaptureWindow,
@@ -15,7 +20,7 @@ import {
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
 import { notifyPainted, runSelfTest } from "./selftest.js";
 import {
-  captureLibraryWindow,
+  captureWindowTo,
   getLibraryWindow,
   showLibraryWindow,
 } from "./library-window.js";
@@ -35,12 +40,15 @@ import {
   moveNote,
   openNote,
   readFolderTree,
-  readNotesIn,
   renameNote,
   saveNote,
   trashNote,
 } from "./vault-io.js";
-import type { SaveNoteRequest } from "../shared/vault-types.js";
+// No explicit invalidation on writes: the scan stats every file anyway, so a changed
+// note is re-read and an unchanged one is not. A capture landing mid-session costs the
+// stat walk, not another full read.
+import { facets, notesMatching } from "./vault-scan.js";
+import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
 // Windows: Roaming AppData can be synchronised by a corporate profile, which is exactly
@@ -74,6 +82,7 @@ const writer = new CaptureWriter(
   (result) => {
     lastSavedAs = result.path;
     rememberAttendees(result.attendees);
+    rememberTags(result.tags);
     const library = getLibraryWindow();
     if (library !== null && !library.isDestroyed()) {
       library.webContents.send(IPC.libraryRefresh);
@@ -117,13 +126,19 @@ async function main(): Promise<void> {
 
   await prepareVault();
 
-  if (launch.openLibrary || launch.screenshot !== null) showLibraryWindow();
+  if (launch.openLibrary) showLibraryWindow();
 
   if (launch.screenshot !== null) {
     const file = launch.screenshot;
+    // Without --library it is the capture window that gets photographed, which is the
+    // one whose layout is easiest to break and hardest to notice.
+    if (launch.openLibrary) showLibraryWindow();
+    else showCaptureWindow();
+
     setTimeout(() => {
-      void captureLibraryWindow(file, flagNote(), flagButton()).then((ok) => {
-        console.log(ok ? `screenshot written to ${file}` : "no library window to capture");
+      const target = launch.openLibrary ? getLibraryWindow() : getCaptureWindow();
+      void captureWindowTo(target, file, flagNote(), flagButton()).then((ok) => {
+        console.log(ok ? `screenshot written to ${file}` : "no window to capture");
         app.exit(ok ? 0 : 1);
       });
     }, 2500);
@@ -299,6 +314,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.attendeesList, () => knownAttendees());
+  ipcMain.handle(IPC.tagsList, () => knownTags());
 
   registerLibraryIpc();
   registerAppIpc();
@@ -367,9 +383,16 @@ function registerLibraryIpc(): void {
       : readFolderTree(vault);
   });
 
-  ipcMain.handle(IPC.libraryNotes, (_event, folder: string) => {
+  ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {
     const vault = vaultPath();
-    return vault === null ? [] : readNotesIn(vault, folder);
+    return vault === null ? [] : await notesMatching(vault, selection);
+  });
+
+  ipcMain.handle(IPC.libraryFacets, async () => {
+    const vault = vaultPath();
+    return vault === null
+      ? { tags: [], people: [], available: false }
+      : await facets(vault);
   });
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {

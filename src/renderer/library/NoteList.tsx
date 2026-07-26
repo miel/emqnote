@@ -1,9 +1,11 @@
-import type { NoteSummary, SortKey } from "../../shared/vault-types.js";
+import type { NoteSummary, Selection, SortKey } from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
 
 interface Props {
   notes: NoteSummary[];
   selected: string | null;
+  /** What produced this list. A filter draws from everywhere, a folder from one place. */
+  showing: Selection;
   sort: SortKey;
   onSort: (key: SortKey) => void;
   onSelect: (path: string) => void;
@@ -13,9 +15,16 @@ interface Props {
 
 const SORTS: SortKey[] = ["modified", "created", "title"];
 
+/** The folder a note sits in, for a list that is not itself one folder. */
+function folderOf(notePath: string): string {
+  const cut = notePath.lastIndexOf("/");
+  return cut === -1 ? "" : notePath.slice(0, cut);
+}
+
 export function NoteList({
   notes,
   selected,
+  showing,
   sort,
   onSort,
   onSelect,
@@ -58,6 +67,20 @@ export function NoteList({
               </span>
             </div>
             <div className="note-excerpt">{note.excerpt}</div>
+            {/* Under a tag or a person the notes come from all over the vault, and a
+                list of titles with no idea where they live is hard to read. */}
+            {showing.kind !== "folder" && (
+              <div className="note-folder">{folderOf(note.path)}</div>
+            )}
+            {note.tags.length > 0 && (
+              <div className="note-tags">
+                {note.tags.map((tag) => (
+                  <span key={tag} className="note-tag">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
             {note.kind === "meeting" && note.attendees.length > 0 && (
               <div className="note-attendees">{note.attendees.join(", ")}</div>
             )}

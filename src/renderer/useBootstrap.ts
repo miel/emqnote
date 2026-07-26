@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Bootstrap } from "../shared/ipc.js";
+import { DEFAULT_HOTKEY, type Bootstrap } from "../shared/ipc.js";
 import { translate, type Locale } from "../shared/i18n.js";
 
 export interface Bootstrapped extends Bootstrap {
@@ -12,7 +12,7 @@ export interface Bootstrapped extends Bootstrap {
 const FALLBACK: Bootstrap = {
   locale: "en-US",
   platform: "win32",
-  hotkey: "CommandOrControl+Shift+Space",
+  hotkey: DEFAULT_HOTKEY,
 };
 
 /**

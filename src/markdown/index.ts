@@ -1,5 +1,13 @@
 export { schema, MARK_NESTING_ORDER } from "./schema.js";
-export { parseNote, serializeNote, serializeBody, emptyDoc, type Note } from "./note.js";
+export {
+  parseNote,
+  serializeNote,
+  serializeBody,
+  splitNote,
+  emptyDoc,
+  type Note,
+  type SplitNote,
+} from "./note.js";
 export {
   parseFrontmatter,
   serializeFrontmatter,
@@ -7,3 +15,11 @@ export {
   type NoteType,
   type NoteSource,
 } from "./frontmatter.js";
+export {
+  startsWithTag,
+  extractTags,
+  findTags,
+  foldTag,
+  cleanTagInput,
+  type FoundTag,
+} from "./tags.js";

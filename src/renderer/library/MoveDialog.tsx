@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { score } from "./fuzzy.js";
 
 interface Props {
   folders: string[];
@@ -6,33 +7,6 @@ interface Props {
   onMove: (folder: string) => void;
   onCancel: () => void;
   t: (key: string) => string;
-}
-
-/**
- * Scores a folder against what has been typed.
- *
- * Loose subsequence matching across the whole path, so `alph rap` finds
- * `10 Projects/Klant X/Project Alpha/Rapportage` — the point being that moving a note
- * four levels deep should cost a few keystrokes, not a walk through a tree.
- */
-function score(path: string, query: string): number | null {
-  if (query === "") return 0;
-
-  const haystack = path.toLowerCase();
-  let position = 0;
-  let hits = 0;
-
-  for (const term of query.toLowerCase().split(/\s+/).filter((t) => t !== "")) {
-    const found = haystack.indexOf(term, position);
-    if (found === -1) return null;
-    // Earlier matches and matches at a word boundary rank higher.
-    hits += found === 0 || /[\s/]/.test(haystack[found - 1] ?? "") ? 2 : 1;
-    position = found + term.length;
-  }
-
-  // Shorter paths win ties: the more specific folder is usually the deeper one you
-  // typed enough of, not the long one that happens to contain the letters.
-  return hits * 1000 - path.length;
 }
 
 export function MoveDialog({

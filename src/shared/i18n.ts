@@ -18,6 +18,7 @@ const DUTCH: Record<string, string> = {
   "capture.meeting": "Vergadering",
   "capture.location": "Locatie",
   "capture.attendees": "Aanwezigen, gescheiden door , of ;",
+  "capture.tags": "#tags",
   "capture.placeholder": "Typ maar.",
   "capture.dismiss": "Ctrl+Enter sluit",
   "capture.nothingSaved": "Nog niets bewaard",
@@ -46,6 +47,13 @@ const DUTCH: Record<string, string> = {
   "library.delete": "Verwijderen",
   "library.newFolder": "Nieuwe map",
   "library.vaultRoot": "Hoofdmap",
+  "library.trash": "Prullenbak",
+  "library.tags": "Tags",
+  "library.people": "Personen",
+  "library.filterEmpty": "Nog niets gevonden",
+  "library.filterUnavailable":
+    "De vault staat op Files On-Demand. Zet de map op 'Altijd behouden op dit apparaat' om te kunnen filteren.",
+  "library.filterSearch": "Filteren…",
   "library.moveWhere": "Naar welke map?",
   "library.noFolderMatch": "Geen map gevonden",
 
@@ -78,6 +86,7 @@ const ENGLISH: Record<string, string> = {
   "capture.meeting": "Meeting",
   "capture.location": "Location",
   "capture.attendees": "Attendees, separated by , or ;",
+  "capture.tags": "#tags",
   "capture.placeholder": "Just type.",
   "capture.dismiss": "Ctrl+Enter closes",
   "capture.nothingSaved": "Nothing saved yet",
@@ -104,6 +113,13 @@ const ENGLISH: Record<string, string> = {
   "library.delete": "Delete",
   "library.newFolder": "New folder",
   "library.vaultRoot": "Vault root",
+  "library.trash": "Trash",
+  "library.tags": "Tags",
+  "library.people": "People",
+  "library.filterEmpty": "Nothing found yet",
+  "library.filterUnavailable":
+    "The vault is on Files On-Demand. Set the folder to 'Always keep on this device' to filter.",
+  "library.filterSearch": "Filter…",
   "library.moveWhere": "Move to which folder?",
   "library.noFolderMatch": "No folder matches",
 

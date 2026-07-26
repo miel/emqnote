@@ -1,9 +1,11 @@
 import type { Locale } from "./i18n.js";
 import type {
+  Facets,
   FolderNode,
   NoteSummary,
   OpenedNote,
   SaveNoteRequest,
+  Selection,
 } from "./vault-types.js";
 
 /** The contract between main and renderer. Both sides import this file. */
@@ -23,8 +25,9 @@ export const IPC = {
   captureReset: "capture:reset",
   /** main → renderer: update the status bar. */
   captureStatus: "capture:status",
-  /** renderer → main: names seen before, for attendee autocomplete. */
+  /** renderer → main: names and tags seen before, for autocomplete. */
   attendeesList: "attendees:list",
+  tagsList: "tags:list",
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
   windowToggleMaximise: "window:toggle-maximise",
@@ -40,6 +43,8 @@ export const IPC = {
   libraryTrashNote: "library:trash-note",
   libraryCreateFolder: "library:create-folder",
   libraryRevealNote: "library:reveal-note",
+  /** The tags and people the vault carries, for the two filter lists. */
+  libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
 
@@ -54,6 +59,16 @@ export interface Bootstrap {
   platform: NodeJS.Platform;
   hotkey: string;
 }
+
+/**
+ * The capture hotkey both sides fall back to: the main process before settings exist,
+ * the renderer before the bootstrap round trip returns. One constant, because two would
+ * drift and the renderer would then advertise a shortcut that does not work.
+ *
+ * Not `Ctrl+Shift+Space`: that is the nonbreaking space in Word, and therefore in
+ * Outlook, which is the one application this hotkey is pressed from. See B18.
+ */
+export const DEFAULT_HOTKEY = "CommandOrControl+Shift+Y";
 
 export interface ShowPayload {
   /** Marker tying this appearance to its measurement. */
@@ -82,11 +97,15 @@ export interface CapturePayload {
   created: string;
   location: string;
   attendees: string[];
+  /** Typed in the tag field. Inline #tags in the body are separate — see B19. */
+  tags: string[];
 }
 
 export interface LibraryApi {
   tree: () => Promise<FolderNode>;
-  notes: (folder: string) => Promise<NoteSummary[]>;
+  /** A folder, a tag or a person — whatever the left panel currently has selected. */
+  notes: (selection: Selection) => Promise<NoteSummary[]>;
+  facets: () => Promise<Facets>;
   openNote: (path: string) => Promise<OpenedNote | null>;
   saveNote: (request: SaveNoteRequest) => Promise<{ written: boolean; path: string }>;
   moveNote: (path: string, folder: string) => Promise<string>;
@@ -107,6 +126,7 @@ export interface CaptureApi {
   minimise: () => void;
   toggleMaximise: () => void;
   knownAttendees: () => Promise<string[]>;
+  knownTags: () => Promise<string[]>;
   openLibrary: () => void;
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;

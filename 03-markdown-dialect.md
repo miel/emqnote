@@ -78,7 +78,10 @@ ATX, altijd. Nooit setext (`====`). Niveau 1 tot en met 6.
 ```
 
 De titel van de notitie staat in de frontmatter, niet als `#` bovenaan. Een `#` in de
-tekst is dus altijd een echte kop binnen de notitie.
+tekst is dus een echte kop binnen de notitie — met één uitzondering: een `#` met
+onmiddellijk een woord erachter is een tag, geen kop. Zie §3.8. CommonMark leest een
+kop alleen wanneer er een spatie, een tab of het regeleinde op de hekjes volgt, dus de
+twee kunnen elkaar niet in de weg zitten.
 
 ### 3.2 Alinea's
 
@@ -206,6 +209,47 @@ inhoud zelf met een backtick begint of eindigt: `` ``tekst met een ` erin`` ``.
 Scheidingslijn: `---` op een eigen regel, met een lege regel ervoor en erna. Nooit `***`
 of `___`.
 
+### 3.8 Tags
+
+Een tag is een `#` met onmiddellijk een naam erachter, ergens in de tekst:
+
+```markdown
+#klantx staat vooraan, en halverwege de regel staat #offerte ook.
+```
+
+Tags staan op twee plaatsen en die zijn niet hetzelfde:
+
+- **In de frontmatter**, in het veld `tags:` (§2). Dat is wat in het tagveld van het
+  capture-venster is getypt.
+- **In de tekst**, als `#naam`. Die blijven staan waar ze staan.
+
+De app voegt de twee samen bij het filteren, maar schrijft ze nooit naar elkaar over. Een
+`#tag` in de tekst belandt dus níét in de frontmatter — anders zou het wijzigen van één
+zin de frontmatter herschrijven, en dat is precies wat B10 verbiedt.
+
+**Grammatica**, gelijk aan die van Obsidian:
+
+| | |
+|---|---|
+| Opent | aan het begin van een regel, of na witruimte, `(` of `[` |
+| Naam | letters, cijfers, `_`, `-`, `/` |
+| Eindigt | bij het eerste teken dat daar niet in zit |
+| Niet | een naam die alleen uit cijfers bestaat (`#2026`, `#1`) |
+| Niet | in code, in een URL-fragment, of in `[[Notitie#Kop]]` |
+
+`#klant/offerte` is één naam. De schuine streep is toegestaan maar betekent niets voor
+het filteren — anders dan in Obsidian, waar hij een hiërarchie aanduidt.
+
+Hoofdletters blijven staan zoals ze zijn getypt; voor het groeperen worden ze genegeerd,
+net als bij deelnemersnamen.
+
+**De uitzondering op het ontsnappen.** Aan het begin van een regel wordt een `#` normaal
+ontsnapt tot `\#`, want daar zou hij een kop kunnen beginnen (§6). Voor een tag gebeurt
+dat niet: `\#klantx` is voor Obsidian geen tag, en dan zou de helft van de tags in de
+vault stilzwijgend dood zijn — precies wat B7 moet voorkomen. Het kan geen kwaad, want
+CommonMark leest alleen een kop wanneer er een spatie, tab of regeleinde op de hekjes
+volgt. `\# Dit is geen kop` houdt zijn backslash dus wél. Zie B19.
+
 ## 4. Inline-opmaak
 
 | Wat | Schrijfwijze | Ook geaccepteerd bij lezen |
@@ -282,7 +326,9 @@ is wat een WYSIWYG-editor sowieso produceert:
 De serializer ontsnapt met een backslash, en alleen waar het echt nodig is:
 
 - Aan het begin van een regel: `#`, `>`, `-`, `+`, `1.` (bij een cijfer gevolgd door
-  punt en spatie), `|`
+  punt en spatie), `|` — met één uitzondering: een `#` die een tag opent blijft staan
+  (§3.8). `\#klantx` is voor Obsidian geen tag, en dat zou de helft van de tags in de
+  vault stilzwijgend dood maken.
 - In de tekst: `*`, `_`, `` ` ``, `[`, `]`, `<`, `~~` — maar alleen wanneer de reeks
   anders als opmaak zou worden gelezen. Een losse `*` midden in een woord wordt niet
   ontsnapt; dat geeft alleen maar ruis in het bestand.
@@ -343,6 +389,8 @@ Het testcorpus bevat minstens deze gevallen, elk als eigen bestand:
 23. Een notitie met alleen de verplichte velden
 24. Realistische vergadernotitie, ~2 A4, zoals hij ze werkelijk schrijft
 25. Realistische geplakte Outlook-mail, na conversie
+26. Tags in de frontmatter en in de tekst, in alle posities waar een `#` anders zou
+    worden ontsnapt (§3.8)
 
 Punt 24 en 25 zijn geen randgevallen maar het dagelijks gebruik. Als die twee niet
 byte-stabiel zijn, is de rest academisch.
@@ -364,13 +412,14 @@ npm run canonical -- test/corpus/24-vergadernotitie.md
 ## 9. Bekende beperkingen
 
 Deze gevallen ronden niet af zoals een argeloze lezer zou verwachten. Ze zijn bewust
-geaccepteerd en staan vastgelegd in `test/beperkingen.test.ts`, zodat ze zichtbaar
+geaccepteerd en staan vastgelegd in `test/limitations.test.ts`, zodat ze zichtbaar
 blijven in plaats van te sluimeren.
 
 | Geschreven | Wordt | Waarom |
 |---|---|---|
 | `\[\[geen wikilink]]` | een wikilink | De ontsnapping is bij het parsen al verdwenen; de scanner ziet geen verschil meer met een echte verwijzing |
 | `\=\=geen markering\=\=` | een markering | Zelfde oorzaak |
+| `\#klantx` aan het begin van een regel | een echte tag | Zelfde oorzaak. Niemand schrijft met de hand een backslash vóór een woord, en de uitzondering uit §3.8 is er alleen wanneer er direct een naam op volgt |
 
 Beide oplossen vraagt om positiebewust parseren — terugkijken in de brontekst om te zien
 of een teken ontsnapt was. Dat is een aanzienlijke complicatie voor gevallen die in

@@ -40,6 +40,13 @@ describe("known limitations", () => {
       "Literally: ==not a highlight==.\n",
     );
   });
+
+  it("turns an escaped hash at the start of a line into a live tag", () => {
+    // Written by hand as literal text, comes back as a tag. Same cause as the two above:
+    // the backslash is gone by the time we parse, so nothing can tell this from a tag
+    // that was meant. Nobody writes \# before a word, which is why this is accepted.
+    expect(roundtrip("\\#klantx staat vooraan.\n")).toBe("#klantx staat vooraan.\n");
+  });
 });
 
 describe("guaranteed not a limitation", () => {
@@ -65,5 +72,12 @@ describe("guaranteed not a limitation", () => {
     expect(roundtrip("Started ==halfway but never finished.\n")).toBe(
       "Started ==halfway but never finished.\n",
     );
+  });
+
+  it("keeps escaping a line-start hash that does not open a tag", () => {
+    // The exception is narrow: a space after the hash means a heading was meant, and a
+    // purely numeric name is not a tag. Both keep the backslash they have always had.
+    expect(roundtrip("\\# Dit is geen kop.\n")).toBe("\\# Dit is geen kop.\n");
+    expect(roundtrip("\\#2026 was een goed jaar.\n")).toBe("\\#2026 was een goed jaar.\n");
   });
 });

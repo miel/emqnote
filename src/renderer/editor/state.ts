@@ -6,6 +6,7 @@ import { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
 import { outlookKeymap } from "./keymap.js";
+import { tagHighlight } from "./tag-decoration.js";
 
 /**
  * Autoformatting, borrowed from Word rather than from markdown.
@@ -39,6 +40,7 @@ export function createEditorState(
     plugins: [
       history(),
       autoformat,
+      tagHighlight(),
       keymap(outlookKeymap(openLinkPrompt)),
       keymap(baseKeymap),
     ],

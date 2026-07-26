@@ -183,6 +183,13 @@ body {
   flex: 1;
 }
 
+/* Narrow on purpose: it shares row one with the subject, which is the field that
+   matters, and a tag is a word or two. */
+.tags {
+  flex: 0 0 22%;
+  min-width: 90px;
+}
+
 /* ---- editor ---- */
 
 .editor {
@@ -323,6 +330,13 @@ body {
 }
 
 .editor-content a {
+  color: var(--accent);
+}
+
+/* A tag is coloured and nothing more: no pill, no background, no border radius. It has
+   to stay ordinary editable text with an ordinary caret in it — anything that looks like
+   a chip invites a click, and there is nothing here to click. */
+.editor-content .tag {
   color: var(--accent);
 }
 

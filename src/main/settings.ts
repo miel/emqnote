@@ -2,6 +2,7 @@ import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locale } from "../shared/i18n.js";
+import { DEFAULT_HOTKEY } from "../shared/ipc.js";
 import { readLaunchOptions } from "./launch-options.js";
 import { defaultVaultPath } from "./vault.js";
 
@@ -14,7 +15,7 @@ export interface Settings {
   filesOnDemandWarned: boolean;
 }
 
-export const DEFAULT_HOTKEY = "CommandOrControl+Shift+Space";
+export { DEFAULT_HOTKEY };
 
 function defaults(): Settings {
   return {

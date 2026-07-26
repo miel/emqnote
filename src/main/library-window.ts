@@ -81,18 +81,23 @@ export function getLibraryWindow(): BrowserWindow | null {
 }
 
 /**
- * Photographs the library window itself.
+ * Photographs one of our own windows.
  *
  * `capturePage` rather than a screen grab: it captures only this window, needs no
- * screen-recording permission, and — the reason it exists — never records whatever
- * else happens to be on the user's desktop.
+ * screen-recording permission, and — the reason it exists — never records whatever else
+ * happens to be on the user's desktop.
+ *
+ * Which window it is comes from the caller, so `--screenshot` on its own photographs the
+ * capture window and `--library --screenshot` the library. Being unable to look at the
+ * capture window is how a layout change to the one window that has to be perfect goes
+ * unnoticed.
  */
-export async function captureLibraryWindow(
+export async function captureWindowTo(
+  target: BrowserWindow | null,
   file: string,
   openNoteTitled?: string,
   clickButton?: string,
 ): Promise<boolean> {
-  const target = window;
   if (target === null || target.isDestroyed()) return false;
 
   if (openNoteTitled !== undefined) {
@@ -107,11 +112,19 @@ export async function captureLibraryWindow(
     await new Promise((done) => setTimeout(done, 900));
   }
 
-  if (clickButton !== undefined) {
+  // `>` separates a sequence: "Tags>#klantx" unfolds the tag list and then picks one.
+  // Anything worth photographing two levels in needs two clicks, and `>` cannot occur in
+  // a folder name (Windows forbids it) or in a tag name.
+  for (const label of clickButton === undefined ? [] : clickButton.split(">")) {
     await target.webContents.executeJavaScript(`
       (() => {
-        const buttons = [...document.querySelectorAll('button')];
-        const match = buttons.find((node) => node.textContent.trim() === ${JSON.stringify(clickButton)});
+        // Folder rows too, not only buttons: the tree is where most of what is worth
+        // photographing lives, and Trash is a row rather than a button. A row is matched
+        // on its name element — its own textContent carries the note count as well, so
+        // "Trash" would never equal "Trash2".
+        const targets = [...document.querySelectorAll('button, .branch')];
+        const name = (node) => (node.querySelector('.branch-name') ?? node).textContent.trim();
+        const match = targets.find((node) => name(node) === ${JSON.stringify(label.trim())});
         match?.click();
         return match !== undefined;
       })()

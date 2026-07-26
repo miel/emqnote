@@ -1,7 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema, serializeNote, type Frontmatter } from "../markdown/index.js";
+import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 import { INBOX } from "./vault.js";
@@ -73,6 +73,12 @@ function buildFrontmatter(
     if (attendees.length > 0) frontmatter.attendees = attendees;
   }
 
+  // Outside the meeting branch on purpose: a quick note is the common case and the one
+  // most likely to want a tag on it. Only what was typed in the field lands here —
+  // inline #tags stay in the body where they were written (B19).
+  const tags = payload.tags.map(cleanTagInput).filter((tag) => tag !== "");
+  if (tags.length > 0) frontmatter.tags = tags;
+
   return frontmatter;
 }
 
@@ -89,9 +95,11 @@ export interface WriteResult {
   written: boolean;
   /** Names in this note, so the caller can remember them for autocomplete. */
   attendees: string[];
+  /** Likewise for the tag field. */
+  tags: string[];
 }
 
-const NOTHING: WriteResult = { path: null, written: false, attendees: [] };
+const NOTHING: WriteResult = { path: null, written: false, attendees: [], tags: [] };
 
 /**
  * This module deliberately imports nothing from Electron. Writing a note is plain file
@@ -136,6 +144,7 @@ export async function writeSession(
     path: session.path,
     written: true,
     attendees: frontmatter.attendees ?? [],
+    tags: frontmatter.tags ?? [],
   };
 }
 

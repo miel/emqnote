@@ -61,7 +61,7 @@ terugkomen, dan moet het schema om en is alles wat erop leunde weggegooid werk.
 
 - Electron-app met tray-icoon (Windows) / menubalk-icoon (macOS)
 - Autostart bij inloggen
-- Global hotkey, instelbaar, standaard `Ctrl+Shift+Space` / `Cmd+Shift+Space`
+- Global hotkey, instelbaar, standaard `Ctrl+Shift+Y` / `Cmd+Shift+Y` (B18)
 - Capture-venster: bij het starten aangemaakt en gerenderd, verborgen gehouden,
   `backgroundThrottling: false`
 - Hotkey doet niets anders dan `show()` + focus
@@ -146,6 +146,10 @@ repo; ze dienen ook fase 6.
 - Hernoemen: titel in frontmatter én bestandsnaam
 - Verwijderen naar prullenbak, nooit definitief
 - Mappen aanmaken en hernoemen
+- Kopblok ook in het hoofdvenster: datum, tags, en bij een vergadering locatie en
+  aanwezigen. Zelfde component als in het capture-venster, zonder onderwerpveld — de
+  titel hoort bij "Hernoemen", dat hernoemt ook het bestand — en zonder de
+  vergadering/snel-schakelaar, omdat omzetten naar snel de locatie en aanwezigen weggooit
 
 **Acceptatie:**
 - Notitie openen uit de lijst **< 50 ms**
@@ -158,6 +162,13 @@ repo; ze dienen ook fase 6.
 ---
 
 ## Fase 5 — Zoeken en synchronisatie
+
+**Al gedaan, vooruitgeschoven bij het tagwerk na fase 3:** filteren op `tag:` en
+`attendee:` bestaat, en `src/main/vault-scan.ts` is de voorloper van de index — dezelfde
+velden als de `notes`-tabel uit [02-technisch-ontwerp.md](02-technisch-ontwerp.md) §7.2,
+dezelfde verversing op mtime en grootte, alleen een `Map` in plaats van SQLite. Fase 5
+vervangt die `Map`; de aanroepen eromheen blijven staan. Gemeten: koud 279 ms over
+drieduizend notities, warm 15 ms.
 
 **Werk:**
 

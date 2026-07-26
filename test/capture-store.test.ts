@@ -93,6 +93,59 @@ describe("saving a capture", () => {
     expect(contents).not.toContain("attendees:");
   });
 
+  it("records tags on a quick note, not only on a meeting", async () => {
+    // The whole point of putting the field in row one: a quick note is the common case.
+    const session = beginSession();
+    session.payload = payload(paragraphs("Snelle gedachte"), {
+      subject: "Idee",
+      tags: ["klantx", "offerte"],
+    });
+
+    const result = await writeSession(session, vault);
+    const note = parseNote(readFileSync(result.path!, "utf8"));
+
+    expect(note.frontmatter.type).toBe("quick");
+    expect(note.frontmatter.tags).toEqual(["klantx", "offerte"]);
+    expect(result.tags).toEqual(["klantx", "offerte"]);
+  });
+
+  it("accepts a tag typed with its hash and stores it without", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Tekst"), {
+      subject: "Idee",
+      tags: ["#klantx", "  ", "#klant/"],
+    });
+
+    const { path } = await writeSession(session, vault);
+
+    expect(parseNote(readFileSync(path!, "utf8")).frontmatter.tags).toEqual([
+      "klantx",
+      "klant",
+    ]);
+  });
+
+  it("leaves the tags line out when none were typed", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Tekst"), { subject: "Idee" });
+
+    const { path } = await writeSession(session, vault);
+
+    expect(readFileSync(path!, "utf8")).not.toContain("tags:");
+  });
+
+  it("keeps an inline tag in the body and out of the frontmatter", async () => {
+    // B19: the two sources stay separate. Copying body tags into the frontmatter would
+    // mean editing one sentence rewrites the header.
+    const session = beginSession();
+    session.payload = payload(paragraphs("#klantx is akkoord."), { subject: "Idee" });
+
+    const { path } = await writeSession(session, vault);
+    const contents = readFileSync(path!, "utf8");
+
+    expect(contents).not.toContain("tags:");
+    expect(contents).toContain("#klantx is akkoord.");
+  });
+
   it("writes nothing when there is no title and no text", async () => {
     const session = beginSession();
     session.payload = payload(paragraphs("", "   "));

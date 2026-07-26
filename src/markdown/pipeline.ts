@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
 import type { Options as StringifyOptions } from "remark-stringify";
 import type { Handle, State, Info } from "mdast-util-to-markdown";
+import { startsWithTag } from "./tags.js";
 
 /**
  * Every write option is spelled out here, including the ones that happen to match the
@@ -57,6 +58,54 @@ const wikiEmbed: Handle = (node) => `![[${(node as { target: string }).target}]]
 const wikiLink: Handle = (node) => {
   const { target, alias } = node as { target: string; alias: string | null };
   return alias === null || alias === "" ? `[[${target}]]` : `[[${target}|${alias}]]`;
+};
+
+/**
+ * Text, with one exception carved out of the escaping: a `#` that opens a tag.
+ *
+ * The stock handler is `state.safe(node.value, info)` and nothing else. `safe` escapes a
+ * `#` at the start of a line, because there it could begin an ATX heading — see the
+ * `{atBreak: true, character: '#'}` rule in mdast-util-to-markdown. That is right for
+ * prose and wrong for `#klantx`, which comes back as `\#klantx` and is then no longer a
+ * tag to Obsidian (B7). Mid-line hashes were never escaped and are untouched.
+ *
+ * Leaving it unescaped is safe because CommonMark only reads `#` as a heading when a
+ * space, a tab or the line end follows it. `#klantx` at column 0 is a paragraph either
+ * way, so it re-parses to exactly the same text. `\# Dit is geen kop` keeps its
+ * backslash, because a space follows the hash and `startsWithTag` therefore says no.
+ *
+ * The value is cut around each such `#` and the pieces go through `state.safe`
+ * separately, so the hash is never inside a string `safe` inspects. Post-processing the
+ * escaped output instead would be a trap: `safe` doubles a literal backslash before
+ * punctuation, so the output can contain `\\#` meaning backslash-then-hash, and
+ * unescaping that with a regex would silently eat a character the user typed.
+ *
+ * Recorded as B19.
+ */
+const text: Handle = (node, _parent, state, info) => {
+  const value = (node as { value: string }).value;
+  if (!value.includes("#")) return state.safe(value, info);
+
+  const pieces: string[] = [];
+  let start = 0;
+  let before = info.before;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== "#") continue;
+
+    // Only a hash that begins a line can be escaped, so only there is there anything to
+    // undo. Inside the value that means right after a newline from a hard break.
+    const atBreak = index === 0 ? before === "" || before.endsWith("\n") : value[index - 1] === "\n";
+    if (!atBreak || !startsWithTag(value.slice(index))) continue;
+
+    pieces.push(state.safe(value.slice(start, index), { ...info, before, after: "#" }));
+    pieces.push("#");
+    start = index + 1;
+    before = "#";
+  }
+
+  pieces.push(state.safe(value.slice(start), { ...info, before }));
+  return pieces.join("");
 };
 
 type Align = "left" | "right" | "center" | null;
@@ -116,7 +165,14 @@ export const stringifyOptions: StringifyOptions = {
   ...STRINGIFY_OPTIONS,
   // `Handlers` only knows mdast's own node types; our four extensions cannot exist
   // there by definition. The cast is exactly as wide as it needs to be.
-  handlers: { underline, highlight, wikiEmbed, wikiLink, table } as StringifyOptions["handlers"],
+  handlers: {
+    underline,
+    highlight,
+    wikiEmbed,
+    wikiLink,
+    table,
+    text,
+  } as StringifyOptions["handlers"],
 };
 
 export const readProcessor = unified()

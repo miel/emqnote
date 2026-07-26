@@ -70,6 +70,67 @@ describe("browsing the vault", () => {
     expect(note!.excerpt).toBe("Els zit voor.");
     expect(note!.path).toBe("00 Inbox/2026-07-25 1432 Kickoff project Alpha.md");
   });
+
+  it("merges frontmatter tags with inline ones, frontmatter first", () => {
+    writeFileSync(
+      join(vault, "00 Inbox", "2026-07-26 0900 Getagd.md"),
+      `---
+title: Getagd
+type: quick
+created: 2026-07-26T09:00:00+02:00
+tags: [klantx, offerte]
+---
+
+#rapportage volgt nog, zie ook #klantx.
+`,
+    );
+
+    const note = readNotesIn(vault, "00 Inbox").find((n) => n.title === "Getagd");
+
+    // klantx appears in both and is listed once, in the frontmatter's casing.
+    expect(note!.tags).toEqual(["klantx", "offerte", "rapportage"]);
+  });
+
+  it("has no tags when the note has none", () => {
+    const [note] = readNotesIn(vault, "00 Inbox");
+    expect(note!.tags).toEqual([]);
+  });
+
+  it("keeps a leading tag in the excerpt but still strips a heading marker", () => {
+    writeFileSync(
+      join(vault, "00 Inbox", "2026-07-26 1000 Excerpt.md"),
+      `---
+title: Excerpt
+type: quick
+created: 2026-07-26T10:00:00+02:00
+---
+
+## Besluiten
+
+#klantx is akkoord.
+`,
+    );
+
+    const note = readNotesIn(vault, "00 Inbox").find((n) => n.title === "Excerpt");
+    expect(note!.excerpt).toBe("Besluiten");
+  });
+
+  it("starts the excerpt at the tag when the body opens with one", () => {
+    writeFileSync(
+      join(vault, "00 Inbox", "2026-07-26 1100 Tagfirst.md"),
+      `---
+title: Tagfirst
+type: quick
+created: 2026-07-26T11:00:00+02:00
+---
+
+#klantx is akkoord.
+`,
+    );
+
+    const note = readNotesIn(vault, "00 Inbox").find((n) => n.title === "Tagfirst");
+    expect(note!.excerpt).toBe("#klantx is akkoord.");
+  });
 });
 
 describe("opening a note", () => {
@@ -129,6 +190,114 @@ describe("saving a note", () => {
     expect(contents).toContain("type: quick");
     expect(contents).not.toContain("location:");
     expect(contents).not.toContain("attendees:");
+  });
+
+  it("keeps frontmatter tags through an edit", () => {
+    // Nothing in the library can edit the tags field, so they survive only because
+    // saveNote spreads the previous frontmatter. Losing them would silently strip a
+    // note's tags the first time it was opened and typed in.
+    const tagged = "00 Inbox/2026-07-26 0900 Getagd.md";
+    writeFileSync(
+      join(vault, tagged),
+      `---
+title: Getagd
+type: quick
+created: 2026-07-26T09:00:00+02:00
+tags: [klantx, offerte]
+---
+
+Eerste regel.
+`,
+    );
+
+    const opened = openNote(vault, tagged)!;
+    saveNote(vault, { ...opened, doc: paragraphs("Heel iets anders.").toJSON() });
+
+    const contents = readFileSync(join(vault, tagged), "utf8");
+    expect(contents).toContain("tags: [klantx, offerte]");
+    expect(contents).toContain("Heel iets anders.");
+  });
+
+  it("writes a changed attendee list and location from the reader", () => {
+    const opened = openNote(vault, path)!;
+    const result = saveNote(vault, {
+      ...opened,
+      location: "Kantoor Utrecht",
+      attendees: ["Els Bakker", "Ruben Ockhuizen"],
+    });
+
+    expect(result.written).toBe(true);
+
+    const contents = readFileSync(join(vault, path), "utf8");
+    expect(contents).toContain("location: Kantoor Utrecht");
+    expect(contents).toContain("attendees: [Els Bakker, Ruben Ockhuizen]");
+    expect(contents).not.toContain("Jan de Vries");
+  });
+
+  it("writes tags edited in the reader, and removes the line when they are cleared", () => {
+    const opened = openNote(vault, path)!;
+    saveNote(vault, { ...opened, tags: ["#klantx", "offerte"] });
+
+    let contents = readFileSync(join(vault, path), "utf8");
+    // The hash is stripped the same way the capture field strips it.
+    expect(contents).toContain("tags: [klantx, offerte]");
+
+    const again = openNote(vault, path)!;
+    expect(again.tags).toEqual(["klantx", "offerte"]);
+
+    saveNote(vault, { ...again, tags: [] });
+    contents = readFileSync(join(vault, path), "utf8");
+    expect(contents).not.toContain("tags:");
+  });
+
+  it("still writes nothing when a tagged note is opened and closed untouched", () => {
+    // B10 has to survive the header becoming editable: reading values into fields and
+    // handing the same ones back must not count as a change.
+    const tagged = "00 Inbox/2026-07-26 1200 Rust.md";
+    writeFileSync(
+      join(vault, tagged),
+      `---
+title: Rust
+type: meeting
+created: 2026-07-26T12:00:00+02:00
+location: Teams
+attendees: [Jan de Vries]
+tags: [klantx, offerte]
+---
+
+Niets aan de hand.
+`,
+    );
+    const before = readFileSync(join(vault, tagged), "utf8");
+
+    const opened = openNote(vault, tagged)!;
+    const result = saveNote(vault, { ...opened });
+
+    expect(result.written).toBe(false);
+    expect(readFileSync(join(vault, tagged), "utf8")).toBe(before);
+  });
+
+  it("keeps an inline tag in the body byte-identical through an edit", () => {
+    // The escape exception has to hold on the way out of the editor too, or a note
+    // gains a backslash the first time it is touched.
+    const tagged = "00 Inbox/2026-07-26 1000 Inline.md";
+    writeFileSync(
+      join(vault, tagged),
+      `---
+title: Inline
+type: quick
+created: 2026-07-26T10:00:00+02:00
+---
+
+#klantx staat vooraan.
+`,
+    );
+
+    const opened = openNote(vault, tagged)!;
+    const result = saveNote(vault, { ...opened });
+
+    expect(result.written).toBe(false);
+    expect(readFileSync(join(vault, tagged), "utf8")).toContain("\n#klantx staat vooraan.\n");
   });
 });
 

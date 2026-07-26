@@ -41,8 +41,11 @@ export function buildTrayMenu(): void {
         click: () => showCaptureWindow(),
       },
       {
+        // No accelerator here. An accelerator in a tray menu is drawn but never
+        // registered, so the menu promised a Cmd+Shift+E that did nothing — and making
+        // it real would have claimed a machine-wide shortcut for a once-in-a-while
+        // action. Browsing is reachable from here and from Mod+O in the capture window.
         label: "Browse notes…",
-        accelerator: "CommandOrControl+Shift+E",
         click: () => showLibraryWindow(),
       },
       { type: "separator" },
