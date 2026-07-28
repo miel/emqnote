@@ -6,6 +6,7 @@ import type {
   OpenedNote,
   SaveNoteRequest,
   Selection,
+  VaultLocation,
 } from "./vault-types.js";
 
 /** The contract between main and renderer. Both sides import this file. */
@@ -42,7 +43,11 @@ export const IPC = {
   libraryRenameNote: "library:rename-note",
   libraryTrashNote: "library:trash-note",
   libraryCreateFolder: "library:create-folder",
+  libraryRenameFolder: "library:rename-folder",
   libraryRevealNote: "library:reveal-note",
+  listVaults: "vault:list",
+  chooseVault: "vault:choose",
+  switchVault: "vault:switch",
   /** The tags and people the vault carries, for the two filter lists. */
   libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
@@ -58,6 +63,8 @@ export interface Bootstrap {
   locale: Locale;
   platform: NodeJS.Platform;
   hotkey: string;
+  /** Where the notes are, so the settings panel can mark the current one. */
+  vaultPath: string | null;
 }
 
 /**
@@ -112,6 +119,12 @@ export interface LibraryApi {
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;
   createFolder: (parent: string, name: string) => Promise<string>;
+  /**
+   * Renames a folder in place and answers with its new path. Rejects rather than
+   * correcting — the renderer has to rebase what it has open onto the answer, so a
+   * silently different name would leave it pointing at nothing.
+   */
+  renameFolder: (path: string, name: string) => Promise<string>;
   revealNote: (path: string) => void;
   onRefresh: (handler: () => void) => () => void;
 }
@@ -131,6 +144,15 @@ export interface CaptureApi {
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  /** The remembered vaults, classified and labelled fresh on every call. */
+  listVaults: () => Promise<VaultLocation[]>;
+  /** Opens the folder picker and answers with the chosen path, or null. */
+  chooseVault: () => Promise<string | null>;
+  /**
+   * Points the app at another vault and restarts it. Does not return — see B21 for why
+   * a live switch is not on offer.
+   */
+  switchVault: (path: string) => Promise<void>;
   library: LibraryApi;
 }
 

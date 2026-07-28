@@ -56,6 +56,36 @@ export function sanitiseTitle(title: string): string {
   return clean === "" ? "Untitled" : clean;
 }
 
+/**
+ * The same rules for a folder name, minus the fallback.
+ *
+ * Folder creation used to strip the illegal characters and nothing else — no control
+ * characters, no reserved device names, no trailing dot or space — which are exactly
+ * the rules that exist because Windows enforces them. A folder is worse than a note
+ * here: every note filed inside it inherits the unreachable path.
+ *
+ * Returns `""` for a name with nothing left in it rather than inventing "Untitled".
+ * A note with no title still has to land somewhere, so a fallback is right there; a
+ * folder the user named entirely out of illegal characters is a mistake to report, not
+ * to guess at.
+ */
+export function sanitiseFolderName(name: string): string {
+  let clean = stripControlCharacters(name)
+    .replace(ILLEGAL, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (clean.length > MAX_TITLE_LENGTH) {
+    clean = clean.slice(0, MAX_TITLE_LENGTH).trimEnd();
+  }
+
+  clean = clean.replace(/[. ]+$/, "");
+
+  if (RESERVED.has(clean.toLowerCase())) clean = `${clean}_`;
+
+  return clean;
+}
+
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }

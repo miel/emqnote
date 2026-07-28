@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld("emqnote", {
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
+  listVaults: () => ipcRenderer.invoke(IPC.listVaults),
+  chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
+  switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
@@ -49,6 +52,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
     createFolder: (parent: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),
+    renameFolder: (path: string, name: string) =>
+      ipcRenderer.invoke(IPC.libraryRenameFolder, path, name),
     revealNote: (path: string) => ipcRenderer.send(IPC.libraryRevealNote, path),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
   },

@@ -16,14 +16,60 @@ const DUTCH: Record<string, string> = {
   // Capture window
   "capture.subject": "Onderwerp (optioneel)",
   "capture.meeting": "Vergadering",
+  "capture.markMeeting": "Markeer als vergadering",
   "capture.location": "Locatie",
-  "capture.attendees": "Aanwezigen, gescheiden door , of ;",
+  // De scheidingstekens blijven in de tekst staan: `parseAttendees` splitst op komma
+  // *en* puntkomma, omdat Outlook puntkomma's gebruikt.
+  "capture.people": "Personen, gescheiden door , of ;",
   "capture.tags": "#tags",
+  // De labels in de eerste kolom van het kop-raster.
+  "capture.when": "Wanneer",
+  "capture.where": "Waar",
+  "capture.who": "Wie",
+  "capture.tagsLabel": "Tags",
   "capture.placeholder": "Typ maar.",
   "capture.dismiss": "Ctrl+Enter sluit",
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
+
+  // Sneltoetsenoverzicht. De namen komen uit src/shared/shortcuts.ts; wat een toets
+  // *is* staat daar, wat hij heet staat hier.
+  "help.title": "Sneltoetsen",
+  "help.or": "of",
+  "help.group.text": "Tekst",
+  "help.group.lists": "Lijsten",
+  "help.group.structure": "Structuur",
+  "help.group.note": "Notitie",
+  "help.group.window": "Venster",
+  "shortcut.strong": "Vet",
+  "shortcut.em": "Cursief",
+  "shortcut.underline": "Onderstreept",
+  "shortcut.strike": "Doorgehaald",
+  "shortcut.highlight": "Gemarkeerd",
+  "shortcut.code": "Code",
+  "shortcut.link": "Link",
+  "shortcut.bulletList": "Opsomming",
+  "shortcut.orderedList": "Nummering",
+  "shortcut.task": "Taak met vinkvakje",
+  "shortcut.tick": "Afvinken",
+  "shortcut.indent": "Niveau dieper",
+  "shortcut.outdent": "Niveau omhoog",
+  "shortcut.heading1": "Kop 1",
+  "shortcut.heading2": "Kop 2",
+  "shortcut.heading3": "Kop 3",
+  "shortcut.heading4": "Kop 4",
+  "shortcut.heading5": "Kop 5",
+  "shortcut.heading6": "Kop 6",
+  "shortcut.paragraph": "Gewone alinea",
+  "shortcut.softBreak": "Regelovergang binnen de alinea",
+  "shortcut.undo": "Ongedaan maken",
+  "shortcut.redo": "Opnieuw",
+  "shortcut.close": "Bewaren en sluiten",
+  "shortcut.markMeeting": "Vergadering aan of uit",
+  "shortcut.openLibrary": "Bibliotheek openen",
+  "shortcut.help": "Dit overzicht",
+  "shortcut.newNote": "Nieuwe notitie (overal)",
 
   // Link prompt
   "link.new": "Link",
@@ -46,6 +92,7 @@ const DUTCH: Record<string, string> = {
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
   "library.newFolder": "Nieuwe map",
+  "library.renameFolder": "Map hernoemen",
   "library.vaultRoot": "Hoofdmap",
   "library.trash": "Prullenbak",
   "library.tags": "Tags",
@@ -60,9 +107,20 @@ const DUTCH: Record<string, string> = {
   // Dialogs
   "ask.renameTitle": "Nieuwe titel",
   "ask.newFolderIn": "Nieuwe map in",
+  "ask.renameFolderTitle": "Nieuwe naam voor de map",
   "ask.confirmDelete": "naar de prullenbak verplaatsen?",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
+
+  // Waarom een map niet hernoemd kon worden. De namen komen als code uit het
+  // hoofdproces, zodat de melding hier in de juiste taal staat.
+  "folder.folder-is-root": "De vault zelf kan niet hernoemd worden.",
+  "folder.folder-is-reserved": "Die map is van de app zelf.",
+  "folder.folder-name-empty": "Een map heeft een naam nodig.",
+  "folder.folder-leaves-vault": "Die naam wijst buiten de vault.",
+  "folder.folder-not-found": "Die map bestaat niet meer.",
+  "folder.folder-already-exists": "Er is al een map met die naam.",
+  "folder.failed": "De map kon niet hernoemd worden.",
 
   // Settings
   "settings.title": "Instellingen",
@@ -71,6 +129,15 @@ const DUTCH: Record<string, string> = {
   "settings.hotkeyHint": "Klik en druk de toetsencombinatie in.",
   "settings.close": "Sluiten",
   "settings.hotkeyTaken": "Die combinatie is al bezet.",
+  "settings.vault": "Waar je notities staan",
+  "settings.vaultChoose": "Andere map kiezen…",
+  "settings.vaultSynced": "Gesynchroniseerd",
+  "settings.vaultLocal": "Lokale map",
+  "settings.vaultUnavailable": "Niet beschikbaar",
+  "settings.vaultRestart":
+    "emqnote start opnieuw op om naar deze vault over te schakelen. Wat nog niet " +
+    "bewaard is, wordt eerst weggeschreven.",
+  "settings.vaultRestartConfirm": "Opnieuw opstarten",
 };
 
 export function translate(locale: Locale, key: string): string {
@@ -84,14 +151,60 @@ export function translate(locale: Locale, key: string): string {
 const ENGLISH: Record<string, string> = {
   "capture.subject": "Subject (optional)",
   "capture.meeting": "Meeting",
+  "capture.markMeeting": "Mark as a meeting",
   "capture.location": "Location",
-  "capture.attendees": "Attendees, separated by , or ;",
+  // The separator clause stays: `parseAttendees` splits on a comma *and* a semicolon,
+  // because Outlook uses semicolons and fingers expect it.
+  "capture.people": "People, separated by , or ;",
   "capture.tags": "#tags",
+  // The labels down the first column of the header grid.
+  "capture.when": "When",
+  "capture.where": "Where",
+  "capture.who": "Who",
+  "capture.tagsLabel": "Tags",
   "capture.placeholder": "Just type.",
   "capture.dismiss": "Ctrl+Enter closes",
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
   "capture.changeTime": "Click to change the date and time",
+
+  // The shortcut sheet. What a key *is* lives in src/shared/shortcuts.ts; what it is
+  // called lives here.
+  "help.title": "Keyboard shortcuts",
+  "help.or": "or",
+  "help.group.text": "Text",
+  "help.group.lists": "Lists",
+  "help.group.structure": "Structure",
+  "help.group.note": "Note",
+  "help.group.window": "Window",
+  "shortcut.strong": "Bold",
+  "shortcut.em": "Italic",
+  "shortcut.underline": "Underline",
+  "shortcut.strike": "Strikethrough",
+  "shortcut.highlight": "Highlight",
+  "shortcut.code": "Code",
+  "shortcut.link": "Link",
+  "shortcut.bulletList": "Bulleted list",
+  "shortcut.orderedList": "Numbered list",
+  "shortcut.task": "Task with a checkbox",
+  "shortcut.tick": "Tick the box",
+  "shortcut.indent": "One level in",
+  "shortcut.outdent": "One level out",
+  "shortcut.heading1": "Heading 1",
+  "shortcut.heading2": "Heading 2",
+  "shortcut.heading3": "Heading 3",
+  "shortcut.heading4": "Heading 4",
+  "shortcut.heading5": "Heading 5",
+  "shortcut.heading6": "Heading 6",
+  "shortcut.paragraph": "Ordinary paragraph",
+  "shortcut.softBreak": "Line break within the paragraph",
+  "shortcut.undo": "Undo",
+  "shortcut.redo": "Redo",
+  "shortcut.close": "Save and close",
+  "shortcut.markMeeting": "Meeting on or off",
+  "shortcut.openLibrary": "Open the library",
+  "shortcut.help": "This sheet",
+  "shortcut.newNote": "New note (from anywhere)",
 
   "link.new": "Link",
   "link.edit": "Edit link",
@@ -112,6 +225,7 @@ const ENGLISH: Record<string, string> = {
   "library.reveal": "Reveal",
   "library.delete": "Delete",
   "library.newFolder": "New folder",
+  "library.renameFolder": "Rename folder",
   "library.vaultRoot": "Vault root",
   "library.trash": "Trash",
   "library.tags": "Tags",
@@ -125,9 +239,18 @@ const ENGLISH: Record<string, string> = {
 
   "ask.renameTitle": "New title",
   "ask.newFolderIn": "New folder in",
+  "ask.renameFolderTitle": "New name for the folder",
   "ask.confirmDelete": "Move to the trash?",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
+
+  "folder.folder-is-root": "The vault itself cannot be renamed.",
+  "folder.folder-is-reserved": "That folder belongs to the app.",
+  "folder.folder-name-empty": "A folder needs a name.",
+  "folder.folder-leaves-vault": "That name points outside the vault.",
+  "folder.folder-not-found": "That folder no longer exists.",
+  "folder.folder-already-exists": "There is already a folder with that name.",
+  "folder.failed": "The folder could not be renamed.",
 
   "settings.title": "Settings",
   "settings.language": "Language",
@@ -135,6 +258,15 @@ const ENGLISH: Record<string, string> = {
   "settings.hotkeyHint": "Click, then press the key combination.",
   "settings.close": "Close",
   "settings.hotkeyTaken": "That combination is already taken.",
+  "settings.vault": "Where your notes live",
+  "settings.vaultChoose": "Choose another folder…",
+  "settings.vaultSynced": "Synced",
+  "settings.vaultLocal": "Local folder",
+  "settings.vaultUnavailable": "Unavailable",
+  "settings.vaultRestart":
+    "emqnote restarts to switch to this vault. Anything not yet saved is written out " +
+    "first.",
+  "settings.vaultRestartConfirm": "Restart",
 };
 
 /**

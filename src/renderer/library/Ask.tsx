@@ -7,6 +7,8 @@ interface Props {
   confirmLabel: string;
   cancelLabel: string;
   danger?: boolean;
+  /** For telling rather than asking: one button, and nothing to cancel out of. */
+  dismissOnly?: boolean;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
@@ -24,6 +26,7 @@ export function Ask({
   confirmLabel,
   cancelLabel,
   danger = false,
+  dismissOnly = false,
   onConfirm,
   onCancel,
 }: Props): React.ReactElement {
@@ -65,9 +68,11 @@ export function Ask({
         )}
 
         <div className="ask-buttons">
-          <button type="button" onClick={onCancel}>
-            {cancelLabel}
-          </button>
+          {!dismissOnly && (
+            <button type="button" onClick={onCancel}>
+              {cancelLabel}
+            </button>
+          )}
           <button
             type="button"
             className={danger ? "danger" : "primary"}

@@ -11,8 +11,13 @@ export interface Settings {
   hotkey: string;
   locale: Locale;
   openAtLogin: boolean;
-  /** The Files On-Demand warning has been shown; do not nag on every start. */
-  filesOnDemandWarned: boolean;
+  /**
+   * Vaults whose Files On-Demand warning has already been shown; do not nag on every
+   * start. Per vault and not one flag: a single boolean meant that switching to a new
+   * OneDrive folder landed with the warning permanently suppressed, which is precisely
+   * the moment it is worth showing.
+   */
+  filesOnDemandWarned: string[];
 }
 
 export { DEFAULT_HOTKEY };
@@ -23,7 +28,7 @@ function defaults(): Settings {
     hotkey: DEFAULT_HOTKEY,
     locale: "en-US",
     openAtLogin: true,
-    filesOnDemandWarned: false,
+    filesOnDemandWarned: [],
   };
 }
 
@@ -39,6 +44,13 @@ export function loadSettings(): Settings {
   try {
     const raw = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<Settings>;
     cache = { ...defaults(), ...raw };
+
+    // `filesOnDemandWarned` used to be a boolean. An old settings.json would put one
+    // back here, and `false.includes(...)` throws on the very first start after an
+    // update — the least forgivable place to crash. The old `true` carried no vault, so
+    // there is nothing to migrate: it becomes an empty list and the warning may appear
+    // once more.
+    if (!Array.isArray(cache.filesOnDemandWarned)) cache.filesOnDemandWarned = [];
   } catch {
     cache = defaults();
   }

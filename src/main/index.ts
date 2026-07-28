@@ -4,9 +4,12 @@ import { IPC, type CapturePayload } from "../shared/ipc.js";
 import {
   knownAttendees,
   knownTags,
+  knownVaults,
   rememberAttendees,
   rememberTags,
+  rememberVault,
 } from "./remembered.js";
+import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
   createCaptureWindow,
@@ -37,6 +40,7 @@ import {
 } from "./vault.js";
 import {
   createFolder,
+  renameFolder,
   moveNote,
   openNote,
   readFolderTree,
@@ -209,7 +213,7 @@ async function prepareVault(): Promise<void> {
   if (loadSettings().vaultPath === null) {
     const chosen = await askForVault();
     if (chosen === null) return;
-    saveSettings({ vaultPath: chosen });
+    adoptVault(chosen);
     buildTrayMenu();
   }
 
@@ -221,11 +225,28 @@ async function prepareVault(): Promise<void> {
 }
 
 /**
+ * Records a deliberately chosen vault.
+ *
+ * Only from an explicit choice — first run, or the chooser in settings. Never from
+ * `loadSettings`, which applies `launch.vaultOverride` *after* the merge, so a
+ * `--vault=` run or a self-test would otherwise drop its temporary folder into the
+ * remembered list and offer it back as somewhere to keep notes.
+ */
+function adoptVault(path: string): void {
+  saveSettings({ vaultPath: path });
+  rememberVault(path);
+}
+
+/**
  * Asks where the vault goes.
  *
  * With more than one business OneDrive — two employers, two tenants — there is no good
  * guess, because putting the vault on the wrong tenant means work content in the wrong
  * place. Better to ask once.
+ *
+ * The one place that knows this wording, for both the people who reach it: first run,
+ * and "Choose another folder…" in settings. Two dialogs asking the same question in
+ * different words would be two chances to describe the tenant choice badly.
  */
 async function askForVault(): Promise<string | null> {
   const candidates = findOneDriveCandidates();
@@ -264,7 +285,8 @@ async function askForVault(): Promise<string | null> {
  * guess, so `unknown` is a valid outcome and holds nothing up.
  */
 async function warnAboutFilesOnDemand(vault: string): Promise<void> {
-  if (loadSettings().filesOnDemandWarned) return;
+  const warned = loadSettings().filesOnDemandWarned;
+  if (warned.includes(vault)) return;
 
   const state = await checkFilesOnDemand(vault);
   if (state !== "ondemand") return;
@@ -276,7 +298,7 @@ async function warnAboutFilesOnDemand(vault: string): Promise<void> {
     detail: FILES_ON_DEMAND_INSTRUCTION,
   });
 
-  saveSettings({ filesOnDemandWarned: true });
+  saveSettings({ filesOnDemandWarned: [...warned, vault] });
 }
 
 function registerIpc(): void {
@@ -328,6 +350,7 @@ function registerAppIpc(): void {
       locale: settings.locale,
       platform: process.platform,
       hotkey: settings.hotkey,
+      vaultPath: settings.vaultPath,
     };
   });
 
@@ -360,9 +383,15 @@ function registerAppIpc(): void {
 /**
  * Everything the library window asks for.
  *
- * Each handler resolves the vault fresh rather than capturing it, so changing the vault
- * in settings takes effect without a restart. `withVault` also means a missing vault
+ * Each handler resolves the vault fresh rather than capturing it, so a vault that only
+ * became known after startup — first run, where it is chosen while the app is already
+ * up — is picked up without special handling. `withVault` also means a missing vault
  * answers with something empty instead of throwing across the IPC boundary.
+ *
+ * That per-call resolution is *not* a promise that the vault can be changed while the
+ * app runs. It cannot: `CaptureWriter`'s session path, `ensureScanned`'s shared promise
+ * and the renderer's pending save are all decided once and never revisited. Switching
+ * restarts the app, deliberately — B21 has the full list.
  */
 function registerLibraryIpc(): void {
   const vaultPath = (): string | null => loadSettings().vaultPath;
@@ -439,6 +468,51 @@ function registerLibraryIpc(): void {
     const created = createFolder(vault, parent, name);
     notifyLibrary();
     return created;
+  });
+
+  ipcMain.handle(IPC.listVaults, () =>
+    listVaults(knownVaults(), findOneDriveCandidates(), loadSettings().vaultPath),
+  );
+
+  ipcMain.handle(IPC.chooseVault, () => askForVault());
+
+  /**
+   * Points the app at another vault and restarts it.
+   *
+   * A restart and not a live switch, and that is B21 rather than laziness — four
+   * separate pieces of state are decided once and never revisited:
+   *
+   *  - `CaptureWriter.session.path` is fixed on the first write, so a half-typed note
+   *    would keep landing in the old vault.
+   *  - `ensureScanned` collapses concurrent callers onto one `running` promise *without
+   *    checking which vault it is for*, so a `facets()` straight after a switch can
+   *    await the old vault's scan and read its cache. `invalidate()` exists and has no
+   *    callers.
+   *  - A pending `saveTimer` in the renderer would write the old note's bytes into the
+   *    new vault at the same relative path, with `writeAtomic`'s `mkdirSync` creating
+   *    the folder to hold it. Silently.
+   *  - `filesOnDemandWarned` — now per vault, precisely so the restart does not land in
+   *    a new OneDrive folder with the warning already suppressed.
+   *
+   * Everything in flight is flushed first. The renderer flushes its own pending save
+   * before it calls this.
+   */
+  ipcMain.handle(IPC.switchVault, async (_event, path: string) => {
+    await writer.flush();
+    writer.finish();
+
+    adoptVault(path);
+
+    app.relaunch();
+    app.quit();
+  });
+
+  ipcMain.handle(IPC.libraryRenameFolder, (_event, path: string, name: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    const renamed = renameFolder(vault, path, name);
+    notifyLibrary();
+    return renamed;
   });
 
   ipcMain.on(IPC.libraryRevealNote, (_event, path: string) => {

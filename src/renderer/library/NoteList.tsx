@@ -81,7 +81,10 @@ export function NoteList({
                 ))}
               </div>
             )}
-            {note.kind === "meeting" && note.attendees.length > 0 && (
+            {/* No longer gated on the kind: any note can carry people now (B20), and a
+                quick note with names on it that the list refused to show was the kind of
+                thing that makes you doubt whether the field saved at all. */}
+            {note.attendees.length > 0 && (
               <div className="note-attendees">{note.attendees.join(", ")}</div>
             )}
           </li>

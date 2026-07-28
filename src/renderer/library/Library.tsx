@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
 import {
+  folderErrorOf,
   selectionKey,
   TRASH_FOLDER,
   type Facets,
@@ -13,7 +14,9 @@ import {
 } from "../../shared/vault-types.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
+import { Help } from "../Help.js";
 import { LinkPrompt } from "../LinkPrompt.js";
+import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
 import { FolderTree } from "./FolderTree.js";
@@ -50,7 +53,9 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
 type Dialog =
   | { kind: "rename"; initial: string }
   | { kind: "newFolder"; parent: string }
-  | { kind: "delete"; title: string };
+  | { kind: "renameFolder"; path: string; initial: string }
+  | { kind: "delete"; title: string }
+  | { kind: "problem"; message: string };
 
 export function Library(): React.ReactElement {
   const app = useBootstrap();
@@ -73,6 +78,7 @@ export function Library(): React.ReactElement {
   const [moving, setMoving] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
   const [knownTags, setKnownTags] = useState<string[]>([]);
@@ -146,6 +152,19 @@ export function Library(): React.ReactElement {
     void loadNotes(selectionRef.current);
   }, [key, loadNotes]);
 
+  // F1 and Ctrl+/ open the sheet here too, tested against the same registry the editor
+  // is built from. Escape is handled inside the sheet, where it cannot reach a note.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!matches(shortcut("help"), event, app.isMac)) return;
+      event.preventDefault();
+      setHelpOpen((open) => !open);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [app.isMac]);
+
   /**
    * Writes the note being edited.
    *
@@ -191,6 +210,7 @@ export function Library(): React.ReactElement {
 
       setOpen(loaded);
       openRef.current = loaded;
+      setDocToken((token) => token + 1);
 
       const fields: HeaderValues = {
         kind: loaded.kind,
@@ -239,11 +259,21 @@ export function Library(): React.ReactElement {
    *
    * Not straight after `setOpen`: the editor is rendered conditionally, so on the
    * first note the ref is still null at that point and the note came up blank.
+   *
+   * Keyed on a counter rather than on `open`, because `setDoc` replaces the whole
+   * editor state and throws away the caret and the undo history. That is right when a
+   * *different* note is opened and wrong for every other reason `open` changes — such
+   * as rebasing its path after a folder rename, which alters no bytes at all. The
+   * counter is bumped in `openNote` and nowhere else, so the reload happens exactly
+   * when a document actually arrives.
    */
+  const [docToken, setDocToken] = useState(0);
+
   useEffect(() => {
-    if (open === null) return;
-    editor.current?.setDoc(schema.nodeFromJSON(open.doc) as PMNode);
-  }, [open]);
+    const current = openRef.current;
+    if (current === null) return;
+    editor.current?.setDoc(schema.nodeFromJSON(current.doc) as PMNode);
+  }, [docToken]);
 
   // The trash is not somewhere you move a note to on purpose — Delete is what puts a
   // note there. Offering it in the move list made it look like an ordinary folder.
@@ -263,6 +293,67 @@ export function Library(): React.ReactElement {
     await save();
     const path = await window.emqnote.library.renameNote(current.path, title);
     await openNote(path);
+  };
+
+  /**
+   * Renames a folder and moves everything that pointed into it.
+   *
+   * The order of the first two steps is the whole trick. `save()` posts the note's path
+   * as it was, and `writeAtomic` calls `mkdirSync(dirname(file), { recursive: true })` —
+   * so a debounced save landing after the rename would *recreate the old folder* and
+   * write the note back into it, leaving two folders where the user asked for one. The
+   * pending save is cancelled and flushed first, the same order Rename and Move use.
+   *
+   * The reloads at the end are not redundant with the `library:refresh` broadcast: that
+   * fires inside the main-process handler, before the invoke resolves, so it reloads
+   * against the path this side has not rebased yet.
+   */
+  const renameFolderAt = async (path: string, name: string): Promise<void> => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (dirty) await save();
+
+    let next: string;
+    try {
+      next = await window.emqnote.library.renameFolder(path, name);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.failed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    if (next !== path) {
+      const rebase = (candidate: string): string =>
+        candidate === path || candidate.startsWith(`${path}/`)
+          ? next + candidate.slice(path.length)
+          : candidate;
+
+      // The open note keeps its caret and its undo history: only the path moved, and
+      // the document reload is keyed on `docToken`, which nothing here touches.
+      const current = openRef.current;
+      if (current !== null) {
+        const moved = { ...current, path: rebase(current.path) };
+        setOpen(moved);
+        openRef.current = moved;
+      }
+
+      if (selectionRef.current.kind === "folder") {
+        const target: Selection = {
+          kind: "folder",
+          path: rebase(selectionRef.current.path),
+        };
+        setSelection(target);
+        selectionRef.current = target;
+      }
+
+      setLastFolder(rebase(lastFolder));
+    }
+
+    await loadTree();
+    await loadNotes(selectionRef.current);
+    refreshFacets();
   };
 
   const trash = async (): Promise<void> => {
@@ -288,8 +379,19 @@ export function Library(): React.ReactElement {
         onExpandFilters={() => void loadFacets()}
         onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
         onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
+        onRenameFolder={() =>
+          setDialog({
+            kind: "renameFolder",
+            path: lastFolder,
+            initial: lastFolder.split("/").pop() ?? "",
+          })
+        }
+        canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
         newFolderLabel={app.t("library.newFolder")}
+        renameFolderLabel={app.t("library.renameFolder")}
+        helpLabel={app.t("help.title")}
         settingsLabel={app.t("settings.title")}
         trashLabel={app.t("library.trash")}
         tagsLabel={app.t("library.tags")}
@@ -428,14 +530,25 @@ export function Library(): React.ReactElement {
           title={
             dialog.kind === "rename"
               ? app.t("ask.renameTitle")
-              : dialog.kind === "newFolder"
-                ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
-                : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+              : dialog.kind === "renameFolder"
+                ? `${app.t("ask.renameFolderTitle")} "${dialog.path}"`
+                : dialog.kind === "newFolder"
+                  ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
+                  : dialog.kind === "problem"
+                    ? dialog.message
+                    : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
           }
-          initial={dialog.kind === "delete" ? undefined : dialog.kind === "rename" ? dialog.initial : ""}
+          initial={
+            dialog.kind === "rename" || dialog.kind === "renameFolder"
+              ? dialog.initial
+              : dialog.kind === "newFolder"
+                ? ""
+                : undefined
+          }
           confirmLabel={dialog.kind === "delete" ? app.t("library.delete") : app.t("ask.ok")}
           cancelLabel={app.t("ask.cancel")}
           danger={dialog.kind === "delete"}
+          dismissOnly={dialog.kind === "problem"}
           onCancel={() => setDialog(null)}
           onConfirm={(value) => {
             const current = dialog;
@@ -445,6 +558,7 @@ export function Library(): React.ReactElement {
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);
             }
+            if (current.kind === "renameFolder") void renameFolderAt(current.path, value);
           }}
         />
       )}
@@ -453,9 +567,26 @@ export function Library(): React.ReactElement {
         <Settings
           locale={app.locale}
           hotkey={app.hotkey}
+          vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}
+          // Switching vault restarts the app, so anything still on the debounce has to
+          // reach disk first — and into the vault it was typed in, not the new one.
+          onBeforeSwitch={async () => {
+            if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+            if (dirty) await save();
+          }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {helpOpen && (
+        <Help
+          window="library"
+          isMac={app.isMac}
+          hotkey={app.hotkey}
+          t={app.t}
+          onClose={() => setHelpOpen(false)}
         />
       )}
     </div>

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Node as PMNode } from "prosemirror-model";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
+import { Help } from "./Help.js";
 import { LinkPrompt } from "./LinkPrompt.js";
 import { TitleBar } from "./TitleBar.js";
+import { matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
 import { useBootstrap } from "./useBootstrap.js";
@@ -33,6 +35,7 @@ export function Capture(): React.ReactElement {
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
   const [knownTags, setKnownTags] = useState<string[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Held in refs so the listeners below never close over stale values.
   const headerRef = useRef(header);
@@ -108,34 +111,42 @@ export function Capture(): React.ReactElement {
     };
   }, []);
 
+  /**
+   * The window-level keys, tested against the same registry the editor is built from.
+   *
+   * Hand-rolled because they act on the window rather than on the document, but no
+   * longer hand-*matched*: `matches` compares every modifier, including the ones the
+   * binding does not want. The chain of `if (mod && event.key === …)` conditions it
+   * replaces did not, which is how Ctrl+Shift+Enter — ticking a checkbox — reached the
+   * "save and close" branch and dismissed the note.
+   */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const mod = event.metaKey || event.ctrlKey;
-
       // While the link box is open it owns the keyboard. Otherwise Ctrl+Shift+G threw
       // focus back into the note and left the box hanging there.
       if (linkOpenRef.current) return;
 
-      // Ctrl+Enter saves and closes, the same gesture that sends a message in
-      // Outlook. Escape used to do this and should not: it is reflexive, and a note is
-      // too easy to lose that way.
-      if (mod && (event.key === "Enter" || event.key.toLowerCase() === "w")) {
+      const fires = (id: string): boolean => matches(shortcut(id), event, app.isMac);
+
+      if (fires("help")) {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+        return;
+      }
+
+      if (fires("close")) {
         event.preventDefault();
         window.emqnote.close();
         return;
       }
 
-      // Ctrl+O opens the library. Window-local on purpose: the library does not need a
-      // global shortcut of its own, and a second global claim would be taken away from
-      // every other app on the machine for something used a few times a day at most.
-      if (mod && !event.shiftKey && event.key.toLowerCase() === "o") {
+      if (fires("openLibrary")) {
         event.preventDefault();
         window.emqnote.openLibrary();
         return;
       }
 
-      // Ctrl+Shift+G toggles the meeting block without reaching for the mouse.
-      if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
+      if (fires("markMeeting")) {
         event.preventDefault();
         onHeaderChange({
           ...headerRef.current,
@@ -147,7 +158,7 @@ export function Capture(): React.ReactElement {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onHeaderChange]);
+  }, [onHeaderChange, app.isMac]);
 
   const overBudget =
     status.lastLatencyMs !== null && status.lastLatencyMs > LATENCY_BUDGET_MS;
@@ -203,10 +214,31 @@ export function Capture(): React.ReactElement {
         {/* Moved out of the header when the tag field took its place. A learn-once
             hint belongs in the ambient chrome anyway, not in a row of fields. */}
         <span className="dismiss-hint">{app.t("capture.dismiss")}</span>
+        <button
+          type="button"
+          className="help-button"
+          title={app.t("help.title")}
+          onClick={() => setHelpOpen(true)}
+        >
+          ?
+        </button>
         <span className="latency" data-over-budget={overBudget}>
           {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
         </span>
       </div>
+
+      {helpOpen && (
+        <Help
+          window="capture"
+          isMac={app.isMac}
+          hotkey={app.hotkey}
+          t={app.t}
+          onClose={() => {
+            setHelpOpen(false);
+            editor.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

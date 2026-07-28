@@ -1,24 +1,13 @@
 import { baseKeymap, chainCommands } from "prosemirror-commands";
-import { redo, undo } from "prosemirror-history";
 import type { Command } from "prosemirror-state";
+import { shortcutsWhere } from "../../shared/shortcuts.js";
 import {
   backspace,
+  COMMANDS,
   enter,
-  indent,
-  outdent,
-  setHeading,
-  setParagraph,
-  softBreak,
   tabIndent,
   tabOutdent,
-  toggleBulletList,
-  toggleCode,
-  toggleEm,
-  toggleHighlight,
-  toggleOrderedList,
-  toggleStrike,
-  toggleStrong,
-  toggleUnderline,
+  type CommandContext,
 } from "./commands.js";
 
 /**
@@ -28,64 +17,40 @@ import {
  * the email-to-self routine has going for it. An editor that puts Ctrl+B somewhere
  * else has already lost, however good the rest of it is.
  *
- * `Mod` is Cmd on macOS and Ctrl everywhere else; ProseMirror resolves it per platform.
+ * Which key does what is *not* decided here — it is decided in
+ * `src/shared/shortcuts.ts`, which the help sheet reads from as well. This walks that
+ * registry and looks each `id` up in `COMMANDS`, so a binding exists once and an entry
+ * with nothing behind it throws on startup rather than silently doing nothing.
+ *
+ * `Mod` is Cmd on macOS and Ctrl everywhere else; ProseMirror resolves it per platform,
+ * which is why the registry spells bindings its way.
  */
 export function outlookKeymap(openLinkPrompt: () => void): Record<string, Command> {
-  const keys: Record<string, Command> = {
-    "Mod-b": toggleStrong,
-    "Mod-i": toggleEm,
-    "Mod-u": toggleUnderline,
-    "Mod-Shift-x": toggleStrike,
-    "Mod-Alt-h": toggleHighlight,
-    "Mod-Shift-c": toggleCode,
+  const context: CommandContext = { openLinkPrompt };
+  const keys: Record<string, Command> = {};
 
-    // Ctrl+Shift+L is Word's bullet list. Numbering has no built-in shortcut there, so
-    // Mod+Shift+O ("ordered") fills the gap.
-    "Mod-Shift-l": toggleBulletList,
-    "Mod-Shift-o": toggleOrderedList,
+  for (const entry of shortcutsWhere("editor")) {
+    const build = COMMANDS[entry.id];
+    if (build === undefined) {
+      throw new Error(`shortcut "${entry.id}" has no command in COMMANDS`);
+    }
 
-    // Word uses Ctrl+Alt+1/2/3 for headings, but on Windows Ctrl+Alt *is* AltGr, and
-    // on a Dutch layout that combination types characters instead. Ctrl+1..6 is the
-    // reliable form; the Word bindings stay as aliases for the muscle memory.
-    "Mod-1": setHeading(1),
-    "Mod-2": setHeading(2),
-    "Mod-3": setHeading(3),
-    "Mod-4": setHeading(4),
-    "Mod-5": setHeading(5),
-    "Mod-6": setHeading(6),
-    "Mod-Alt-1": setHeading(1),
-    "Mod-Alt-2": setHeading(2),
-    "Mod-Alt-3": setHeading(3),
-    "Mod-Alt-4": setHeading(4),
-    "Mod-Alt-5": setHeading(5),
-    "Mod-Alt-6": setHeading(6),
+    const command = build(context);
+    for (const binding of entry.keys) keys[binding] = command;
+  }
 
-    // Ctrl+Shift+N is Chromium's "new incognito window" and never reaches the page.
-    // Ctrl+0 reads as "heading zero" and is free.
-    "Mod-0": setParagraph,
-    "Mod-Shift-n": setParagraph,
+  // Tab and Shift+Tab are the exception the registry cannot express: they share the
+  // `indent`/`outdent` ids but must *always* be consumed, whether or not there was
+  // anywhere to indent to. Pressing Tab twice used to walk the caret out of the note and
+  // into the header fields, because a failed indent fell through to the browser.
+  keys.Tab = tabIndent;
+  keys["Shift-Tab"] = tabOutdent;
 
-    "Mod-m": indent,
-    "Mod-Shift-m": outdent,
-
-    "Mod-k": () => {
-      openLinkPrompt();
-      return true;
-    },
-
-    // Tab and Shift+Tab work wherever the caret sits inside the item, not just at its
-    // start — that is what makes an outline feel like an outline.
-    Tab: tabIndent,
-    "Shift-Tab": tabOutdent,
-
-    Enter: chainCommands(enter, baseKeymap.Enter!),
-    "Shift-Enter": softBreak,
-    Backspace: chainCommands(backspace, baseKeymap.Backspace!),
-
-    "Mod-z": undo,
-    "Mod-Shift-z": redo,
-    "Mod-y": redo,
-  };
+  // Not in the registry: nothing to look up and nothing to show. Enter and Backspace are
+  // the plain keys, and what makes them worth overriding is structural — ending a list
+  // from any depth, and promoting an item instead of merging two of them.
+  keys.Enter = chainCommands(enter, baseKeymap.Enter!);
+  keys.Backspace = chainCommands(backspace, baseKeymap.Backspace!);
 
   return keys;
 }

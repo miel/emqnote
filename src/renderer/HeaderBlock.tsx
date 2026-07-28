@@ -18,10 +18,10 @@ export interface HeaderValues {
  *
  * `capture` is the original: subject, time, the meeting toggle and tags. `reader` is the
  * library, where the title is owned by Rename — that renames the file too, so a second
- * way to change it would let the two drift — and where the kind toggle is deliberately
- * absent: flipping a meeting to quick discards its location and attendees
- * (`saveNote` in `vault-io.ts`), which is right in capture where you toggle before you
- * type, and destructive on a note that already has them.
+ * way to change it would let the two drift.
+ *
+ * The fields themselves no longer differ. Both variants show When, Where, Who and Tags;
+ * only the subject and which direction the kind button goes depend on the window.
  */
 export type HeaderVariant = "capture" | "reader";
 
@@ -37,17 +37,26 @@ interface Props {
 }
 
 /**
- * The header block: two fields for a quick note, five for a meeting.
+ * The header block: one shape, on every note, in both windows.
  *
- * Deliberately two shapes rather than one. Always showing the full block makes "just
- * get a thought down" too heavy, and that is the very action the app has to win at;
- * only ever showing date and time makes meetings too thin, while attendees is exactly
- * what you want to search on later.
+ * It used to be two shapes — date and tags for a quick note, five fields for a meeting —
+ * on the argument that always showing the full block makes "just get a thought down"
+ * too heavy. Six weeks of use answered that the other way (B20): where and who are
+ * wanted on ordinary notes too, the row appearing and disappearing made the window jump
+ * while typing, and the gating was what made `type: meeting` a destructive switch
+ * instead of a label.
  *
- * The same component serves the library reader, so that the parsing of attendees and
- * tags, and the date editing, exist once. Two copies would drift, and the drift would
- * show up as a note whose fields behave differently depending on which window you last
- * touched it in.
+ * A fixed two-row grid, so nothing moves. A narrow first column of muted labels — When,
+ * Where, Who, Tags — removes the guesswork that a row of bare placeholder text left
+ * behind, and one grid replaces the old special case where the tag field was 22% wide
+ * in capture and `1 1 auto` in the reader.
+ *
+ * Rejected: chips for the people field. A free-text list of names wants to be wide and
+ * to stay one line; the reader header's own history is of a header that grew and shrank.
+ *
+ * The same component serves both windows, so that the parsing of attendees and tags, and
+ * the date editing, exist once. Two copies would drift, and the drift would show up as a
+ * note whose fields behave differently depending on which window you last touched it in.
  */
 export function HeaderBlock({
   values,
@@ -136,74 +145,78 @@ export function HeaderBlock({
 
   return (
     <div className={`header header-${variant}`}>
-      <div className="header-row">
-        {inCapture && (
-          <input
-            className="subject"
-            placeholder={isMeeting ? t("capture.meeting") : t("capture.subject")}
-            value={values.subject}
-            onChange={(event) => set("subject", event.target.value)}
-            onKeyDown={leaveOnEnter}
-          />
-        )}
-
-        {editingTime ? (
-          <input
-            ref={timeInput}
-            className="created"
-            type="datetime-local"
-            value={asLocalInput(values.created)}
-            onChange={(event) => set("created", isoWithOffset(new Date(event.target.value)))}
-            onBlur={() => setEditingTime(false)}
-            onKeyDown={leaveOnEnter}
-          />
-        ) : (
-          <button
-            type="button"
-            className="created"
-            title={t("capture.changeTime")}
-            onClick={() => setEditingTime(true)}
-          >
-            {formatDateTime(locale, values.created)}
-          </button>
-        )}
-
-        {/* Capture only. In the library this note already is what it is, and toggling
-            it to quick would throw away its location and attendees on the next save. */}
-        {inCapture && (
-          <button
-            type="button"
-            className={`kind${isMeeting ? " kind-on" : ""}`}
-            title="Ctrl+Shift+G"
-            onClick={() => set("kind", isMeeting ? "quick" : "meeting")}
-          >
-            {t("capture.meeting")}
-          </button>
-        )}
-
-        {/* The tag field lives in row one, where the "Ctrl+Enter closes" hint used to
-            sit — that hint has moved to the status bar. Tags belong on a quick note as
-            much as on a meeting, and row two only exists for meetings; adding a row for
-            every note would make "just get a thought down" heavier, which is the one
-            thing this window may not do. */}
+      {inCapture && (
         <input
-          className="tags"
-          placeholder={t("capture.tags")}
-          list="known-tags"
-          value={tagText ?? values.tags.map((tag) => `#${tag}`).join(" ")}
-          onChange={(event) => setTagText(event.target.value)}
-          onBlur={commitTags}
+          className="subject"
+          placeholder={isMeeting ? t("capture.meeting") : t("capture.subject")}
+          value={values.subject}
+          onChange={(event) => set("subject", event.target.value)}
           onKeyDown={leaveOnEnter}
         />
-        <datalist id="known-tags">
-          {knownTags.map((tag) => (
-            <option key={tag} value={tag} />
-          ))}
-        </datalist>
-      </div>
+      )}
 
-      {isMeeting && (
-        <div className="header-row">
+      <div className="header-grid">
+        <span className="header-label">{t("capture.when")}</span>
+        <div className="header-cell header-when">
+          {editingTime ? (
+            <input
+              ref={timeInput}
+              className="created"
+              type="datetime-local"
+              value={asLocalInput(values.created)}
+              onChange={(event) =>
+                set("created", isoWithOffset(new Date(event.target.value)))
+              }
+              onBlur={() => setEditingTime(false)}
+              onKeyDown={leaveOnEnter}
+            />
+          ) : (
+            <button
+              type="button"
+              className="created"
+              title={t("capture.changeTime")}
+              onClick={() => setEditingTime(true)}
+            >
+              {formatDateTime(locale, values.created)}
+            </button>
+          )}
+
+          {/* Two-way in capture, where you set it before typing. In the reader it
+              appears only on a note that is not a meeting yet, so the button only ever
+              promotes — with the fields no longer gated on the kind, that is a one-line
+              change to `type:` and nothing else, which is what B10 wants. */}
+          {(inCapture || !isMeeting) && (
+            <button
+              type="button"
+              className={`kind${isMeeting ? " kind-on" : ""}`}
+              title="Ctrl+Shift+G"
+              onClick={() => set("kind", isMeeting ? "quick" : "meeting")}
+            >
+              {inCapture ? t("capture.meeting") : t("capture.markMeeting")}
+            </button>
+          )}
+        </div>
+
+        <span className="header-label">{t("capture.tagsLabel")}</span>
+        <div className="header-cell">
+          <input
+            className="tags"
+            placeholder={t("capture.tags")}
+            list="known-tags"
+            value={tagText ?? values.tags.map((tag) => `#${tag}`).join(" ")}
+            onChange={(event) => setTagText(event.target.value)}
+            onBlur={commitTags}
+            onKeyDown={leaveOnEnter}
+          />
+          <datalist id="known-tags">
+            {knownTags.map((tag) => (
+              <option key={tag} value={tag} />
+            ))}
+          </datalist>
+        </div>
+
+        <span className="header-label">{t("capture.where")}</span>
+        <div className="header-cell">
           <input
             className="location"
             placeholder={t("capture.location")}
@@ -211,9 +224,13 @@ export function HeaderBlock({
             onChange={(event) => set("location", event.target.value)}
             onKeyDown={leaveOnEnter}
           />
+        </div>
+
+        <span className="header-label">{t("capture.who")}</span>
+        <div className="header-cell">
           <input
             className="attendees"
-            placeholder={t("capture.attendees")}
+            placeholder={t("capture.people")}
             list="known-attendees"
             value={attendeeText ?? values.attendees.join(", ")}
             onChange={(event) => setAttendeeText(event.target.value)}
@@ -226,7 +243,7 @@ export function HeaderBlock({
             ))}
           </datalist>
         </div>
-      )}
+      </div>
     </div>
   );
 }

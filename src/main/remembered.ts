@@ -20,12 +20,17 @@ import { join } from "node:path";
 
 const LIMIT = 500;
 
-interface Remembered {
+export interface Remembered {
   known: () => string[];
   remember: (values: string[]) => void;
 }
 
-function store(fileName: string): Remembered {
+/**
+ * Exported because the vault list wants exactly this and nothing more: an atomic write,
+ * case-insensitive de-duplication, most recent first, and a cap. Writing a second one of
+ * these for `vaults.json` would be writing this one again with a different bug.
+ */
+export function store(fileName: string): Remembered {
   let cache: string[] | null = null;
 
   const path = (): string => join(app.getPath("userData"), fileName);
@@ -87,3 +92,16 @@ export const knownAttendees = attendees.known;
 export const rememberAttendees = attendees.remember;
 export const knownTags = tags.known;
 export const rememberTags = tags.remember;
+
+/**
+ * Vaults this machine has used, bare paths only.
+ *
+ * Deliberately not the label alongside — see `vaults.ts`. Remembered only from the
+ * explicit act of choosing one, never from `loadSettings`, which applies
+ * `launch.vaultOverride` after the merge: a `--vault=` run or a self-test would
+ * otherwise leave its temporary folder in the list.
+ */
+const vaults = store("vaults.json");
+
+export const knownVaults = vaults.known;
+export const rememberVault = (path: string): void => vaults.remember([path]);

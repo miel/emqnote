@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 235 tests, under a second
+npm test               # vitest run — 322 tests, about a second
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -79,16 +79,19 @@ Latency budgets are hard, measured, and failing them is a bug not a wish: hotkey
 
 **A hotkey → caret figure without its display attached means nothing.** The measurement ends after two `requestAnimationFrame` callbacks, so it is quantized to the refresh interval and roughly halves at 120 Hz. Measured packaged figures:
 
-| Machine | Display | p50 | p95 |
-|---|---|---|---|
-| unrecorded — not the Mac mini, which has no internal panel | unrecorded; the numbers fit a 120 Hz panel | 26 ms | 43 ms |
-| Mac mini M4 | external 2490W1, 1920×1080 @ 60 Hz | 60 ms | 62–68 ms |
+| Machine | Display | p50 | p95 | When |
+|---|---|---|---|---|
+| unrecorded — not the Mac mini, which has no internal panel | unrecorded; the numbers fit a 120 Hz panel | 26 ms | 43 ms | phase 2 |
+| Mac mini M4 | external 2490W1, 1920×1080 @ 60 Hz | 60 ms | 62–68 ms | phase 3 |
+| Mac mini M4 | external 2490W1, 1920×1080 @ 60 Hz | 27–31 ms | 36–45 ms | 28 Jul 2026 |
 
 Record the machine and refresh rate with any future figure. The first row cannot be reproduced because neither was written down.
 
-Both are the same code: the phase-1 commit (`5051ca7`, a `<textarea>`, no ProseMirror) measures 60.7 ms on the Mac mini, against 60.5 ms for the current build. Removing the two-frame wait drops it to 37.9 ms, so ~23 ms of the 60 is that deliberate wait and the rest is `show()` + focus + the IPC round trip, itself partly frame-bound. Nothing in phases 2 and 3 cost anything on this path — as designed, since the window is already rendered.
+**The second and third rows disagree, on identical hardware, and that is not yet explained.** The third is three consecutive packaged runs of fifty rounds (27.4/27.3/30.9 p50, zero missed), taken on a quiet machine after the ten items above; the second is the phase-3 figure. Nothing in those ten items touches this path — the hotkey does `show()` and focus on a window that is already rendered — and a change that halved it would be a surprise, not a win to claim. Treat the third row as "measured, reproducible, unexplained" until someone re-measures the phase-3 build on the same display and settles which condition differed.
 
-The practical consequence: on a 60 Hz display the floor is ~44 ms and there is ~20 ms of headroom against the 80 ms budget, not 54.
+What the second row supported: the phase-1 commit (`5051ca7`, a `<textarea>`, no ProseMirror) measured 60.7 ms on the Mac mini against 60.5 ms for the phase-3 build, and removing the two-frame wait dropped it to 37.9 ms — so ~23 ms of that 60 was the deliberate wait and the rest `show()` + focus + the IPC round trip. The conclusion that survives either row is the one that matters: **the editor and the library cost nothing on this path**, as designed.
+
+The floor claim that went with the second row — "on a 60 Hz display the floor is ~44 ms" — does not hold against the third, which sits below it consistently. Do not rely on it without re-measuring.
 
 The capture window's bundle is kept deliberately small — it is the one that must appear instantly — so the library window is a separate rollup entry and its tree, list and dialogs are not loaded into it.
 
@@ -104,7 +107,9 @@ The capture window's bundle is kept deliberately small — it is the one that mu
 
 **A `#` that opens a tag is not escaped at the start of a line** (B19). Everywhere else a line-initial `#` becomes `\#`, because it could begin a heading — but `\#klantx` is not a tag to Obsidian, and half the tags in the vault being silently inert is exactly what B7 forbids. The exception is narrow: `startsWithTag` in `src/markdown/tags.ts` requires a tag character immediately after the hash, so `\# Dit is geen kop` keeps its backslash. It is implemented as a custom `text` handler in `pipeline.ts` that cuts the value around the hash and runs the pieces through `state.safe` separately — never by unescaping the output afterwards, which would eat a literal backslash the user typed.
 
-**`HeaderBlock` serves two windows, through a `variant` prop.** `capture` has the subject field and the meeting toggle; `reader` (the library) has neither. The title belongs to Rename, which renames the file with it, and a second way to change it would let the two drift. The kind toggle is left out because `saveNote` drops `location` and `attendees` when a note becomes `quick` — correct in capture, where you toggle before typing, and destructive on a note that already has them. One component so the attendee/tag parsing and the date editing exist once.
+**`HeaderBlock` serves two windows, through a `variant` prop.** One shape now, not two: a fixed two-row grid of When / Tags / Where / Who, on every note, in both windows (B20). The fields are no longer gated on `type: meeting`, which survives as a label — that is what makes the kind a one-line change to the file rather than a destructive one. `capture` adds the subject field; `reader` has none, because the title belongs to Rename, which renames the file with it, and a second way to change it would let the two drift. The kind button is two-way in capture and appears in the reader only on a note that is not a meeting yet, so it can only promote. One component so the attendee/tag parsing and the date editing exist once.
+
+The English word for the `attendees:` field is **People** in the UI and **attendees** everywhere else, and that asymmetry is deliberate: the frontmatter key is `attendees:`, and renaming it would break every existing note and Obsidian compatibility (B7). Only `capture.people` — the placeholder — carries the new word.
 
 In the library the header values live in their own `header` state, deliberately not folded into `open`: an effect reloads the document into the editor whenever `open` changes, so header values there would rebuild the document on every keystroke and throw the caret away.
 
@@ -118,7 +123,7 @@ In the library the header values live in their own `header` state, deliberately 
 
 ## Tests
 
-`test/corpus/` is **the specification**, not a set of examples. Each of the 26 files is written exactly as the serializer is meant to write it. `test/roundtrip.test.ts` asserts byte-identity in both directions plus formal file shape (LF only, exactly one trailing newline, frontmatter first, no trailing whitespace). If output differs from the corpus, one of the two is wrong — decide which, deliberately. Do not relax the assertion.
+`test/corpus/` is **the specification**, not a set of examples. Each of the 27 files is written exactly as the serializer is meant to write it. `test/roundtrip.test.ts` asserts byte-identity in both directions plus formal file shape (LF only, exactly one trailing newline, frontmatter first, no trailing whitespace). If output differs from the corpus, one of the two is wrong — decide which, deliberately. Do not relax the assertion.
 
 `test/limitations.test.ts` pins what the dialect deliberately *cannot* express, so the boundary is visible rather than discovered later.
 
@@ -127,6 +132,8 @@ The suite must stay under about two seconds so it can run on every change.
 ## Where the project stands
 
 Phases 0–3 are done: byte-identical markdown round trip, resident shell, the editor, and the library window. Phase 3 and 4 of `04-bouwplan.md` were swapped in practice — the library window shipped first, so **pasting and images (the `mso-list` reconstruction) is the next work**, and it is the largest unknown in the project.
+
+Ten items from real use landed after that, before the paste work: checkbox affordances (the format always supported them, nothing could *make* one), folder rename (the phase-4 item that was never built), a shortcut registry with an in-app help sheet, a chooser for the vault location, and a group of header and list refinements. Two of them are recorded as decisions: **B20** — location and people belong to every note, `type: meeting` survives as a label — and **B21** — changing vault restarts the app.
 
 Tags and People filtering landed after phase 3 and pulled one piece of phase 5 forward. There is still no index: `src/main/vault-scan.ts` is an in-memory cache in front of the filesystem, shaped like the `notes` table phase 5 will build (same fields, same mtime-and-size refresh) so SQLite replaces the Map rather than the interface. It is never touched from the capture path, and it yields every hundred files — a cold scan of three thousand notes costs 279 ms, a warm one 15 ms.
 

@@ -1,4 +1,4 @@
-import type { NodeType, ResolvedPos } from "prosemirror-model";
+import type { Node as PMNode, NodeType, ResolvedPos } from "prosemirror-model";
 import {
   TextSelection,
   type Command,
@@ -6,6 +6,7 @@ import {
   type Transaction,
 } from "prosemirror-state";
 import { setBlockType, toggleMark, wrapIn, lift } from "prosemirror-commands";
+import { redo, undo } from "prosemirror-history";
 import {
   liftListItem,
   sinkListItem,
@@ -68,12 +69,130 @@ export function toggleList(target: NodeType): Command {
       const position = $from.before(current.depth);
       const node = state.doc.nodeAt(position)!;
       const attrs = target === orderedList ? { start: 1 } : null;
-      dispatch(state.tr.setNodeMarkup(position, target, attrs).scrollIntoView());
+      const tr = state.tr.setNodeMarkup(position, target, attrs);
+
+      // Numbered task lists are not part of the dialect, so numbering a list of tasks
+      // takes the boxes off rather than producing a shape that cannot be written to a
+      // file. Only this list's own items: a nested bullet list under one of them stays
+      // a bullet list, and its tasks stay tasks.
+      if (target === orderedList) {
+        let itemPos = position + 1;
+        node.forEach((child) => {
+          if (child.attrs.checked !== null) {
+            tr.setNodeMarkup(itemPos, undefined, { ...child.attrs, checked: null });
+          }
+          itemPos += child.nodeSize;
+        });
+      }
+
+      dispatch(tr.scrollIntoView());
     }
 
     return true;
   };
 }
+
+/**
+ * The list items the selection actually sits in, innermost only.
+ *
+ * Walking `nodesBetween` for `listItem` nodes is the obvious version and it is wrong:
+ * inside an item nested three deep, all three ancestors span the caret, so a toggle
+ * would put a checkbox on the two parents as well. Going by the textblocks in range and
+ * taking each one's immediate parent gives the items being *edited*, once each even
+ * when an item holds several paragraphs.
+ */
+function itemsInSelection(state: EditorState): { pos: number; node: PMNode }[] {
+  const { from, to } = state.selection;
+  const found = new Map<number, PMNode>();
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    const $pos = state.doc.resolve(pos);
+    if ($pos.depth >= 1 && $pos.parent.type === listItem) {
+      found.set($pos.before($pos.depth), $pos.parent);
+    }
+    return true;
+  });
+
+  return [...found].map(([pos, node]) => ({ pos, node }));
+}
+
+/**
+ * Turns list items into tasks, or back into plain items.
+ *
+ * Deliberately an attribute on `listItem` and not a fourth list node: `checked` is how
+ * both the file format and the editor schema already model this, and a third list type
+ * would be a second definition of something markdown expresses one way. Because it only
+ * touches item attributes it works at any depth without knowing anything about depth.
+ *
+ * Outside a list it starts one, and inside a numbered list it turns that list into
+ * bullets first — numbered task lists are not admitted.
+ *
+ * A mixed selection resolves one way for all of it rather than flipping each item
+ * separately, the way `toggleMark` does: half the selection ticking and the other half
+ * clearing is not a gesture anyone means.
+ */
+export const toggleTask: Command = (state, dispatch) => {
+  const list = findList(state.selection.$from);
+
+  if (list === null) {
+    return withList(wrapInList(bulletList!), state, dispatch);
+  }
+  if (list.type === orderedList) {
+    return withList(toggleList(bulletList!), state, dispatch);
+  }
+
+  const items = itemsInSelection(state);
+  if (items.length === 0) return false;
+
+  if (dispatch) {
+    const becomeTasks = items.some((item) => item.node.attrs.checked === null);
+    const tr = state.tr;
+    for (const { pos, node } of items) {
+      tr.setNodeMarkup(pos, undefined, {
+        ...node.attrs,
+        checked: becomeTasks ? false : null,
+      });
+    }
+    dispatch(tr.scrollIntoView());
+  }
+
+  return true;
+};
+
+/** Runs `first`, then puts boxes on whatever list it left behind. */
+function withList(first: Command, state: EditorState, dispatch: Dispatch): boolean {
+  if (dispatch === undefined) return first(state, undefined);
+
+  let after: EditorState | null = null;
+  const ok = first(state, (tr) => {
+    after = state.apply(tr);
+    dispatch(tr);
+  });
+
+  if (!ok || after === null) return ok;
+  return toggleTask(after, dispatch);
+}
+
+/**
+ * Ticks and unticks. Returns false on anything that is not a task, so the key falls
+ * through to whatever else wants it rather than silently doing nothing.
+ */
+export const toggleChecked: Command = (state, dispatch) => {
+  const items = itemsInSelection(state).filter((item) => item.node.attrs.checked !== null);
+  if (items.length === 0) return false;
+
+  if (dispatch) {
+    const tick = items.some((item) => item.node.attrs.checked === false);
+    const tr = state.tr;
+    for (const { pos, node } of items) {
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: tick });
+    }
+    dispatch(tr.scrollIntoView());
+  }
+
+  return true;
+};
 
 /**
  * Indent. Inside a list this sinks the item one level; outside one it falls back to a
@@ -197,12 +316,31 @@ export const exitList: Command = (state, dispatch) => {
 
 /**
  * Enter. Inside a list this splits the item; on an empty item it ends the list.
+ *
+ * The new item inherits the *shape* of the one it came from but never its tick: Enter
+ * after a finished task starts the next task, not a second one already crossed off.
+ * The attrs have to be chosen per press rather than passed always, because
+ * `splitListItem`'s `itemAttrs` is static and would stamp `checked: false` — a
+ * checkbox — onto every ordinary bullet.
  */
 export const enter: Command = (state, dispatch) => {
   if (exitList(state, dispatch)) return true;
-  if (isInList(state)) return splitListItem(listItem!)(state, dispatch);
-  return false;
+  if (!isInList(state)) return false;
+
+  const item = enclosingItem(state.selection.$from);
+
+  return item !== null && item.attrs.checked !== null
+    ? splitListItem(listItem!, { checked: false })(state, dispatch)
+    : splitListItem(listItem!)(state, dispatch);
 };
+
+/** The nearest list item around a position, if there is one. */
+function enclosingItem($pos: ResolvedPos): PMNode | null {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type === listItem) return $pos.node(depth);
+  }
+  return null;
+}
 
 /**
  * Backspace at the very start of a list item promotes it, and at the top level takes
@@ -322,6 +460,50 @@ export function applyLink(href: string): Command {
     return true;
   };
 }
+
+/** What a command needs from the window around it. Most need nothing. */
+export interface CommandContext {
+  openLinkPrompt: () => void;
+}
+
+/**
+ * Every editor command, by the id the shortcut registry knows it under.
+ *
+ * The pairing lives here and the keys live in `src/shared/shortcuts.ts`; `outlookKeymap`
+ * is what joins them. Uniformly a factory, even for the commands that ignore the
+ * context, so that the lookup has one shape — the alternative is special-casing `link`,
+ * which is the sort of exception that grows a second one.
+ */
+export const COMMANDS: Record<string, (context: CommandContext) => Command> = {
+  strong: () => toggleStrong,
+  em: () => toggleEm,
+  underline: () => toggleUnderline,
+  strike: () => toggleStrike,
+  highlight: () => toggleHighlight,
+  code: () => toggleCode,
+  link: (context) => () => {
+    context.openLinkPrompt();
+    return true;
+  },
+
+  bulletList: () => toggleBulletList,
+  orderedList: () => toggleOrderedList,
+  task: () => toggleTask,
+  tick: () => toggleChecked,
+  indent: () => indent,
+  outdent: () => outdent,
+
+  heading1: () => setHeading(1),
+  heading2: () => setHeading(2),
+  heading3: () => setHeading(3),
+  heading4: () => setHeading(4),
+  heading5: () => setHeading(5),
+  heading6: () => setHeading(6),
+  paragraph: () => setParagraph,
+  softBreak: () => softBreak,
+  undo: () => undo,
+  redo: () => redo,
+};
 
 export function isMarkActive(state: EditorState, markName: string): boolean {
   const type = schema.marks[markName];

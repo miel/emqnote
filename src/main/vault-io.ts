@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import {
   cleanTagInput,
   extractTags,
@@ -21,13 +21,14 @@ import {
   type Frontmatter,
 } from "../markdown/index.js";
 import {
+  FOLDER_ERROR,
   TRASH_FOLDER,
   type FolderNode,
   type NoteSummary,
   type OpenedNote,
   type SaveNoteRequest,
 } from "../shared/vault-types.js";
-import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
+import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
 
 /**
  * Reading and writing the vault for the main window.
@@ -242,17 +243,16 @@ export function saveNote(vault: string, request: SaveNoteRequest): SaveResult {
     modified: isoWithOffset(new Date()),
   };
 
-  if (request.kind === "meeting") {
-    if (request.location.trim() !== "") frontmatter.location = request.location.trim();
-    else delete frontmatter.location;
+  // Location and attendees belong to every note, not only to meetings (B20). This used
+  // to delete both when the kind was `quick`, which is why the reader had no way to
+  // change the kind at all — the safe direction was the only direction. `type` is now a
+  // label, so promoting a note to a meeting changes that one line and nothing else.
+  if (request.location.trim() !== "") frontmatter.location = request.location.trim();
+  else delete frontmatter.location;
 
-    const attendees = request.attendees.map((n) => n.trim()).filter((n) => n !== "");
-    if (attendees.length > 0) frontmatter.attendees = attendees;
-    else delete frontmatter.attendees;
-  } else {
-    delete frontmatter.location;
-    delete frontmatter.attendees;
-  }
+  const attendees = request.attendees.map((n) => n.trim()).filter((n) => n !== "");
+  if (attendees.length > 0) frontmatter.attendees = attendees;
+  else delete frontmatter.attendees;
 
   // Tags apply to both kinds, so they sit outside that branch. Written from the request
   // rather than left to the `...previous` spread, because the reader can now clear them —
@@ -346,12 +346,57 @@ export function trashNote(vault: string, notePath: string): string {
 }
 
 export function createFolder(vault: string, parent: string, name: string): string {
-  const clean = name.replace(/[\\/:*?"<>|]/g, "-").trim();
-  if (clean === "") throw new Error("A folder needs a name");
+  const clean = sanitiseFolderName(name);
+  if (clean === "") throw new Error(FOLDER_ERROR.empty);
 
   const path = parent === "" ? clean : `${parent}/${clean}`;
   mkdirSync(join(vault, path), { recursive: true });
   return path;
+}
+
+/**
+ * Renames a folder in place, keeping it where it is in the tree.
+ *
+ * It refuses rather than corrects. `uniquePath` is deliberately not reused here: for a
+ * note, quietly becoming "Notitie (2)" beats losing it, but silently turning "Klant A"
+ * into "Klant A (2)" leaves the user with two folders they believe are one, and files
+ * accumulating in whichever they click next. For a container an error is the kinder
+ * answer.
+ *
+ * Nothing inside needs rewriting: wikilinks and embeds carry bare names, not paths.
+ */
+export function renameFolder(vault: string, folderPath: string, name: string): string {
+  if (folderPath === "") throw new Error(FOLDER_ERROR.root);
+
+  const segments = folderPath.split("/");
+  if (segments[0] === TRASH_FOLDER || segments.some(isHidden)) {
+    throw new Error(FOLDER_ERROR.reserved);
+  }
+
+  const clean = sanitiseFolderName(name);
+  if (clean === "") throw new Error(FOLDER_ERROR.empty);
+  if (isHidden(clean) || clean === TRASH_FOLDER) throw new Error(FOLDER_ERROR.reserved);
+
+  const parent = segments.slice(0, -1).join("/");
+  const target = parent === "" ? clean : `${parent}/${clean}`;
+  if (target === folderPath) return folderPath;
+
+  const from = join(vault, folderPath);
+  const to = join(vault, target);
+
+  // Sanitising already takes `..` apart, but the check is on the *resolved* path all
+  // the same: this is the one call that turns a typed string into a directory location.
+  if (!resolve(to).startsWith(resolve(vault) + sep)) throw new Error(FOLDER_ERROR.outside);
+
+  if (!existsSync(from)) throw new Error(FOLDER_ERROR.missing);
+
+  // On macOS and Windows "Klant a" already exists as "Klant A", so a change of case
+  // alone would otherwise refuse itself.
+  const caseOnly = target.toLowerCase() === folderPath.toLowerCase();
+  if (!caseOnly && existsSync(to)) throw new Error(FOLDER_ERROR.exists);
+
+  renameSync(from, to);
+  return target;
 }
 
 /** Every folder in the vault as a flat list, for the "move to…" search. */

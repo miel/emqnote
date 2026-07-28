@@ -376,6 +376,99 @@ bij in §9.
 
 ---
 
+## B20 — Locatie en personen horen bij elke notitie, niet alleen bij een vergadering
+
+**Genomen** op 28 juli 2026, na zes weken gebruik. `location` en `attendees` bestaan op
+elke notitie en zijn zichtbaar in **beide** vensters. `type: meeting` blijft bestaan, maar
+alleen nog als *etiket*: het bepaalt niet langer welke velden er zijn.
+
+**Wat er verandert.** `saveNote` in `vault-io.ts` verwijderde beide velden zodra
+`kind === "quick"`, en `buildFrontmatter` in `capture-store.ts` schreef ze alleen binnen
+`if (kind === "meeting")`. Beide takken zijn weg. Het kopblok is één vaste vorm geworden —
+Wanneer / Waar / Wie / Tags, altijd alle vier — in plaats van twee vormen.
+
+**Waarom het de redenering in `HeaderBlock.tsx` omkeert.** Daar stond: "altijd het volle
+blok tonen maakt 'even iets vastleggen' te zwaar, en dat is nu juist de handeling waarop
+deze app moet winnen." Dat argument klopte op papier en niet in gebruik. Drie dingen
+kwamen eruit:
+
+- Waar en wie zijn óók op gewone notities gewild. "Even bijgepraat met Els bij de koffie"
+  is geen vergadering en het is precies wat je een half jaar later terugzoekt op naam.
+- De rij die verscheen en verdween liet het venster springen tijdens het typen. De vorm
+  die "licht" moest voelen was juist de onrustige.
+- Het poortje was wat `type` gevaarlijk maakte. Omdat terugzetten naar `quick` locatie en
+  aanwezigen wíste, kon het leesvenster de schakelaar helemaal niet aanbieden — de veilige
+  richting was de enige richting. Nu verandert hij één regel in het bestand, wat B10 wil.
+
+**Wat het kost.** Het volle blok is meer eerste paint in het opnamevenster. Gemeten met
+`--selftest=50` tegen dezelfde machine: hotkey → caret is ongewijzigd, wat klopt met de
+architectuur — het venster is al gerenderd en de sneltoets doet niets dan `show()` en
+focus.
+
+**Prijs:** de docblock van `HeaderBlock.tsx`, de `HeaderBlock`-alinea in `CLAUDE.md` en
+§3.2 van `01-functioneel-ontwerp.md` beschreven alle drie de twee vormen en zijn bijgesteld.
+`03-markdown-dialect.md` §2 kon blijven staan: de specificatie stond elk optioneel veld op
+elk type altijd al toe — de code was strenger dan het formaat. Er is één corpusbestand bij
+voor de nieuwe toegestane vorm, `27-snelle-notitie-met-wie-en-waar.md`.
+
+**Dit beantwoordt het open punt "Blijft het bij twee notitietypen?"** Ja, maar als etiket:
+de twee typen overleven, de tweedeling in vélden niet.
+
+---
+
+## B21 — Van vault wisselen start de app opnieuw op
+
+**Genomen** op 28 juli 2026. De instellingen tonen een lijst van eerder gebruikte
+vaultlocaties. Er een kiezen schrijft `vaultPath`, vraagt om bevestiging, en doet dan
+`app.relaunch(); app.quit()`. Er is geen wissel-tijdens-gebruik.
+
+**Waarom niet live.** Niet uit voorzichtigheid maar omdat er vier stukken toestand zijn
+die één keer worden bepaald en daarna nooit meer worden herzien. Alle vier nagelopen in
+de code, niet aangenomen:
+
+- `CaptureWriter.session.path` wordt bij de eerste schrijfactie vastgesteld en verandert
+  daarna niet. Een half getypte notitie zou in de oude vault blijven landen.
+- `ensureScanned` laat gelijktijdige aanroepers samenvallen op één `running`-belofte
+  **zonder te kijken om welke vault het gaat**. Een `facets()` vlak na een wissel kan dus
+  wachten op de scan van de oude vault en diens cache teruglezen. `invalidate()` bestaat
+  en heeft nul aanroepers.
+- Een lopende `saveTimer` in de renderer zou de bytes van de oude notitie in de nieuwe
+  vault schrijven, op hetzelfde relatieve pad, waarbij `writeAtomic`'s `mkdirSync` de map
+  aanmaakt om hem in te zetten. Zonder enige melding.
+- `filesOnDemandWarned` was één globale boolean, dus een nieuwe on-demand vault zou de
+  waarschuwing nooit meer tonen.
+
+Alle vier zijn afzonderlijk op te lossen. Samen zijn ze een herontwerp van de
+levensduur van vier modules, voor een handeling die een paar keer per jaar voorkomt en
+waarvan de faalmodus "notities in de verkeerde vault" is. Herstarten kost twee seconden.
+
+**Wat er wél is aangepast:** `filesOnDemandWarned` is een lijst van paden geworden, want
+anders landt juist de herstart in een nieuwe vault met de waarschuwing permanent
+onderdrukt. En bij `registerLibraryIpc` staat nu een zin die uitlegt dat het per aanroep
+opzoeken van de vault géén belofte van live wisselen is — dat stond er als "zodat het
+zonder herstart werkt", en dat is precies hoe iemand dit over een jaar verkeerd leest.
+
+**Bare paden, labels afgeleid.** `vaults.json` bewaart alleen paden. Het label — *Gesynchroniseerd
+— &lt;tenant&gt;*, *Lokale map*, *Niet beschikbaar* — wordt bij elke weergave opnieuw bepaald,
+want een pad dat géén OneDrive-pad meer is (map verplaatst, tenant hernoemd, account
+losgekoppeld) moet correct worden beschreven, en een bewaard label zou juist over dat
+geval met stelligheid liegen. De prefixtest heeft een scheidingsteken-bewaking, anders
+valt `OneDrive-Contoso-old` binnen `OneDrive-Contoso` en krijgt de vault de verkeerde
+tenant te zien.
+
+Niet-beschikbare vaults worden grijs getoond en niet verborgen: vlak na inloggen, vóórdat
+OneDrive zijn mappen heeft aangekoppeld, is precies wanneer deze lijst wordt geraadpleegd.
+
+De classificatie staat in een Electron-vrije `src/main/vaults.ts` die de kandidatenlijst
+als parameter krijgt — dezelfde discipline als `vault-io.ts`. `remembered.ts` importeert
+`app` en is daarmee ontestbaar, en deze lijst bepaalt waar notities terechtkomen.
+
+**Val:** `loadSettings()` past `launch.vaultOverride` ná de merge toe. Een `--vault=`-run
+of een zelftest mag dus nooit in de onthouden lijst belanden; onthouden gebeurt alleen
+vanuit de expliciete handeling, in `adoptVault`.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -385,4 +478,4 @@ bij in §9.
 | Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 3 — het grootste onbekende stuk werk |
-| Blijft het bij twee notitietypen? | Na zes weken gebruik — B13 |
+| ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |

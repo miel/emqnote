@@ -18,6 +18,27 @@ import type { MarkSpec, NodeSpec } from "prosemirror-model";
  * note that saves differently from how it was typed.
  */
 
+/**
+ * Whether a parsed `<li>` is a task item, and if so whether it is ticked.
+ *
+ * `toDOM` writes `data-checked`, so without the matching read a cut and paste *inside*
+ * the editor lost the box: the item went out with its state and came back a plain
+ * bullet. The `input[type=checkbox]` form is how GitHub and Obsidian write the same
+ * thing, and it is what will arrive from the clipboard once pasting lands.
+ */
+function readChecked(dom: HTMLElement): boolean | null {
+  const attribute = dom.getAttribute("data-checked");
+  if (attribute === "true") return true;
+  if (attribute === "false") return false;
+
+  const box = dom.querySelector("input[type=checkbox]");
+  if (box === null) return null;
+
+  // A checkbox inside a *nested* item is that item's marker, not this one's.
+  if (box.closest("li") !== dom) return null;
+  return box.hasAttribute("checked") || (box as HTMLInputElement).checked;
+}
+
 const nodes: Record<string, NodeSpec> = {
   doc: { content: "block+" },
 
@@ -107,7 +128,9 @@ const nodes: Record<string, NodeSpec> = {
     // null = not a task list item; true/false = checked or unchecked
     attrs: { checked: { default: null } },
     defining: true,
-    parseDOM: [{ tag: "li" }],
+    parseDOM: [
+      { tag: "li", getAttrs: (dom) => ({ checked: readChecked(dom as HTMLElement) }) },
+    ],
     toDOM: (node) => [
       "li",
       node.attrs.checked === null ? {} : { "data-checked": String(node.attrs.checked) },

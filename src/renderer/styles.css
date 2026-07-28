@@ -109,14 +109,37 @@ body {
   padding: 6px 10px;
 }
 
-.header-row {
+/* Two fixed rows: When/Tags, then Where/Who. Both are always present, in both windows,
+   so nothing moves while you type — the old block grew a second row when a note became
+   a meeting and shrank again when it did not. The first column is a narrow gutter of
+   labels; a row of bare placeholders left it to the reader to work out which box was
+   which. */
+.header-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.header-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-left: 2px;
+}
+
+/* The label's partner cell. A cell rather than the control itself, so the When cell can
+   hold the date and the kind button side by side without a second grid. */
+.header-cell {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
-.header-row + .header-row {
-  margin-top: 6px;
+.header-cell input {
+  flex: 1;
+  min-width: 0;
 }
 
 .header input,
@@ -125,10 +148,18 @@ body {
   font-family: inherit;
   font-size: 13px;
   color: inherit;
-  background: transparent;
   border: 1px solid transparent;
   border-radius: 5px;
   padding: 4px 7px;
+}
+
+/* Three states, not two. A field used to be invisible until the pointer found it, so
+   there was nothing to say it *was* a field. The rest state is a neutral overlay rather
+   than a token: the header is `--surface`, and in light mode `--background` differs
+   from it by a level or two — the same trick `.branch:hover` uses. */
+.header input,
+.header button {
+  background: rgba(127, 127, 127, 0.08);
 }
 
 .header input:hover,
@@ -147,8 +178,10 @@ body {
 }
 
 .subject {
-  flex: 1;
+  display: block;
+  width: 100%;
   font-weight: 600;
+  margin-bottom: 6px;
 }
 
 .created {
@@ -161,11 +194,15 @@ body {
 .kind {
   color: var(--muted);
   cursor: pointer;
+  white-space: nowrap;
 }
 
+/* `!important` because the hover rule above has the same specificity and comes later;
+   the fill has to be overridden too now that the rest state carries one. */
 .kind-on {
   color: var(--accent);
   border-color: var(--accent) !important;
+  background: var(--background) !important;
 }
 
 .dismiss-hint {
@@ -175,20 +212,9 @@ body {
   padding-right: 2px;
 }
 
-.location {
-  flex: 0 0 32%;
-}
-
-.attendees {
-  flex: 1;
-}
-
-/* Narrow on purpose: it shares row one with the subject, which is the field that
-   matters, and a tag is a word or two. */
-.tags {
-  flex: 0 0 22%;
-  min-width: 90px;
-}
+/* The grid sizes these now. `.location`, `.attendees` and `.tags` used to carry their
+   own flex bases — and `.tags` had to be overridden in the reader, which is exactly the
+   special case one grid definition removes. */
 
 /* ---- editor ---- */
 
@@ -248,6 +274,56 @@ body {
   padding-left: 1.6em;
 }
 
+/* The marker-to-text gap.
+ *
+ * `padding-left` is the *per-level* indent and must not move: it sets both the text
+ * column and how far each of the six levels steps in. The gap between the glyph and
+ * the text is a different distance, browser-determined with the default
+ * `list-style-position: outside`, and no property addresses it. Putting the spacing
+ * inside `::marker` content is what moves the glyph alone: an outside marker box is
+ * laid out against the content edge, so trailing spaces push the glyph left and leave
+ * the text exactly where it was.
+ *
+ * One em space, and the size is measured rather than guessed. Chromium's own disc
+ * marker already carries about 2 nbsp of built-in spacing, so the obvious "\00a0\00a0"
+ * reproduces the old gap almost exactly — 13px against 14px — and looks like the rule
+ * is not working. An em space puts the glyph 19px off the text and makes the marker box
+ * 24px wide, which is where `--marker-slot` gets its 1.5em.
+ *
+ * `--marker-slot` is exported because items that have no marker box at all — task
+ * items, which set `list-style: none` — position their checkbox into it by hand. Mixed
+ * lists go ragged if the two numbers drift apart.
+ */
+.editor-content {
+  --marker-gap: "\2003";
+  --marker-slot: 1.5em;
+}
+
+.editor-content ul > li::marker {
+  content: "•" var(--marker-gap);
+}
+
+/* Setting `content` switches off Chromium's own disc → circle → square cycling by
+   depth, which a six-level outline reads by. Mirror it explicitly — and keep
+   `.editor-content` in the nested selectors, or the base rule above outranks them on
+   specificity and every level draws a disc. `:is()` covers a `ul` nested under an
+   `ol`, since the levels of a mixed outline are what this is for. */
+.editor-content :is(ul, ol) ul > li::marker {
+  content: "◦" var(--marker-gap);
+}
+
+.editor-content :is(ul, ol) :is(ul, ol) ul > li::marker {
+  content: "▪" var(--marker-gap);
+}
+
+/* `counter(list-item)` is seeded natively from the `start` attribute, so numbering
+   above nine and the non-1 starts the `1. ` input rule can produce both keep working.
+   The marker box is right-aligned against the content edge, so "10." grows leftwards
+   and its full stop stays in the same column as "1." — measured, not assumed. */
+.editor-content ol > li::marker {
+  content: counter(list-item) "." var(--marker-gap);
+}
+
 .editor-content li > ul,
 .editor-content li > ol {
   margin-bottom: 0;
@@ -266,21 +342,49 @@ body {
   margin-top: 0.5em;
 }
 
+/* A task item has no marker box of its own, so the checkbox is placed into the same
+   slot the marker would have used — that is what keeps a mixed list, where some items
+   are tasks and some are bullets, lined up on one column. */
 .editor-content li[data-checked] {
   list-style: none;
   position: relative;
 }
 
-.editor-content li[data-checked]::before {
-  content: "☐";
-  position: absolute;
-  left: -1.25em;
-  color: var(--muted);
+/* `list-style: none` stops suppressing the marker the moment `::marker` has explicit
+   `content`, so without this a task item draws its bullet *and* its checkbox. */
+.editor-content li[data-checked]::marker {
+  content: none;
 }
 
-.editor-content li[data-checked="true"]::before {
-  content: "☑";
+.editor-content .task-check {
+  position: absolute;
+  left: calc(-1 * var(--marker-slot));
+  top: 0;
+  display: flex;
+  align-items: center;
+  width: var(--marker-slot);
+  /* One line tall, so the box centres on the first line of a wrapped item rather than
+     on the item as a whole. */
+  height: 1.4em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.editor-content .task-check svg {
+  width: 0.88em;
+  height: 0.88em;
+}
+
+.editor-content li[data-checked="true"] > .task-check {
   color: var(--accent);
+}
+
+.editor-content .task-check:hover {
+  color: var(--text);
 }
 
 /* Ctrl+M indents to the same column as a list level, so mixing the two lines up. */
@@ -393,6 +497,113 @@ body {
   outline: none;
 }
 
+/* ---- shortcut sheet ----
+
+   Here rather than in library.css, because the capture window does not load that file
+   and this component serves both. It cannot reuse `.overlay` and `.settings` for the
+   same reason. */
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 20;
+}
+
+.help {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  overflow: hidden;
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-head h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.help-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.help-close:hover {
+  color: var(--text);
+}
+
+/* Two columns where there is room, one when there is not — the capture window is
+   narrow, and a sheet that needs scrolling to be read is a sheet you stop opening.
+   A grid and deliberately not `columns: 2`: multi-column lays overflow out *sideways*,
+   so in the short capture window the last group ended up in a third column past the
+   right edge, with `overflow-y` unable to reach it. */
+.help-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-content: start;
+  gap: 12px 24px;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+
+.help-group {
+  min-width: 0;
+}
+
+.help-group h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.help-group dl {
+  margin: 0;
+}
+
+.help-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.help-row dt {
+  color: var(--text);
+}
+
+.help-row dd {
+  margin: 0;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- status bar ---- */
 
 .statusbar {
@@ -411,6 +622,25 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The discoverable way in. F1 is the shortcut, but a shortcut sheet you can only reach
+   with a shortcut you have to already know is not much of an answer. */
+.help-button {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.help-button:hover {
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .latency {

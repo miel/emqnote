@@ -3,6 +3,7 @@ import {
   isoWithOffset,
   MAX_TITLE_LENGTH,
   noteFileName,
+  sanitiseFolderName,
   sanitiseTitle,
   timestampPrefix,
 } from "../src/main/filename.js";
@@ -57,6 +58,49 @@ describe("sanitiseTitle", () => {
 
   it("falls back to a name when nothing usable is left", () => {
     expect(sanitiseTitle("   ")).toBe("Untitled");
+    expect(sanitiseTitle("...")).toBe("Untitled");
+  });
+});
+
+describe("sanitiseFolderName", () => {
+  it("leaves an ordinary name alone", () => {
+    expect(sanitiseFolderName("Klant A")).toBe("Klant A");
+  });
+
+  it("applies the rules folder creation used to skip", () => {
+    // Only the first of these was handled before: a folder could be created with a
+    // control character in it, or called CON, and every note filed inside inherited a
+    // path Windows cannot open.
+    expect(sanitiseFolderName("Klant: A/B")).toBe("Klant- A-B");
+    expect(sanitiseFolderName(`Klant${BELL}${UNIT_SEPARATOR}${DELETE} A`)).toBe("Klant A");
+    expect(sanitiseFolderName("CON")).toBe("CON_");
+    expect(sanitiseFolderName("prn")).toBe("prn_");
+    expect(sanitiseFolderName("Klant A.")).toBe("Klant A");
+    expect(sanitiseFolderName("Klant A ")).toBe("Klant A");
+  });
+
+  it("collapses whitespace, tabs included", () => {
+    expect(sanitiseFolderName(`Klant${TAB}   A`)).toBe("Klant A");
+  });
+
+  it("truncates at the same length as a title", () => {
+    expect(sanitiseFolderName("x".repeat(200))).toHaveLength(MAX_TITLE_LENGTH);
+  });
+
+  it("takes a relative path apart rather than resolving it", () => {
+    expect(sanitiseFolderName("..")).toBe("");
+
+    // The separators are what made it a path; without them the dots are just dots and
+    // the result names one folder, awkwardly, instead of climbing out of the vault.
+    expect(sanitiseFolderName("../../etc")).toBe("..-..-etc");
+    expect(sanitiseFolderName("../../etc")).not.toContain("/");
+  });
+
+  it("gives back an empty string rather than inventing a name", () => {
+    // Unlike a title: a note with nothing to call it still has to land somewhere, while
+    // a folder named entirely out of forbidden characters is a mistake worth reporting.
+    expect(sanitiseFolderName("   ")).toBe("");
+    expect(sanitiseFolderName("...")).toBe("");
     expect(sanitiseTitle("...")).toBe("Untitled");
   });
 });

@@ -13,6 +13,7 @@ const FALLBACK: Bootstrap = {
   locale: "en-US",
   platform: "win32",
   hotkey: DEFAULT_HOTKEY,
+  vaultPath: null,
 };
 
 /**

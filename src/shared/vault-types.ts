@@ -8,6 +8,49 @@
  */
 export const TRASH_FOLDER = "_trash";
 
+/**
+ * A vault this machine knows about, as the settings panel shows it.
+ *
+ * Three states and not two. "Unavailable" is its own answer rather than an absence,
+ * because just after logging in — before OneDrive has mounted its folders — is exactly
+ * when this list gets looked at, and a vault silently missing from it is far more
+ * alarming than one greyed out with a reason. The label is best-effort and gates
+ * nothing; see `src/main/vaults.ts`.
+ */
+export type VaultStatus = "synced" | "local" | "unavailable";
+
+export interface VaultLocation {
+  path: string;
+  status: VaultStatus;
+  /** The tenant, for a synced vault. Empty otherwise. */
+  tenant: string;
+}
+
+/**
+ * Why a folder rename was refused.
+ *
+ * Codes rather than sentences, because the thrower is in the main process and the
+ * reader is a bilingual UI: an English message from `vault-io.ts` would arrive in a
+ * Dutch dialog. Electron wraps a rejected `invoke` in its own text, so the renderer
+ * looks for the code inside the message rather than comparing the whole of it.
+ */
+export const FOLDER_ERROR = {
+  root: "folder-is-root",
+  reserved: "folder-is-reserved",
+  empty: "folder-name-empty",
+  outside: "folder-leaves-vault",
+  missing: "folder-not-found",
+  exists: "folder-already-exists",
+} as const;
+
+export type FolderErrorCode = (typeof FOLDER_ERROR)[keyof typeof FOLDER_ERROR];
+
+/** The code inside a rejected rename, if it carries one. */
+export function folderErrorOf(error: unknown): FolderErrorCode | null {
+  const text = error instanceof Error ? error.message : String(error);
+  return Object.values(FOLDER_ERROR).find((code) => text.includes(code)) ?? null;
+}
+
 export interface FolderNode {
   /** Path relative to the vault root; "" is the root itself. */
   path: string;

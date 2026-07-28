@@ -38,9 +38,15 @@
   text-align: left;
 }
 
-.tree-toolbar button:hover {
+.tree-toolbar button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* The vault root and the trash cannot be renamed, so the button says so rather than
+   waiting to refuse. */
+.tree-toolbar button:disabled {
+  opacity: 0.4;
 }
 
 /* ---- folder tree ---- */
@@ -72,10 +78,17 @@
 }
 
 .filter-glyph {
-  width: 12px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 12px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.filter-glyph svg {
+  width: 12px;
+  height: 12px;
 }
 
 .filter-search {
@@ -102,10 +115,8 @@
   color: var(--muted);
 }
 
-/* The gear sits in the twisty's slot so its label lines up with the folder names, but
-   at the twisty's 10px an icon is unreadable where an arrow is fine. */
-.tree-settings .twisty {
-  text-align: center;
+/* An icon needs more than the twisty's 10px to be readable where an arrow is fine. */
+.tree-settings .filter-glyph {
   font-size: 13px;
 }
 
@@ -250,17 +261,33 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Shared geometry only. They used to share the colour as well — both 11px `--accent` at
+   the same opacity — which made a line of body text and a list of names literally
+   indistinguishable in a column of titles. */
 .note-excerpt,
-/* One rule, not two: this was declared twice, the second half silently overriding the
-   font-size and colour of the first. */
 .note-attendees {
   font-size: 11px;
-  color: var(--accent);
-  opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-top: 2px;
+}
+
+/* Body text recedes: in a list of titles it is context, not a second heading. */
+.note-excerpt {
+  color: var(--muted);
+}
+
+.note-attendees {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+/* The same glyph `FilterSection` puts in front of People, so the list and the left
+   panel finally say the same thing about the same field. */
+.note-attendees::before {
+  content: "◍";
+  margin-right: 4px;
 }
 
 /* Only shown under a tag or a person, where the notes are not all from one folder. */
@@ -327,11 +354,9 @@
   padding: 4px 14px 8px;
 }
 
-/* Row one has no subject field here, so the tags get the width the subject would have
-   taken. At the capture window's 22% the second tag was already cut off. */
-.header-reader .tags {
-  flex: 1 1 auto;
-}
+/* The tag field used to need widening here, because in capture it shared row one with
+   the subject at a fixed 22% and the second tag was already cut off. The grid gives
+   both windows the same four columns, so there is nothing left to override. */
 
 .reader-titles {
   flex: 1 1 auto;
@@ -551,4 +576,79 @@
   margin: 0 0 8px;
   font-size: 12px;
   color: var(--warning);
+}
+
+/* ---- where the notes live ---- */
+
+/* The row above the list gets its own rule: the button here says what it does rather
+   than showing a current value, so the fixed 200px of `.settings-row button` is width
+   it does not need. */
+.settings-row-block {
+  margin-bottom: 6px;
+}
+
+.settings-row-block button {
+  min-width: 0;
+}
+
+.vault-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.vault {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: default;
+}
+
+.vault:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.vault-on {
+  border-color: var(--accent) !important;
+}
+
+/* Shown rather than hidden. Just after logging in, before OneDrive has mounted its
+   folders, is exactly when this list gets looked at — and a vault that has silently
+   disappeared from it is far more alarming than one greyed out with a reason. */
+.vault:disabled {
+  opacity: 0.45;
+}
+
+.vault-path {
+  display: block;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-status {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-confirm {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.settings-confirm p {
+  margin: 0 0 10px;
+  color: var(--muted);
 }

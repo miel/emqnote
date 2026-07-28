@@ -79,12 +79,28 @@ describe("saving a capture", () => {
     expect(result.attendees).toEqual(["Jan de Vries", "Els Bakker"]);
   });
 
-  it("leaves meeting fields out of a quick note", async () => {
+  it("records where and who on a quick note too (B20)", async () => {
+    // The reverse of what this asserted until B20. Both fields used to be written only
+    // inside `if (kind === "meeting")`, so a quick note that had them typed in threw
+    // them away on the way to disk — which is also why the reader could not offer the
+    // kind toggle at all.
     const session = beginSession();
     session.payload = payload(paragraphs("Snelle gedachte"), {
       location: "Teams",
       attendees: ["Iemand"],
     });
+
+    const { path } = await writeSession(session, vault);
+    const contents = readFileSync(path!, "utf8");
+
+    expect(contents).toContain("type: quick");
+    expect(contents).toContain("location: Teams");
+    expect(contents).toContain("attendees: [Iemand]");
+  });
+
+  it("still writes nothing for a field that was left empty", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Snelle gedachte"));
 
     const { path } = await writeSession(session, vault);
     const contents = readFileSync(path!, "utf8");

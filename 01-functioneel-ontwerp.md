@@ -66,18 +66,33 @@ vastgelegd zonder één beslissing.
 
 ### 3.2 Een vergadering notuleren
 
-Zelfde hotkey, zelfde venster. Eén toets (of klik op *Vergadering*) vouwt het kopblok
-uit met drie extra velden:
+Zelfde hotkey, zelfde venster, hetzelfde kopblok. Er valt niets uit te vouwen: het blok
+heeft één vaste vorm van twee rijen, met een smalle kolom labels ervoor.
 
-- **Locatie** — vrije tekst
-- **Aanwezigen** — meerdere namen, met aanvulling op eerder ingevoerde namen
-- **Bijlagen** — verwijzingen naar bestanden die bij de vergadering horen
+| | |
+|---|---|
+| **Wanneer** | datum en tijd, aanklikbaar om te wijzigen; daarnaast de knop *Vergadering* |
+| **Tags** | vrije tekst, met aanvulling op eerder gebruikte tags |
+| **Waar** | vrije tekst |
+| **Wie** | meerdere namen, gescheiden door een komma of een puntkomma, met aanvulling op eerder ingevoerde namen |
+
+Die vier velden staan er op **elke** notitie, niet alleen op een vergadering — zie B20 in
+[05-besluitenlog.md](05-besluitenlog.md). Waar en wie zijn net zo goed van toepassing op
+"even bijgepraat bij de koffie", en dat is precies wat je een half jaar later terugzoekt.
+Een leeg veld schrijft niets, dus een notitie zonder die gegevens leest terug zoals hij
+altijd deed.
+
+De knop *Vergadering* zet `type: meeting` in de frontmatter, zodat je later op
+vergaderingen kunt zoeken. Het is een etiket en niet meer dan dat: het bepaalt niet welke
+velden er zijn, en omzetten verandert dus één regel in het bestand. In het
+bibliotheekvenster verschijnt de knop alleen op een notitie die nog géén vergadering is —
+daar promoveert hij alleen.
+
+Bijlagen horen ook bij een vergadering, maar zijn nog niet te bewerken vanuit het kopblok;
+`attachments:` in de frontmatter wordt wel gelezen en behouden.
 
 Daaronder typ je in outline-vorm. Dit is de belangrijkste schrijfvorm en krijgt de
 meeste aandacht (zie §4).
-
-Notitietype wordt onthouden als `type: meeting` in de frontmatter, zodat je later
-kunt zoeken op vergaderingen of op wie erbij was.
 
 ### 3.2a Terugvinden dwars door de mappen heen: tags en personen
 
@@ -89,7 +104,8 @@ Onderin het linkerpaneel staan daarom twee lijsten, naast de prullenbak:
 - **Tags** — alles wat in het tagveld van het capture-venster is getypt, plus elke
   `#tag` die ergens in een notitietekst staat. De twee worden samengevoegd; zie §3.8 van
   [03-markdown-dialect.md](03-markdown-dialect.md) voor wat als tag telt.
-- **Personen** — de deelnemers uit de frontmatter van vergadernotities.
+- **Personen** — de namen uit het veld *Wie*. Sinds B20 kan elke notitie die hebben, niet
+  alleen een vergadering, en de notitielijst toont ze ook op een snelle notitie.
 
 Beide lijsten staan op aantal gesorteerd, druk gebruikt bovenaan, met een filterveldje
 zodra het er meer dan vijftien zijn. Kies je er een, dan toont de notitielijst alles uit
@@ -104,19 +120,21 @@ capture-kant er volledig buiten.
 ### 3.2b Een notitie bijwerken in het hoofdvenster
 
 Boven de tekst van de geopende notitie staat hetzelfde kopblok als in het
-capture-venster: datum en tijd, tags, en bij een vergadering ook locatie en aanwezigen.
-Een verkeerd gespelde naam of een vergeten tag is daarmee ter plekke te herstellen; tot
-nu toe kon dat alleen door het bestand buiten de app te openen.
+capture-venster, met dezelfde vier velden: wanneer, tags, waar en wie. Een verkeerd
+gespelde naam of een vergeten tag is daarmee ter plekke te herstellen; tot nu toe kon dat
+alleen door het bestand buiten de app te openen.
 
-Twee dingen zitten er bewust *niet* in:
+Eén ding zit er bewust *niet* in:
 
 - **Het onderwerpveld.** De titel wijzig je met *Hernoemen*, want die actie past ook de
   bestandsnaam aan. Een tweede plek om hem te wijzigen zou de twee uit elkaar laten
   lopen.
-- **De vergadering/snel-schakelaar.** Een vergadering terugzetten naar een snelle
-  notitie gooit locatie en aanwezigen weg. In het capture-venster is dat prima — je
-  schakelt vóór je typt — maar op een bestaande notitie is één misklik genoeg om een
-  deelnemerslijst kwijt te raken.
+
+En één ding staat er maar half in: de **vergaderknop** verschijnt alleen op een notitie
+die nog geen vergadering is. Vroeger ontbrak hij helemaal, omdat terugzetten naar een
+snelle notitie locatie en aanwezigen wíste — één misklik en een deelnemerslijst was weg.
+Sinds B20 wist het niets meer, maar de omgekeerde richting blijft achterwege: er is geen
+reden om een vergadering te dégraderen, en wat onbereikbaar is kan niet misgaan.
 
 Wijzigingen worden op dezelfde manier bewaard als de tekst: 800 ms na de laatste
 aanslag, en alleen wanneer de bytes werkelijk anders zijn (B10).
@@ -178,18 +196,27 @@ Markdown bestaat wel op schijf, maar niet op het scherm.
 
 ### 4.2 Sneltoetsen, letterlijk die van Outlook
 
-| Actie | Windows | macOS |
-|---|---|---|
-| Vet / cursief / onderstreept | `Ctrl+B` / `I` / `U` | `Cmd+B` / `I` / `U` |
-| Opsomming aan/uit | `Ctrl+Shift+L` | `Cmd+Shift+L` |
-| Kop 1 / 2 / 3 | `Ctrl+Alt+1/2/3` | `Cmd+Alt+1/2/3` |
-| Normale tekst | `Ctrl+Shift+N` | `Cmd+Shift+N` |
-| Inspringen / uitspringen | `Ctrl+M` / `Ctrl+Shift+M` | `Cmd+M` / `Cmd+Shift+M` |
-| Hyperlink | `Ctrl+K` | `Cmd+K` |
-| Plakken zonder opmaak | `Ctrl+Shift+V` | `Cmd+Shift+V` |
-| Markeren | `Ctrl+Alt+H` | `Cmd+Alt+H` |
+Niets hoeft te worden afgeleerd. Twintig jaar spiergeheugen is het belangrijkste dat de
+mail-aan-jezelf-routine had; een editor die `Ctrl+B` ergens anders neerlegt is al
+verloren, hoe goed de rest ook is.
 
-Niets hoeft te worden afgeleerd.
+**De volledige lijst staat in de app**, onder `F1` of `Ctrl+/`, en in het
+bibliotheekvenster onderin het linkerpaneel. Die lijst wordt gegenereerd uit
+`src/shared/shortcuts.ts`, hetzelfde bestand waaruit de toetsenbindingen zélf worden
+opgebouwd — dus hij kan niet verouderen. Deze tabel stond hier eerder wel en was dat
+inmiddels: hij noemde `Ctrl+Alt+1/2/3` zonder de `Ctrl+1..6` die er werkelijk zijn, liet
+een handvol toetsen weg, en noemde er één die pas in fase 3 bestaat.
+
+Wat hier blijft staan zijn de drie keuzes die *ontwerp* zijn en geen opsomming:
+
+- **Koppen zijn `Ctrl+1` t/m `Ctrl+6`**, met Word's `Ctrl+Alt+1..6` ernaast als alias. Op
+  Windows ís `Ctrl+Alt` namelijk AltGr, en op een Nederlandse indeling typt die
+  combinatie tekens in plaats van een kop te maken.
+- **Normale alinea is `Ctrl+0`** ("kop nul"), want Word's `Ctrl+Shift+N` is in Chromium
+  "nieuw incognitovenster" en bereikt de pagina nooit.
+- **`Ctrl+Enter` bewaart en sluit**, het gebaar waarmee in Outlook een bericht weggaat.
+  `Escape` doet dit met opzet *niet*: die toets wordt reflexmatig ingedrukt, en een half
+  getypte notitie is te makkelijk kwijt.
 
 ### 4.3 Outlines
 

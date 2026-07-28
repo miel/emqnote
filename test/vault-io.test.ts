@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,9 +17,11 @@ import {
   openNote,
   readFolderTree,
   readNotesIn,
+  renameFolder,
   renameNote,
   saveNote,
 } from "../src/main/vault-io.js";
+import { FOLDER_ERROR, TRASH_FOLDER } from "../src/shared/vault-types.js";
 import { paragraphs } from "./helpers/doc.js";
 
 let vault: string;
@@ -182,14 +192,60 @@ describe("saving a note", () => {
     expect(readFileSync(join(vault, path), "utf8")).toContain("Heel iets anders.");
   });
 
-  it("drops meeting fields when the note becomes a quick note", () => {
+  it("keeps where and who when the note becomes a quick note (B20)", () => {
+    // This asserted the opposite until B20. Deleting both on the way to `quick` is what
+    // made the kind a destructive switch, and why the reader dared not offer it.
     const opened = openNote(vault, path)!;
     saveNote(vault, { ...opened, kind: "quick" });
 
     const contents = readFileSync(join(vault, path), "utf8");
     expect(contents).toContain("type: quick");
+    expect(contents).toContain("location: Teams");
+    expect(contents).toContain("attendees: [Jan de Vries, Els Bakker]");
+  });
+
+  it("clears a field that was emptied, on either kind", () => {
+    // The fields are still editable-to-empty; what changed is that the *kind* no longer
+    // decides for them.
+    const opened = openNote(vault, path)!;
+    saveNote(vault, { ...opened, location: "", attendees: [] });
+
+    const contents = readFileSync(join(vault, path), "utf8");
     expect(contents).not.toContain("location:");
     expect(contents).not.toContain("attendees:");
+  });
+
+  it("promotes a quick note to a meeting by changing only type and modified", () => {
+    const quick = "00 Inbox/2026-07-26 0900 Snel.md";
+    writeFileSync(
+      join(vault, quick),
+      `---
+title: Snel
+type: quick
+created: 2026-07-26T09:00:00+02:00
+location: Bij de koffie
+attendees: [Els Bakker]
+---
+
+Body die niet mag veranderen.
+
+- Een punt
+`,
+    );
+
+    const opened = openNote(vault, quick)!;
+    saveNote(vault, { ...opened, kind: "meeting" });
+
+    const after = readFileSync(join(vault, quick), "utf8");
+
+    expect(after).toContain("type: meeting");
+    expect(after).toContain("location: Bij de koffie");
+    expect(after).toContain("attendees: [Els Bakker]");
+
+    // B10: the smallest diff that expresses the change. Everything below the
+    // frontmatter is untouched, byte for byte.
+    const body = (text: string): string => text.split("---\n")[2]!;
+    expect(body(after)).toBe("\nBody die niet mag veranderen.\n\n- Een punt\n");
   });
 
   it("keeps frontmatter tags through an edit", () => {
@@ -343,5 +399,114 @@ describe("moving and renaming", () => {
 
   it("keeps a folder name usable on Windows", () => {
     expect(createFolder(vault, "", 'Klant: Z*')).toBe("Klant- Z-");
+  });
+
+  it("refuses a folder name Windows reserves", () => {
+    // Went through unchanged before `createFolder` shared the title rules.
+    expect(createFolder(vault, "", "CON")).toBe("CON_");
+  });
+});
+
+describe("renaming a folder", () => {
+  it("renames in place, keeping it where it is in the tree", () => {
+    const renamed = renameFolder(vault, "10 Projects/Klant X", "Klant Xerxes");
+
+    expect(renamed).toBe("10 Projects/Klant Xerxes");
+    const folders = flattenFolders(readFolderTree(vault));
+    expect(folders).toContain("10 Projects/Klant Xerxes");
+    expect(folders).not.toContain("10 Projects/Klant X");
+  });
+
+  it("brings the notes and the subfolders along", () => {
+    writeFileSync(join(vault, "10 Projects", "Klant X", "2026-07-25 1432 Iets.md"), NOTE);
+
+    const renamed = renameFolder(vault, "10 Projects/Klant X", "Klant Xerxes");
+
+    expect(readNotesIn(vault, renamed)).toHaveLength(1);
+    expect(flattenFolders(readFolderTree(vault))).toContain(
+      "10 Projects/Klant Xerxes/Project Alpha",
+    );
+  });
+
+  it("applies the same name rules as everything else", () => {
+    expect(renameFolder(vault, "10 Projects/Klant X", "Klant: Y*")).toBe(
+      "10 Projects/Klant- Y-",
+    );
+  });
+
+  it("allows a change of case, which already 'exists' on macOS and Windows", () => {
+    expect(renameFolder(vault, "10 Projects/Klant X", "KLANT X")).toBe(
+      "10 Projects/KLANT X",
+    );
+  });
+
+  it("does nothing, successfully, when the name has not changed", () => {
+    expect(renameFolder(vault, "10 Projects/Klant X", "Klant X")).toBe(
+      "10 Projects/Klant X",
+    );
+  });
+
+  describe("refuses rather than corrects", () => {
+    it("an existing name — never `uniquePath`, which would make a second folder", () => {
+      createFolder(vault, "10 Projects", "Klant Y");
+
+      expect(() => renameFolder(vault, "10 Projects/Klant X", "Klant Y")).toThrow(
+        FOLDER_ERROR.exists,
+      );
+      // The point of refusing: the folder is still there, under its own name.
+      expect(flattenFolders(readFolderTree(vault))).toContain("10 Projects/Klant X");
+    });
+
+    it("the vault root", () => {
+      expect(() => renameFolder(vault, "", "Nieuw")).toThrow(FOLDER_ERROR.root);
+    });
+
+    it("the trash, and anything inside it", () => {
+      mkdirSync(join(vault, TRASH_FOLDER, "Oud"), { recursive: true });
+
+      expect(() => renameFolder(vault, TRASH_FOLDER, "Weg")).toThrow(FOLDER_ERROR.reserved);
+      expect(() => renameFolder(vault, `${TRASH_FOLDER}/Oud`, "Weg")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+    });
+
+    it("a folder the app owns", () => {
+      expect(() => renameFolder(vault, "_attachments", "Bijlagen")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+    });
+
+    it("renaming a folder *into* a name the app owns", () => {
+      expect(() => renameFolder(vault, "10 Projects/Klant X", "_trash")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+      expect(() => renameFolder(vault, "10 Projects/Klant X", "_attachments")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+    });
+
+    it("a name with nothing left in it", () => {
+      expect(() => renameFolder(vault, "10 Projects/Klant X", "  ")).toThrow(
+        FOLDER_ERROR.empty,
+      );
+    });
+
+    it("a folder that is gone", () => {
+      expect(() => renameFolder(vault, "10 Projects/Weg", "Terug")).toThrow(
+        FOLDER_ERROR.missing,
+      );
+    });
+
+    it("an escape attempt, twice over", () => {
+      // Sanitising takes the separators out first, so there is no traversal left to
+      // resolve; what remains begins with a dot, which is the app's own namespace and
+      // refused on that count. Assert on where it did *not* go either way.
+      expect(() => renameFolder(vault, "10 Projects/Klant X", "../../escaped")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+
+      expect(existsSync(join(vault, "..", "escaped"))).toBe(false);
+      expect(flattenFolders(readFolderTree(vault))).toContain("10 Projects/Klant X");
+    });
   });
 });

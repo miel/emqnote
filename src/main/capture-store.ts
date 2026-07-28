@@ -63,19 +63,19 @@ function buildFrontmatter(
   const modified = isoWithOffset(new Date());
   if (modified !== frontmatter.created) frontmatter.modified = modified;
 
-  if (payload.kind === "meeting") {
-    const location = payload.location.trim();
-    if (location !== "") frontmatter.location = location;
+  // Not gated on the kind any more (B20): where and who apply to any note, and the
+  // frontmatter spec always allowed every optional field on either type. An empty field
+  // still writes nothing, so a note that has neither reads exactly as it did before.
+  const location = payload.location.trim();
+  if (location !== "") frontmatter.location = location;
 
-    const attendees = payload.attendees
-      .map((name) => name.trim())
-      .filter((name) => name !== "");
-    if (attendees.length > 0) frontmatter.attendees = attendees;
-  }
+  const attendees = payload.attendees
+    .map((name) => name.trim())
+    .filter((name) => name !== "");
+  if (attendees.length > 0) frontmatter.attendees = attendees;
 
-  // Outside the meeting branch on purpose: a quick note is the common case and the one
-  // most likely to want a tag on it. Only what was typed in the field lands here —
-  // inline #tags stay in the body where they were written (B19).
+  // Only what was typed in the field lands here — inline #tags stay in the body where
+  // they were written (B19).
   const tags = payload.tags.map(cleanTagInput).filter((tag) => tag !== "");
   if (tags.length > 0) frontmatter.tags = tags;
 
