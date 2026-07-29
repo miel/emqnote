@@ -3,19 +3,16 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * The names and tags you have used before, for autocomplete in the capture window.
+ * Small lists this machine keeps beside its settings, outside the vault (B9).
  *
- * Kept as small files next to the settings rather than gathered by scanning the vault. A
- * scan would mean reading every note on a OneDrive folder that may not even be hydrated
- * yet, at the exact moment the window has to appear — `vault-scan.ts` does exactly that,
- * and it is deliberately never reached from this path. These lists grow by themselves
- * from your own use and cost nothing.
+ * This used to hold three: attendees, tags, and vaults. The first two fed the
+ * `<datalist>` on the tag and people fields, and went when those dropdowns did — they
+ * knew only what had been typed on this machine, while the vault holds the real lists
+ * and `vault-scan.ts` already serves them to the library's filters. Nothing was lost
+ * with them: they were a cache of something derivable, never a source.
  *
- * They are therefore incomplete on purpose: they know what you typed on this machine,
- * not what is in the vault. That is the right trade for a dropdown and the wrong one for
- * the filter lists in the library, which is why those use the scan instead.
- *
- * The real index arrives in phase 5; both can fold into it then.
+ * `attendees.json` and `known-tags.json` may still be sitting in the app data folder on
+ * a machine that ran an earlier build. They are harmless and nothing reads them.
  */
 
 const LIMIT = 500;
@@ -26,9 +23,9 @@ export interface Remembered {
 }
 
 /**
- * Exported because the vault list wants exactly this and nothing more: an atomic write,
- * case-insensitive de-duplication, most recent first, and a cap. Writing a second one of
- * these for `vaults.json` would be writing this one again with a different bug.
+ * Kept as a factory even with one caller left. It is the piece worth having exactly
+ * once — atomic write, case-insensitive de-duplication, most recent first, and a cap —
+ * and the next list to want it should not be a second copy with a different bug.
  */
 export function store(fileName: string): Remembered {
   let cache: string[] | null = null;
@@ -84,14 +81,6 @@ export function store(fileName: string): Remembered {
 
   return { known, remember };
 }
-
-const attendees = store("attendees.json");
-const tags = store("known-tags.json");
-
-export const knownAttendees = attendees.known;
-export const rememberAttendees = attendees.remember;
-export const knownTags = tags.known;
-export const rememberTags = tags.remember;
 
 /**
  * Vaults this machine has used, bare paths only.

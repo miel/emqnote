@@ -29,8 +29,6 @@ contextBridge.exposeInMainWorld("emqnote", {
   close: () => ipcRenderer.send(IPC.captureClose),
   minimise: () => ipcRenderer.send(IPC.windowMinimise),
   toggleMaximise: () => ipcRenderer.send(IPC.windowToggleMaximise),
-  knownAttendees: () => ipcRenderer.invoke(IPC.attendeesList) as Promise<string[]>,
-  knownTags: () => ipcRenderer.invoke(IPC.tagsList) as Promise<string[]>,
   openLibrary: () => ipcRenderer.send(IPC.libraryOpen),
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),

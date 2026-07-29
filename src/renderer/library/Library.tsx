@@ -80,8 +80,6 @@ export function Library(): React.ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
-  const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
-  const [knownTags, setKnownTags] = useState<string[]>([]);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -129,14 +127,6 @@ export function Library(): React.ReactElement {
   const key = selectionKey(selection);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-
-  useEffect(() => {
-    // The same accumulators the capture window uses for its dropdowns. Not the vault
-    // scan: these are for typing into a field, where a stale-but-instant list beats a
-    // complete one that has to be waited for.
-    void window.emqnote.knownAttendees().then(setKnownAttendees);
-    void window.emqnote.knownTags().then(setKnownTags);
-  }, []);
 
   useEffect(() => {
     void loadTree();
@@ -462,8 +452,6 @@ export function Library(): React.ReactElement {
                 variant="reader"
                 values={header}
                 onChange={onHeaderChange}
-                knownAttendees={knownAttendees}
-                knownTags={knownTags}
                 onLeave={() => editor.current?.focus()}
                 locale={app.locale}
                 t={app.t}

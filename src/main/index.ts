@@ -1,14 +1,7 @@
 import { app, dialog, globalShortcut, ipcMain, Menu, shell } from "electron";
 import { join } from "node:path";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
-import {
-  knownAttendees,
-  knownTags,
-  knownVaults,
-  rememberAttendees,
-  rememberTags,
-  rememberVault,
-} from "./remembered.js";
+import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
@@ -85,8 +78,6 @@ const writer = new CaptureWriter(
   () => loadSettings().vaultPath,
   (result) => {
     lastSavedAs = result.path;
-    rememberAttendees(result.attendees);
-    rememberTags(result.tags);
     const library = getLibraryWindow();
     if (library !== null && !library.isDestroyed()) {
       library.webContents.send(IPC.libraryRefresh);
@@ -334,9 +325,6 @@ function registerIpc(): void {
     if (target.isMaximized()) target.unmaximize();
     else target.maximize();
   });
-
-  ipcMain.handle(IPC.attendeesList, () => knownAttendees());
-  ipcMain.handle(IPC.tagsList, () => knownTags());
 
   registerLibraryIpc();
   registerAppIpc();

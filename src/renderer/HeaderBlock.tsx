@@ -28,8 +28,6 @@ export type HeaderVariant = "capture" | "reader";
 interface Props {
   values: HeaderValues;
   onChange: (values: HeaderValues) => void;
-  knownAttendees: string[];
-  knownTags: string[];
   onLeave: () => void;
   locale: Locale;
   t: (key: string) => string;
@@ -54,6 +52,17 @@ interface Props {
  * Rejected: chips for the people field. A free-text list of names wants to be wide and
  * to stay one line; the reader header's own history is of a header that grew and shrank.
  *
+ * **The tag and people fields have no completion, deliberately.** They used to carry a
+ * `<datalist>` fed from `remembered.ts` — the names and tags typed on *this machine*.
+ * Two things were wrong with it and only one was fixable. The list was thin and
+ * personal where the vault holds the real one, and a native datalist will not close on
+ * a second click, which is Chromium's behaviour and not reachable from here. Serving
+ * the vault's own list meant either putting a scan on the capture path, which B-nothing
+ * permits and `CLAUDE.md` forbids outright, or building a real combobox — new UI, on
+ * the one window with a 16 ms keystroke budget, to complete fields that hold a word or
+ * two. Plain inputs are the better trade. The vault-wide lists still exist where they
+ * belong: the library's Tags and People filters, from `facets()`.
+ *
  * The same component serves both windows, so that the parsing of attendees and tags, and
  * the date editing, exist once. Two copies would drift, and the drift would show up as a
  * note whose fields behave differently depending on which window you last touched it in.
@@ -61,8 +70,6 @@ interface Props {
 export function HeaderBlock({
   values,
   onChange,
-  knownAttendees,
-  knownTags,
   onLeave,
   locale,
   t,
@@ -202,17 +209,11 @@ export function HeaderBlock({
           <input
             className="tags"
             placeholder={t("capture.tags")}
-            list="known-tags"
             value={tagText ?? values.tags.map((tag) => `#${tag}`).join(" ")}
             onChange={(event) => setTagText(event.target.value)}
             onBlur={commitTags}
             onKeyDown={leaveOnEnter}
           />
-          <datalist id="known-tags">
-            {knownTags.map((tag) => (
-              <option key={tag} value={tag} />
-            ))}
-          </datalist>
         </div>
 
         <span className="header-label">{t("capture.where")}</span>
@@ -231,17 +232,11 @@ export function HeaderBlock({
           <input
             className="attendees"
             placeholder={t("capture.people")}
-            list="known-attendees"
             value={attendeeText ?? values.attendees.join(", ")}
             onChange={(event) => setAttendeeText(event.target.value)}
             onBlur={commitAttendees}
             onKeyDown={leaveOnEnter}
           />
-          <datalist id="known-attendees">
-            {knownAttendees.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
       </div>
     </div>

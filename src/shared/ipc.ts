@@ -27,8 +27,6 @@ export const IPC = {
   /** main → renderer: update the status bar. */
   captureStatus: "capture:status",
   /** renderer → main: names and tags seen before, for autocomplete. */
-  attendeesList: "attendees:list",
-  tagsList: "tags:list",
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
   windowToggleMaximise: "window:toggle-maximise",
@@ -138,8 +136,6 @@ export interface CaptureApi {
   close: () => void;
   minimise: () => void;
   toggleMaximise: () => void;
-  knownAttendees: () => Promise<string[]>;
-  knownTags: () => Promise<string[]>;
   openLibrary: () => void;
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;

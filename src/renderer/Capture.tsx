@@ -33,8 +33,6 @@ export function Capture(): React.ReactElement {
     savedAs: null,
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
-  const [knownAttendees, setKnownAttendees] = useState<string[]>([]);
-  const [knownTags, setKnownTags] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
 
   // Held in refs so the listeners below never close over stale values.
@@ -79,9 +77,6 @@ export function Capture(): React.ReactElement {
   );
 
   useEffect(() => {
-    void window.emqnote.knownAttendees().then(setKnownAttendees);
-    void window.emqnote.knownTags().then(setKnownTags);
-
     const stopShow = window.emqnote.onShow(({ token }) => {
       editor.current?.focus();
 
@@ -98,8 +93,6 @@ export function Capture(): React.ReactElement {
       setHeader(freshHeader());
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
-      void window.emqnote.knownAttendees().then(setKnownAttendees);
-      void window.emqnote.knownTags().then(setKnownTags);
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
@@ -170,8 +163,6 @@ export function Capture(): React.ReactElement {
       <HeaderBlock
         values={header}
         onChange={onHeaderChange}
-        knownAttendees={knownAttendees}
-        knownTags={knownTags}
         onLeave={() => editor.current?.focus()}
         locale={app.locale}
         t={app.t}
