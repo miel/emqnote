@@ -22,7 +22,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: "src/main/index.ts",
-        external: ["electron"],
+        // electron-updater does dynamic requires that don't survive bundling, and is
+        // shipped instead via electron-builder.yml's dependency walk (package.json
+        // `dependencies`). It is only ever imported on the win32 update path.
+        external: ["electron", "electron-updater"],
         output: { format: "es", entryFileNames: "[name].js" },
       },
     },

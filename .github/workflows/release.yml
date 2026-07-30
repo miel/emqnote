@@ -1,0 +1,46 @@
+name: release
+
+# Publishes a tagged version to GitHub Releases, which is what the in-app update check
+# (src/main/updater.ts) reads. Tagging stays a manual step — `git tag vX.Y.Z && git push
+# --tags`, after bumping package.json's version — this workflow only builds and
+# publishes what a tag push asks for.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    name: ${{ matrix.label }}
+    permissions:
+      # electron-builder creates/updates the GitHub Release and uploads assets to it
+      # with the default GITHUB_TOKEN; nothing beyond this repo's own token is needed.
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS (arm64)
+            target: --mac
+          - os: windows-latest
+            label: Windows (x64)
+            target: --win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      # Don't publish an untested build — the same checks build.yml runs on every push.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run icons
+      - run: npx electron-builder ${{ matrix.target }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No code signing on either platform yet — see B22 in 05-besluitenlog.md.
+          CSC_IDENTITY_AUTO_DISCOVERY: false

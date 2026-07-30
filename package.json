@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Snelle notitie-app voor werk, met markdown-bestanden op OneDrive",
   "main": "out/main/index.js",
+  "repository": "github:miel/emqnote",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build && npm run check:bundle",
@@ -18,7 +19,7 @@
     "canonical": "tsx scripts/canonical.ts",
     "icons": "tsx scripts/make-icons.ts"
   },
-  "//dependencies": "Empty on purpose. Main, preload and renderer are all fully bundled, so nothing from node_modules is needed at runtime. Anything listed here is NOT bundled by electron-vite but externalised, and would then be missing from the package. If a native module is ever added (better-sqlite3 in phase 5) it does belong here, and electron-builder has to ship it.",
+  "//dependencies": "Kept minimal on purpose. Main, preload and renderer are otherwise fully bundled, so nothing from node_modules is needed at runtime. Anything listed here is NOT bundled by electron-vite but externalised, and would then be missing from the package unless electron-builder ships it too (see the files list in electron-builder.yml). electron-updater is here because it does dynamic requires that don't survive bundling. If a native module is ever added (better-sqlite3 in phase 5) it belongs here as well.",
   "devDependencies": {
     "@types/mdast": "^4.0.4",
     "@types/node": "^22.13.0",
@@ -50,5 +51,8 @@
     "unified": "^11.0.5",
     "vitest": "^3.0.5",
     "yaml": "^2.7.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

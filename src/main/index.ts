@@ -24,6 +24,7 @@ import {
 import { readLaunchOptions } from "./launch-options.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
+import { checkForUpdates, setBeforeInstall } from "./updater.js";
 import {
   checkFilesOnDemand,
   ensureVaultLayout,
@@ -133,7 +134,16 @@ async function main(): Promise<void> {
     void writer.flush();
   });
 
+  setBeforeInstall(async () => {
+    await writer.flush();
+    writer.finish();
+  });
+
   await prepareVault();
+
+  // A measurement run must never touch the network or show a dialog — same reasoning
+  // as skipping the tray and hotkey above.
+  if (selfTestRounds === 0) maybeCheckForUpdatesOnStartup();
 
   if (launch.openLibrary) showLibraryWindow();
 
@@ -194,6 +204,23 @@ function flagNote(): string | undefined {
 function flagButton(): string | undefined {
   const match = process.argv.find((argument) => argument.startsWith("--click-button="));
   return match?.slice("--click-button=".length);
+}
+
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * At most once a day, well clear of the hotkey → caret budget: this runs after
+ * `prepareVault()`, not in the startup path a latency measurement cares about.
+ */
+function maybeCheckForUpdatesOnStartup(): void {
+  const { updateLastCheckedAt } = loadSettings();
+  const stale =
+    updateLastCheckedAt === null ||
+    Date.now() - updateLastCheckedAt > UPDATE_CHECK_INTERVAL_MS;
+  if (!stale) return;
+
+  saveSettings({ updateLastCheckedAt: Date.now() });
+  void checkForUpdates("startup");
 }
 
 function registerHotkey(): void {

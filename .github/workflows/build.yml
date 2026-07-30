@@ -35,10 +35,13 @@ jobs:
             label: macOS (arm64)
             command: pack:mac
             artifact: emqnote-macos-arm64
+            glob: release/*.zip
           - os: windows-latest
             label: Windows (x64)
             command: pack:win
             artifact: emqnote-windows-x64
+            # A per-user NSIS installer since B22, not a zip — see electron-builder.yml.
+            glob: release/*.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +61,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: release/*.zip
+          path: ${{ matrix.glob }}
           if-no-files-found: error
           retention-days: 30
