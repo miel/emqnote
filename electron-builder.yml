@@ -6,14 +6,15 @@ directories:
   output: release
   buildResources: build
 
-# Main, preload and renderer are all fully bundled (see electron.vite.config.ts), so
-# nothing from node_modules is needed at runtime. electron-builder would otherwise pull
-# the production dependencies in anyway; excluding them saves around 10 MB of dead
-# weight here.
+# Main, preload and renderer are almost all fully bundled (see electron.vite.config.ts).
+# The one exception is electron-updater (package.json `dependencies`), which does
+# dynamic requires that don't survive bundling — so unlike earlier, node_modules is not
+# excluded wholesale here. electron-builder's default dependency walk picks up
+# electron-updater and its own transitive tree from `dependencies` and ships exactly
+# that, nothing from devDependencies.
 files:
   - out/**/*
   - package.json
-  - "!node_modules/**/*"
 
 asar: true
 
@@ -22,6 +23,13 @@ asar: true
 electronLanguages:
   - en-US
   - nl
+
+# Update checks read the latest tagged GitHub release; see src/main/updater.ts and B22 in
+# 05-besluitenlog.md. The repo has to be public for the unauthenticated check to work.
+publish:
+  provider: github
+  owner: miel
+  repo: emqnote
 
 mac:
   category: public.app-category.productivity
@@ -32,14 +40,24 @@ mac:
   # and the app switcher, which for a tray app is only in the way.
   extendInfo:
     LSUIElement: true
+  # No Developer ID / notarization (see B22): mac stays ad-hoc signed and zip-only.
+  # The update check on this platform is a plain version comparison that opens the
+  # release page for a manual reinstall — it does not use electron-updater's own
+  # Squirrel.Mac-based install flow, which requires real code signing.
 
 win:
-  # Deliberately no installer. Without admin rights an installer is just another
-  # hurdle; an unpacked folder you start from OneDrive is the least vulnerable to
-  # corporate policy. See 02-technisch-ontwerp.md §9.
+  # Per-user NSIS install: no admin rights required, same as unzipping a folder is
+  # today, so this is not "an extra hurdle" the way a per-machine installer would be.
+  # See B22 in 05-besluitenlog.md, which revisits the original no-installer decision in
+  # 02-technisch-ontwerp.md §9.
   target:
-    - target: zip
+    - target: nsis
       arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
 
 linux:
   target: []

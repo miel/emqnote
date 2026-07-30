@@ -23,6 +23,9 @@ import { init, parse } from "es-module-lexer";
 /** Only these may stay unbundled: Electron itself and the Node built-ins. */
 const ALLOWED = new Set([
   "electron",
+  // Shipped via package.json `dependencies` + electron-builder's dependency walk, not
+  // bundled — see the comment on `external` in electron.vite.config.ts.
+  "electron-updater",
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
 ]);

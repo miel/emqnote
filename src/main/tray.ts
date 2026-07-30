@@ -4,6 +4,7 @@ import { describeStats } from "./latency.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { showCaptureWindow } from "./capture-window.js";
 import { showLibraryWindow } from "./library-window.js";
+import { checkForUpdates } from "./updater.js";
 
 let tray: Tray | null = null;
 
@@ -66,6 +67,10 @@ export function buildTrayMenu(): void {
           buildTrayMenu();
         },
       },
+      {
+        label: "Check for updates…",
+        click: () => void checkForUpdates("manual"),
+      },
       { type: "separator" },
       { label: describeStats(), enabled: false },
       {
@@ -73,6 +78,7 @@ export function buildTrayMenu(): void {
         click: () => void shell.openPath(app.getPath("userData")),
       },
       { type: "separator" },
+      { label: `emqnote ${app.getVersion()}`, enabled: false },
       { label: "Quit emqnote", click: () => app.quit() },
     ]),
   );

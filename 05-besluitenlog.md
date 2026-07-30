@@ -469,6 +469,50 @@ vanuit de expliciete handeling, in `adoptVault`.
 
 ---
 
+## B22 — Toch een installer en een auto-updater, alleen op Windows anders dan verwacht
+
+**Genomen** op 30 juli 2026. `02-technisch-ontwerp.md` §9 koos bewust tegen een installer:
+"zonder admin is een installer alleen maar een extra hindernis." Dat argument klopt nog
+steeds voor een *systeembrede* installer — maar niet voor een installer die, net als het
+uitgepakte zip-mapje van nu, in het eigen gebruikersprofiel installeert. `electron-builder`'s
+NSIS-doel met `perMachine: false` doet precies dat: geen adminrechten nodig, geen extra
+stap tegenover unzippen-en-starten. Windows krijgt daarom een echte installer én een echte
+auto-updater (`electron-updater`, in `src/main/updater.ts`), met twee expliciete
+bevestigingen — vóór downloaden, nog eens vóór herstarten — zodat een achtergrondcontrole
+nooit ongevraagd een sessie onderbreekt.
+
+**macOS blijft zoals het was, met opzet.** Geen Developer ID, geen notarisatie — dat kost
+geld en tijd voor een app van één gebruiker, en `electron-updater`'s stille installatiepad
+op macOS (Squirrel.Mac) vereist echte code-signing om betrouwbaar te werken. In plaats
+daarvan doet de mac-kant een kale versievergelijking tegen de laatste GitHub-release en
+opent bij een nieuwere versie de releasepagina in de browser — dezelfde handeling als
+vandaag (map vervangen), alleen met een seintje in plaats van zelf moeten onthouden om te
+kijken. `mac.target` blijft `zip`, ad-hoc gesigneerd, ongewijzigd.
+
+**De repository moet publiek zijn.** `electron-updater`'s GitHub-provider en de kale
+`fetch` die de mac-kant doet tegen `api.github.com/repos/.../releases/latest` werken
+allebei alleen ongeauthenticeerd. De repo was privé; die stap (GitHub-instellingen, niet iets wat de code
+zelf doet) hoort hierbij en is onomkeerbaar voor de bestaande geschiedenis — een bewuste,
+aparte beslissing van de gebruiker, niet iets wat dit besluit stilzwijgend meebrengt.
+
+**Wat het kost.** `electron-updater` is de eerste "echte" runtime-dependency (naast een
+toekomstige `better-sqlite3`) die niet door electron-vite gebundeld wordt — het doet
+dynamische `require`s die dat niet overleven. `package.json`'s `dependencies` was leeg om
+precies deze reden zichtbaar te houden; nu staat er iets in, bewust, met dezelfde
+uitzondering die daar al voor `better-sqlite3` in fase 5 was voorzien. `electron-builder.yml`
+sluit `node_modules` niet langer categorisch uit — electron-builder's eigen
+dependency-walk pakt wat er in `dependencies` staat automatisch mee, inclusief de
+transitieve boom, zonder dat die met de hand hoeft te worden opgesomd.
+
+**Wat gelijk blijft.** Geen versietekstopmaak, geen releasenotes in de app, geen
+"skip deze versie" — de "Later"-knop in de dialoog dekt dat al, per sessie. Geen
+tag-automatisering: een release blijft `package.json`'s versie bijwerken,
+`git tag vX.Y.Z`, `git push --tags`, precies zoals `v0.1.0` handmatig ging.
+`.github/workflows/release.yml` bouwt en publiceert pas ná die tag, met dezelfde
+`npm run typecheck && npm test && npm run build` als elke andere push.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

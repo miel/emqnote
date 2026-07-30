@@ -18,6 +18,8 @@ export interface Settings {
    * the moment it is worth showing.
    */
   filesOnDemandWarned: string[];
+  /** `Date.now()` of the last automatic update check, to throttle it to once a day. */
+  updateLastCheckedAt: number | null;
 }
 
 export { DEFAULT_HOTKEY };
@@ -29,6 +31,7 @@ function defaults(): Settings {
     locale: "en-US",
     openAtLogin: true,
     filesOnDemandWarned: [],
+    updateLastCheckedAt: null,
   };
 }
 
