@@ -191,6 +191,9 @@ export function readNotesIn(vault: string, folder: string): NoteSummary[] {
 
 /**
  * Opens a note. Reads only — no write, no touch, not even a `modified` refresh.
+ *
+ * `editable` always comes back true here: this module knows nothing of the capture
+ * window's session. The caller in `index.ts`, which holds that state, overrides it.
  */
 export function openNote(vault: string, notePath: string): OpenedNote | null {
   const file = join(vault, notePath);
@@ -207,6 +210,7 @@ export function openNote(vault: string, notePath: string): OpenedNote | null {
     attendees: frontmatter.attendees ?? [],
     tags: frontmatter.tags ?? [],
     doc: doc.toJSON(),
+    editable: true,
   };
 }
 

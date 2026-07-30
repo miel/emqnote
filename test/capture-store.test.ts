@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { beginSession, writeSession } from "../src/main/capture-store.js";
+import { beginSession, loadSession, writeSession } from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
+import { openNote } from "../src/main/vault-io.js";
 import { paragraphs, payload } from "./helpers/doc.js";
 
 let vault: string;
@@ -215,5 +216,81 @@ describe("saving a capture", () => {
 
     expect(second.path).not.toBe(first.path);
     expect(basename(second.path!)).toMatch(/ \(2\)\.md$/);
+  });
+});
+
+describe("saving a session loaded from an existing note", () => {
+  const NOTE = `---
+title: Kickoff project Alpha
+type: quick
+created: 2026-07-25T14:32:00+02:00
+source: email
+---
+
+Eerste versie.
+`;
+
+  const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+
+  /** A note already on disk, as if written by something other than this session. */
+  function writeFixture(): string {
+    const absolute = join(vault, relativePath);
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    writeFileSync(absolute, NOTE);
+    return absolute;
+  }
+
+  it("writes back through the note's own path, unrelated frontmatter untouched", async () => {
+    const absolute = writeFixture();
+
+    const opened = openNote(vault, relativePath)!;
+    const session = loadSession(opened);
+    session.payload = payload(paragraphs("Eerste versie.", "Tweede regel."), {
+      created: opened.created,
+    });
+
+    const result = await writeSession(session, vault);
+    expect(result.written).toBe(true);
+    expect(result.path).toBe(relativePath);
+
+    const saved = parseNote(readFileSync(absolute, "utf8"));
+    expect(saved.frontmatter.title).toBe("Kickoff project Alpha");
+    // `source: email` is not one of the fields the header carries, so it only survives
+    // if the write goes through `saveNote`'s `...previous` spread rather than building
+    // frontmatter from scratch the way a brand new note does.
+    expect(saved.frontmatter.source).toBe("email");
+    expect(saved.doc.textContent).toContain("Tweede regel.");
+  });
+
+  it("keeps the title pinned even if a stray subject was carried along", async () => {
+    // The header hides the subject field for a loaded note (variant="reader"), but the
+    // write path pins the title from the session regardless of what the field holds —
+    // the same guarantee the library reader has, and for the same reason (B20).
+    const absolute = writeFixture();
+
+    const opened = openNote(vault, relativePath)!;
+    const session = loadSession(opened);
+    session.payload = payload(paragraphs("Bijgewerkt."), {
+      subject: "Iets heel anders",
+      created: opened.created,
+    });
+
+    await writeSession(session, vault);
+
+    const saved = parseNote(readFileSync(absolute, "utf8"));
+    expect(saved.frontmatter.title).toBe("Kickoff project Alpha");
+  });
+
+  it("touches nothing until an edit actually arrives", async () => {
+    const absolute = writeFixture();
+    const before = statSync(absolute).mtimeMs;
+
+    const opened = openNote(vault, relativePath)!;
+    const session = loadSession(opened);
+
+    const result = await writeSession(session, vault);
+
+    expect(result.written).toBe(false);
+    expect(statSync(absolute).mtimeMs).toBe(before);
   });
 });

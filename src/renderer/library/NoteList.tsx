@@ -9,6 +9,11 @@ interface Props {
   sort: SortKey;
   onSort: (key: SortKey) => void;
   onSelect: (path: string) => void;
+  /** Double-click: hand the note to the capture window for quick editing. */
+  onOpenInCapture: (path: string) => void;
+  /** The only way in is otherwise the global hotkey; this opens the capture window for
+   * a brand new note, the same as pressing it. */
+  onNewNote: () => void;
   locale: Locale;
   t: (key: string) => string;
 }
@@ -28,6 +33,8 @@ export function NoteList({
   sort,
   onSort,
   onSelect,
+  onOpenInCapture,
+  onNewNote,
   locale,
   t,
 }: Props): React.ReactElement {
@@ -51,6 +58,9 @@ export function NoteList({
             </button>
           ))}
         </div>
+        <button type="button" className="new-note" onClick={onNewNote}>
+          + {t("library.newNote")}
+        </button>
       </div>
 
       <ul className="notes-list">
@@ -59,6 +69,7 @@ export function NoteList({
             key={note.path}
             className={`note${selected === note.path ? " note-on" : ""}`}
             onClick={() => onSelect(note.path)}
+            onDoubleClick={() => onOpenInCapture(note.path)}
           >
             <div className="note-top">
               <span className="note-title">{note.title}</span>

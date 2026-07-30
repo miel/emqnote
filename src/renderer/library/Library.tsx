@@ -128,15 +128,33 @@ export function Library(): React.ReactElement {
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
+  /**
+   * Re-checks whether the open note is still claimed by the capture window, without
+   * touching the document itself: a full `openNote()` would bump `docToken` and throw
+   * away the caret and undo history for a change that altered no bytes at all.
+   */
+  const refreshEditable = useCallback(async () => {
+    const current = openRef.current;
+    if (current === null) return;
+    const editable = await window.emqnote.library.noteEditable(current.path);
+    // Stale by the time it resolves: a different note, or none, is open now.
+    if (openRef.current === null || openRef.current.path !== current.path) return;
+    if (openRef.current.editable === editable) return;
+    const updated = { ...openRef.current, editable };
+    setOpen(updated);
+    openRef.current = updated;
+  }, []);
+
   useEffect(() => {
     void loadTree();
     const stop = window.emqnote.library.onRefresh(() => {
       void loadTree();
       void loadNotes(selectionRef.current);
       refreshFacets();
+      void refreshEditable();
     });
     return stop;
-  }, [loadTree, loadNotes, refreshFacets]);
+  }, [loadTree, loadNotes, refreshFacets, refreshEditable]);
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
@@ -167,6 +185,10 @@ export function Library(): React.ReactElement {
     const fields = headerRef.current;
     const doc = editor.current?.getDoc();
     if (current === null || fields === null || doc === null || doc === undefined) return;
+    // The capture window has this exact note claimed — see `editable` on `OpenedNote`.
+    // Saving here would race its own debounced write with no conflict copy either side,
+    // which is exactly the failure B10 exists to prevent.
+    if (!current.editable) return;
 
     const result = await window.emqnote.library.saveNote({
       path: current.path,
@@ -219,7 +241,10 @@ export function Library(): React.ReactElement {
   );
 
   const onDocChange = useCallback(() => {
-    if (openRef.current === null) return;
+    // Belt and braces alongside the `pointer-events: none` overlay: a note can go
+    // read-only while the editor already has focus from before, and a keystroke that
+    // slips through must not schedule a save that `save()` would refuse anyway.
+    if (openRef.current === null || !openRef.current.editable) return;
     setDirty(true);
     if (saveTimer.current !== null) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
@@ -234,7 +259,7 @@ export function Library(): React.ReactElement {
    */
   const onHeaderChange = useCallback(
     (values: HeaderValues) => {
-      if (openRef.current === null) return;
+      if (openRef.current === null || !openRef.current.editable) return;
       setHeader(values);
       headerRef.current = values;
       setDirty(true);
@@ -356,6 +381,28 @@ export function Library(): React.ReactElement {
     void loadNotes(selectionRef.current);
   };
 
+  /**
+   * Hands a note to the capture window for quick editing.
+   *
+   * If this same note is open here, the reader locks itself immediately rather than
+   * waiting on a round trip through main — this side already knows the claim is about
+   * to move, and a keystroke landing in the gap is exactly the race B10 exists to avoid.
+   */
+  const openInCapture = async (path: string): Promise<void> => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+
+    const current = openRef.current;
+    if (current !== null && current.path === path) {
+      if (dirty) await save();
+      const locked = { ...current, editable: false };
+      setOpen(locked);
+      openRef.current = locked;
+      setDirty(false);
+    }
+
+    await window.emqnote.library.openInCapture(path);
+  };
+
   return (
     <div className="library">
       <FolderTree
@@ -377,6 +424,7 @@ export function Library(): React.ReactElement {
           })
         }
         canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
+        canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
         newFolderLabel={app.t("library.newFolder")}
@@ -398,6 +446,8 @@ export function Library(): React.ReactElement {
         sort={sort}
         onSort={setSort}
         onSelect={(path) => void openNote(path)}
+        onOpenInCapture={(path) => void openInCapture(path)}
+        onNewNote={() => window.emqnote.library.newNote()}
         locale={app.locale}
         t={app.t}
       />
@@ -417,7 +467,9 @@ export function Library(): React.ReactElement {
               </div>
               <div className="reader-actions">
                 <span className="reader-state">
-                  {app.t(dirty ? "library.saving" : "library.saved")}
+                  {open.editable
+                    ? app.t(dirty ? "library.saving" : "library.saved")
+                    : app.t("library.openInCapture")}
                 </span>
                 <button
                   type="button"
@@ -444,25 +496,32 @@ export function Library(): React.ReactElement {
               </div>
             </header>
 
-            {/* The same block as the capture window, minus the subject and the kind
-                toggle. Fixing an attendee list or a date used to mean editing the file
-                by hand outside the app. */}
-            {header !== null && (
-              <HeaderBlock
-                variant="reader"
-                values={header}
-                onChange={onHeaderChange}
-                onLeave={() => editor.current?.focus()}
-                locale={app.locale}
-                t={app.t}
-              />
-            )}
+            {/* `pointer-events: none` when a note is claimed by the capture window: the
+                content stays visible — reading it while it is being typed into
+                elsewhere is the point — but nothing here can be clicked into, so no
+                keystroke can slip past the `editable` guards in `onDocChange` and
+                `onHeaderChange`. */}
+            <div className={open.editable ? "reader-body" : "reader-body reader-locked"}>
+              {/* The same block as the capture window, minus the subject and the kind
+                  toggle. Fixing an attendee list or a date used to mean editing the
+                  file by hand outside the app. */}
+              {header !== null && (
+                <HeaderBlock
+                  variant="reader"
+                  values={header}
+                  onChange={onHeaderChange}
+                  onLeave={() => editor.current?.focus()}
+                  locale={app.locale}
+                  t={app.t}
+                />
+              )}
 
-            <Editor
-              ref={editor}
-              onChange={onDocChange}
-              onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
-            />
+              <Editor
+                ref={editor}
+                onChange={onDocChange}
+                onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
+              />
+            </div>
 
             {link !== null && (
               <LinkPrompt

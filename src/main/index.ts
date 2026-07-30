@@ -6,6 +6,7 @@ import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
 import {
   createCaptureWindow,
+  focusCaptureWindow,
   getCaptureWindow,
   hideCaptureWindow,
   sendStatus,
@@ -74,14 +75,23 @@ if (launch.selfTestRounds === 0 && !app.requestSingleInstanceLock()) {
 let lastLatency: number | null = null;
 let lastSavedAs: string | null = null;
 
+/**
+ * Tells the library to reload. Used for the vault changing underneath it, and also for
+ * the capture window claiming or releasing a note — the library's `editable` flag on
+ * whatever it has open is only ever as fresh as the last of these.
+ */
+function notifyLibrary(): void {
+  const library = getLibraryWindow();
+  if (library !== null && !library.isDestroyed()) {
+    library.webContents.send(IPC.libraryRefresh);
+  }
+}
+
 const writer = new CaptureWriter(
   () => loadSettings().vaultPath,
   (result) => {
     lastSavedAs = result.path;
-    const library = getLibraryWindow();
-    if (library !== null && !library.isDestroyed()) {
-      library.webContents.send(IPC.libraryRefresh);
-    }
+    notifyLibrary();
     sendStatus({ lastLatencyMs: lastLatency, savedAs: lastSavedAs });
   },
 );
@@ -112,6 +122,10 @@ async function main(): Promise<void> {
   setHideHandler(() => {
     writer.finish();
     lastSavedAs = null;
+    // Whether or not there was anything to write, the window has released whatever
+    // note it had — including a note it never wrote a byte to, which `writer.finish`'s
+    // own refresh (guarded on `written`) would otherwise miss entirely.
+    notifyLibrary();
   });
 
   // Switching away is not closing: write what is there and leave the note open.
@@ -384,14 +398,8 @@ function registerAppIpc(): void {
 function registerLibraryIpc(): void {
   const vaultPath = (): string | null => loadSettings().vaultPath;
 
-  const notifyLibrary = (): void => {
-    const target = getLibraryWindow();
-    if (target !== null && !target.isDestroyed()) {
-      target.webContents.send(IPC.libraryRefresh);
-    }
-  };
-
   ipcMain.on(IPC.libraryOpen, () => showLibraryWindow());
+  ipcMain.on(IPC.captureNew, () => focusCaptureWindow());
 
   ipcMain.handle(IPC.libraryTree, () => {
     const vault = vaultPath();
@@ -414,7 +422,35 @@ function registerLibraryIpc(): void {
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
     const vault = vaultPath();
-    return vault === null ? null : openNote(vault, path);
+    if (vault === null) return null;
+    const note = openNote(vault, path);
+    // Read-only if the capture window has this exact note claimed — two windows open
+    // on one note is fine, two windows writing the same file underneath OneDrive is the
+    // failure B10 exists to prevent.
+    return note === null ? null : { ...note, editable: writer.activePath() !== path };
+  });
+
+  ipcMain.handle(IPC.libraryNoteEditable, (_event, path: string) => {
+    return writer.activePath() !== path;
+  });
+
+  /**
+   * Hands a note to the capture window and brings it to the front.
+   *
+   * Mirrors `finish()`'s ordering inside `writer.load`: whatever capture was composing
+   * is flushed and closed first, so a half-typed note is never abandoned mid-session.
+   */
+  ipcMain.handle(IPC.captureLoad, async (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return false;
+    const note = openNote(vault, path);
+    if (note === null) return false;
+
+    await writer.load(note);
+    focusCaptureWindow();
+    getCaptureWindow()?.webContents.send(IPC.captureLoadNote, note);
+    notifyLibrary();
+    return true;
   });
 
   ipcMain.handle(IPC.librarySaveNote, (_event, request: SaveNoteRequest) => {

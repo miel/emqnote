@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Node as PMNode } from "prosemirror-model";
+import { schema } from "../markdown/schema.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
@@ -28,6 +29,10 @@ export function Capture(): React.ReactElement {
   const app = useBootstrap();
   const editor = useRef<EditorHandle>(null);
   const [header, setHeader] = useState<HeaderValues>(freshHeader);
+  // True once an existing note has been handed over from the library window. The
+  // subject field disappears then, the same way it does in the reader — the title
+  // belongs to Rename, and a second way to set it would let the two drift (B20).
+  const [existing, setExisting] = useState(false);
   const [status, setStatus] = useState<StatusPayload>({
     lastLatencyMs: null,
     savedAs: null,
@@ -91,16 +96,39 @@ export function Capture(): React.ReactElement {
     const stopReset = window.emqnote.onReset(() => {
       editor.current?.reset();
       setHeader(freshHeader());
+      setExisting(false);
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
 
+    // The library window handed over a note it already has on disk. Loaded straight
+    // into the editor and header state rather than through `onHeaderChange`/the
+    // editor's own `onChange`, so nothing is sent back to main and nothing is written
+    // just for having been opened — the same rule B10 puts on the reader.
+    const stopLoad = window.emqnote.onLoad((note) => {
+      editor.current?.setDoc(schema.nodeFromJSON(note.doc) as PMNode);
+      const fields: HeaderValues = {
+        kind: note.kind,
+        subject: note.title,
+        created: note.created,
+        location: note.location,
+        attendees: note.attendees,
+        tags: note.tags,
+      };
+      setHeader(fields);
+      headerRef.current = fields;
+      setExisting(true);
+      setLink(null);
+      setStatus((previous) => ({ ...previous, savedAs: note.path }));
+    });
+
     return () => {
       stopShow();
       stopReset();
       stopStatus();
+      stopLoad();
     };
   }, []);
 
@@ -161,6 +189,7 @@ export function Capture(): React.ReactElement {
       <TitleBar onClose={() => window.emqnote.close()} native={app.isMac} />
 
       <HeaderBlock
+        variant={existing ? "reader" : "capture"}
         values={header}
         onChange={onHeaderChange}
         onLeave={() => editor.current?.focus()}

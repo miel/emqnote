@@ -26,6 +26,12 @@ export const IPC = {
   captureReset: "capture:reset",
   /** main → renderer: update the status bar. */
   captureStatus: "capture:status",
+  /** library renderer → main: open an existing note in the capture window instead. */
+  captureLoad: "capture:load",
+  /** main → capture renderer: here is the note that was just claimed. */
+  captureLoadNote: "capture:load-note",
+  /** library renderer → main: show the capture window for a brand new note. */
+  captureNew: "capture:new",
   /** renderer → main: names and tags seen before, for autocomplete. */
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
@@ -50,6 +56,8 @@ export const IPC = {
   libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
+  /** Whether the note at this path is still free to save — see `OpenedNote.editable`. */
+  libraryNoteEditable: "library:note-editable",
 
   /** Locale, platform and hotkey — everything a window needs before it draws. */
   bootstrap: "app:bootstrap",
@@ -124,6 +132,12 @@ export interface LibraryApi {
    */
   renameFolder: (path: string, name: string) => Promise<string>;
   revealNote: (path: string) => void;
+  /** True if nothing else currently has this note claimed for writing. */
+  noteEditable: (path: string) => Promise<boolean>;
+  /** Hands the note to the capture window and brings it to the front. */
+  openInCapture: (path: string) => Promise<boolean>;
+  /** Shows the capture window for a brand new note, exactly like the hotkey. */
+  newNote: () => void;
   onRefresh: (handler: () => void) => () => void;
 }
 
@@ -131,6 +145,8 @@ export interface CaptureApi {
   onShow: (handler: (payload: ShowPayload) => void) => () => void;
   onReset: (handler: () => void) => () => void;
   onStatus: (handler: (payload: StatusPayload) => void) => () => void;
+  /** An existing note was handed over from the library window — load it in place. */
+  onLoad: (handler: (note: OpenedNote) => void) => () => void;
   painted: (token: number) => void;
   change: (payload: CapturePayload) => void;
   close: () => void;

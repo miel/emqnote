@@ -5,7 +5,7 @@ import {
   type ShowPayload,
   type StatusPayload,
 } from "../shared/ipc.js";
-import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
+import type { OpenedNote, SaveNoteRequest, Selection } from "../shared/vault-types.js";
 
 /**
  * The renderer gets exactly these nine things and nothing else. The sandbox stays on
@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("emqnote", {
   onReset: (handler: () => void) => subscribe<void>(IPC.captureReset, handler),
   onStatus: (handler: (payload: StatusPayload) => void) =>
     subscribe<StatusPayload>(IPC.captureStatus, handler),
+  onLoad: (handler: (note: OpenedNote) => void) =>
+    subscribe<OpenedNote>(IPC.captureLoadNote, handler),
   painted: (token: number) => ipcRenderer.send(IPC.capturePainted, token),
   change: (payload: CapturePayload) => ipcRenderer.send(IPC.captureChange, payload),
   close: () => ipcRenderer.send(IPC.captureClose),
@@ -53,6 +55,9 @@ contextBridge.exposeInMainWorld("emqnote", {
     renameFolder: (path: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryRenameFolder, path, name),
     revealNote: (path: string) => ipcRenderer.send(IPC.libraryRevealNote, path),
+    noteEditable: (path: string) => ipcRenderer.invoke(IPC.libraryNoteEditable, path),
+    openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
+    newNote: () => ipcRenderer.send(IPC.captureNew),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
   },
 });

@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 28 July 2026, at `v0.1.0`.
+Last updated 30 July 2026, at `v0.1.0`.
 
 ## Where the project stands
 
@@ -33,52 +33,9 @@ See "Settled" at the foot of this file.*
 
 ### Note browser
 
-**No "New note" button.** The browser can open, rename, move, reveal and delete
-a note but cannot make one; the only way in is the global hotkey. Add it to
-`.tree-toolbar` beside "+ New folder" and "Rename folder", or to the note-list
-header. It should open the capture window rather than grow a second way to
-create a note — the capture path owns note creation and `CaptureWriter` decides
-the filename.
-
-**The two windows do not stay in sync on the same note.** Confirmed one way
-only:
-
-- capture → browser **works**: every capture write sends `IPC.libraryRefresh`
-  (`index.ts`, in the `CaptureWriter` result handler).
-- browser → capture **does not**: there is no reverse notification, and the
-  capture window has no reload path at all — it listens for `onShow` and
-  `onReset` and nothing else.
-
-Two windows open on one note is a *feature* — looking something up while
-editing — so this has to be fixed rather than designed away. It is also more
-than a refresh annoyance: both windows can currently write the same file, and
-the loser's bytes are gone with no conflict copy, which is the failure mode B10
-exists to prevent. Options worth weighing: make the reader read-only while the
-same note is open in capture; or give the capture window a reload channel and
-have the library announce the path it is saving; or have main refuse the second
-writer outright. Whichever way, the write conflict is the part that matters and
-the refresh is the easy half.
-
-**Double-clicking a note should open it in the capture window.**
-`NoteList.tsx` has only an `onClick` that opens the note in the reader. Add a
-double-click that opens the same note in the capture window for editing. Needs
-the capture window to be able to *load* an existing note, which it currently
-cannot — it only ever starts a new one — so this depends on the same
-capture-side plumbing as the sync item above and should follow it.
-
-**Tags and People list items are outdented under their own heading.** The
-section heading sits at `padding-left: 8px` but its label is pushed right by the
-twisty and the glyph before it, so the text starts near 44px. The items below
-are at `padding-left: 22px` with no twisty and no glyph, so they start at 22px —
-left of the heading they belong to. `FilterSection.tsx`, the two inline
-`paddingLeft` styles. They should clear the heading's text column.
-
-**"New folder" is offered while the Trash is selected.** Selecting Trash sets
-`lastFolder` to `_trash` like any other folder (`Library.tsx`, `onSelect`), and
-"+ New folder" acts on `lastFolder` — so it will happily create a folder inside
-the trash. `canRenameFolder` already excludes the trash; the new-folder button
-needs the same guard, and so does the right-click "new folder inside this one"
-on the trash row.
+*All five items below are done — see "Settled" at the foot of this file for
+what changed and how. None of it has been seen running in a real window yet;
+that gap is called out under "Verification still owed" below.*
 
 ---
 
@@ -86,7 +43,12 @@ on the trash row.
 
 None of these is reachable through the app's `--screenshot` / `--click-button`
 flags, so they were not covered before tagging. The release is tested and
-typechecked, and was checked by screenshot; these are the gaps.
+typechecked, and was checked by screenshot; these are the gaps. Still open as
+of 30 July 2026 — the machine this round of work was done on has no display
+and, it turns out, cannot even launch Electron (the installed Node is older
+than `electron@43` requires, and its own postinstall download script fails
+before a window could ever open), so none of the items below could be looked
+at, old or new. `npm test`, `npm run typecheck` and `npm run build` all pass.
 
 - [ ] Rename a folder while a note inside it is **open and dirty**. Confirm no
       duplicate old folder appears, the note keeps its caret and undo history,
@@ -103,6 +65,20 @@ typechecked, and was checked by screenshot; these are the gaps.
 - [ ] The header and note-list changes judged by eye in **dark mode**. Every
       colour used is a token or `currentColor`, so it should follow, but it has
       only been seen in light mode.
+- [ ] The write-conflict fix, end to end: open a note in the library, double-click
+      it to hand it to capture, confirm the reader locks itself (dimmed,
+      unclickable, "open for editing in the capture window") immediately, and
+      that closing capture again unlocks it. Then the other direction: with a
+      note already loaded in capture, single-click the same note in the library
+      and confirm it opens read-only from the start. The logic underneath is
+      covered by `capture-store.test.ts` and `capture-writer.test.ts`, but
+      nobody has watched the lock/unlock actually happen on screen.
+- [ ] The "+ New note" button in the note-list header, and double-click on a row,
+      against the real window layout — both were built and typechecked but never
+      rendered.
+- [ ] Whatever the "+ New note" button's placement looks like next to the sort
+      buttons; `justify-content: space-between` was inherited from a two-child
+      header and may put more air between them than intended.
 
 ## Housekeeping
 
@@ -114,6 +90,57 @@ typechecked, and was checked by screenshot; these are the gaps.
       will do the same again.
 
 ## Settled
+
+**The two windows now share one write claim per note.** `OpenedNote` gained an
+`editable` field. `index.ts` computes it in the `library:open-note` handler by
+asking `CaptureWriter.activePath()` — a new getter — whether capture currently
+has that exact path loaded; the library reader renders read-only (a
+`pointer-events: none` wrapper, `.reader-locked`) whenever it comes back false,
+and `save()`/`onDocChange`/`onHeaderChange` all refuse to write regardless, as
+a second line of defence. The reverse direction — capture loading a note the
+library already has open — goes through a new `capture:load` / `capture:load-note`
+IPC pair: `CaptureWriter.load()` flushes whatever capture was composing (same
+ordering `finish()` uses, for the same reason) and starts a session pointed at
+the existing file. Saving that session routes through `vault-io.ts`'s own
+`saveNote` rather than the Inbox-only `buildFrontmatter` path, so unrelated
+frontmatter (a `source:` other than `manual`, for instance) survives an edit
+made from capture the same way it does from the reader, and the title stays
+pinned to what was loaded — the header hides the subject field for a loaded
+note (`variant="reader"`) for the same B20 reason the library reader has none.
+Opening a note that turns out to be claimed still costs a file read but never a
+write, so B10 holds in both directions. Covered by new tests in
+`capture-store.test.ts` and `capture-writer.test.ts`; not yet seen on screen,
+see "Verification still owed" above.
+
+**Double-clicking a note opens it in the capture window.** `NoteList.tsx` adds
+an `onDoubleClick` that calls into a new `Library.tsx` `openInCapture`, which —
+if this same note happens to be the one already open in the reader — locks the
+reader itself immediately, before the round trip to main, rather than waiting
+for the `editable` recheck that `library:refresh` triggers elsewhere. Main's
+`capture:load` handler does the rest: load the note into capture, focus the
+window, tell the library to refresh.
+
+**A "+ New note" button lives in the note-list header**, beside the sort
+buttons. It calls a new `library.newNote()` → `capture:new` IPC that shows the
+capture window exactly like the hotkey, deliberately not through
+`showCaptureWindow()`: that function also starts a hotkey-to-caret latency
+measurement, and folding a mouse click into the same rolling sample window
+`stats()` reports would quietly contaminate the number `CLAUDE.md` treats as an
+acceptance criterion. A new `focusCaptureWindow()` in `capture-window.ts` does
+the same show-and-focus dance with a token that was never registered, so
+`completeMeasurement` finds nothing pending and records nothing. The same
+function backs the double-click handoff above.
+
+**Tags and People list items outdent to 44px**, matching where the section
+heading's own label starts once its twisty and glyph are accounted for — was
+22px, left of the heading. `FilterSection.tsx`, one inline style.
+
+**"New folder" is disabled while the Trash is selected.** A new
+`canCreateFolder` prop on `FolderTree`, following the same
+`!lastFolder.startsWith(TRASH_FOLDER)` guard `canRenameFolder` already used.
+The right-click "new folder inside this one" gesture on the Trash row itself
+turned out to be guarded already (an `onCreateFolder={() => {}}` override on
+that one `Branch`) — nothing to do there.
 
 **No completion on the tag and people fields.** Both dropdown items are closed by
 removing the `<datalist>` from those two fields rather than fixing it. The reason

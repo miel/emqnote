@@ -104,7 +104,11 @@ export function FilterSection({
                     className={`branch${
                       selectionKey(selected) === selectionKey(target) ? " branch-on" : ""
                     }`}
-                    style={{ paddingLeft: "22px" }}
+                    // Clears the heading's own text column: 8px padding + the 16px
+                    // twisty + 12px glyph + two 4px gaps put "Tags" and "People" at
+                    // 44px, and an item with neither twisty nor glyph needs the same
+                    // number to land under the label rather than left of it.
+                    style={{ paddingLeft: "44px" }}
                     onClick={() => onSelect(target)}
                   >
                     <span className="branch-name">

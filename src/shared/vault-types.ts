@@ -86,6 +86,13 @@ export interface OpenedNote {
   tags: string[];
   /** ProseMirror document JSON. */
   doc: unknown;
+  /**
+   * False when the capture window currently has this same note loaded. Two windows open
+   * on one note is a feature — looking something up while editing — but two writers of
+   * the same file is the failure B10 exists to prevent, so whichever window opened it
+   * second reads it without being able to save it.
+   */
+  editable: boolean;
 }
 
 export interface SaveNoteRequest {

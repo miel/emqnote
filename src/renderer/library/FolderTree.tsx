@@ -23,6 +23,8 @@ interface Props {
   onRenameFolder: () => void;
   /** False for the vault root and the trash, neither of which can be renamed. */
   canRenameFolder: boolean;
+  /** False for the trash, which is a destination for deleted notes, not a place to file. */
+  canCreateFolder: boolean;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
   newFolderLabel: string;
@@ -143,6 +145,7 @@ export function FolderTree({
   onNewFolder,
   onRenameFolder,
   canRenameFolder,
+  canCreateFolder,
   onOpenSettings,
   onOpenHelp,
   newFolderLabel,
@@ -171,7 +174,7 @@ export function FolderTree({
           "no option to create a new folder" was a fair complaint about a feature that
           existed only as a hidden gesture. */}
       <div className="tree-toolbar">
-        <button type="button" onClick={onNewFolder}>
+        <button type="button" onClick={onNewFolder} disabled={!canCreateFolder}>
           + {newFolderLabel}
         </button>
         {/* Beside it rather than hidden behind a gesture, for the reason above — and

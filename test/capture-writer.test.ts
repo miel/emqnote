@@ -1,9 +1,19 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CaptureWriter, type WriteResult } from "../src/main/capture-store.js";
+import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
+import { openNote } from "../src/main/vault-io.js";
 import { paragraphs, payload } from "./helpers/doc.js";
 
 let vault: string;
@@ -83,3 +93,77 @@ describe("closing and immediately reopening", () => {
     expect(written).toHaveLength(0);
   });
 });
+
+describe("loading an existing note", () => {
+  const NOTE = `---
+title: Kickoff project Alpha
+type: quick
+created: 2026-07-25T14:32:00+02:00
+---
+
+Eerste versie.
+`;
+
+  const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+
+  function writeFixture(): void {
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    writeFileSync(join(vault, relativePath), NOTE);
+  }
+
+  it("claims the note's path immediately, before any edit arrives", async () => {
+    writeFixture();
+    const { writer } = makeWriter();
+
+    await writer.load(openNote(vault, relativePath)!);
+
+    expect(writer.activePath()).toBe(relativePath);
+    // Nothing was typed yet, so nothing was written — opening a note must not touch it.
+    expect(readFileSync(join(vault, relativePath), "utf8")).toBe(NOTE);
+  });
+
+  it("releases the claim once the window closes", async () => {
+    writeFixture();
+    const { writer } = makeWriter();
+
+    await writer.load(openNote(vault, relativePath)!);
+    await writer.finish();
+
+    expect(writer.activePath()).toBeNull();
+  });
+
+  it("flushes whatever was being composed before loading the note, same as finish", async () => {
+    // The fixture note is already in the Inbox, so a flush that behaves means exactly
+    // one more file appears beside it — the one just composed.
+    writeFixture();
+    const { writer } = makeWriter();
+
+    writer.update(payload(paragraphs("Half getypt")));
+    await writer.load(openNote(vault, relativePath)!);
+
+    expect(notesIn()).toHaveLength(2);
+    expect(notesIn().some((name) => name.endsWith("Half getypt.md"))).toBe(true);
+  });
+
+  it("writes an edit back into the note's own file", async () => {
+    writeFixture();
+    const { writer } = makeWriter();
+
+    await writer.load(openNote(vault, relativePath)!);
+    writer.update(payload(paragraphs("Eerste versie.", "Nieuwe regel."), {
+      created: "2026-07-25T14:32:00+02:00",
+    }));
+    await writer.finish();
+
+    // No second file appeared in the Inbox — the edit landed in the note that was
+    // loaded, not in a fresh one.
+    expect(notesIn()).toEqual([basenameOf(relativePath)]);
+    const saved = parseNote(readFileSync(join(vault, relativePath), "utf8"));
+    expect(saved.frontmatter.title).toBe("Kickoff project Alpha");
+    expect(saved.doc.textContent).toContain("Nieuwe regel.");
+  });
+});
+
+function basenameOf(path: string): string {
+  return path.split(/[\\/]/).pop()!;
+}

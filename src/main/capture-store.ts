@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
 import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
+import type { OpenedNote } from "../shared/vault-types.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
+import { saveNote } from "./vault-io.js";
 import { INBOX } from "./vault.js";
 
 /**
@@ -23,10 +25,37 @@ export interface CaptureSession {
   /** Decided on the first real write and never changed afterwards. */
   path: string | null;
   lastWritten: string | null;
+  /**
+   * Set only when the session was loaded from an existing note (see `loadSession`).
+   * The title then stays pinned to this rather than to the subject field — which the
+   * header hides for that case, the same way the library reader has none, because the
+   * title belongs to Rename and a second way to change it would let them drift (B20).
+   */
+  existingTitle: string | null;
 }
 
 export function beginSession(): CaptureSession {
-  return { createdAt: new Date(), payload: null, path: null, lastWritten: null };
+  return {
+    createdAt: new Date(),
+    payload: null,
+    path: null,
+    lastWritten: null,
+    existingTitle: null,
+  };
+}
+
+/**
+ * Starts a session on a note that already exists, so the next write lands back in its
+ * own file instead of a fresh one in the Inbox.
+ */
+export function loadSession(note: OpenedNote): CaptureSession {
+  return {
+    createdAt: new Date(),
+    payload: null,
+    path: note.path,
+    lastWritten: null,
+    existingTitle: note.title,
+  };
 }
 
 /** The first non-empty line of the body, used when no subject was given. */
@@ -121,6 +150,32 @@ export async function writeSession(
   const payload = session.payload;
   if (payload === null) return { ...NOTHING, path: session.path };
 
+  // A session loaded from an existing note saves through the same path the library
+  // reader uses, so the two write identically: unrelated frontmatter is preserved, and
+  // `title` stays pinned to what was loaded rather than to the (hidden, in this case)
+  // subject field.
+  if (session.existingTitle !== null) {
+    if (session.path === null) return { ...NOTHING, path: null };
+
+    const result = saveNote(vault, {
+      path: session.path,
+      title: session.existingTitle,
+      kind: payload.kind,
+      created: payload.created,
+      location: payload.location,
+      attendees: payload.attendees,
+      tags: payload.tags,
+      doc: payload.doc,
+    });
+
+    return {
+      path: result.path,
+      written: result.written,
+      attendees: payload.attendees,
+      tags: payload.tags,
+    };
+  }
+
   const doc = schema.nodeFromJSON(payload.doc);
   const frontmatter = buildFrontmatter(payload, doc, session.createdAt);
   if (frontmatter === null) return { ...NOTHING, path: session.path };
@@ -165,6 +220,23 @@ export class CaptureWriter {
     this.session.payload = payload;
     this.cancelTimer();
     this.timer = setTimeout(() => void this.flush(), WRITE_DEBOUNCE_MS);
+  }
+
+  /** The path of the note currently claimed by this session, if any. */
+  activePath(): string | null {
+    return this.session.path;
+  }
+
+  /**
+   * Hands the window over to an existing note: flush and close whatever was being
+   * composed, the same ordering `finish` uses and for the same reason, then start a
+   * session already pointed at the note's own file.
+   */
+  load(note: OpenedNote): Promise<WriteResult> {
+    const finished = this.session;
+    this.session = loadSession(note);
+    this.cancelTimer();
+    return this.enqueue(finished);
   }
 
   /**

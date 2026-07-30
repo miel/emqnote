@@ -98,10 +98,26 @@ export function setBlurHandler(handler: Handler): void {
  * `moveTop` covers the cases where it still resists.
  */
 export function showCaptureWindow(): void {
+  reveal(beginMeasurement());
+}
+
+/**
+ * Shows the window without starting a measurement: the library's "New note" button and
+ * double-click-to-edit both bring this window up too, and folding them into the hotkey
+ * budget would quietly widen the rolling 200-sample window `stats()` reports with opens
+ * the acceptance criterion never meant to cover.
+ *
+ * `completeMeasurement` looks the token up in `pending` and answers `null` for one that
+ * was never begun, which is what keeps the eventual `capture:painted` round trip a
+ * no-op instead of a special case.
+ */
+export function focusCaptureWindow(): void {
+  reveal(-1);
+}
+
+function reveal(token: number): void {
   const target = window;
   if (target === null || target.isDestroyed()) return;
-
-  const token = beginMeasurement();
 
   if (process.platform === "darwin") {
     // A menu bar app has no dock icon and therefore does not receive keyboard focus
