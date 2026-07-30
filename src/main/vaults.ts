@@ -21,9 +21,15 @@ export function tenantOf(oneDriveRoot: string): string {
   return base.replace(/^OneDrive\s*-\s*/, "").replace(/^OneDrive-/, "");
 }
 
-/** Windows and macOS are both case-insensitive; Linux is not, and is not a target. */
+/**
+ * Windows and macOS are both case-insensitive, and the app only ever ships on those —
+ * always folded, rather than gated on `process.platform`, because that would also gate
+ * it on whatever OS happens to be running the tests. CI's `check` job runs on
+ * `ubuntu-latest`, so a Linux-only branch here would make the case-insensitivity tests
+ * pass or fail depending on the runner rather than the code.
+ */
 function fold(path: string): string {
-  return process.platform === "linux" ? path : path.toLowerCase();
+  return path.toLowerCase();
 }
 
 /**
