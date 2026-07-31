@@ -51,6 +51,19 @@ mac:
   # The update check on this platform is a plain version comparison that opens the
   # release page for a manual reinstall — it does not use electron-updater's own
   # Squirrel.Mac-based install flow, which requires real code signing.
+  #
+  # "-" is not optional. Without an explicit identity, and with no Developer ID
+  # certificate in the CI keychain (CSC_IDENTITY_AUTO_DISCOVERY: false, no CSC_LINK
+  # secret), electron-builder finds nothing and skips signing *entirely* — not even
+  # ad-hoc — logging a warning easy to miss ("skipped macOS application code signing").
+  # An arm64 binary with no signature at all cannot run on Apple Silicon: AMFI refuses
+  # to execute it at the kernel level, which macOS surfaces as "'emqnote.app' is damaged
+  # and can't be opened" — a Gatekeeper-shaped message for a problem no Gatekeeper
+  # workaround (xattr, spctl, System Settings "Open Anyway") can fix, because there is no
+  # signature for Gatekeeper to evaluate trust of in the first place. "-" forces the
+  # ad-hoc signature that makes the binary launchable; it is not the same as, and does
+  # not require, a real Developer ID.
+  identity: "-"
 
 win:
   # Per-user NSIS install: no admin rights required, same as unzipping a folder is
