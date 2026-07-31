@@ -1,0 +1,9 @@
+# LF everywhere, regardless of platform or a contributor's local core.autocrlf.
+#
+# The markdown dialect itself is LF-only (test/roundtrip.test.ts asserts it byte for
+# byte), and test/corpus/*.md are read straight off disk and compared against LF-only
+# serializer output. Without this file, a Windows checkout converts them to CRLF on the
+# way down — which is exactly what broke `npm test` on windows-latest in release.yml:
+# that workflow is the first one to ever run the test suite on a Windows runner: the
+# older build.yml only ran `npm test` on ubuntu-latest, so this had nothing to catch it.
+* text=auto eol=lf
