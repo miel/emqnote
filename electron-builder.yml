@@ -30,6 +30,10 @@ publish:
   provider: github
   owner: miel
   repo: emqnote
+  # electron-builder's own default is a draft. A draft never appears from GitHub's
+  # "latest release" API, which is exactly what both update paths read — a release that
+  # stayed a draft would silently mean nobody ever gets offered the update.
+  draft: false
 
 mac:
   category: public.app-category.productivity

@@ -17,6 +17,13 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      # One at a time, not in parallel: electron-builder's GitHub publisher checks
+      # whether a release for the tag exists and creates one if not, and two matrix
+      # jobs starting at the same moment both see "no release yet" and each create their
+      # own — v0.2.0's first publish landed as two separate draft releases with the mac
+      # and Windows assets split between them. Serializing means the second job always
+      # finds the first job's release and uploads into it instead.
+      max-parallel: 1
       matrix:
         include:
           - os: macos-14
