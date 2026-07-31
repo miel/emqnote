@@ -26,15 +26,17 @@ electronLanguages:
 
 # Update checks read the latest tagged GitHub release; see src/main/updater.ts and B22 in
 # 05-besluitenlog.md. The repo has to be public for the unauthenticated check to work.
+#
+# Left at the default releaseType (draft) deliberately: release.yml pre-creates the
+# draft itself before either platform job runs, specifically so electron-builder always
+# finds and reuses it through its unconditional "it's a draft, use it" path rather than
+# its list-then-create path, which is not atomic across jobs or even across one job's
+# own sequential uploads. release.yml's finalize-release job un-drafts it once both
+# platforms are done.
 publish:
   provider: github
   owner: miel
   repo: emqnote
-  # electron-builder's own default is "draft", and a draft never appears from GitHub's
-  # "latest release" API — exactly what both update paths read, so a release that stayed
-  # a draft would silently mean nobody ever gets offered the update. (There is no plain
-  # `draft` boolean in this version's schema, only this three-way enum.)
-  releaseType: release
 
 mac:
   category: public.app-category.productivity

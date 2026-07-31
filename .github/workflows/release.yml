@@ -9,21 +9,35 @@ on:
     tags: ["v*"]
 
 jobs:
+  # A draft is created here, up front, rather than letting electron-builder's own
+  # getOrCreateRelease do it per platform. That function lists releases, and creates one
+  # if none matches the tag — and that list-then-create is not atomic. v0.2.0's first
+  # publish attempt hit this twice: two matrix jobs starting at once both saw "nothing
+  # yet" and each created their own release, splitting the mac and Windows assets across
+  # two drafts; serializing the jobs fixed that, but then a single job's own two
+  # sequential uploads (the blockmap, then the zip) raced the same way — a release
+  # electron-builder had itself just created was not always visible yet to its own very
+  # next list call. A *draft* release found in that list is reused immediately and
+  # unconditionally (electron-builder never re-creates over an existing draft), so
+  # pre-creating one here removes every "does it exist yet" race entirely: both platform
+  # jobs, and every upload within them, just find it already there.
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release create "$GITHUB_REF_NAME" --draft --notes-from-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
     name: ${{ matrix.label }}
+    needs: create-release
     permissions:
-      # electron-builder creates/updates the GitHub Release and uploads assets to it
-      # with the default GITHUB_TOKEN; nothing beyond this repo's own token is needed.
       contents: write
     strategy:
       fail-fast: false
-      # One at a time, not in parallel: electron-builder's GitHub publisher checks
-      # whether a release for the tag exists and creates one if not, and two matrix
-      # jobs starting at the same moment both see "no release yet" and each create their
-      # own — v0.2.0's first publish landed as two separate draft releases with the mac
-      # and Windows assets split between them. Serializing means the second job always
-      # finds the first job's release and uploads into it instead.
-      max-parallel: 1
       matrix:
         include:
           - os: macos-14
@@ -51,3 +65,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # No code signing on either platform yet — see B22 in 05-besluitenlog.md.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  finalize-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # A draft never appears from GitHub's "latest release" API, which is exactly what
+      # both update paths (src/main/updater.ts) read — this is the step that actually
+      # makes a release visible to them.
+      - run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
