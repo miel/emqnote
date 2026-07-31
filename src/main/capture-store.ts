@@ -24,7 +24,12 @@ export interface CaptureSession {
   payload: CapturePayload | null;
   /** Decided on the first real write and never changed afterwards. */
   path: string | null;
-  lastWritten: string | null;
+  /**
+   * Frontmatter and doc serialized *without* `modified`, from the last write — the
+   * identity of "nothing changed" that decides whether the next call writes at all.
+   * Not the literal bytes on disk: those may carry a `modified` stamp this does not.
+   */
+  lastContent: string | null;
   /**
    * Set only when the session was loaded from an existing note (see `loadSession`).
    * The title then stays pinned to this rather than to the subject field — which the
@@ -39,7 +44,7 @@ export function beginSession(): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: null,
-    lastWritten: null,
+    lastContent: null,
     existingTitle: null,
   };
 }
@@ -53,7 +58,7 @@ export function loadSession(note: OpenedNote): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: note.path,
-    lastWritten: null,
+    lastContent: null,
     existingTitle: note.title,
   };
 }
@@ -73,24 +78,30 @@ function firstLineOf(doc: PMNode): string {
   return found;
 }
 
+/**
+ * Everything about the frontmatter except `modified`, which `writeSession` stamps
+ * separately — and only once it has already decided a real change happened. Deciding
+ * that by comparing `modified` (computed from wall-clock "now") against `created` would
+ * make two calls with genuinely identical content disagree the moment real time ticks
+ * over a second between them, which is exactly the false "something changed" B10 exists
+ * to rule out: a debounced write followed by a blur-triggered flush with nothing more
+ * typed would then rewrite the file for no reason other than the clock having moved.
+ */
 function buildFrontmatter(
   payload: CapturePayload,
   doc: PMNode,
   createdFallback: Date,
-): Frontmatter | null {
+): Omit<Frontmatter, "modified"> | null {
   const subject = payload.subject.trim();
   const title = subject === "" ? firstLineOf(doc) : subject;
   if (title === "") return null;
 
-  const frontmatter: Frontmatter = {
+  const frontmatter: Omit<Frontmatter, "modified"> = {
     title,
     type: payload.kind,
     created: payload.created === "" ? isoWithOffset(createdFallback) : payload.created,
     source: "manual",
   };
-
-  const modified = isoWithOffset(new Date());
-  if (modified !== frontmatter.created) frontmatter.modified = modified;
 
   // Not gated on the kind any more (B20): where and who apply to any note, and the
   // frontmatter spec always allowed every optional field on either type. An empty field
@@ -177,14 +188,21 @@ export async function writeSession(
   }
 
   const doc = schema.nodeFromJSON(payload.doc);
-  const frontmatter = buildFrontmatter(payload, doc, session.createdAt);
-  if (frontmatter === null) return { ...NOTHING, path: session.path };
+  const base = buildFrontmatter(payload, doc, session.createdAt);
+  if (base === null) return { ...NOTHING, path: session.path };
 
-  const contents = serializeNote({ frontmatter, doc });
-
-  if (session.path !== null && session.lastWritten === contents) {
+  // Decided from content alone, before `modified` enters the picture at all — see the
+  // comment on `buildFrontmatter` for why the order matters.
+  const unstamped = serializeNote({ frontmatter: base, doc });
+  if (session.path !== null && session.lastContent === unstamped) {
     return { ...NOTHING, path: session.path };
   }
+
+  const frontmatter: Frontmatter = { ...base };
+  // The very first write needs no `modified`: it is not an edit of anything. Every
+  // write after that already cleared the identity check above, so it is a real change.
+  if (session.lastContent !== null) frontmatter.modified = isoWithOffset(new Date());
+  const contents = serializeNote({ frontmatter, doc });
 
   if (session.path === null) {
     const inbox = join(vault, INBOX);
@@ -193,7 +211,7 @@ export async function writeSession(
   }
 
   await writeAtomic(session.path, contents);
-  session.lastWritten = contents;
+  session.lastContent = unstamped;
 
   return {
     path: session.path,
