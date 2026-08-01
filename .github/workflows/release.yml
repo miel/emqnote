@@ -73,6 +73,19 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      # electron-builder always writes a blockmap and update-feed yml for the mac zip
+      # target (ArchiveTarget hardcodes isWriteUpdateInfo for it — there's no config
+      # knob to turn it off), but src/main/updater.ts never uses electron-updater's own
+      # Squirrel.Mac path on macOS, only a plain version-check fetch. Both files are
+      # genuinely dead weight on this release, unlike latest.yml and the Windows
+      # .exe.blockmap, which electron-updater actually reads on the Windows path.
+      - name: Remove unused mac update-feed files
+        run: |
+          for name in $(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name' | grep -E '(-mac\.zip\.blockmap$|^latest-mac\.yml$)'); do
+            gh release delete-asset "$GITHUB_REF_NAME" "$name" --yes
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # A draft never appears from GitHub's "latest release" API, which is exactly what
       # both update paths (src/main/updater.ts) read — this is the step that actually
       # makes a release visible to them.
