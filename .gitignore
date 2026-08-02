@@ -5,3 +5,8 @@ release
 build
 *.log
 .DS_Store
+
+# Real .eml samples for building the phase 4 paste/import pipeline against —
+# real correspondence, kept out of this public repo's history on purpose.
+# Fixtures derived from them (trimmed, reviewed) live in test/ instead.
+/test-emails/

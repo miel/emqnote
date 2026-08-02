@@ -13,7 +13,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
-| 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
+| 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
 | 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher), `vault-scan.ts` (a query layer over the index, Map gone), `search-query.ts` (the search-bar query language) and `vault-scan.ts`'s `searchNotes` all exist and are tested for real. Not wired into IPC or a real search bar yet — see "Settled" below. Still missing after that: conflict-copy recognition, orphaned-attachment cleanup. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
@@ -38,16 +38,43 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   logic is implemented and the release pipeline now publishes correctly, but
   nobody has watched a real install pick up an update through the two
   confirmation dialogs. Worth doing once, on the Windows machine.
-- **Phase 4 needs real clipboard samples before the `mso-list` reconstruction
-  can be written for real, not guessed at.** `emqnote --dump-clipboard=<prefix>`
-  is built and tested (flag parsing only — nobody has run it against a live
-  clipboard yet, same sandbox limitation as everything else Electron here).
-  On the Mac, copy from real Outlook and run it once per case, at minimum: a
-  plain paragraph, a nested mixed bullet/numbered list, bold/italic/underline/
-  highlighted text, a table with at least one merged cell, and an inline
-  image. Hand the resulting `.html` files back — they become the fixtures the
-  paste pipeline is built and tested against, the same way `test/corpus/`
-  already works for the serializer.
+- **Real samples arrived (7 `.eml` files, 2 August 2026) and the finding
+  reshapes phase 4 more than it resolves it.** Kept locally at
+  `test-emails/`, gitignored — real correspondence, this repo is public. Only
+  one of the seven is genuine Word/Outlook-authored content (`Generator:
+  Microsoft Word 15` in its own HTML head); the other six are HTML-email-
+  marketing output (Mailchimp/HubSpot-style, 25–119 layout `<table>`s each,
+  zero `mso-list`) — real but useless for the list-reconstruction problem
+  specifically. The one genuine sample, and a second one you composed
+  yourself (`Test-email 1.eml`, sent from `mkb-fonds.nl`), **both use real
+  `<ol>`/`<ul>`/`<li>` tags already, not the flat `<p class=MsoListParagraph>`
+  fake-list pattern `02-technisch-ontwerp.md` §6.3 assumes is "the reason
+  pasting from Outlook goes wrong everywhere."** `mso-list` shows up in the
+  Word-authored one purely as decorative CSS layered on top of otherwise
+  structurally valid HTML. The self-composed one is cleaner still — `Aptos`
+  font, a `data-editing-info` attribute — markers of new Outlook / Outlook on
+  the web, not classic desktop Outlook's Word rendering engine at all. You
+  confirmed these are from **Outlook for Mac**, which you believe shares that
+  same web-based technology, and you don't have access to classic desktop
+  Outlook (Windows) for about two weeks from 2 August 2026 — the one client
+  that might still exhibit the flat-paragraph pattern, unconfirmed either
+  way. **Deferred rather than built against an assumption**: with a real
+  vault-relative existing schema whose own `parseDOM` may already handle
+  `<ol>/<ul>/<li>` correctly, the actual size of "the largest unknown in the
+  project" might be much smaller than assumed — or the flat pattern might
+  still be real and simply absent from every sample gathered so far. Pick
+  this back up once classic Outlook is reachable, either to confirm the
+  flat-paragraph problem is real and needs the full reconstruction the design
+  doc describes, or to confirm it mostly isn't and scope the work down
+  accordingly. `emqnote --dump-clipboard=<prefix>` (built earlier, still
+  untested against a live clipboard) remains the tool for capturing that —
+  a live clipboard paste from an open compose window may still differ from a
+  saved/sent `.eml`'s HTML even on the same client, since those are
+  genuinely different HTML generation paths. `postal-mime` was added as a
+  devDependency while investigating (used interactively to parse the real
+  samples, confirmed to bundle cleanly, correctly placed — unlike
+  `better-sqlite3`, it's pure JS with no native binary); nothing in `src/`
+  imports it yet.
 
 ## Verification still owed
 

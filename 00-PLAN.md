@@ -104,9 +104,14 @@ gebouwd; de app raadt niet en vraagt het. Zie B21 in 05-besluitenlog.md.
    ```
 
    Het resultaat komt in `%LOCALAPPDATA%\emqnote\`, samen met `latency.log`.
-3. **Fase 4** — plakken uit Outlook op niveau, inclusief het reconstrueren van lijsten
-   uit `mso-list`-metadata, en afbeeldingen naar de bijlagemap. Nog niet begonnen, en het
-   grootste onbekende stuk werk in het project.
+3. **Fase 4** — bewust uitgesteld. Zeven echte `.eml`-voorbeelden (2 augustus 2026)
+   laten zien dat het platte `MsoListParagraph`-patroon uit
+   [02-technisch-ontwerp.md](02-technisch-ontwerp.md#63-plak-pijplijn) niet voorkomt in
+   Word-desktop-inhoud die al als echte `<ol>/<ul>/<li>` binnenkomt, noch in wat
+   waarschijnlijk Outlook voor Mac blijkt te zijn (dezelfde webgebaseerde techniek als
+   Outlook op het web). Alleen klassieke desktop Outlook op Windows kan dat nog
+   bevestigen of ontkrachten, en die is twee weken niet beschikbaar vanaf 2 augustus
+   2026. Details en het volledige onderzoek in `TODO.md`.
 
 Voor het volledige, actuele overzicht van open punten (verificatie, housekeeping, wat er
 sinds `v0.1.0` is gebouwd) zie `TODO.md` — dit document blijft bewust op het niveau van
