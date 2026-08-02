@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeIndex, openIndex, type IndexDb } from "../src/main/index-db.js";
-import { facets, notesMatching } from "../src/main/vault-scan.js";
+import { parseSearchQuery } from "../src/main/search-query.js";
+import { facets, notesMatching, searchNotes } from "../src/main/vault-scan.js";
 
 let vault: string;
 let db: IndexDb;
@@ -11,13 +12,13 @@ let db: IndexDb;
 function note(
   folder: string,
   name: string,
-  options: { tags?: string; attendees?: string; body?: string } = {},
+  options: { tags?: string; attendees?: string; body?: string; created?: string } = {},
 ): void {
   const front = [
     "---",
     `title: ${name}`,
     options.attendees === undefined ? "type: quick" : "type: meeting",
-    "created: 2026-07-26T09:00:00+02:00",
+    `created: ${options.created ?? "2026-07-26T09:00:00+02:00"}`,
     ...(options.attendees === undefined ? [] : [`attendees: [${options.attendees}]`]),
     ...(options.tags === undefined ? [] : [`tags: [${options.tags}]`]),
     "---",
@@ -212,5 +213,98 @@ describe("keeping up with changes", () => {
     note("00 Inbox", "Een", { tags: "gloednieuw" });
 
     expect((await facets(vault, db)).tags.map((t) => t.name)).toEqual(["gloednieuw"]);
+  });
+});
+
+describe("running a search-bar query", () => {
+  it("matches free text against the body", async () => {
+    note("00 Inbox", "Kickoff", { body: "Een belangrijke afspraak met de klant." });
+    note("00 Inbox", "Onderhoud", { body: "Niets bijzonders." });
+
+    const found = await searchNotes(vault, db, parseSearchQuery("belangrijke"));
+
+    expect(found.map((n) => n.title)).toEqual(["Kickoff"]);
+  });
+
+  it("combines free text with a tag filter", async () => {
+    note("00 Inbox", "Een", { tags: "klantx", body: "Kickoff voor het project." });
+    note("00 Inbox", "Twee", { tags: "klanty", body: "Kickoff voor iets anders." });
+
+    const found = await searchNotes(vault, db, parseSearchQuery("kickoff tag:klantx"));
+
+    expect(found.map((n) => n.title)).toEqual(["Een"]);
+  });
+
+  it("filters by type alone, with no free text to rank by", async () => {
+    note("00 Inbox", "Snel", {});
+    note("00 Inbox", "Overleg", { attendees: "Jan de Vries" });
+
+    const found = await searchNotes(vault, db, parseSearchQuery("type:meeting"));
+
+    expect(found.map((n) => n.title)).toEqual(["Overleg"]);
+  });
+
+  it("filters by attendee, case- and accent-insensitively", async () => {
+    note("00 Inbox", "Een", { attendees: "Jan de Vries" });
+    note("00 Inbox", "Twee", { attendees: "Marieke" });
+
+    const found = await searchNotes(vault, db, parseSearchQuery('attendee:"jan de vries"'));
+
+    expect(found.map((n) => n.title)).toEqual(["Een"]);
+  });
+
+  it("filters by a date range on the created date, inclusive of both ends", async () => {
+    note("00 Inbox", "Te vroeg", { created: "2025-12-31T09:00:00+02:00" });
+    note("00 Inbox", "Op de grens vroeg", { created: "2026-01-01T09:00:00+02:00" });
+    note("00 Inbox", "Ertussenin", { created: "2026-06-15T09:00:00+02:00" });
+    note("00 Inbox", "Op de grens laat", { created: "2026-12-31T09:00:00+02:00" });
+    note("00 Inbox", "Te laat", { created: "2027-01-01T09:00:00+02:00" });
+
+    const found = await searchNotes(
+      vault,
+      db,
+      parseSearchQuery("after:2026-01-01 before:2026-12-31"),
+    );
+
+    expect(found.map((n) => n.title).sort()).toEqual([
+      "Ertussenin",
+      "Op de grens laat",
+      "Op de grens vroeg",
+    ]);
+  });
+
+  it("restricts to a folder scope and its subfolders when given one", async () => {
+    note("00 Inbox", "Binnen");
+    note("10 Projects/Klant X", "Ook binnen");
+    note("20 Areas", "Buiten");
+
+    const found = await searchNotes(vault, db, parseSearchQuery(""), { scope: "10 Projects" });
+
+    expect(found.map((n) => n.title).sort()).toEqual(["Ook binnen"]);
+  });
+
+  it("excludes a given path, same as facets and notesMatching do", async () => {
+    note("00 Inbox", "Een", { tags: "klantx" });
+    note("00 Inbox", "Twee", { tags: "klantx" });
+
+    const found = await searchNotes(vault, db, parseSearchQuery("tag:klantx"), {
+      excludePath: "00 Inbox/Twee.md",
+    });
+
+    expect(found.map((n) => n.title)).toEqual(["Een"]);
+  });
+
+  it("returns every note for a completely blank query, same rule as a filter with no free text", async () => {
+    // Not a special case: "no free text" always falls back to the full note set for
+    // filters to narrow, so an entirely blank query (no text, no filters) inherits
+    // "everything" from the same rule the type/tag/attendee-only tests above rely on,
+    // rather than a separate "blank means nothing" carve-out that would make clearing
+    // the last filter jump straight from "some notes" to zero instead of to "all notes".
+    note("00 Inbox", "Een");
+    note("00 Inbox", "Twee");
+
+    const found = await searchNotes(vault, db, parseSearchQuery(""));
+
+    expect(found.map((n) => n.title).sort()).toEqual(["Een", "Twee"]);
   });
 });

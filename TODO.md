@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
-| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher) and `vault-scan.ts` (a query layer over the index, Map gone) all exist and are wired into `index.ts`, tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). Still missing: the search bar's query parser, conflict-copy recognition, orphaned-attachment cleanup — see "Settled" below. |
+| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher), `vault-scan.ts` (a query layer over the index, Map gone), `search-query.ts` (the search-bar query language) and `vault-scan.ts`'s `searchNotes` all exist and are tested for real. Not wired into IPC or a real search bar yet — see "Settled" below. Still missing after that: conflict-copy recognition, orphaned-attachment cleanup. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -296,9 +296,38 @@ guessing at a delay. This is the one file in the suite that costs real
 wall-clock time — flagged in `CLAUDE.md`'s Tests section, since that
 document is explicit about the suite needing to stay fast.
 
-Next: the search bar's own query parser (`type:`/`attendee:`/`tag:`/date
-range) in front of `search()`, then conflict-copy recognition and
-orphaned-attachment cleanup — see §5.2/§6.5 in `02-technisch-ontwerp.md`.
+**The search bar's own query language — `02-technisch-ontwerp.md` §7.3 — now
+exists, still with no search bar to type it into.** `src/main/search-query.ts`'s
+`parseSearchQuery(input)` pulls `type:`, `tag:`, `attendee:"…"`, `after:` and
+`before:` out of the box text and leaves the rest as free text; an
+unrecognised key or an invalid value (`type:archived`, `after:volgende-week`)
+falls back to being treated as free text rather than erroring, since a search
+box has no error state to show. One deliberate translation from the design
+doc: it spells the date filters `na:`/`voor:`, Dutch, predating the
+English-UI decision in commit `c24d82b` — this implements `after:`/`before:`
+instead, the same kind of divergence B19 already models, not an oversight.
+`vault-scan.ts`'s new `searchNotes(vault, db, query, { scope?, excludePath? })`
+runs a parsed query against the index: free text goes through `search()`'s
+FTS5 ranking and keeps that order, a filters-only query falls back to
+`allNotes`' alphabetical order, and a completely blank query returns
+everything rather than being special-cased to nothing — clearing the last
+filter should feel like "back to everything", not a cliff down to zero.
+`after`/`before` compare against `created`'s date portion only, not the full
+timestamp-with-offset string, which is spelled out in the function's own
+comment since the wrong version of that comparison silently does something
+that looks right and is not. `scope` (the folder-vs-global switch) is
+implemented and tested but nothing passes one yet. 30 new tests between the
+two modules (16 for the parser's own edge cases, the rest for the combining
+function), all passing on the first real run against the actual index.
+
+Not done: no `IPC.librarySearch`-shaped channel, no renderer search box.
+Building those is real UI work — a text input, debounced typing, swapping
+the note list's contents — not a small addition to this pass.
+
+Next: conflict-copy recognition and orphaned-attachment cleanup — see
+§5.2/§6.5 in `02-technisch-ontwerp.md`. Wiring the search bar itself into
+the library window is also still open, whenever that becomes the priority
+over the rest of phase 5.
 
 ## Unexplained, worth settling
 

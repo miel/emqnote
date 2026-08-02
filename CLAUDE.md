@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 387 tests, a couple of seconds
+npm test               # vitest run — 411 tests, a couple of seconds
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -143,7 +143,7 @@ Phases 0–3 are done: byte-identical markdown round trip, resident shell, the e
 
 Ten items from real use landed after that, before the paste work: checkbox affordances (the format always supported them, nothing could *make* one), folder rename (the phase-4 item that was never built), a shortcut registry with an in-app help sheet, a chooser for the vault location, and a group of header and list refinements. Two of them are recorded as decisions: **B20** — location and people belong to every note, `type: meeting` survives as a label — and **B21** — changing vault restarts the app.
 
-Tags and People filtering landed after phase 3 and pulled one piece of phase 5 forward. Phase 5's index is now real: `src/main/index-db.ts` holds the SQLite/FTS5 schema, `index-scan.ts` is the full-scan builder, and `index-watch.ts` wraps `chokidar` for incremental reindexing after that — `src/main/vault-scan.ts` used to be the in-memory cache in front of the filesystem and is now a thin query layer over that index instead, its `facets`/`notesMatching` interface unchanged by the swap. Folder browsing still bypasses the index entirely, straight from disk, so opening a folder never waits on a scan. Not yet built: the search bar's own query parser, conflict-copy recognition, and orphaned-attachment cleanup.
+Tags and People filtering landed after phase 3 and pulled one piece of phase 5 forward. Phase 5's index is now real: `src/main/index-db.ts` holds the SQLite/FTS5 schema, `index-scan.ts` is the full-scan builder, and `index-watch.ts` wraps `chokidar` for incremental reindexing after that — `src/main/vault-scan.ts` used to be the in-memory cache in front of the filesystem and is now a thin query layer over that index instead, its `facets`/`notesMatching` interface unchanged by the swap. Folder browsing still bypasses the index entirely, straight from disk, so opening a folder never waits on a scan. `src/main/search-query.ts` parses the search bar's own filter language (`type:`, `tag:`, `attendee:"…"`, `after:`/`before:`) and `vault-scan.ts`'s `searchNotes` runs it against the index — built and tested, but there is no IPC channel or renderer search box yet for anything to call it from. Not yet built: conflict-copy recognition and orphaned-attachment cleanup.
 
 ## The documents
 

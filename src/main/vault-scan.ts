@@ -1,7 +1,8 @@
 import { foldTag } from "../markdown/index.js";
 import type { Facet, Facets, NoteSummary, Selection } from "../shared/vault-types.js";
-import { allNotes, type IndexDb, type NoteMeta } from "./index-db.js";
+import { allNotes, getNote, search, type IndexDb, type NoteMeta } from "./index-db.js";
 import { fullScan } from "./index-scan.js";
+import type { ParsedQuery } from "./search-query.js";
 import { readNotesIn } from "./vault-io.js";
 
 /**
@@ -125,4 +126,77 @@ async function notesFor(vault: string, db: IndexDb, selection: Selection): Promi
   return allNotes(db)
     .map(toSummary)
     .filter((note) => note[field].some((value) => foldTag(value) === wanted));
+}
+
+/**
+ * Runs a parsed search-bar query (`search-query.ts`) against the index.
+ *
+ * Free text goes through `search()`'s FTS5 ranking and that order is kept; a query with
+ * only filters and no free text (`tag:klantx` on its own) has no relevance signal to
+ * rank by, so it falls back to `allNotes`' alphabetical order instead of an arbitrary
+ * one. A completely blank query — no text, no filters — inherits "everything" from that
+ * same fallback rather than being special-cased to return nothing: the alternative would
+ * make clearing the last filter jump straight from "some notes" to zero instead of to
+ * "all notes", which is the wrong direction for a box that is otherwise always narrowing.
+ * `after`/`before` compare against the *date* portion of `created` only — `created`
+ * itself carries a time and a UTC offset (never bare `Z`, see `CLAUDE.md`), and comparing
+ * that string against a bare `YYYY-MM-DD` bound directly is not the same comparison a
+ * human means by "after this date": a note created at `2026-01-01T09:00:00+02:00` reads
+ * as lexicographically *greater than* the bound `"2026-01-01"` only because it is a
+ * longer string with the same prefix, not because of anything about actual dates — the
+ * comparison has to happen on equal-length date strings to mean what it looks like it
+ * means.
+ *
+ * `scope`, when given, restricts to a folder and everything nested under it — the
+ * "current folder only" switch `02-technisch-ontwerp.md` §7.3 describes; nothing calls
+ * this with one yet, since the search bar itself has not been built.
+ */
+export async function searchNotes(
+  vault: string,
+  db: IndexDb,
+  query: ParsedQuery,
+  options: { scope?: string; excludePath?: string } = {},
+): Promise<NoteSummary[]> {
+  await ensureScanned(vault, db);
+  if (!available) return [];
+
+  const candidates: NoteMeta[] =
+    query.text === ""
+      ? allNotes(db)
+      : search(db, query.text)
+          .map((path) => getNote(db, path))
+          .filter((note): note is NoteMeta => note !== null);
+
+  const wantedTag = query.tag === null ? null : foldTag(query.tag);
+  const wantedAttendee = query.attendee === null ? null : foldTag(query.attendee);
+
+  const filtered = candidates.filter((note) => {
+    if (query.type !== null && note.type !== query.type) return false;
+    if (wantedTag !== null && !note.tags.some((tag) => foldTag(tag) === wantedTag)) return false;
+    if (
+      wantedAttendee !== null &&
+      !note.attendees.some((attendee) => foldTag(attendee) === wantedAttendee)
+    ) {
+      return false;
+    }
+
+    const createdDate = note.created.slice(0, 10);
+    if (query.after !== null && createdDate < query.after) return false;
+    if (query.before !== null && createdDate > query.before) return false;
+
+    // "" is the vault root, i.e. no restriction — a note's path never starts with "/",
+    // so without this check every note would fail the prefix test below instead.
+    if (
+      options.scope !== undefined &&
+      options.scope !== "" &&
+      !note.path.startsWith(`${options.scope}/`)
+    ) {
+      return false;
+    }
+    if (note.path === options.excludePath) return false;
+
+    return true;
+  });
+
+  return filtered.map(toSummary);
 }
