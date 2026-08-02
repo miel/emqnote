@@ -60,7 +60,7 @@ npm run pack:mac   # verpakte app (zip) in release/
 npm run pack:win   # installer in release/, sinds B22
 ```
 
-`npm test` draait de volledige suite van 411 tests over alle 23 testbestanden. Tot
+`npm test` draait de volledige suite van 423 tests over alle 24 testbestanden. Tot
 2 augustus 2026 liep deze sandbox op Node 18 — te oud voor `jsdom` (ESM) en voor
 `better-sqlite3` (segfault, ≥22 vereist) — waardoor `schema-dom.test.ts` en
 `checkbox-widget.test.ts` hier niet laadden. Een `nvm`-install van Node 24 (naast het

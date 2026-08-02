@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
-| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher), `vault-scan.ts` (a query layer over the index, Map gone), `search-query.ts` (the search-bar query language) and `vault-scan.ts`'s `searchNotes` all exist and are tested for real. Not wired into IPC or a real search bar yet — see "Settled" below. Still missing after that: conflict-copy recognition, orphaned-attachment cleanup. |
+| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher), `vault-scan.ts` (a query layer over the index, Map gone), `search-query.ts` + `searchNotes` (the search-bar query language) and `conflicts.ts` (OneDrive conflict-copy recognition) all exist and are tested for real. None of it is wired into IPC or any UI (search box, conflict banner) yet — see "Settled" below. Still missing after that: orphaned-attachment cleanup. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -351,10 +351,41 @@ Not done: no `IPC.librarySearch`-shaped channel, no renderer search box.
 Building those is real UI work — a text input, debounced typing, swapping
 the note list's contents — not a small addition to this pass.
 
-Next: conflict-copy recognition and orphaned-attachment cleanup — see
-§5.2/§6.5 in `02-technisch-ontwerp.md`. Wiring the search bar itself into
-the library window is also still open, whenever that becomes the priority
-over the rest of phase 5.
+**Conflict-copy recognition (`02-technisch-ontwerp.md` §5.2) now exists
+too, narrower than the design doc's own aside about it.** `src/main/
+conflicts.ts`'s `findConflictCopies(paths)` pairs a machine-suffixed
+OneDrive conflict copy (`Kickoff project Alpha-LAPTOP-ABC123.md`) with its
+original from a plain list of vault-relative paths — no file reads, no
+hashing, filenames only. Deliberately does *not* treat a bare ` (N)`
+suffix as conflict evidence on its own, even though the design doc
+mentions that shape too: `filename.ts`'s `uniquePath` already produces
+exactly `Title (2).md` for a completely ordinary reason — two notes
+independently created with the same title in the same minute — and
+flagging that as "edited on two machines" would be a false alarm over
+routine use of the app's own disambiguation. The machine-name suffix has
+no such ambiguity; nothing in this app ever appends one. Matching works by
+trying progressively larger hyphen-segment removals from a path's stem and
+stopping at the first known file that results — smallest removal first,
+so `Kickoff project Alpha-LAPTOP-ABC123.md` pairs with `Kickoff project
+Alpha.md` rather than over-stripping to something shorter that also
+happens to exist. Still an acknowledged heuristic, not a certainty, and
+says so in its own comment: a genuinely hyphenated title sitting next to
+its own unhyphenated prefix (`Weekly Report-Draft.md` beside `Weekly
+Report.md`) reads as a false positive by the same rule that finds a real
+conflict — the design doc's own "*herkent* dat patroon" (recognises the
+pattern) already concedes this, not a gap introduced here. 12 tests,
+including that acknowledged false positive as its own test rather than
+leaving it undocumented.
+
+Not wired in: nothing calls this from a scan or the watcher yet, there is
+no banner, no diff, no "keep this / keep that / merge" UI — `04-bouwplan.md`
+describes all three as part of this same acceptance criterion, and none of
+them is a small addition to what exists now.
+
+Next: orphaned-attachment cleanup — see §6.5 in `02-technisch-ontwerp.md`.
+Wiring the search bar and the conflict banner into the library window is
+also still open, whenever UI work becomes the priority over the rest of
+phase 5's backend.
 
 ## Unexplained, worth settling
 
