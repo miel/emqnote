@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
-| 5 — index and search | Not started. `vault-scan.ts` is an in-memory stand-in shaped like the `notes` table SQLite will build, so the Map is replaced and not the interface. |
+| 5 — index and search | Started. `src/main/index-db.ts` holds the SQLite/FTS5 index itself, tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). `vault-scan.ts`'s Map is still what's actually wired up; nothing reads from the new index yet — see "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -186,6 +186,34 @@ the last `library:refresh`, and pushes a `locked` refresh back to the library
 when it catches a save that lands after the note above it. Covered by new
 tests in `capture-writer.test.ts`, `vault-io.test.ts` and `vault-scan.test.ts`;
 not yet seen on screen for the same reason as the item above.
+
+**Phase 5's SQLite index exists as its own module, tested against a real
+database, not wired in yet.** `src/main/index-db.ts` holds the schema
+(`notes` + an FTS5 `notes_fts`), `upsertNote`/`deleteNote`/`getNote`/
+`allNotes`/`needsRefresh`, and free-text `search()`. Two deliberate
+departures from the sketch in `02-technisch-ontwerp.md` §7.1, both explained
+in the module's own comments: `notes_fts` is a plain FTS5 table keyed on an
+`UNINDEXED path` column rather than the `content=''` "contentless" form the
+doc sketches, because a contentless table needs the *old* column values
+handed back to it on every delete/update and syncing that by hand against a
+second table's rowid space bought nothing at this scale; and `search()`
+quotes and prefix-matches each word of the query separately
+(`"word1"* "word2"*`, FTS5's implicit AND) rather than treating the whole
+query as one phrase, verified against a real FTS5 table — a whole-query
+phrase match requires the words to appear in that exact order, which is
+wrong for a type-ahead box. `better-sqlite3` is now a real `dependencies`
+entry (see the note in `CLAUDE.md`); it needed nothing beyond `npm install`
+to work here — it ships prebuilt N-API binaries for every platform in the
+package itself, no `node-gyp`/`electron-rebuild` step required, which is
+also presumably why it was the anticipated choice over Tauri's Rust
+equivalent in B2. What's still open: nothing in `vault-scan.ts` or `index.ts`
+reads from this yet — the Map is still what's live. Next: a full-scan
+builder that walks the vault the way `vault-scan.ts` already does and calls
+`upsertNote` per file, then swapping `vault-scan.ts`'s Map for reads against
+this index, then the `chokidar` watcher, then the search bar's own query
+parser (`type:`/`attendee:`/`tag:`/date range) in front of `search()`, then
+conflict-copy recognition and orphaned-attachment cleanup — see §7.2/§5.2/§6.5
+in `02-technisch-ontwerp.md`.
 
 ## Unexplained, worth settling
 
