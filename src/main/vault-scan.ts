@@ -189,11 +189,13 @@ function ranked(seen: Map<string, Facet>): Facet[] {
   );
 }
 
-export async function facets(vault: string): Promise<Facets> {
+export async function facets(vault: string, excludePath?: string): Promise<Facets> {
   await ensureScanned(vault);
   if (!available) return { tags: [], people: [], available: false };
 
-  const notes = [...cache.values()].map((entry) => entry.note);
+  const notes = [...cache.values()]
+    .map((entry) => entry.note)
+    .filter((note) => note.path !== excludePath);
   const tags = new Map<string, Facet>();
   const people = new Map<string, Facet>();
 
@@ -218,7 +220,13 @@ export async function facets(vault: string): Promise<Facets> {
 export async function notesMatching(
   vault: string,
   selection: Selection,
+  excludePath?: string,
 ): Promise<NoteSummary[]> {
+  const notes = await notesFor(vault, selection);
+  return excludePath === undefined ? notes : notes.filter((note) => note.path !== excludePath);
+}
+
+async function notesFor(vault: string, selection: Selection): Promise<NoteSummary[]> {
   if (selection.kind === "folder") return readNotesIn(vault, selection.path);
 
   await ensureScanned(vault);

@@ -34,23 +34,37 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 
 | Fase | Stand |
 |---|---|
-| −1 Go/no-go | Ongetekende Electron-app start op de werkmachine |
-| 0 Markdown-rondgang | Bytegelijk in beide richtingen, 25 corpusbestanden |
+| −1 Go/no-go | Ongetekende Electron-app start op de werkmachine — bevestigd |
+| 0 Markdown-rondgang | Bytegelijk in beide richtingen, 27 corpusbestanden |
 | 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
 | 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
-| 3 Hoofdvenster | Mappenboom, notitielijst, lezen en bewerken, verplaatsen |
-| 4 Plakken en afbeeldingen | Volgende |
+| 3 Hoofdvenster | Mappenboom, notitielijst, lezen en bewerken, verplaatsen, prullenbak — op slepen in de boom na, dat werk-item is nog niet gebouwd |
+| 4 Plakken en afbeeldingen | Nog niet begonnen — de volgende fase, en het grootste onbekende stuk werk |
+| 5 Zoeken en synchronisatie | Gedeeltelijk vooruitgeschoven: tag-/attendee-filters en de scan-voorloper (`vault-scan.ts`) bestaan; de SQLite-index, watcher en conflictdetectie zelf nog niet |
+| 6 E-mail | Nog niet begonnen |
 
-Gemeten latency van de verpakte macOS-app mét editor: **p50 26 ms, p95 43 ms,
-max 58 ms** over 30 rondes, tegen een budget van 80 ms. Op Windows ligt het hoger —
-de eerste vertoning na het starten kostte daar 112 ms, daarna 77 en 52 ms.
+Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.2.1`.
+
+Actuele hotkey→cursor-metingen staan in `CLAUDE.md`, met machine en beeldscherm erbij —
+dat hoort erbij, een getal zonder die twee betekent niets. Laatste stand: Mac mini M4 op
+een 60 Hz scherm, p50 27–31 ms, p95 36–45 ms, tegen een budget van 80 ms — de helft van
+de fase-3-meting op dezelfde machine, en nog niet verklaard waarom. Windows heeft nog
+geen betrouwbare reeks, zie punt 2 hieronder.
 
 ```bash
-npm test          # 178 tests
+npm test           # vitest run
 npm run typecheck
-npm run dev       # draaien tijdens ontwikkelen
-npm run pack:mac  # verpakte app in release/
+npm run dev        # draaien tijdens ontwikkelen
+npm run pack:mac   # verpakte app (zip) in release/
+npm run pack:win   # installer in release/, sinds B22
 ```
+
+`npm test` draait 325 tests over 16 van de 18 testbestanden in deze sandbox; de
+overige twee (`schema-dom.test.ts`, `checkbox-widget.test.ts`) laden hier niet — jsdom
+vereist ESM en deze omgeving heeft Node 18, ouder dan dat toestaat. Geen bekend
+codeprobleem, alleen een sandbox-beperking; op de echte ontwikkelmachine draait de
+volledige suite.
 
 Twee handige haakjes:
 
@@ -71,13 +85,15 @@ een exitcode, dus hij kan zo in CI.
 
 ## Wat er nu moet gebeuren
 
-1. **Kiezen op welke OneDrive de vault komt.** Op de Mac Mini staan twee zakelijke
-   tenants — Futureproof Group en MKB Fonds — plus gedeelde bibliotheken. De app raadt
-   niet en vraagt het bij de eerste start.
-2. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365, voor het
+**Klaar sinds de vorige versie van dit plan:** de vault-keuze bij eerste start — welke
+OneDrive-tenant, van de twee zakelijke plus gedeelde bibliotheken op de Mac Mini — is
+gebouwd; de app raadt niet en vraagt het. Zie B21 in 05-besluitenlog.md.
+
+1. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365, voor het
    e-mail-vangnet in fase 6. Terugval staat klaar, dus dit blokkeert niets.
-3. **Een echte serie metingen op Windows.** Drie regels uit het log is te weinig om
-   iets van te vinden. Draai de zelftest daar en lees `selftest-result.json`:
+2. **Een echte serie metingen op Windows.** Drie regels uit het log is nog steeds te
+   weinig om iets van te vinden — dat punt is niet opgelost sinds het voor het eerst is
+   genoteerd. Draai de zelftest daar en lees `selftest-result.json`:
 
    ```
    set EMQNOTE_SELFTEST=50
@@ -86,8 +102,13 @@ een exitcode, dus hij kan zo in CI.
    ```
 
    Het resultaat komt in `%LOCALAPPDATA%\emqnote\`, samen met `latency.log`.
-4. **Fase 3** — plakken uit Outlook op niveau, inclusief het reconstrueren van lijsten
-   uit `mso-list`-metadata, en afbeeldingen naar de bijlagemap.
+3. **Fase 4** — plakken uit Outlook op niveau, inclusief het reconstrueren van lijsten
+   uit `mso-list`-metadata, en afbeeldingen naar de bijlagemap. Nog niet begonnen, en het
+   grootste onbekende stuk werk in het project.
+
+Voor het volledige, actuele overzicht van open punten (verificatie, housekeeping, wat er
+sinds `v0.1.0` is gebouwd) zie `TODO.md` — dit document blijft bewust op het niveau van
+de fasen, niet de losse taken.
 
 ## Wat expliciet géén onderdeel is
 

@@ -210,7 +210,11 @@ export function Library(): React.ReactElement {
       void loadNotes(selectionRef.current);
       refreshFacets();
     }
-  }, [loadNotes, refreshFacets]);
+    // The local `editable` flag was stale: the capture window claimed this exact note
+    // between our last refresh and this save landing. Catch up immediately rather than
+    // let further keystrokes queue up saves that will never land.
+    if (result.locked) void refreshEditable();
+  }, [loadNotes, refreshFacets, refreshEditable]);
 
   const openNote = useCallback(
     async (path: string) => {

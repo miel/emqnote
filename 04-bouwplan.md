@@ -3,6 +3,11 @@
 Elke fase heeft **acceptatiecriteria**. Een fase is af als die aantoonbaar gehaald zijn,
 niet als de code er staat. Fasen 0 tot en met 6 vormen v1.
 
+**Fase 3 en 4 zijn in de praktijk omgewisseld** ten opzichte van hoe ze hier ooit gepland
+stonden: het hoofdvenster ging als eerste in productie, plakken en afbeeldingen ligt nog
+open. De nummering hieronder volgt wat er echt is gebeurd, niet de oorspronkelijke
+volgorde.
+
 ---
 
 ## Fase −1 — Go/no-go
@@ -45,7 +50,7 @@ serializer en tests.
 5. Rondgang-test die op **bytegelijkheid** valt, niet op "ziet er hetzelfde uit"
 
 **Waarom dit eerst.** Alles wat later komt — de editor, plakken, e-mail-import — schrijft
-via deze serializer. Blijkt in fase 3 dat geneste gemengde lijsten niet stabiel
+via deze serializer. Blijkt in fase 4 dat geneste gemengde lijsten niet stabiel
 terugkomen, dan moet het schema om en is alles wat erop leunde weggegooid werk.
 
 **Acceptatie:**
@@ -107,7 +112,33 @@ zit, is dat een architectuurprobleem — niet iets wat je later "optimaliseert".
 
 ---
 
-## Fase 3 — Plakken en afbeeldingen
+## Fase 3 — Hoofdvenster
+
+**Werk:**
+
+- Drie panelen: mappenboom, notitielijst, editor
+- Notitielijst sorteerbaar op gewijzigd / gemaakt / titel
+- "Verplaats naar…" met fuzzy zoeken over de hele boom
+- Slepen in de boom
+- Hernoemen: titel in frontmatter én bestandsnaam
+- Verwijderen naar prullenbak, nooit definitief
+- Mappen aanmaken en hernoemen
+- Kopblok ook in het hoofdvenster: datum, tags, en bij een vergadering locatie en
+  aanwezigen. Zelfde component als in het capture-venster, zonder onderwerpveld — de
+  titel hoort bij "Hernoemen", dat hernoemt ook het bestand — en zonder de
+  vergadering/snel-schakelaar, omdat omzetten naar snel de locatie en aanwezigen weggooit
+
+**Acceptatie:**
+- Notitie openen uit de lijst **< 50 ms**
+- Een notitie verplaatsen naar een map vier niveaus diep kost drie toetsaanslagen plus
+  Enter
+- Verplaatsen breekt geen enkele afbeeldingsverwijzing
+- Een notitie openen en weer sluiten zonder te typen **wijzigt het bestand niet** —
+  te controleren met `mtime`
+
+---
+
+## Fase 4 — Plakken en afbeeldingen
 
 De pijplijn uit [02-technisch-ontwerp.md §6.3](02-technisch-ontwerp.md#63-plak-pijplijn).
 
@@ -132,32 +163,6 @@ repo; ze dienen ook fase 6.
   en een werkende `![[…]]`-verwijzing
 - Bij twijfel over de nesting liever een platte lijst dan een verkeerd geneste — dat is
   te repareren, het omgekeerde niet
-
----
-
-## Fase 4 — Hoofdvenster
-
-**Werk:**
-
-- Drie panelen: mappenboom, notitielijst, editor
-- Notitielijst sorteerbaar op gewijzigd / gemaakt / titel
-- "Verplaats naar…" met fuzzy zoeken over de hele boom
-- Slepen in de boom
-- Hernoemen: titel in frontmatter én bestandsnaam
-- Verwijderen naar prullenbak, nooit definitief
-- Mappen aanmaken en hernoemen
-- Kopblok ook in het hoofdvenster: datum, tags, en bij een vergadering locatie en
-  aanwezigen. Zelfde component als in het capture-venster, zonder onderwerpveld — de
-  titel hoort bij "Hernoemen", dat hernoemt ook het bestand — en zonder de
-  vergadering/snel-schakelaar, omdat omzetten naar snel de locatie en aanwezigen weggooit
-
-**Acceptatie:**
-- Notitie openen uit de lijst **< 50 ms**
-- Een notitie verplaatsen naar een map vier niveaus diep kost drie toetsaanslagen plus
-  Enter
-- Verplaatsen breekt geen enkele afbeeldingsverwijzing
-- Een notitie openen en weer sluiten zonder te typen **wijzigt het bestand niet** —
-  te controleren met `mtime`
 
 ---
 
@@ -195,7 +200,7 @@ drieduizend notities, warm 15 ms.
 
 **Werk:**
 
-- Verwerking van `00 Inbox/_incoming/`: `postal-mime`, dan de plak-pijplijn uit fase 3
+- Verwerking van `00 Inbox/_incoming/`: `postal-mime`, dan de plak-pijplijn uit fase 4
 - Bijlagen naar `_attachments/`, `cid:`-afbeeldingen omgezet
 - Power Automate-flow inrichten (of de Outlook-macro als terugval)
 - Importmodus voor de bulkmigratie naar `90 Archive/Mail-import/JJJJ/`
@@ -203,7 +208,7 @@ drieduizend notities, warm 15 ms.
 
 **Acceptatie:**
 - Een mail naar jezelf staat binnen twee minuten als nette notitie in de Inbox
-- De tien testmails uit fase 3 leveren via de e-mailroute hetzelfde resultaat op als via
+- De tien testmails uit fase 4 leveren via de e-mailroute hetzelfde resultaat op als via
   plakken — bewijs dat de pijplijn werkelijk gedeeld is
 - De volledige historie is geïmporteerd, doorzoekbaar, met de oorspronkelijke datums
 - Geen enkele mail is stilzwijgend overgeslagen; wat niet lukt komt in een foutenrapport

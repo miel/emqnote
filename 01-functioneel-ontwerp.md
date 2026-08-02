@@ -205,7 +205,7 @@ bibliotheekvenster onderin het linkerpaneel. Die lijst wordt gegenereerd uit
 `src/shared/shortcuts.ts`, hetzelfde bestand waaruit de toetsenbindingen zélf worden
 opgebouwd — dus hij kan niet verouderen. Deze tabel stond hier eerder wel en was dat
 inmiddels: hij noemde `Ctrl+Alt+1/2/3` zonder de `Ctrl+1..6` die er werkelijk zijn, liet
-een handvol toetsen weg, en noemde er één die pas in fase 3 bestaat.
+een handvol toetsen weg, en noemde er één die pas in fase 4 bestaat.
 
 Wat hier blijft staan zijn de drie keuzes die *ontwerp* zijn en geen opsomming:
 

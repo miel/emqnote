@@ -1,5 +1,5 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
 import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
@@ -122,6 +122,10 @@ function buildFrontmatter(
   return frontmatter;
 }
 
+function toPosix(path: string): string {
+  return path.split(sep).join("/");
+}
+
 /** Atomic: temporary file first, then rename. OneDrive never sees half a note. */
 async function writeAtomic(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
@@ -240,9 +244,36 @@ export class CaptureWriter {
     this.timer = setTimeout(() => void this.flush(), WRITE_DEBOUNCE_MS);
   }
 
-  /** The path of the note currently claimed by this session, if any. */
+  /**
+   * The path of the note currently claimed by this session, if any — vault-relative,
+   * matching `NoteSummary.path`/`OpenedNote.path` everywhere else this gets compared
+   * against. `session.path` itself is not: `writeSession` stores it absolute for a
+   * brand-new note (built from `uniquePath` against the vault) and relative for one
+   * loaded from an existing note (echoing `OpenedNote.path` as-is, see `loadSession`).
+   * Comparing the raw field against a library note path silently never matched for a new
+   * note — the exact bug this normalises away.
+   */
   activePath(): string | null {
-    return this.session.path;
+    return this.relativePath(this.session.path);
+  }
+
+  /**
+   * The path of a brand-new note that has not yet been committed — the window has not
+   * been closed or Ctrl+Enter'd. Null once the session was loaded from an existing note
+   * (that one stays visible in the library, just locked, per `activePath`), or before the
+   * first write has picked a path at all.
+   */
+  uncommittedNewPath(): string | null {
+    return this.session.existingTitle === null ? this.relativePath(this.session.path) : null;
+  }
+
+  private relativePath(path: string | null): string | null {
+    if (path === null) return null;
+    // Only a brand-new session's path needs converting; a loaded session's is already
+    // vault-relative (see the comment on `activePath`).
+    if (this.session.existingTitle !== null) return path;
+    const vault = this.vault();
+    return vault === null ? null : toPosix(relative(vault, path));
   }
 
   /**

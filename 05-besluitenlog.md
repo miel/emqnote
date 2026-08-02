@@ -119,7 +119,7 @@ produceert een geplakte lijst subtiel andere inspringing dan een getypte, en bre
 rondgang bij precies de constructies die het vaakst voorkomen. Eén pad, één testsuite.
 
 **Gevolg dat het besluit rechtvaardigt:** de e-mail-import in fase 6 is bijna gratis,
-want het is de plak-pijplijn uit fase 3 met een `.eml`-parser ervoor.
+want het is de plak-pijplijn uit fase 4 met een `.eml`-parser ervoor.
 
 ---
 
@@ -299,7 +299,7 @@ de Mac.
 
 **Prijs:** wat TipTap kant-en-klaar levert — bubble menus, een tabel-extensie,
 samenwerkingshooks — moet hier zelf. Voor tabellen betekent dat `prosemirror-tables`,
-en dat komt pas in fase 3 aan de orde bij het plakken.
+en dat komt pas in fase 4 aan de orde bij het plakken.
 
 ---
 
@@ -349,7 +349,7 @@ een tag-node en scant gewoon. In het schema zetten kost een mdast-uitbreiding, e
 scanner in `normalize-phrasing.ts`, een tak in `from-mdast.ts` en in `to-mdast.ts`, een
 stringify-handler, `toDOM`/`parseDOM`, en een plek in `MARK_NESTING_ORDER`. Het verandert
 bovendien de vorm van `CapturePayload.doc`, en dat is precies het contract waar het
-plakwerk van fase 3 tegenaan geschreven gaat worden.
+plakwerk van fase 4 tegenaan geschreven gaat worden.
 
 Het zou de rondgang ook niet béter maken maar slechter: een met de hand geschreven
 `\#tag` zou door de scanner alsnog tot tag worden gepromoveerd en als levende `#tag`
@@ -521,5 +521,5 @@ tag-automatisering: een release blijft `package.json`'s versie bijwerken,
 | Is Power Automate beschikbaar? | Fase 6 — terugval staat klaar, blokkeert niets |
 | Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
-| Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 3 — het grootste onbekende stuk werk |
+| Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |

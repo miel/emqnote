@@ -63,6 +63,18 @@ describe("browsing the vault", () => {
     expect(names).not.toContain("_attachments");
   });
 
+  it("leaves an uncommitted note out of its own folder's count only", () => {
+    const tree = readFolderTree(
+      vault,
+      "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md",
+    );
+    const inbox = tree.children.find((c) => c.name === "00 Inbox")!;
+    const projects = tree.children.find((c) => c.name === "10 Projects")!;
+
+    expect(inbox.noteCount).toBe(0);
+    expect(projects.noteCount).toBe(0);
+  });
+
   it("goes several levels deep", () => {
     const projects = readFolderTree(vault).children.find((c) => c.name === "10 Projects");
     const client = projects!.children[0]!;

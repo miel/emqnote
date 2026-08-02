@@ -120,7 +120,9 @@ export interface LibraryApi {
   notes: (selection: Selection) => Promise<NoteSummary[]>;
   facets: () => Promise<Facets>;
   openNote: (path: string) => Promise<OpenedNote | null>;
-  saveNote: (request: SaveNoteRequest) => Promise<{ written: boolean; path: string }>;
+  saveNote: (
+    request: SaveNoteRequest,
+  ) => Promise<{ written: boolean; path: string; locked?: boolean }>;
   moveNote: (path: string, folder: string) => Promise<string>;
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;

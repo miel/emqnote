@@ -69,7 +69,13 @@ function countNotes(directory: string): number {
   }
 }
 
-export function readFolderTree(vault: string): FolderNode {
+export function readFolderTree(vault: string, excludePath?: string): FolderNode {
+  // A note not yet committed by the capture window (see `uncommittedNewPath`) is left
+  // out of its own folder's badge too, or the count would disagree with what the note
+  // list actually shows for as long as the window stays open.
+  const excludeFolder =
+    excludePath === undefined ? null : (dirname(excludePath) === "." ? "" : dirname(excludePath));
+
   const build = (absolute: string, relativePath: string, depth: number): FolderNode => {
     const children: FolderNode[] = [];
 
@@ -99,7 +105,7 @@ export function readFolderTree(vault: string): FolderNode {
       path: relativePath,
       name: relativePath === "" ? "Vault" : basename(relativePath),
       children,
-      noteCount: countNotes(absolute),
+      noteCount: countNotes(absolute) - (relativePath === excludeFolder ? 1 : 0),
     };
   };
 

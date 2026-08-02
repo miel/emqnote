@@ -140,6 +140,43 @@ describe("filtering the note list", () => {
   });
 });
 
+describe("excluding a not-yet-committed note", () => {
+  it("leaves it out of a folder listing", async () => {
+    note("00 Inbox", "Een");
+    note("00 Inbox", "Twee");
+
+    const found = await notesMatching(
+      vault,
+      { kind: "folder", path: "00 Inbox" },
+      "00 Inbox/Twee.md",
+    );
+
+    expect(found.map((n) => n.title)).toEqual(["Een"]);
+  });
+
+  it("leaves it out of a tag/person listing", async () => {
+    note("00 Inbox", "Een", { tags: "klantx" });
+    note("00 Inbox", "Twee", { tags: "klantx" });
+
+    const found = await notesMatching(
+      vault,
+      { kind: "tag", name: "klantx" },
+      "00 Inbox/Twee.md",
+    );
+
+    expect(found.map((n) => n.title)).toEqual(["Een"]);
+  });
+
+  it("leaves its tags and people out of the facet counts", async () => {
+    note("00 Inbox", "Een", { tags: "klantx" });
+    note("00 Inbox", "Twee", { tags: "klantx" });
+
+    const { tags } = await facets(vault, "00 Inbox/Twee.md");
+
+    expect(tags).toEqual([{ name: "klantx", count: 1 }]);
+  });
+});
+
 describe("keeping up with changes", () => {
   it("picks up a note added after the first scan", async () => {
     note("00 Inbox", "Een", { tags: "eerst" });

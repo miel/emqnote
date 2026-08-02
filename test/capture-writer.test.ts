@@ -164,6 +164,52 @@ Eerste versie.
   });
 });
 
+describe("uncommittedNewPath", () => {
+  it("is null before any write has picked a path", () => {
+    const { writer } = makeWriter();
+    writer.update(payload(paragraphs("Nog niets weggeschreven")));
+
+    expect(writer.uncommittedNewPath()).toBeNull();
+  });
+
+  it("holds the new note's path once written, until the window closes — vault-relative, like a library note's own path", async () => {
+    const { writer } = makeWriter();
+    writer.update(payload(paragraphs("Half getypt")));
+    const result = await writer.flush();
+
+    // `WriteResult.path` stays absolute (existing contract, existing tests and callers
+    // rely on it); `uncommittedNewPath` normalises to the vault-relative form a
+    // `NoteSummary.path` uses, which is exactly what it gets compared against.
+    expect(writer.uncommittedNewPath()).toBe(`${INBOX}/${basenameOf(result.path!)}`);
+
+    await writer.finish();
+    expect(writer.uncommittedNewPath()).toBeNull();
+  });
+
+  it("is null for a note loaded from an existing file, even while it is being written to", async () => {
+    // An existing note reopened into capture stays visible (locked, not hidden) in the
+    // library — only a brand-new note needs hiding until it is committed.
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+    writeFileSync(
+      join(vault, relativePath),
+      "---\ntitle: Kickoff project Alpha\ntype: quick\ncreated: 2026-07-25T14:32:00+02:00\n---\n\nEerste versie.\n",
+    );
+
+    const { writer } = makeWriter();
+    await writer.load(openNote(vault, relativePath)!);
+    expect(writer.uncommittedNewPath()).toBeNull();
+
+    writer.update(
+      payload(paragraphs("Eerste versie.", "Nieuwe regel."), {
+        created: "2026-07-25T14:32:00+02:00",
+      }),
+    );
+    await writer.flush();
+    expect(writer.uncommittedNewPath()).toBeNull();
+  });
+});
+
 function basenameOf(path: string): string {
   return path.split(/[\\/]/).pop()!;
 }

@@ -92,7 +92,11 @@ const writer = new CaptureWriter(
   () => loadSettings().vaultPath,
   (result) => {
     lastSavedAs = result.path;
-    notifyLibrary();
+    // A note still awaiting Ctrl+Enter/close has nothing worth telling the library about
+    // yet: it stays filtered out of every listing (see `uncommittedNewPath`), so pushing a
+    // refresh here would only make it rescan for no visible change, every 800ms while the
+    // user keeps typing.
+    if (writer.uncommittedNewPath() === null) notifyLibrary();
     sendStatus({ lastLatencyMs: lastLatency, savedAs: lastSavedAs });
   },
 );
@@ -432,19 +436,21 @@ function registerLibraryIpc(): void {
     const vault = vaultPath();
     return vault === null
       ? { path: "", name: "Vault", children: [], noteCount: 0 }
-      : readFolderTree(vault);
+      : readFolderTree(vault, writer.uncommittedNewPath() ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {
     const vault = vaultPath();
-    return vault === null ? [] : await notesMatching(vault, selection);
+    return vault === null
+      ? []
+      : await notesMatching(vault, selection, writer.uncommittedNewPath() ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryFacets, async () => {
     const vault = vaultPath();
     return vault === null
       ? { tags: [], people: [], available: false }
-      : await facets(vault);
+      : await facets(vault, writer.uncommittedNewPath() ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
@@ -483,6 +489,12 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.librarySaveNote, (_event, request: SaveNoteRequest) => {
     const vault = vaultPath();
     if (vault === null) return { written: false, path: request.path };
+    // The renderer's own `editable` flag is only ever as fresh as the last
+    // `library:refresh` round trip (see `notifyLibrary`) — this is the check that
+    // actually holds regardless of that staleness: never write under the capture
+    // window's own note.
+    if (writer.activePath() === request.path)
+      return { written: false, path: request.path, locked: true };
     return saveNote(vault, request);
   });
 
