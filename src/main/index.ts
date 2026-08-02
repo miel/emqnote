@@ -47,9 +47,10 @@ import {
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
 // note is re-read and an unchanged one is not. A capture landing mid-session costs the
 // stat walk, not another full read.
-import { facets, notesMatching } from "./vault-scan.js";
+import { facets, notesMatching, searchNotes } from "./vault-scan.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
+import { parseSearchQuery } from "./search-query.js";
 import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
@@ -478,6 +479,15 @@ function registerLibraryIpc(): void {
     return vault === null || indexDb === null
       ? []
       : await notesMatching(vault, indexDb, selection, writer.uncommittedNewPath() ?? undefined);
+  });
+
+  ipcMain.handle(IPC.librarySearch, async (_event, query: string) => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null
+      ? []
+      : await searchNotes(vault, indexDb, parseSearchQuery(query), {
+          excludePath: writer.uncommittedNewPath() ?? undefined,
+        });
   });
 
   ipcMain.handle(IPC.libraryFacets, async () => {

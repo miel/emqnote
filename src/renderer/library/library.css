@@ -184,6 +184,27 @@
   overflow: hidden;
 }
 
+.notes-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-search input {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.notes-search input:focus {
+  outline: 0;
+  border-color: var(--accent);
+}
+
 .notes-header {
   display: flex;
   align-items: center;

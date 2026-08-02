@@ -6,6 +6,10 @@ interface Props {
   selected: string | null;
   /** What produced this list. A filter draws from everywhere, a folder from one place. */
   showing: Selection;
+  /** A search query is currently narrowing the list — results can come from anywhere, same as a tag or a person. */
+  searching: boolean;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   sort: SortKey;
   onSort: (key: SortKey) => void;
   onSelect: (path: string) => void;
@@ -30,6 +34,9 @@ export function NoteList({
   notes,
   selected,
   showing,
+  searching,
+  searchQuery,
+  onSearchChange,
   sort,
   onSort,
   onSelect,
@@ -40,6 +47,15 @@ export function NoteList({
 }: Props): React.ReactElement {
   return (
     <div className="notes">
+      <div className="notes-search">
+        <input
+          type="text"
+          value={searchQuery}
+          placeholder={t("library.search")}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+      </div>
+
       <div className="notes-header">
         <span className="notes-count">
           {notes.length === 0
@@ -78,9 +94,10 @@ export function NoteList({
               </span>
             </div>
             <div className="note-excerpt">{note.excerpt}</div>
-            {/* Under a tag or a person the notes come from all over the vault, and a
-                list of titles with no idea where they live is hard to read. */}
-            {showing.kind !== "folder" && (
+            {/* Under a tag, a person or a search the notes come from all over the
+                vault, and a list of titles with no idea where they live is hard to
+                read. */}
+            {(showing.kind !== "folder" || searching) && (
               <div className="note-folder">{folderOf(note.path)}</div>
             )}
             {note.tags.length > 0 && (

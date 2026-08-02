@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
     notes: (selection: Selection) => ipcRenderer.invoke(IPC.libraryNotes, selection),
+    search: (query: string) => ipcRenderer.invoke(IPC.librarySearch, query),
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
     saveNote: (request: SaveNoteRequest) => ipcRenderer.invoke(IPC.librarySaveNote, request),

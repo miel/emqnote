@@ -70,6 +70,15 @@ export function Library(): React.ReactElement {
    * in the tree keeps that button working from a filter view instead of guessing.
    */
   const [lastFolder, setLastFolder] = useState("00 Inbox");
+  /**
+   * A search overrides the current selection rather than combining with it — clicking
+   * the tree while searching clears the box (see `FolderTree`'s `onSelect` below), so
+   * the two never need to agree on what should be showing at once.
+   */
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   const [sort, setSort] = useState<SortKey>("modified");
@@ -100,9 +109,34 @@ export function Library(): React.ReactElement {
     setTree(await window.emqnote.library.tree());
   }, []);
 
+  /**
+   * A search query, when there is one, wins over the tree selection entirely — reading
+   * `searchQueryRef` rather than taking a parameter keeps every existing call site
+   * (after a save, after a folder rename, on `library:refresh`) correct for free: they
+   * already all mean "show whatever the list should be showing right now."
+   */
   const loadNotes = useCallback(async (target: Selection) => {
-    setNotes(await window.emqnote.library.notes(target));
+    const query = searchQueryRef.current;
+    setNotes(
+      query.trim() === ""
+        ? await window.emqnote.library.notes(target)
+        : await window.emqnote.library.search(query),
+    );
   }, []);
+
+  /**
+   * Debounced the same way `onDocChange`/`onHeaderChange` debounce a save: search runs
+   * against the index on every call, and firing it on every keystroke of a multi-word
+   * query would mean typing "kickoff" costs seven round trips instead of one.
+   */
+  const onSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => void loadNotes(selectionRef.current), 150);
+    },
+    [loadNotes],
+  );
 
   /**
    * True once a filter list has been unfolded.
@@ -416,6 +450,14 @@ export function Library(): React.ReactElement {
         onSelect={(target) => {
           setSelection(target);
           if (target.kind === "folder") setLastFolder(target.path);
+          // Picking something in the tree is a stronger signal than a half-typed
+          // query — clear it rather than leave the list disagreeing with what looks
+          // selected. Cancel a pending debounce too, or a stale search fired 150ms
+          // ago would overwrite the folder this click just asked for.
+          if (searchQuery !== "") {
+            if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+            setSearchQuery("");
+          }
         }}
         onExpandFilters={() => void loadFacets()}
         onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
@@ -447,6 +489,9 @@ export function Library(): React.ReactElement {
         notes={sorted}
         selected={open?.path ?? null}
         showing={selection}
+        searching={searchQuery.trim() !== ""}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
         sort={sort}
         onSort={setSort}
         onSelect={(path) => void openNote(path)}

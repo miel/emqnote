@@ -41,6 +41,8 @@ export const IPC = {
   libraryOpen: "library:open",
   libraryTree: "library:tree",
   libraryNotes: "library:notes",
+  /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
+  librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
   librarySaveNote: "library:save-note",
   libraryMoveNote: "library:move-note",
@@ -118,6 +120,14 @@ export interface LibraryApi {
   tree: () => Promise<FolderNode>;
   /** A folder, a tag or a person — whatever the left panel currently has selected. */
   notes: (selection: Selection) => Promise<NoteSummary[]>;
+  /**
+   * `type:meeting attendee:"Jan de Vries" tag:klantx after:2026-01-01` plus free text —
+   * `search-query.ts` parses it, `vault-scan.ts`'s `searchNotes` runs it. An empty or
+   * blank query still returns something (see that function's own comment on why a
+   * completely blank query is not special-cased to nothing), so the caller decides
+   * whether to show search results or fall back to `notes()` — this call never does.
+   */
+  search: (query: string) => Promise<NoteSummary[]>;
   facets: () => Promise<Facets>;
   openNote: (path: string) => Promise<OpenedNote | null>;
   saveNote: (

@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
-| 5 — index and search | **Every backend piece built and tested**: `index-db.ts` (SQLite/FTS5), `index-scan.ts` (full-scan), `index-watch.ts` (`chokidar` watcher), `vault-scan.ts` (query layer, Map gone), `search-query.ts` + `searchNotes` (query language), `conflicts.ts` (conflict-copy recognition), `orphaned-attachments.ts` (orphan finding). None of it is wired into IPC or any UI yet — the search bar, the conflict banner, the orphaned-attachments screen are all still unbuilt. See "Settled" below. |
+| 5 — index and search | Backend complete and tested. **The search bar is now wired end to end** (IPC, preload, a real input in the library window) — the first piece of phase 5's UI, confirmed rendering via `Xvfb`. Still unbuilt: the conflict banner and the orphaned-attachments cleanup screen. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -78,17 +78,21 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 
 ## Verification still owed
 
-None of these is reachable through the app's `--screenshot` / `--click-button`
-flags, so they weren't covered before `v0.1.0` was tagged, and nothing since
-has closed them — this environment still has no display, so the app itself
-can't be watched running, and these carry forward unverified. (The Node
-version is no longer the reason: an `nvm` install of Node 24 on 2 August 2026
-fixed both the jsdom-based tests and `better-sqlite3`, which segfaulted under
-the sandbox's previous Node 18 — see `00-PLAN.md`. Whether `Xvfb`, which
-happens to be installed here, makes a real headless launch possible is itself
-untested; nobody's tried.) `npm test`, `npm run typecheck` and `npm run build`
-all still pass — 387 tests now, the full suite, up from 325 across the
-commits of phase 5 work plus the 12 jsdom tests Node 24 unlocked.
+**Update, 2 August 2026: `Xvfb` actually works here.**
+`xvfb-run -a --server-args="-screen 0 1280x800x24" node_modules/.bin/electron
+out/main/index.js --library --screenshot=<path> --vault=<path>` renders the
+real library window and writes a real PNG — confirmed while wiring the
+search bar (below), not assumed. The dbus/GPU warnings it prints are normal
+headless-Linux Electron noise, not failures. That reopens every item below
+that only needs `--screenshot`/`--click-button` and a look, in this sandbox,
+without waiting for the real machine — two of them (the "+ New note" button
+and its placement) already got closed this way, struck through below. The
+rest are still open only because nobody has gone through them yet, not
+because they are unreachable. (Also no longer blocked on Node: an `nvm`
+install of Node 24 on 2 August 2026 fixed both the jsdom-based tests and
+`better-sqlite3`, which segfaulted under the sandbox's previous Node 18 —
+see `00-PLAN.md`.) `npm test`, `npm run typecheck` and `npm run build` all
+pass — 438 tests, the full suite.
 
 - [ ] Rename a folder while a note inside it is **open and dirty**. Confirm no
       duplicate old folder appears, the note keeps its caret and undo history,
@@ -118,12 +122,14 @@ commits of phase 5 work plus the 12 jsdom tests Node 24 unlocked.
       or Tags/People facets until Ctrl+Enter or close. Then confirm it *does*
       appear immediately after. Logic is covered by new tests (see "Settled"),
       not watched on screen.
-- [ ] The "+ New note" button in the note-list header, and double-click on a row,
-      against the real window layout — both were built and typechecked but never
-      rendered.
-- [ ] Whatever the "+ New note" button's placement looks like next to the sort
-      buttons; `justify-content: space-between` was inherited from a two-child
-      header and may put more air between them than intended.
+- [x] ~~The "+ New note" button in the note-list header... against the real
+      window layout.~~ Seen via `Xvfb` while wiring the search bar, 2 August
+      2026: renders correctly, reasonable spacing next to the sort buttons.
+      Double-click-on-a-row still unverified — that needs `--click-button`
+      against an actual note row, not just a look.
+- [x] ~~Whatever the "+ New note" button's placement looks like next to the
+      sort buttons.~~ Same screenshot: fine as built, `justify-content:
+      space-between` did not put excessive air between them.
 - [ ] The watcher's real acceptance criterion: edit a note on one machine,
       confirm it shows up in the library on the other **within 5 seconds** of
       OneDrive finishing the sync (`04-bouwplan.md`, phase 5). `index-watch.test.ts`
@@ -412,11 +418,42 @@ produces the list to choose from.
 
 **That closes out every backend piece phase 5 named as work**: the SQLite
 index, the full-scan builder, the watcher, the search-bar query language,
-conflict-copy recognition, orphaned-attachment finding. What's left in the
-phase is entirely UI: the search bar itself, the conflict banner with its
-diff and three choices, and the orphaned-attachments cleanup screen with
-its thumbnails — see `02-technisch-ontwerp.md` §5.2/§6.5/§7.3 for what each
-one needs to show. None of that has been started.
+conflict-copy recognition, orphaned-attachment finding.
+
+**The search bar is now wired end to end — IPC, preload, and a real input
+in the library window** — the first piece of phase 5's UI. `IPC.librarySearch`
+(`"library:search"`) takes the raw query string; the main-process handler
+runs it through `parseSearchQuery` then `searchNotes`, threading
+`uncommittedNewPath()` through as `excludePath` the same way `libraryNotes`
+and `libraryFacets` already do, so a note still being typed in capture stays
+invisible to search too. `NoteList.tsx` gained a `.notes-search` input above
+its existing header row; `Library.tsx` owns the query as state, debounced
+150 ms on change the same way `onDocChange`/`onHeaderChange` already debounce
+a save — searching runs a real query against the index on every call, and
+firing one per keystroke would turn typing "kickoff" into seven round trips.
+A non-blank query wins over the tree selection entirely rather than
+combining with it: `loadNotes` (the one function every existing call site
+already uses — after a save, after a folder rename, on `library:refresh`)
+now checks the query first and calls `search()` instead of `notes()` when
+there is one, so every one of those call sites stays correct without being
+touched individually. Clicking anything in the tree while a search is active
+clears it, cancelling a pending debounce too — a stronger signal (you picked
+a specific folder) should not lose to a stale query about to re-fire 150 ms
+later. Results reuse the same "show which folder" treatment a tag or person
+view already gets, since search draws from the whole vault the same way.
+
+Confirmed rendering correctly via `Xvfb` — see the note under "Verification
+still owed" above — both empty and with a real note in the list; not
+confirmed is an actual keystroke-driven round trip, since no flag exists to
+inject text into a field the way `--click-button` clicks one. Every piece
+underneath the box (the parser, the query-runner, the IPC plumbing) already
+has its own tests from when phase 5's backend was built, so this is UI
+wiring on top of already-verified logic, not new untested logic.
+
+What's left in the phase: the conflict banner with its diff and three
+choices, and the orphaned-attachments cleanup screen with its thumbnails —
+see `02-technisch-ontwerp.md` §5.2/§6.5 for what each one needs to show.
+Neither has been started.
 
 ## Unexplained, worth settling
 
