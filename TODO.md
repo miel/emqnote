@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
-| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher), `vault-scan.ts` (a query layer over the index, Map gone), `search-query.ts` + `searchNotes` (the search-bar query language) and `conflicts.ts` (OneDrive conflict-copy recognition) all exist and are tested for real. None of it is wired into IPC or any UI (search box, conflict banner) yet — see "Settled" below. Still missing after that: orphaned-attachment cleanup. |
+| 5 — index and search | **Every backend piece built and tested**: `index-db.ts` (SQLite/FTS5), `index-scan.ts` (full-scan), `index-watch.ts` (`chokidar` watcher), `vault-scan.ts` (query layer, Map gone), `search-query.ts` + `searchNotes` (query language), `conflicts.ts` (conflict-copy recognition), `orphaned-attachments.ts` (orphan finding). None of it is wired into IPC or any UI yet — the search bar, the conflict banner, the orphaned-attachments screen are all still unbuilt. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -382,10 +382,41 @@ no banner, no diff, no "keep this / keep that / merge" UI — `04-bouwplan.md`
 describes all three as part of this same acceptance criterion, and none of
 them is a small addition to what exists now.
 
-Next: orphaned-attachment cleanup — see §6.5 in `02-technisch-ontwerp.md`.
-Wiring the search bar and the conflict banner into the library window is
-also still open, whenever UI work becomes the priority over the rest of
-phase 5's backend.
+**Orphaned-attachment cleanup (`02-technisch-ontwerp.md` §6.5) now exists
+too — every backend piece phase 5 named is now built and tested.**
+`src/markdown/wiki-targets.ts`'s `collectWikiTargets(doc)` is the new small
+piece underneath it: every `![[…]]`/`[[…]]` target a document points at,
+`wikiEmbed` and `wikiLink` collected together and deliberately
+undistinguished, since §6.4 routes an image through `wikiEmbed` but a
+non-image attachment through the very same `[[…]]` syntax a note-to-note
+link uses — a target cannot be told apart as "attachment" or "note" from
+the document alone, only by later checking it against what actually exists
+in `_attachments/`. `src/main/orphaned-attachments.ts`'s
+`findOrphanedAttachments(vault)` does that check: every file under
+`_attachments/` whose name no note references, matched by filename alone
+(the same rule wikilink resolution itself already follows, which is why
+moving a note never breaks its embeds — an attachment nested under
+`_attachments/2026/07/` is referenced the same way a flat one would be).
+One deliberate difference from `index-scan.ts`'s own file walk: a note
+already in `_trash/` still counts as a reference, since it can still be
+restored and an attachment it needs would otherwise get reported as
+orphaned and cleaned up out from under it — a reference is a different
+question from a listing, and trash answers it differently for each. 8
+(orphan-finding) + 7 (wiki-target-collecting) new tests, both green on the
+first real run. 438 tests total.
+
+Not wired in, same as the two items above: no IPC channel, no thumbnail
+grid, no explicit per-file delete confirmation in the UI. §6.5 is explicit
+that deletion is always a manual, one-at-a-time choice — this only ever
+produces the list to choose from.
+
+**That closes out every backend piece phase 5 named as work**: the SQLite
+index, the full-scan builder, the watcher, the search-bar query language,
+conflict-copy recognition, orphaned-attachment finding. What's left in the
+phase is entirely UI: the search bar itself, the conflict banner with its
+diff and three choices, and the orphaned-attachments cleanup screen with
+its thumbnails — see `02-technisch-ontwerp.md` §5.2/§6.5/§7.3 for what each
+one needs to show. None of that has been started.
 
 ## Unexplained, worth settling
 

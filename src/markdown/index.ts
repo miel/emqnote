@@ -1,5 +1,6 @@
 export { schema, MARK_NESTING_ORDER } from "./schema.js";
 export { plainText } from "./plain-text.js";
+export { collectWikiTargets } from "./wiki-targets.js";
 export {
   parseNote,
   serializeNote,
