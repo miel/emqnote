@@ -49,6 +49,7 @@ import {
 // stat walk, not another full read.
 import { facets, notesMatching } from "./vault-scan.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
+import { watchVault, type VaultWatcher } from "./index-watch.js";
 import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
@@ -89,6 +90,8 @@ let lastSavedAs: string | null = null;
  * quit during the second-instance-lock check never reaches `main` at all.
  */
 let indexDb: IndexDb | null = null;
+/** Incremental reindexing after the initial full scan — §7.2. Started once a vault is known, closed on quit. */
+let vaultWatcher: VaultWatcher | null = null;
 
 /**
  * Tells the library to reload. Used for the vault changing underneath it, and also for
@@ -168,7 +171,14 @@ async function main(): Promise<void> {
   await prepareVault();
 
   // A measurement run must never touch the network or show a dialog — same reasoning
-  // as skipping the tray and hotkey above.
+  // as skipping the tray and hotkey above. The watcher joins that list for a different
+  // reason: background fs polling is exactly the kind of unaccounted-for noise the
+  // hotkey→caret numbers in `CLAUDE.md` cannot afford to quietly pick up.
+  const watchedVault = loadSettings().vaultPath;
+  if (selfTestRounds === 0 && watchedVault !== null && indexDb !== null) {
+    vaultWatcher = watchVault(watchedVault, indexDb, { onChange: notifyLibrary });
+  }
+
   if (selfTestRounds === 0) maybeCheckForUpdatesOnStartup();
 
   if (launch.openLibrary) showLibraryWindow();
@@ -615,7 +625,11 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   void writer.flush();
-  // Registered unconditionally, so this can fire before `main` ever opened it — the
-  // second-instance-lock check quits without calling `main` at all in that path.
+  // Registered unconditionally, so this can fire before `main` ever opened either of
+  // these — the second-instance-lock check quits without calling `main` at all in that
+  // path. The watcher closes first, same fire-and-forget style `writer.flush()` above
+  // already uses, so it is not still reindexing into a database that just closed under
+  // it — not a hard guarantee, just narrowing the race rather than ignoring it.
+  if (vaultWatcher !== null) void vaultWatcher.close();
   if (indexDb !== null) closeIndex(indexDb);
 });

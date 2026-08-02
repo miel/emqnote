@@ -85,7 +85,8 @@ function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-function buildRecord(vault: string, file: string, raw: string, stats: Stats): NoteRecord {
+/** Shared with `index-watch.ts`, so an incremental reindex builds a note the same way a full scan does. */
+export function buildRecord(vault: string, file: string, raw: string, stats: Stats): NoteRecord {
   const summary = summarise(vault, file, raw, stats.mtime);
   const { frontmatter, doc } = parseNote(raw);
 

@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 346 tests, about a second
+npm test               # vitest run — 387 tests, a couple of seconds
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -135,15 +135,15 @@ In the library the header values live in their own `header` state, deliberately 
 
 `test/limitations.test.ts` pins what the dialect deliberately *cannot* express, so the boundary is visible rather than discovered later.
 
-The suite must stay under about two seconds so it can run on every change.
+The suite must stay under about two seconds so it can run on every change. `test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
 
 ## Where the project stands
 
-Phases 0–3 are done: byte-identical markdown round trip, resident shell, the editor, and the library window. Phase 3 and 4 of `04-bouwplan.md` were swapped in practice — the library window shipped first, so **pasting and images (the `mso-list` reconstruction) is the next work**, and it is the largest unknown in the project.
+Phases 0–3 are done: byte-identical markdown round trip, resident shell, the editor, and the library window. Phase 3 and 4 of `04-bouwplan.md` were swapped in practice — the library window shipped first. **Pasting and images (the `mso-list` reconstruction) is started but has no pipeline yet** — a `--dump-clipboard` diagnostic flag exists to capture real Outlook/Word HTML, since nobody had a real sample to build the list-reconstruction logic against; it is still the largest unknown in the project.
 
 Ten items from real use landed after that, before the paste work: checkbox affordances (the format always supported them, nothing could *make* one), folder rename (the phase-4 item that was never built), a shortcut registry with an in-app help sheet, a chooser for the vault location, and a group of header and list refinements. Two of them are recorded as decisions: **B20** — location and people belong to every note, `type: meeting` survives as a label — and **B21** — changing vault restarts the app.
 
-Tags and People filtering landed after phase 3 and pulled one piece of phase 5 forward. There is still no index: `src/main/vault-scan.ts` is an in-memory cache in front of the filesystem, shaped like the `notes` table phase 5 will build (same fields, same mtime-and-size refresh) so SQLite replaces the Map rather than the interface. It is never touched from the capture path, and it yields every hundred files — a cold scan of three thousand notes costs 279 ms, a warm one 15 ms.
+Tags and People filtering landed after phase 3 and pulled one piece of phase 5 forward. Phase 5's index is now real: `src/main/index-db.ts` holds the SQLite/FTS5 schema, `index-scan.ts` is the full-scan builder, and `index-watch.ts` wraps `chokidar` for incremental reindexing after that — `src/main/vault-scan.ts` used to be the in-memory cache in front of the filesystem and is now a thin query layer over that index instead, its `facets`/`notesMatching` interface unchanged by the swap. Folder browsing still bypasses the index entirely, straight from disk, so opening a folder never waits on a scan. Not yet built: the search bar's own query parser, conflict-copy recognition, and orphaned-attachment cleanup.
 
 ## The documents
 

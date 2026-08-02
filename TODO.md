@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
-| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder) and `vault-scan.ts` (now a query layer over the index, Map gone) all exist and are tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). Still missing: the `chokidar` watcher, the search bar's query parser, conflict-copy recognition, orphaned-attachment cleanup — see "Settled" below. |
+| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder), `index-watch.ts` (the `chokidar` watcher) and `vault-scan.ts` (a query layer over the index, Map gone) all exist and are wired into `index.ts`, tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). Still missing: the search bar's query parser, conflict-copy recognition, orphaned-attachment cleanup — see "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -60,8 +60,8 @@ fixed both the jsdom-based tests and `better-sqlite3`, which segfaulted under
 the sandbox's previous Node 18 — see `00-PLAN.md`. Whether `Xvfb`, which
 happens to be installed here, makes a real headless launch possible is itself
 untested; nobody's tried.) `npm test`, `npm run typecheck` and `npm run build`
-all still pass — 346 tests now, the full suite, up from 325 across two
-commits of new test coverage plus the 12 jsdom tests Node 24 unlocked.
+all still pass — 387 tests now, the full suite, up from 325 across the
+commits of phase 5 work plus the 12 jsdom tests Node 24 unlocked.
 
 - [ ] Rename a folder while a note inside it is **open and dirty**. Confirm no
       duplicate old folder appears, the note keeps its caret and undo history,
@@ -97,6 +97,13 @@ commits of new test coverage plus the 12 jsdom tests Node 24 unlocked.
 - [ ] Whatever the "+ New note" button's placement looks like next to the sort
       buttons; `justify-content: space-between` was inherited from a two-child
       header and may put more air between them than intended.
+- [ ] The watcher's real acceptance criterion: edit a note on one machine,
+      confirm it shows up in the library on the other **within 5 seconds** of
+      OneDrive finishing the sync (`04-bouwplan.md`, phase 5). `index-watch.test.ts`
+      proves the mechanism against a local temp directory with a 20 ms
+      threshold; nothing here proves the 300 ms production default is the
+      right number against real OneDrive sync latency, which was never
+      measured either.
 
 ## Housekeeping
 
@@ -248,15 +255,50 @@ swap. All 17 of `vault-scan.test.ts`'s existing tests pass unchanged in
 behaviour against the new implementation, which is the real evidence the
 swap preserved the interface.
 
-What's still open: no IPC channel or worker calls `fullScan` on its own — a
-capture or an app launch reaching `facets`/`notesMatching` is still what
-triggers it, same as the Map always was, so the *first* library open after
-a cold start pays for the initial full scan inline rather than during a
-progress-bar startup step. Next: the `chokidar` watcher for incremental
-reindexing outside of that trigger, then the search bar's own query parser
-(`type:`/`attendee:`/`tag:`/date range) in front of `search()`, then
-conflict-copy recognition and orphaned-attachment cleanup — see
-§7.2/§5.2/§6.5 in `02-technisch-ontwerp.md`.
+What was still open at that point: no IPC channel or worker called
+`fullScan` on its own — a capture or an app launch reaching
+`facets`/`notesMatching` was still what triggered it, same as the Map
+always was, so the *first* library open after a cold start paid for the
+initial full scan inline rather than during a progress-bar startup step.
+That part is still true today — nothing about the watcher below changes it,
+since the watcher only takes over *after* that first scan has run.
+
+**The `chokidar` watcher for incremental reindexing now exists too, wired
+into `index.ts`, not just written.** `src/main/index-watch.ts`'s
+`watchVault(vault, db, options?)` starts watching once a vault is known
+(`main`, right after `prepareVault`) and keeps the index in step with
+changes that land afterward — the other machine's OneDrive sync, chiefly —
+without waiting for something else to trigger a rescan. The 300 ms debounce
+`02-technisch-ontwerp.md` §7.2 calls for is chokidar's own
+`awaitWriteFinish` (polls a file's size until it stops changing) rather than
+a hand-rolled timer on a plain fs watch, deliberately: OneDrive can write a
+synced file over several separate writes, and a naive "react to the first
+change event" watch would index it mid-write. `ignoreInitial: true` keeps
+it purely incremental — the full scan already covers what exists at
+startup — and it shares the same hidden-folder/trash rule `collectFiles`
+walks by, so a file inside `_attachments` or `_trash` is never watched in
+the first place. Skipped like the watcher-adjacent parts of `--selftest`
+already were: it does not start during a measurement run, since background
+fs polling is exactly the kind of unaccounted-for noise the hotkey→caret
+numbers in `CLAUDE.md` cannot afford to quietly pick up. Closed on
+`will-quit`, before the index it writes into.
+
+Real chokidar against a real temp directory, not a mock — 8 tests in
+`test/index-watch.test.ts`, using a much smaller `stabilityThreshold` than
+the 300 ms production default and the smallest settle margin found reliable
+across repeated runs. One genuine race surfaced and got fixed rather than
+papered over: writing a file immediately after starting the watcher could
+be missed, because chokidar's initial crawl has to finish before it is
+actually attached, and `ignoreInitial` only suppresses the `add` events
+that crawl would otherwise fire — it does not make attachment itself
+faster. `VaultWatcher` now exposes a `ready()` the tests await instead of
+guessing at a delay. This is the one file in the suite that costs real
+wall-clock time — flagged in `CLAUDE.md`'s Tests section, since that
+document is explicit about the suite needing to stay fast.
+
+Next: the search bar's own query parser (`type:`/`attendee:`/`tag:`/date
+range) in front of `search()`, then conflict-copy recognition and
+orphaned-attachment cleanup — see §5.2/§6.5 in `02-technisch-ontwerp.md`.
 
 ## Unexplained, worth settling
 
