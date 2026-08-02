@@ -16,6 +16,8 @@ export interface LaunchOptions {
   openLibrary: boolean;
   /** Write a PNG of the library window to this path and exit. */
   screenshot: string | null;
+  /** Dump the system clipboard to `<prefix>.html`/`.txt`/`.png` and exit. */
+  dumpClipboard: string | null;
 }
 
 function flagValue(argv: string[], name: string): string | null {
@@ -43,5 +45,6 @@ export function readLaunchOptions(argv: string[] = process.argv): LaunchOptions 
     vaultOverride: vault === "" ? null : vault,
     openLibrary: argv.includes("--library"),
     screenshot: flagValue(argv, "screenshot"),
+    dumpClipboard: flagValue(argv, "dump-clipboard"),
   };
 }

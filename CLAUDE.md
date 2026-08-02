@@ -27,13 +27,19 @@ npx vitest run test/roundtrip.test.ts
 npx vitest run -t "stays byte-identical"
 ```
 
-Two diagnostic helpers:
+Three diagnostic helpers:
 
 ```bash
 npm run canonical -- test/corpus/24-vergadernotitie.md
 ```
 
 Shows how the serializer *would* write a file, with a line diff. It exists to let you **judge** a difference, not paper over it: if the corpus differs from the serializer output, one of the two is wrong, and telling those apart is a decision.
+
+```bash
+emqnote --dump-clipboard=/tmp/paste-sample
+```
+
+Copy something from Outlook or Word first, then run this. Writes `<prefix>.html`/`.txt`/`.png` for whatever formats are on the clipboard and exits. It exists for the same reason the corpus is hand-verified real output rather than an invented approximation: nobody had captured real `mso-list` markup before phase 4 started, and `03-markdown-dialect.md`'s whole approach is not to guess at a format when the real thing is one paste away. Runs alongside the resident instance (bypasses the single-instance lock, like `--selftest`), so no need to quit the everyday app first.
 
 ```bash
 emqnote.exe --selftest=50 --vault=%TEMP%\emqnote-proef

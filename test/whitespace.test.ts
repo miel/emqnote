@@ -102,4 +102,14 @@ describe("launch options", () => {
     expect(readLaunchOptions(["emqnote", "--selftest=abc"]).selfTestRounds).toBe(0);
     expect(readLaunchOptions(["emqnote", "--selftest=-3"]).selfTestRounds).toBe(0);
   });
+
+  it("reads the clipboard dump prefix from a flag", () => {
+    expect(readLaunchOptions(["emqnote", "--dump-clipboard=/tmp/paste-sample"]).dumpClipboard).toBe(
+      "/tmp/paste-sample",
+    );
+  });
+
+  it("treats a normal launch as no clipboard dump", () => {
+    expect(readLaunchOptions(["emqnote"]).dumpClipboard).toBeNull();
+  });
 });

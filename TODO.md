@@ -13,7 +13,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
-| 4 — **pasting and images** | **Not started. Still the next work, and the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. |
+| 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
 | 5 — index and search | Not started. `vault-scan.ts` is an in-memory stand-in shaped like the `notes` table SQLite will build, so the Map is replaced and not the interface. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
@@ -38,6 +38,16 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   logic is implemented and the release pipeline now publishes correctly, but
   nobody has watched a real install pick up an update through the two
   confirmation dialogs. Worth doing once, on the Windows machine.
+- **Phase 4 needs real clipboard samples before the `mso-list` reconstruction
+  can be written for real, not guessed at.** `emqnote --dump-clipboard=<prefix>`
+  is built and tested (flag parsing only — nobody has run it against a live
+  clipboard yet, same sandbox limitation as everything else Electron here).
+  On the Mac, copy from real Outlook and run it once per case, at minimum: a
+  plain paragraph, a nested mixed bullet/numbered list, bold/italic/underline/
+  highlighted text, a table with at least one merged cell, and an inline
+  image. Hand the resulting `.html` files back — they become the fixtures the
+  paste pipeline is built and tested against, the same way `test/corpus/`
+  already works for the serializer.
 
 ## Verification still owed
 

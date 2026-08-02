@@ -16,6 +16,7 @@ import {
 } from "./capture-window.js";
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
 import { notifyPainted, runSelfTest } from "./selftest.js";
+import { dumpClipboard } from "./clipboard-dump.js";
 import {
   captureWindowTo,
   getLibraryWindow,
@@ -63,11 +64,14 @@ const launch = readLaunchOptions();
 // A self-test is the exception: it has to be able to run while the everyday instance
 // is resident, otherwise it would quietly hand off to that instance and appear to do
 // nothing at all — which is exactly what happened the first time it was tried on
-// Windows. It runs on its own vault and exits when done.
-if (launch.selfTestRounds === 0 && !app.requestSingleInstanceLock()) {
+// Windows. It runs on its own vault and exits when done. `--dump-clipboard` needs the
+// same exception for the same reason: its whole point is running it alongside the
+// resident instance, right after copying something from Outlook.
+const bypassesSingleInstance = launch.selfTestRounds > 0 || launch.dumpClipboard !== null;
+if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  if (launch.selfTestRounds === 0) {
+  if (!bypassesSingleInstance) {
     app.on("second-instance", () => showCaptureWindow());
   }
   void main();
@@ -103,6 +107,12 @@ const writer = new CaptureWriter(
 
 async function main(): Promise<void> {
   await app.whenReady();
+
+  if (launch.dumpClipboard !== null) {
+    dumpClipboard(launch.dumpClipboard);
+    app.exit(0);
+    return;
+  }
 
   // Menu bar app: no dock icon, no app switcher entry. The main window in phase 4 will
   // temporarily restore this when it opens.
