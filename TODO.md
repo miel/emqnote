@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
-| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5) and `index-scan.ts` (the full-scan builder) both exist and are tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). `vault-scan.ts`'s Map is still what's actually wired up; nothing reads from the new index yet — see "Settled" below. |
+| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5), `index-scan.ts` (the full-scan builder) and `vault-scan.ts` (now a query layer over the index, Map gone) all exist and are tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). Still missing: the `chokidar` watcher, the search bar's query parser, conflict-copy recognition, orphaned-attachment cleanup — see "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -188,7 +188,7 @@ tests in `capture-writer.test.ts`, `vault-io.test.ts` and `vault-scan.test.ts`;
 not yet seen on screen for the same reason as the item above.
 
 **Phase 5's SQLite index exists as its own module, tested against a real
-database, not wired in yet.** `src/main/index-db.ts` holds the schema
+database.** `src/main/index-db.ts` holds the schema
 (`notes` + an FTS5 `notes_fts`), `upsertNote`/`deleteNote`/`getNote`/
 `allNotes`/`needsRefresh`, and free-text `search()`. Two deliberate
 departures from the sketch in `02-technisch-ontwerp.md` §7.1, both explained
@@ -208,29 +208,54 @@ package itself, no `node-gyp`/`electron-rebuild` step required, which is
 also presumably why it was the anticipated choice over Tauri's Rust
 equivalent in B2.
 
-**The full-scan builder that fills the index now exists too, also tested
-against a real database and a real temp vault, still not wired in.**
-`src/main/index-scan.ts`'s `fullScan(vault, db, onProgress?)` walks the
-vault with `vault-scan.ts`'s own `collectFiles`/`isDataless` — now exported
-so the two walks share one set of hidden-folder and OneDrive-placeholder
-rules rather than risking two copies drifting apart — and calls `upsertNote`
+**The full-scan builder that fills the index also exists, also tested
+against a real database and a real temp vault.** `src/main/index-scan.ts`'s
+`fullScan(vault, db, onProgress?)` walks the vault and calls `upsertNote`
 per file that is new or has a changed `mtime`/`size`, then deletes any
 indexed row whose file is gone. One thing it does deliberately differently
-from the Map, explained in the module's own comment: a dataless (evicted)
-file keeps its last-indexed row rather than being dropped, because the Map
-is rebuilt from nothing every time so "not shown until it hydrates" costs
-nothing, while dropping a row from a *persistent* index would mean a note
-someone could search for on Monday silently stops matching on Tuesday
-because OneDrive evicted a file nobody touched. `checkFilesOnDemand`'s
-`"ondemand"` short-circuit is wired through but its actual trigger path
-(`process.platform === "darwin"`) cannot be exercised on this Linux sandbox,
-same limitation that function already had before phase 5. What's still
-open: nothing in `vault-io.ts` or `index.ts` reads from the index yet — the
-Map is still what's live, and no IPC channel or worker calls `fullScan` at
-all. Next: swapping `vault-scan.ts`'s Map for reads against the index, then
-the `chokidar` watcher for incremental reindexing, then the search bar's own
-query parser (`type:`/`attendee:`/`tag:`/date range) in front of `search()`,
-then conflict-copy recognition and orphaned-attachment cleanup — see
+from what the old Map did, explained in the module's own comment: a
+dataless (evicted) file keeps its last-indexed row rather than being
+dropped, because the Map was rebuilt from nothing every time so "not shown
+until it hydrates" cost nothing there, while dropping a row from a
+*persistent* index would mean a note someone could search for on Monday
+silently stops matching on Tuesday because OneDrive evicted a file nobody
+touched. `checkFilesOnDemand`'s `"ondemand"` short-circuit is wired through
+but its actual trigger path (`process.platform === "darwin"`) cannot be
+exercised on this Linux sandbox, same limitation that function already had
+before phase 5.
+
+**`vault-scan.ts`'s Map is gone — the swap the two items above were leading
+up to.** `facets`/`notesMatching` now take a `db: IndexDb` parameter and
+read from `index-db.ts` via `allNotes`, with `ensureScanned` calling
+`fullScan` (still collapsing concurrent callers onto one running scan, same
+as before) instead of rebuilding a Map. `collectFiles`/`isDataless` moved
+into `index-scan.ts` — their only remaining caller — rather than staying
+exported from a module that no longer walks the filesystem itself. Folder
+browsing is unchanged: still straight from disk via `readNotesIn`, never
+through the index, so opening a folder never waits on a scan. `NoteRecord`
+gained `fileName` and `excerpt` columns so a tag/person query never has to
+re-read a matched file to build the `NoteSummary` the library expects —
+`index-scan.ts`'s `buildRecord` already had both from the `summarise()` call
+it was making anyway. `index.ts` opens one `IndexDb` at
+`app.getPath("userData")/index.sqlite` in `main`, after `app.whenReady`
+(B9), and closes it in `will-quit`. `better-sqlite3` also needed adding to
+`electron.vite.config.ts`'s `external` list and `check-bundle.ts`'s
+allowlist, alongside `electron-updater` — the same reason: a dynamic
+`require` for its native binary that cannot survive bundling, and the sole
+existing test of that path (`npm run build`) had nothing to catch it until
+`index.ts` actually imported `index-db.ts`, which happened only with this
+swap. All 17 of `vault-scan.test.ts`'s existing tests pass unchanged in
+behaviour against the new implementation, which is the real evidence the
+swap preserved the interface.
+
+What's still open: no IPC channel or worker calls `fullScan` on its own — a
+capture or an app launch reaching `facets`/`notesMatching` is still what
+triggers it, same as the Map always was, so the *first* library open after
+a cold start pays for the initial full scan inline rather than during a
+progress-bar startup step. Next: the `chokidar` watcher for incremental
+reindexing outside of that trigger, then the search bar's own query parser
+(`type:`/`attendee:`/`tag:`/date range) in front of `search()`, then
+conflict-copy recognition and orphaned-attachment cleanup — see
 §7.2/§5.2/§6.5 in `02-technisch-ontwerp.md`.
 
 ## Unexplained, worth settling

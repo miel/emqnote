@@ -1,28 +1,74 @@
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, type Stats } from "node:fs";
-import { relative, sep } from "node:path";
+import { readdirSync, readFileSync, statSync, type Dirent, type Stats } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { parseNote, plainText } from "../markdown/index.js";
+import { TRASH_FOLDER } from "../shared/vault-types.js";
 import { allNotes, deleteNote, needsRefresh, upsertNote, type IndexDb, type NoteRecord } from "./index-db.js";
-import { summarise } from "./vault-io.js";
-import { collectFiles, isDataless } from "./vault-scan.js";
+import { isHidden, summarise } from "./vault-io.js";
 import { checkFilesOnDemand } from "./vault.js";
 
 /**
  * Building the SQLite index from what is actually on disk — `02-technisch-ontwerp.md`
  * §7.2's "eerste start: volledige scan met voortgangsbalk, in een worker". The worker
- * part is not here yet; this is written to be Electron-free like `vault-scan.ts` so it
- * can move into one unchanged, same as that module already does.
+ * part is not here yet; this is written to be Electron-free so it can move into one
+ * unchanged, the same reasoning `vault-io.ts` and `vault-scan.ts` already follow.
  *
- * `vault-scan.ts`'s Map and this rebuild the file walk the same way on purpose —
- * `collectFiles`/`isDataless` are shared, not reimplemented — but they diverge on one
- * thing the Map does not need to care about: a note whose file has gone dataless (a
- * OneDrive Files On-Demand placeholder, evicted from local disk) still belongs in a
- * *persistent* index. The Map is rebuilt from nothing on every scan, so dropping a
- * placeholder from it just means "not shown until it hydrates" — there is no old copy to
- * lose. Dropping it from SQLite would mean a note the user can search for on Monday
- * silently stops matching on Tuesday because OneDrive decided to evict a file nobody
- * touched. So a dataless file keeps its last-indexed row untouched instead.
+ * `collectFiles`/`isDataless` used to live in `vault-scan.ts` and be shared from there,
+ * back when that module did its own walk over an in-memory Map. Now that `vault-scan.ts`
+ * is a query layer over this index instead (see its own comment), this is their only
+ * caller and their one home. What they encode is still exactly the two rules that must
+ * not drift regardless of which module owns them: which folders never count as vault
+ * content, and how a OneDrive placeholder is told apart from a real file.
+ *
+ * On that second rule, this scan diverges from what the old Map did with a dataless
+ * file: a note whose file has gone dataless (evicted from local disk by OneDrive Files
+ * On-Demand) still belongs in a *persistent* index. The Map was rebuilt from nothing on
+ * every scan, so skipping a placeholder there just meant "not shown until it hydrates"
+ * — there was no old copy to lose. Dropping it from SQLite would mean a note the user
+ * can search for on Monday silently stops matching on Tuesday because OneDrive decided
+ * to evict a file nobody touched. So a dataless file keeps its last-indexed row and is
+ * simply not re-read.
  */
+
+/** Every `.md` in the vault, skipping the folders the app owns and the trash. */
+function collectFiles(vault: string): string[] {
+  const files: string[] = [];
+
+  const walk = (absolute: string, depth: number): void => {
+    if (depth > 12) return;
+
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(absolute, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const path = join(absolute, entry.name);
+      if (entry.isDirectory()) {
+        // Deleted notes must not resurface under their tags.
+        if (isHidden(entry.name) || entry.name === TRASH_FOLDER) continue;
+        walk(path, depth + 1);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        files.push(path);
+      }
+    }
+  };
+
+  walk(vault, 0);
+  return files;
+}
+
+/**
+ * A file that OneDrive has evicted reports a size but occupies no blocks.
+ *
+ * Reading one forces a download. On macOS that is detectable per file; on Windows it is
+ * not, which is why there is also the up-front check in `fullScan`.
+ */
+function isDataless(stats: { size: number; blocks: number }): boolean {
+  return process.platform === "darwin" && stats.size > 0 && stats.blocks === 0;
+}
 
 export interface ScanProgress {
   done: number;
@@ -45,6 +91,7 @@ function buildRecord(vault: string, file: string, raw: string, stats: Stats): No
 
   return {
     path: summary.path,
+    fileName: summary.fileName,
     title: summary.title,
     type: summary.kind,
     created: summary.created,
@@ -52,6 +99,7 @@ function buildRecord(vault: string, file: string, raw: string, stats: Stats): No
     location: frontmatter.location ?? "",
     attendees: summary.attendees,
     tags: summary.tags,
+    excerpt: summary.excerpt,
     mtime: stats.mtimeMs,
     size: stats.size,
     hash: hashOf(raw),
@@ -67,8 +115,8 @@ function breathe(): Promise<void> {
 
 /**
  * Walks the whole vault and brings the index up to date: every file that is new,
- * changed (by `mtime`+`size`, the same cheap check `vault-scan.ts` already uses), or
- * gone gets reflected. A file that has not changed costs one `stat` and nothing else.
+ * changed (by `mtime`+`size`, the same cheap check `index-db.ts`'s `needsRefresh` does),
+ * or gone gets reflected. A file that has not changed costs one `stat` and nothing else.
  *
  * Returns `"ondemand"` without touching the index at all when the vault looks like an
  * un-hydrated OneDrive folder — reading a few thousand placeholders would each force a

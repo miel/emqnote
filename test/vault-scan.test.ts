@@ -2,9 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { facets, invalidate, notesMatching } from "../src/main/vault-scan.js";
+import { closeIndex, openIndex, type IndexDb } from "../src/main/index-db.js";
+import { facets, notesMatching } from "../src/main/vault-scan.js";
 
 let vault: string;
+let db: IndexDb;
 
 function note(
   folder: string,
@@ -28,11 +30,12 @@ function note(
 
 beforeEach(() => {
   vault = mkdtempSync(join(tmpdir(), "emqnote-scan-"));
-  invalidate();
+  db = openIndex(":memory:");
 });
 
 afterEach(() => {
   rmSync(vault, { recursive: true, force: true });
+  closeIndex(db);
 });
 
 describe("gathering tags and people across the vault", () => {
@@ -40,7 +43,7 @@ describe("gathering tags and people across the vault", () => {
     note("00 Inbox", "Een", { tags: "klantx" });
     note("10 Projects", "Twee", { body: "Zie #offerte hiervoor." });
 
-    const { tags } = await facets(vault);
+    const { tags } = await facets(vault, db);
 
     expect(tags.map((tag) => tag.name).sort()).toEqual(["klantx", "offerte"]);
   });
@@ -49,7 +52,7 @@ describe("gathering tags and people across the vault", () => {
     note("00 Inbox", "Een", { body: "#klantx en nog eens #klantx en #KLANTX." });
     note("00 Inbox", "Twee", { tags: "klantx" });
 
-    const { tags } = await facets(vault);
+    const { tags } = await facets(vault, db);
 
     expect(tags).toEqual([{ name: "klantx", count: 2 }]);
   });
@@ -59,7 +62,7 @@ describe("gathering tags and people across the vault", () => {
     note("00 Inbox", "Twee", { tags: "veel" });
     note("00 Inbox", "Drie", { tags: "weinig" });
 
-    const { tags } = await facets(vault);
+    const { tags } = await facets(vault, db);
 
     expect(tags.map((tag) => tag.name)).toEqual(["veel", "weinig"]);
   });
@@ -68,7 +71,7 @@ describe("gathering tags and people across the vault", () => {
     note("00 Inbox", "Overleg", { attendees: "Jan de Vries, Els Bakker" });
     note("00 Inbox", "Nog een", { attendees: "Jan de Vries" });
 
-    const { people } = await facets(vault);
+    const { people } = await facets(vault, db);
 
     expect(people).toEqual([
       { name: "Jan de Vries", count: 2 },
@@ -79,7 +82,7 @@ describe("gathering tags and people across the vault", () => {
   it("looks in every folder, however deep", async () => {
     note("10 Projects/Klant X/Project Alpha", "Diep", { tags: "diep" });
 
-    const { tags } = await facets(vault);
+    const { tags } = await facets(vault, db);
 
     expect(tags.map((tag) => tag.name)).toContain("diep");
   });
@@ -90,7 +93,7 @@ describe("gathering tags and people across the vault", () => {
     note("00 Inbox/_incoming", "Binnen", { tags: "binnen" });
     note("00 Inbox", "Gewoon", { tags: "gewoon" });
 
-    const { tags } = await facets(vault);
+    const { tags } = await facets(vault, db);
 
     expect(tags.map((tag) => tag.name)).toEqual(["gewoon"]);
   });
@@ -102,7 +105,7 @@ describe("filtering the note list", () => {
     note("10 Projects", "Twee", { body: "#klantx staat vooraan." });
     note("20 Areas", "Drie", { tags: "iets anders" });
 
-    const found = await notesMatching(vault, { kind: "tag", name: "klantx" });
+    const found = await notesMatching(vault, db, { kind: "tag", name: "klantx" });
 
     expect(found.map((n) => n.title).sort()).toEqual(["Een", "Twee"]);
   });
@@ -110,7 +113,7 @@ describe("filtering the note list", () => {
   it("matches a tag regardless of casing", async () => {
     note("00 Inbox", "Een", { body: "#KlantX hier." });
 
-    const found = await notesMatching(vault, { kind: "tag", name: "klantx" });
+    const found = await notesMatching(vault, db, { kind: "tag", name: "klantx" });
 
     expect(found).toHaveLength(1);
   });
@@ -119,7 +122,7 @@ describe("filtering the note list", () => {
     note("00 Inbox", "Overleg", { attendees: "Jan de Vries, Els Bakker" });
     note("00 Inbox", "Ander", { attendees: "Els Bakker" });
 
-    const found = await notesMatching(vault, { kind: "person", name: "Jan de Vries" });
+    const found = await notesMatching(vault, db, { kind: "person", name: "Jan de Vries" });
 
     expect(found.map((n) => n.title)).toEqual(["Overleg"]);
   });
@@ -128,7 +131,7 @@ describe("filtering the note list", () => {
     note("00 Inbox", "Een");
     note("10 Projects", "Twee");
 
-    const found = await notesMatching(vault, { kind: "folder", path: "00 Inbox" });
+    const found = await notesMatching(vault, db, { kind: "folder", path: "00 Inbox" });
 
     expect(found.map((n) => n.title)).toEqual(["Een"]);
   });
@@ -136,7 +139,7 @@ describe("filtering the note list", () => {
   it("finds nothing for a tag nobody uses", async () => {
     note("00 Inbox", "Een", { tags: "klantx" });
 
-    expect(await notesMatching(vault, { kind: "tag", name: "onbekend" })).toEqual([]);
+    expect(await notesMatching(vault, db, { kind: "tag", name: "onbekend" })).toEqual([]);
   });
 });
 
@@ -147,6 +150,7 @@ describe("excluding a not-yet-committed note", () => {
 
     const found = await notesMatching(
       vault,
+      db,
       { kind: "folder", path: "00 Inbox" },
       "00 Inbox/Twee.md",
     );
@@ -160,6 +164,7 @@ describe("excluding a not-yet-committed note", () => {
 
     const found = await notesMatching(
       vault,
+      db,
       { kind: "tag", name: "klantx" },
       "00 Inbox/Twee.md",
     );
@@ -171,7 +176,7 @@ describe("excluding a not-yet-committed note", () => {
     note("00 Inbox", "Een", { tags: "klantx" });
     note("00 Inbox", "Twee", { tags: "klantx" });
 
-    const { tags } = await facets(vault, "00 Inbox/Twee.md");
+    const { tags } = await facets(vault, db, "00 Inbox/Twee.md");
 
     expect(tags).toEqual([{ name: "klantx", count: 1 }]);
   });
@@ -180,29 +185,32 @@ describe("excluding a not-yet-committed note", () => {
 describe("keeping up with changes", () => {
   it("picks up a note added after the first scan", async () => {
     note("00 Inbox", "Een", { tags: "eerst" });
-    expect((await facets(vault)).tags.map((t) => t.name)).toEqual(["eerst"]);
+    expect((await facets(vault, db)).tags.map((t) => t.name)).toEqual(["eerst"]);
 
     note("00 Inbox", "Twee", { tags: "later" });
 
-    expect((await facets(vault)).tags.map((t) => t.name).sort()).toEqual(["eerst", "later"]);
+    expect((await facets(vault, db)).tags.map((t) => t.name).sort()).toEqual([
+      "eerst",
+      "later",
+    ]);
   });
 
   it("drops a note that was deleted", async () => {
     note("00 Inbox", "Een", { tags: "weg" });
-    await facets(vault);
+    await facets(vault, db);
 
     rmSync(join(vault, "00 Inbox", "Een.md"));
 
-    expect((await facets(vault)).tags).toEqual([]);
+    expect((await facets(vault, db)).tags).toEqual([]);
   });
 
   it("re-reads a note whose contents changed", async () => {
     note("00 Inbox", "Een", { tags: "oud" });
-    await facets(vault);
+    await facets(vault, db);
 
     // Same path, new contents. The size differs, so the cache must not trust itself.
     note("00 Inbox", "Een", { tags: "gloednieuw" });
 
-    expect((await facets(vault)).tags.map((t) => t.name)).toEqual(["gloednieuw"]);
+    expect((await facets(vault, db)).tags.map((t) => t.name)).toEqual(["gloednieuw"]);
   });
 });

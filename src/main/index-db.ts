@@ -15,6 +15,7 @@ import Database from "better-sqlite3";
 
 export interface NoteRecord {
   path: string;
+  fileName: string;
   title: string;
   type: string;
   created: string;
@@ -22,6 +23,8 @@ export interface NoteRecord {
   location: string;
   attendees: string[];
   tags: string[];
+  /** First line or so of the body — `NoteSummary.excerpt`, stored rather than re-read per query. */
+  excerpt: string;
   /** `stat().mtimeMs`, for the cheap refresh check `02-technisch-ontwerp.md` §7.2 wants. */
   mtime: number;
   size: number;
@@ -53,6 +56,7 @@ function migrate(db: IndexDb): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
       path TEXT PRIMARY KEY,
+      fileName TEXT NOT NULL,
       title TEXT NOT NULL,
       type TEXT NOT NULL,
       created TEXT NOT NULL,
@@ -60,6 +64,7 @@ function migrate(db: IndexDb): void {
       location TEXT NOT NULL,
       attendees TEXT NOT NULL,
       tags TEXT NOT NULL,
+      excerpt TEXT NOT NULL,
       mtime REAL NOT NULL,
       size INTEGER NOT NULL,
       hash TEXT NOT NULL
@@ -88,9 +93,10 @@ export function closeIndex(db: IndexDb): void {
 
 const upsertNoteStatements = (db: IndexDb) => ({
   note: db.prepare(`
-    INSERT INTO notes (path, title, type, created, modified, location, attendees, tags, mtime, size, hash)
-    VALUES (@path, @title, @type, @created, @modified, @location, @attendees, @tags, @mtime, @size, @hash)
+    INSERT INTO notes (path, fileName, title, type, created, modified, location, attendees, tags, excerpt, mtime, size, hash)
+    VALUES (@path, @fileName, @title, @type, @created, @modified, @location, @attendees, @tags, @excerpt, @mtime, @size, @hash)
     ON CONFLICT(path) DO UPDATE SET
+      fileName = excluded.fileName,
       title = excluded.title,
       type = excluded.type,
       created = excluded.created,
@@ -98,6 +104,7 @@ const upsertNoteStatements = (db: IndexDb) => ({
       location = excluded.location,
       attendees = excluded.attendees,
       tags = excluded.tags,
+      excerpt = excluded.excerpt,
       mtime = excluded.mtime,
       size = excluded.size,
       hash = excluded.hash
@@ -114,6 +121,7 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
   const statements = upsertNoteStatements(db);
   const row = {
     path: record.path,
+    fileName: record.fileName,
     title: record.title,
     type: record.type,
     created: record.created,
@@ -121,6 +129,7 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
     location: record.location,
     attendees: JSON.stringify(record.attendees),
     tags: JSON.stringify(record.tags),
+    excerpt: record.excerpt,
     mtime: record.mtime,
     size: record.size,
     hash: record.hash,
@@ -142,6 +151,7 @@ export function deleteNote(db: IndexDb, path: string): void {
 
 interface StoredRow {
   path: string;
+  fileName: string;
   title: string;
   type: string;
   created: string;
@@ -149,6 +159,7 @@ interface StoredRow {
   location: string;
   attendees: string;
   tags: string;
+  excerpt: string;
   mtime: number;
   size: number;
   hash: string;
@@ -157,6 +168,7 @@ interface StoredRow {
 function toMeta(row: StoredRow): NoteMeta {
   return {
     path: row.path,
+    fileName: row.fileName,
     title: row.title,
     type: row.type,
     created: row.created,
@@ -164,6 +176,7 @@ function toMeta(row: StoredRow): NoteMeta {
     location: row.location,
     attendees: JSON.parse(row.attendees) as string[],
     tags: JSON.parse(row.tags) as string[],
+    excerpt: row.excerpt,
     mtime: row.mtime,
     size: row.size,
     hash: row.hash,

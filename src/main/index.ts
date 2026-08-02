@@ -48,6 +48,7 @@ import {
 // note is re-read and an unchanged one is not. A capture landing mid-session costs the
 // stat walk, not another full read.
 import { facets, notesMatching } from "./vault-scan.js";
+import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
@@ -79,6 +80,15 @@ if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
 
 let lastLatency: number | null = null;
 let lastSavedAs: string | null = null;
+/**
+ * The search index (`02-technisch-ontwerp.md` §7). Opened once in `main`, after
+ * `app.whenReady`, since its path lives under `app.getPath("userData")` — B9, same
+ * reasoning as `settings.ts`. Null only in the sliver of time before that, and in the
+ * `--dump-clipboard` early exit, which never touches it; `will-quit` guards on it for
+ * exactly that second case, since that handler is registered unconditionally and a
+ * quit during the second-instance-lock check never reaches `main` at all.
+ */
+let indexDb: IndexDb | null = null;
 
 /**
  * Tells the library to reload. Used for the vault changing underneath it, and also for
@@ -113,6 +123,8 @@ async function main(): Promise<void> {
     app.exit(0);
     return;
   }
+
+  indexDb = openIndex(join(app.getPath("userData"), "index.sqlite"));
 
   // Menu bar app: no dock icon, no app switcher entry. The main window in phase 4 will
   // temporarily restore this when it opens.
@@ -451,16 +463,18 @@ function registerLibraryIpc(): void {
 
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {
     const vault = vaultPath();
-    return vault === null
+    // `indexDb` is only ever null in the sliver of startup before `main` opens it, and
+    // in the `--dump-clipboard` exit, which never shows a library window at all.
+    return vault === null || indexDb === null
       ? []
-      : await notesMatching(vault, selection, writer.uncommittedNewPath() ?? undefined);
+      : await notesMatching(vault, indexDb, selection, writer.uncommittedNewPath() ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryFacets, async () => {
     const vault = vaultPath();
-    return vault === null
+    return vault === null || indexDb === null
       ? { tags: [], people: [], available: false }
-      : await facets(vault, writer.uncommittedNewPath() ?? undefined);
+      : await facets(vault, indexDb, writer.uncommittedNewPath() ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
@@ -601,4 +615,7 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   void writer.flush();
+  // Registered unconditionally, so this can fire before `main` ever opened it — the
+  // second-instance-lock check quits without calling `main` at all in that path.
+  if (indexDb !== null) closeIndex(indexDb);
 });

@@ -26,6 +26,7 @@ const ALLOWED = new Set([
   // Shipped via package.json `dependencies` + electron-builder's dependency walk, not
   // bundled — see the comment on `external` in electron.vite.config.ts.
   "electron-updater",
+  "better-sqlite3",
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
 ]);

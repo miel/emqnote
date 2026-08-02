@@ -15,6 +15,7 @@ import {
 function record(overrides: Partial<NoteRecord> = {}): NoteRecord {
   return {
     path: "00 Inbox/Kickoff project Alpha.md",
+    fileName: "Kickoff project Alpha.md",
     title: "Kickoff project Alpha",
     type: "meeting",
     created: "2026-07-25T14:32:00+02:00",
@@ -22,6 +23,7 @@ function record(overrides: Partial<NoteRecord> = {}): NoteRecord {
     location: "Teams",
     attendees: ["Jan de Vries"],
     tags: ["klantx"],
+    excerpt: "Kickoff met de klant over project Alpha.",
     mtime: 1_000,
     size: 200,
     hash: "abc123",
@@ -50,6 +52,7 @@ describe("the SQLite index", () => {
 
     expect(getNote(db, "00 Inbox/Kickoff project Alpha.md")).toEqual({
       path: "00 Inbox/Kickoff project Alpha.md",
+      fileName: "Kickoff project Alpha.md",
       title: "Kickoff project Alpha",
       type: "meeting",
       created: "2026-07-25T14:32:00+02:00",
@@ -57,6 +60,7 @@ describe("the SQLite index", () => {
       location: "Teams",
       attendees: ["Jan de Vries"],
       tags: ["klantx"],
+      excerpt: "Kickoff met de klant over project Alpha.",
       mtime: 1_000,
       size: 200,
       hash: "abc123",

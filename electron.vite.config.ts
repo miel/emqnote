@@ -9,10 +9,11 @@ import react from "@vitejs/plugin-react";
  * steps the ESM/CJS resolution that remark and prosemirror otherwise run into.
  *
  * **Note:** electron-vite externalises *everything* listed in package.json's
- * `dependencies` by default. That is why that list is empty and the build packages
- * live in `devDependencies`. The `external` below is the second lock on the same door,
- * and `npm run check:bundle` is the third: it fails if a bare import ends up in the
- * bundle after all.
+ * `dependencies` by default. That is why that list stays minimal on purpose — see the
+ * `//dependencies` note there — and the build packages live in `devDependencies`
+ * instead. The `external` below is the second lock on the same door, and
+ * `npm run check:bundle` is the third: it fails if a bare import ends up in the bundle
+ * after all.
  *
  * The preload script stays CJS: a sandboxed preload cannot load ESM, and we want to
  * keep the sandbox on.
@@ -22,10 +23,11 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: "src/main/index.ts",
-        // electron-updater does dynamic requires that don't survive bundling, and is
-        // shipped instead via electron-builder.yml's dependency walk (package.json
-        // `dependencies`). It is only ever imported on the win32 update path.
-        external: ["electron", "electron-updater"],
+        // electron-updater and better-sqlite3 both do dynamic requires that don't
+        // survive bundling — better-sqlite3's is how it locates its native `.node`
+        // binary, so it could not be bundled even in principle. Both ship instead via
+        // electron-builder.yml's dependency walk (package.json `dependencies`).
+        external: ["electron", "electron-updater", "better-sqlite3"],
         output: { format: "es", entryFileNames: "[name].js" },
       },
     },
