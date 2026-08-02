@@ -27,10 +27,12 @@ interface Props {
   canCreateFolder: boolean;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
+  onOpenOrphanedAttachments: () => void;
   newFolderLabel: string;
   renameFolderLabel: string;
   helpLabel: string;
   settingsLabel: string;
+  orphanedAttachmentsLabel: string;
   trashLabel: string;
   tagsLabel: string;
   peopleLabel: string;
@@ -148,10 +150,12 @@ export function FolderTree({
   canCreateFolder,
   onOpenSettings,
   onOpenHelp,
+  onOpenOrphanedAttachments,
   newFolderLabel,
   renameFolderLabel,
   helpLabel,
   settingsLabel,
+  orphanedAttachmentsLabel,
   trashLabel,
   tagsLabel,
   peopleLabel,
@@ -261,6 +265,19 @@ export function FolderTree({
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">?</span>
           <span className="branch-name">{helpLabel}</span>
+        </div>
+
+        {/* §6.5's manual, explicit cleanup action — deliberately down here with Settings
+            and Help rather than anywhere more prominent, since nothing about it is
+            urgent the way a sync conflict is. */}
+        <div
+          className="branch tree-settings"
+          style={{ paddingLeft: "8px" }}
+          onClick={onOpenOrphanedAttachments}
+        >
+          <span className="twisty twisty-empty" />
+          <span className="filter-glyph">⎚</span>
+          <span className="branch-name">{orphanedAttachmentsLabel}</span>
         </div>
       </div>
     </nav>

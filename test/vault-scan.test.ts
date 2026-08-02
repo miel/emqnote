@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeIndex, openIndex, type IndexDb } from "../src/main/index-db.js";
 import { parseSearchQuery } from "../src/main/search-query.js";
-import { facets, notesMatching, searchNotes } from "../src/main/vault-scan.js";
+import { conflicts, facets, notesMatching, searchNotes } from "../src/main/vault-scan.js";
 
 let vault: string;
 let db: IndexDb;
@@ -306,5 +306,28 @@ describe("running a search-bar query", () => {
     const found = await searchNotes(vault, db, parseSearchQuery(""));
 
     expect(found.map((n) => n.title).sort()).toEqual(["Een", "Twee"]);
+  });
+});
+
+describe("finding OneDrive conflicts from the index", () => {
+  it("pairs a machine-suffixed copy with its original", async () => {
+    note("00 Inbox", "Kickoff");
+    note("00 Inbox", "Kickoff-LAPTOP-ABC123");
+
+    const found = await conflicts(vault, db);
+
+    expect(found).toEqual([
+      {
+        original: "00 Inbox/Kickoff.md",
+        conflict: "00 Inbox/Kickoff-LAPTOP-ABC123.md",
+      },
+    ]);
+  });
+
+  it("finds nothing when there is no conflict", async () => {
+    note("00 Inbox", "Een");
+    note("00 Inbox", "Twee");
+
+    expect(await conflicts(vault, db)).toEqual([]);
   });
 });

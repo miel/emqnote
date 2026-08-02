@@ -40,7 +40,7 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
 | 3 Hoofdvenster | Mappenboom, notitielijst, lezen en bewerken, verplaatsen, prullenbak — op slepen in de boom na, dat werk-item is nog niet gebouwd |
 | 4 Plakken en afbeeldingen | Nog niet begonnen — de volgende fase, en het grootste onbekende stuk werk |
-| 5 Zoeken en synchronisatie | Backend compleet en getest: SQLite/FTS5-index, volledige scan, `chokidar`-watcher, zoekbalk-querytaal, conflictkopie-herkenning, verweesde-bijlagen-detectie. Nog geen IPC of UI: geen zoekbalk, geen conflictbanner, geen opruimscherm |
+| 5 Zoeken en synchronisatie | **Klaar.** SQLite/FTS5-index, volledige scan, `chokidar`-watcher, zoekbalk, conflictbanner met verschil en drie keuzes, opruimscherm voor verweesde bijlagen — alles bevestigd werkend via `Xvfb`, echte bestandsoperaties op schijf, niet alleen gerenderd |
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
@@ -60,7 +60,7 @@ npm run pack:mac   # verpakte app (zip) in release/
 npm run pack:win   # installer in release/, sinds B22
 ```
 
-`npm test` draait de volledige suite van 438 tests over alle 26 testbestanden. Tot
+`npm test` draait de volledige suite van 460 tests over alle 27 testbestanden. Tot
 2 augustus 2026 liep deze sandbox op Node 18 — te oud voor `jsdom` (ESM) en voor
 `better-sqlite3` (segfault, ≥22 vereist) — waardoor `schema-dom.test.ts` en
 `checkbox-widget.test.ts` hier niet laadden. Een `nvm`-install van Node 24 (naast het
@@ -89,7 +89,9 @@ een exitcode, dus hij kan zo in CI.
 
 **Klaar sinds de vorige versie van dit plan:** de vault-keuze bij eerste start — welke
 OneDrive-tenant, van de twee zakelijke plus gedeelde bibliotheken op de Mac Mini — is
-gebouwd; de app raadt niet en vraagt het. Zie B21 in 05-besluitenlog.md.
+gebouwd; de app raadt niet en vraagt het. Zie B21 in 05-besluitenlog.md. Fase 5 is
+sindsdien ook helemaal klaar — zie de tabel hierboven en `TODO.md` voor het volledige
+verhaal.
 
 1. **Uitzoeken of Power Automate beschikbaar is** in je werk-M365, voor het
    e-mail-vangnet in fase 6. Terugval staat klaar, dus dit blokkeert niets.

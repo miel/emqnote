@@ -1,3 +1,7 @@
+import type { ConflictPair } from "../shared/vault-types.js";
+
+export type { ConflictPair };
+
 /**
  * Recognising a OneDrive sync conflict from filenames alone —
  * `02-technisch-ontwerp.md` §5.2.
@@ -23,13 +27,6 @@
  * make, not a bug introduced here — see its own "de watcher *herkent* dat patroon"
  * (recognises the pattern), not "verifies" it.
  */
-
-export interface ConflictPair {
-  /** The note nothing renamed — where OneDrive's own sync considers the winner to live. */
-  original: string;
-  /** The machine-suffixed copy sitting next to it. */
-  conflict: string;
-}
 
 /**
  * Candidate "original" names for a conflict copy's stem (filename without `.md`),

@@ -23,11 +23,14 @@ import {
 import {
   FOLDER_ERROR,
   TRASH_FOLDER,
+  type ConflictChoice,
+  type ConflictPair,
   type FolderNode,
   type NoteSummary,
   type OpenedNote,
   type SaveNoteRequest,
 } from "../shared/vault-types.js";
+import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
 
 /**
@@ -353,6 +356,74 @@ export function trashNote(vault: string, notePath: string): string {
   renameSync(from, to);
 
   return toPosix(relative(vault, to));
+}
+
+/**
+ * `uniquePath`'s own collision suffix is hardcoded to `.md` — exactly right for a note,
+ * silently wrong for anything else: a colliding `photo.png` would come back
+ * `photo (2).md`, an image quietly turned into a markdown file by its own trash
+ * operation. `trashAttachment` below needs a collision suffix that keeps whatever
+ * extension the file actually has.
+ */
+function uniqueAttachmentPath(directory: string, fileName: string): string {
+  const candidate = join(directory, fileName);
+  if (!existsSync(candidate)) return candidate;
+
+  const dot = fileName.lastIndexOf(".");
+  const base = dot === -1 ? fileName : fileName.slice(0, dot);
+  const extension = dot === -1 ? "" : fileName.slice(dot);
+
+  for (let counter = 2; counter < 1000; counter += 1) {
+    const next = join(directory, `${base} (${counter})${extension}`);
+    if (!existsSync(next)) return next;
+  }
+
+  return join(directory, `${base} (${Date.now()})${extension}`);
+}
+
+/** Same reasoning as `trashNote`, for one file under `_attachments/` — §6.5's manual, explicit cleanup, never automatic. */
+export function trashAttachment(vault: string, attachmentPath: string): string {
+  const from = join(vault, attachmentPath);
+  const trashDirectory = join(vault, TRASH);
+  mkdirSync(trashDirectory, { recursive: true });
+
+  const to = uniqueAttachmentPath(trashDirectory, basename(attachmentPath));
+  renameSync(from, to);
+
+  return toPosix(relative(vault, to));
+}
+
+/** The conflict banner's own line-by-line diff — reads both files fresh, never cached, since either can change out from under it while the banner is open. */
+export function diffConflict(
+  vault: string,
+  pair: { original: string; conflict: string },
+): DiffLine[] {
+  const original = readFileSync(join(vault, pair.original), "utf8");
+  const conflict = readFileSync(join(vault, pair.conflict), "utf8");
+  return diffText(original, conflict);
+}
+
+/**
+ * Carries out one of the three choices `02-technisch-ontwerp.md` §5.2 offers for a
+ * OneDrive conflict: `keepOriginal` trashes the conflict copy and leaves the original
+ * exactly where it was; `keepConflict` trashes the original — through the same
+ * `trashNote` a manual delete uses, never a permanent unlink, because this is still
+ * overwriting a note's canonical path — and renames the conflict copy into its place.
+ * There is no third branch here for "merge": that choice does not touch either file at
+ * all, so the renderer never calls this for it. See `ConflictBanner.tsx`.
+ */
+export function resolveConflict(
+  vault: string,
+  pair: ConflictPair,
+  choice: ConflictChoice,
+): void {
+  if (choice === "keepOriginal") {
+    trashNote(vault, pair.conflict);
+    return;
+  }
+
+  trashNote(vault, pair.original);
+  renameSync(join(vault, pair.conflict), join(vault, pair.original));
 }
 
 export function createFolder(vault: string, parent: string, name: string): string {

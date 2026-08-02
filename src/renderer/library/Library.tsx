@@ -5,6 +5,7 @@ import {
   folderErrorOf,
   selectionKey,
   TRASH_FOLDER,
+  type ConflictPair,
   type Facets,
   type FolderNode,
   type NoteSummary,
@@ -19,9 +20,11 @@ import { LinkPrompt } from "../LinkPrompt.js";
 import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
+import { ConflictBanner } from "./ConflictBanner.js";
 import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
+import { OrphanedAttachments } from "./OrphanedAttachments.js";
 import { Settings } from "./Settings.js";
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -88,7 +91,16 @@ export function Library(): React.ReactElement {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
+  /**
+   * OneDrive conflict pairs, loaded eagerly on mount and on every `library:refresh` —
+   * unlike `facets`, which stays behind the collapsed Tags/People sections specifically
+   * so opening the library never pays for a scan nobody asked for. A conflict banner is
+   * meant to be seen without having to ask, which is the whole point of it, so this one
+   * pays that cost up front instead.
+   */
+  const [conflicts, setConflicts] = useState<ConflictPair[]>([]);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -107,6 +119,10 @@ export function Library(): React.ReactElement {
 
   const loadTree = useCallback(async () => {
     setTree(await window.emqnote.library.tree());
+  }, []);
+
+  const loadConflicts = useCallback(async () => {
+    setConflicts(await window.emqnote.library.conflicts());
   }, []);
 
   /**
@@ -181,14 +197,16 @@ export function Library(): React.ReactElement {
 
   useEffect(() => {
     void loadTree();
+    void loadConflicts();
     const stop = window.emqnote.library.onRefresh(() => {
       void loadTree();
       void loadNotes(selectionRef.current);
       refreshFacets();
       void refreshEditable();
+      void loadConflicts();
     });
     return stop;
-  }, [loadTree, loadNotes, refreshFacets, refreshEditable]);
+  }, [loadTree, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
@@ -442,157 +460,167 @@ export function Library(): React.ReactElement {
   };
 
   return (
-    <div className="library">
-      <FolderTree
-        root={tree}
-        selected={selection}
-        facets={facets}
-        onSelect={(target) => {
-          setSelection(target);
-          if (target.kind === "folder") setLastFolder(target.path);
-          // Picking something in the tree is a stronger signal than a half-typed
-          // query — clear it rather than leave the list disagreeing with what looks
-          // selected. Cancel a pending debounce too, or a stale search fired 150ms
-          // ago would overwrite the folder this click just asked for.
-          if (searchQuery !== "") {
-            if (searchTimer.current !== null) clearTimeout(searchTimer.current);
-            setSearchQuery("");
-          }
-        }}
-        onExpandFilters={() => void loadFacets()}
-        onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
-        onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
-        onRenameFolder={() =>
-          setDialog({
-            kind: "renameFolder",
-            path: lastFolder,
-            initial: lastFolder.split("/").pop() ?? "",
-          })
-        }
-        canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
-        canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenHelp={() => setHelpOpen(true)}
-        newFolderLabel={app.t("library.newFolder")}
-        renameFolderLabel={app.t("library.renameFolder")}
-        helpLabel={app.t("help.title")}
-        settingsLabel={app.t("settings.title")}
-        trashLabel={app.t("library.trash")}
-        tagsLabel={app.t("library.tags")}
-        peopleLabel={app.t("library.people")}
-        emptyLabel={app.t("library.filterEmpty")}
-        unavailableLabel={app.t("library.filterUnavailable")}
-        filterLabel={app.t("library.filterSearch")}
-      />
-
-      <NoteList
-        notes={sorted}
-        selected={open?.path ?? null}
-        showing={selection}
-        searching={searchQuery.trim() !== ""}
-        searchQuery={searchQuery}
-        onSearchChange={onSearchChange}
-        sort={sort}
-        onSort={setSort}
-        onSelect={(path) => void openNote(path)}
-        onOpenInCapture={(path) => void openInCapture(path)}
-        onNewNote={() => window.emqnote.library.newNote()}
-        locale={app.locale}
+    <div className="library-shell">
+      <ConflictBanner
+        pairs={conflicts}
         t={app.t}
+        onMerge={(path) => void openNote(path)}
       />
 
-      <section className="reader">
-        {open === null ? (
-          <div className="reader-empty">
-            <p>{app.t("library.pick")}</p>
-            <p className="reader-hint">{app.t("library.pickHint")}</p>
-          </div>
-        ) : (
-          <>
-            <header className="reader-header">
-              <div className="reader-titles">
-                <h1>{open.title}</h1>
-                <span className="reader-path">{open.path}</span>
+      <div className="library">
+        <FolderTree
+          root={tree}
+          selected={selection}
+          facets={facets}
+          onSelect={(target) => {
+            setSelection(target);
+            if (target.kind === "folder") setLastFolder(target.path);
+            // Picking something in the tree is a stronger signal than a half-typed
+            // query — clear it rather than leave the list disagreeing with what looks
+            // selected. Cancel a pending debounce too, or a stale search fired 150ms
+            // ago would overwrite the folder this click just asked for.
+            if (searchQuery !== "") {
+              if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+              setSearchQuery("");
+            }
+          }}
+          onExpandFilters={() => void loadFacets()}
+          onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
+          onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
+          onRenameFolder={() =>
+            setDialog({
+              kind: "renameFolder",
+              path: lastFolder,
+              initial: lastFolder.split("/").pop() ?? "",
+            })
+          }
+          canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
+          canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
+          onOpenOrphanedAttachments={() => setOrphanedAttachmentsOpen(true)}
+          newFolderLabel={app.t("library.newFolder")}
+          renameFolderLabel={app.t("library.renameFolder")}
+          helpLabel={app.t("help.title")}
+          settingsLabel={app.t("settings.title")}
+          orphanedAttachmentsLabel={app.t("orphans.title")}
+          trashLabel={app.t("library.trash")}
+          tagsLabel={app.t("library.tags")}
+          peopleLabel={app.t("library.people")}
+          emptyLabel={app.t("library.filterEmpty")}
+          unavailableLabel={app.t("library.filterUnavailable")}
+          filterLabel={app.t("library.filterSearch")}
+        />
+  
+        <NoteList
+          notes={sorted}
+          selected={open?.path ?? null}
+          showing={selection}
+          searching={searchQuery.trim() !== ""}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          sort={sort}
+          onSort={setSort}
+          onSelect={(path) => void openNote(path)}
+          onOpenInCapture={(path) => void openInCapture(path)}
+          onNewNote={() => window.emqnote.library.newNote()}
+          locale={app.locale}
+          t={app.t}
+        />
+  
+        <section className="reader">
+          {open === null ? (
+            <div className="reader-empty">
+              <p>{app.t("library.pick")}</p>
+              <p className="reader-hint">{app.t("library.pickHint")}</p>
+            </div>
+          ) : (
+            <>
+              <header className="reader-header">
+                <div className="reader-titles">
+                  <h1>{open.title}</h1>
+                  <span className="reader-path">{open.path}</span>
+                </div>
+                <div className="reader-actions">
+                  <span className="reader-state">
+                    {open.editable
+                      ? app.t(dirty ? "library.saving" : "library.saved")
+                      : app.t("library.openInCapture")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ kind: "rename", initial: open.title })}
+                  >
+                    {app.t("library.rename")}
+                  </button>
+                  <button type="button" onClick={() => setMoving(true)}>
+                    {app.t("library.move")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.emqnote.library.revealNote(open.path)}
+                  >
+                    {app.t("library.reveal")}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => setDialog({ kind: "delete", title: open.title })}
+                  >
+                    {app.t("library.delete")}
+                  </button>
+                </div>
+              </header>
+  
+              {/* `pointer-events: none` when a note is claimed by the capture window: the
+                  content stays visible — reading it while it is being typed into
+                  elsewhere is the point — but nothing here can be clicked into, so no
+                  keystroke can slip past the `editable` guards in `onDocChange` and
+                  `onHeaderChange`. */}
+              <div className={open.editable ? "reader-body" : "reader-body reader-locked"}>
+                {/* The same block as the capture window, minus the subject and the kind
+                    toggle. Fixing an attendee list or a date used to mean editing the
+                    file by hand outside the app. */}
+                {header !== null && (
+                  <HeaderBlock
+                    variant="reader"
+                    values={header}
+                    onChange={onHeaderChange}
+                    onLeave={() => editor.current?.focus()}
+                    locale={app.locale}
+                    t={app.t}
+                  />
+                )}
+  
+                <Editor
+                  ref={editor}
+                  onChange={onDocChange}
+                  onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
+                />
               </div>
-              <div className="reader-actions">
-                <span className="reader-state">
-                  {open.editable
-                    ? app.t(dirty ? "library.saving" : "library.saved")
-                    : app.t("library.openInCapture")}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setDialog({ kind: "rename", initial: open.title })}
-                >
-                  {app.t("library.rename")}
-                </button>
-                <button type="button" onClick={() => setMoving(true)}>
-                  {app.t("library.move")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.emqnote.library.revealNote(open.path)}
-                >
-                  {app.t("library.reveal")}
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => setDialog({ kind: "delete", title: open.title })}
-                >
-                  {app.t("library.delete")}
-                </button>
-              </div>
-            </header>
-
-            {/* `pointer-events: none` when a note is claimed by the capture window: the
-                content stays visible — reading it while it is being typed into
-                elsewhere is the point — but nothing here can be clicked into, so no
-                keystroke can slip past the `editable` guards in `onDocChange` and
-                `onHeaderChange`. */}
-            <div className={open.editable ? "reader-body" : "reader-body reader-locked"}>
-              {/* The same block as the capture window, minus the subject and the kind
-                  toggle. Fixing an attendee list or a date used to mean editing the
-                  file by hand outside the app. */}
-              {header !== null && (
-                <HeaderBlock
-                  variant="reader"
-                  values={header}
-                  onChange={onHeaderChange}
-                  onLeave={() => editor.current?.focus()}
-                  locale={app.locale}
+  
+              {link !== null && (
+                <LinkPrompt
+                  initialHref={link.href}
+                  onApply={(href) => {
+                    editor.current?.applyLink(href);
+                    setLink(null);
+                  }}
+                  onCancel={() => {
+                    setLink(null);
+                    editor.current?.focus();
+                  }}
                   t={app.t}
+                  onApplyAndClose={(href) => {
+                    editor.current?.applyLink(href);
+                    setLink(null);
+                  }}
                 />
               )}
-
-              <Editor
-                ref={editor}
-                onChange={onDocChange}
-                onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
-              />
-            </div>
-
-            {link !== null && (
-              <LinkPrompt
-                initialHref={link.href}
-                onApply={(href) => {
-                  editor.current?.applyLink(href);
-                  setLink(null);
-                }}
-                onCancel={() => {
-                  setLink(null);
-                  editor.current?.focus();
-                }}
-                t={app.t}
-                onApplyAndClose={(href) => {
-                  editor.current?.applyLink(href);
-                  setLink(null);
-                }}
-              />
-            )}
-          </>
-        )}
-      </section>
+            </>
+          )}
+        </section>
+      </div>
 
       {moving && open !== null && (
         <MoveDialog
@@ -684,6 +712,10 @@ export function Library(): React.ReactElement {
           t={app.t}
           onClose={() => setHelpOpen(false)}
         />
+      )}
+
+      {orphanedAttachmentsOpen && (
+        <OrphanedAttachments t={app.t} onClose={() => setOrphanedAttachmentsOpen(false)} />
       )}
     </div>
   );

@@ -143,3 +143,17 @@ export interface Facets {
    */
   available: boolean;
 }
+
+/** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */
+export interface ConflictPair {
+  original: string;
+  conflict: string;
+}
+
+export type ConflictChoice = "keepOriginal" | "keepConflict";
+
+/** One line of `src/main/diff.ts`'s output. */
+export type DiffLine =
+  | { kind: "same"; text: string }
+  | { kind: "removed"; text: string }
+  | { kind: "added"; text: string };

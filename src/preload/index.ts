@@ -5,10 +5,16 @@ import {
   type ShowPayload,
   type StatusPayload,
 } from "../shared/ipc.js";
-import type { OpenedNote, SaveNoteRequest, Selection } from "../shared/vault-types.js";
+import type {
+  ConflictChoice,
+  ConflictPair,
+  OpenedNote,
+  SaveNoteRequest,
+  Selection,
+} from "../shared/vault-types.js";
 
 /**
- * The renderer gets exactly these nine things and nothing else. The sandbox stays on
+ * The renderer gets exactly what is listed here and nothing else. The sandbox stays on
  * and contextIsolation stays on; there is no reason a note window should be able to
  * reach Node.
  */
@@ -60,5 +66,14 @@ contextBridge.exposeInMainWorld("emqnote", {
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
     newNote: () => ipcRenderer.send(IPC.captureNew),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
+
+    conflicts: () => ipcRenderer.invoke(IPC.libraryConflicts),
+    conflictDiff: (pair: ConflictPair) => ipcRenderer.invoke(IPC.libraryConflictDiff, pair),
+    resolveConflict: (pair: ConflictPair, choice: ConflictChoice) =>
+      ipcRenderer.invoke(IPC.libraryResolveConflict, pair, choice),
+
+    orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
+    attachmentPreview: (path: string) => ipcRenderer.invoke(IPC.libraryAttachmentPreview, path),
+    trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
   },
 });

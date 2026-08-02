@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { findOrphanedAttachments } from "../src/main/orphaned-attachments.js";
+import { attachmentPreview, findOrphanedAttachments } from "../src/main/orphaned-attachments.js";
 
 let vault: string;
 
@@ -83,5 +83,32 @@ describe("finding orphaned attachments", () => {
     note("00 Inbox", "Kickoff", "![[een.png]] en ![[twee.png]]");
 
     expect(findOrphanedAttachments(vault)).toEqual([]);
+  });
+});
+
+describe("previewing an attachment", () => {
+  it("returns a data URL for an image, matching its actual bytes", () => {
+    attachment("2026/07/foto.png", "niet-echte-png-bytes");
+
+    const preview = attachmentPreview(vault, "_attachments/2026/07/foto.png");
+
+    expect(preview).toBe(
+      `data:image/png;base64,${Buffer.from("niet-echte-png-bytes").toString("base64")}`,
+    );
+  });
+
+  it("picks the right MIME type per extension", () => {
+    attachment("2026/07/foto.jpg", "x");
+    expect(attachmentPreview(vault, "_attachments/2026/07/foto.jpg")).toMatch(/^data:image\/jpeg;/);
+  });
+
+  it("returns null for a non-image attachment", () => {
+    attachment("2026/07/offerte.pdf", "x");
+
+    expect(attachmentPreview(vault, "_attachments/2026/07/offerte.pdf")).toBeNull();
+  });
+
+  it("returns null for a file that does not exist", () => {
+    expect(attachmentPreview(vault, "_attachments/2026/07/weg.png")).toBeNull();
   });
 });

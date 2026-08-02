@@ -1,12 +1,23 @@
 /* The library window: folder tree, note list, note. */
 
+/* Wraps the conflict banner above the three-column grid. `flex: 1` on `.library` below
+   is what makes the grid take "whatever height is left" instead of the full window —
+   the banner needs real space above it, not to float over the tree toolbar. */
+.library-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* `minmax(0, …)` on every track: a grid item defaults to a minimum size of its own
    content, so a long note title was pushing the third column wider than the window and
    the whole layout jittered while resizing. */
 .library {
   display: grid;
   grid-template-columns: minmax(0, 236px) minmax(0, 300px) minmax(0, 1fr);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--background);
 }
@@ -709,4 +720,174 @@
 .settings-confirm p {
   margin: 0 0 10px;
   color: var(--muted);
+}
+
+/* ---- conflict banner ---- */
+
+.conflict-banner {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 14px;
+  color: #7a4a00;
+  background: #ffd875;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+}
+
+.conflict-dialog {
+  width: min(640px, 86vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+.conflict-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.conflict-path {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-diff {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+}
+
+.conflict-loading {
+  margin: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.diff-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 1px 10px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diff-marker {
+  display: inline-block;
+  width: 14px;
+  color: var(--muted);
+}
+
+/* Overlay tints rather than solid colours — the same `rgba(127, 127, 127, …)` technique
+   `.branch-on` already uses, so this reads correctly in both colour schemes without a
+   separate dark-mode override. */
+.diff-added {
+  background: rgba(26, 127, 55, 0.16);
+}
+
+.diff-removed {
+  background: rgba(196, 43, 28, 0.14);
+}
+
+/* ---- orphaned attachments ---- */
+
+.orphans {
+  width: min(640px, 86vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+.orphans h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.orphans-note {
+  margin: 6px 0 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.orphans-grid {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.orphan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.orphan-preview {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--background);
+}
+
+.orphan-generic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.orphan-name {
+  width: 100%;
+  font-size: 11px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orphan .danger {
+  font: inherit;
+  font-size: 11px;
+  color: #c42b1c;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: default;
+}
+
+.orphan .danger:hover {
+  border-color: #c42b1c;
 }

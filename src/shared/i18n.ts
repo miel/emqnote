@@ -142,6 +142,20 @@ const DUTCH: Record<string, string> = {
     "emqnote start opnieuw op om naar deze vault over te schakelen. Wat nog niet " +
     "bewaard is, wordt eerst weggeschreven.",
   "settings.vaultRestartConfirm": "Opnieuw opstarten",
+
+  // Conflict banner
+  "conflict.banner": "notitie is op twee machines gewijzigd — klik om op te lossen",
+  "conflict.bannerPlural": "notities zijn op twee machines gewijzigd — klik om op te lossen",
+  "conflict.title": "Deze notitie is op twee machines gewijzigd",
+  "conflict.loading": "Verschil laden…",
+  "conflict.keepThis": "Deze houden",
+  "conflict.keepThat": "Die houden",
+  "conflict.merge": "Samenvoegen in de editor",
+
+  // Orphaned attachments
+  "orphans.title": "Verweesde bijlagen",
+  "orphans.loading": "Bezig met zoeken…",
+  "orphans.empty": "Geen verweesde bijlagen gevonden.",
 };
 
 export function translate(locale: Locale, key: string): string {
@@ -275,6 +289,20 @@ const ENGLISH: Record<string, string> = {
     "emqnote restarts to switch to this vault. Anything not yet saved is written out " +
     "first.",
   "settings.vaultRestartConfirm": "Restart",
+
+  // Conflict banner
+  "conflict.banner": "note was changed on two machines — click to resolve",
+  "conflict.bannerPlural": "notes were changed on two machines — click to resolve",
+  "conflict.title": "This note was changed on two machines",
+  "conflict.loading": "Loading diff…",
+  "conflict.keepThis": "Keep this one",
+  "conflict.keepThat": "Keep that one",
+  "conflict.merge": "Merge in the editor",
+
+  // Orphaned attachments
+  "orphans.title": "Orphaned attachments",
+  "orphans.loading": "Looking…",
+  "orphans.empty": "No orphaned attachments found.",
 };
 
 /**

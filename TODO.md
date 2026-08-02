@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
-| 5 — index and search | Backend complete and tested. **The search bar is now wired end to end** (IPC, preload, a real input in the library window) — the first piece of phase 5's UI, confirmed rendering via `Xvfb`. Still unbuilt: the conflict banner and the orphaned-attachments cleanup screen. See "Settled" below. |
+| 5 — index and search | **Done.** Search bar, conflict banner (diff + keep/keep/merge) and the orphaned-attachments cleanup screen are all wired end to end — IPC, preload, real UI — and confirmed actually working via `Xvfb`: a real conflict pair resolved on disk, a real orphaned attachment trashed on disk, not just rendered. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -450,10 +450,73 @@ underneath the box (the parser, the query-runner, the IPC plumbing) already
 has its own tests from when phase 5's backend was built, so this is UI
 wiring on top of already-verified logic, not new untested logic.
 
-What's left in the phase: the conflict banner with its diff and three
-choices, and the orphaned-attachments cleanup screen with its thumbnails —
-see `02-technisch-ontwerp.md` §5.2/§6.5 for what each one needs to show.
-Neither has been started.
+**Phase 5 is done — the conflict banner and the orphaned-attachments cleanup
+screen both landed, and both were verified actually working, on disk, not
+just rendered.** New backend underneath them:
+
+- `src/main/diff.ts` — a line-by-line diff, the classic O(n·m) longest-
+  common-subsequence table rather than the O(ND) Myers algorithm a real diff
+  tool uses. Deliberate at this scale: a note is at most a few hundred
+  lines, and the simpler algorithm is also the simpler one to get right. 11
+  tests.
+- `vault-io.ts`'s `resolveConflict(vault, pair, choice)` — `keepOriginal`
+  trashes the conflict copy; `keepConflict` trashes the *original* (through
+  the same `trashNote` a manual delete uses, never a permanent unlink,
+  since this is still overwriting a note's canonical path) and renames the
+  conflict copy into its place. No third branch for "merge" — that choice
+  touches no file at all, so the renderer never calls this for it; it just
+  opens the original note the same as clicking it in the list would, and
+  leaves the conflict copy exactly where it is for the user to reconcile by
+  hand, in their own time.
+- `vault-io.ts`'s `trashAttachment` — deliberately *not* `trashNote` reused
+  for a different file type: `uniquePath`'s collision suffix is hardcoded
+  to `.md`, so a colliding `photo.png` would come back `photo (2).md` — an
+  image silently turned into a markdown file by its own trash operation.
+  Caught before it shipped, not after.
+- `orphaned-attachments.ts`'s `attachmentPreview` — a data URL for an
+  image attachment, no thumbnail actually generated. Deliberate scope cut:
+  real resizing (`sharp`) was only ever anticipated for phase 4's inline
+  images, and this screen is opened by hand, occasionally, for however many
+  files happen to be orphaned.
+- `vault-scan.ts`'s `conflicts(vault, db)` — `findConflictCopies` run
+  against the same index every other view reads, refreshed eagerly on
+  mount and on every `library:refresh` rather than staying lazy behind a
+  fold the way Tags/People do: a banner that only shows up after the user
+  goes looking for it defeats the point of a banner.
+- `ConflictPair`/`ConflictChoice`/`DiffLine` moved to `shared/vault-types.ts`
+  — they cross the IPC boundary, so they cannot live in a `src/main/`-only
+  module the way they started out.
+
+UI: `ConflictBanner.tsx` (a slim banner plus its dialog, one conflict shown
+at a time even when several exist — resolving one never auto-advances into
+the next, since trashing a note either way is too consequential to happen
+back to back without the user choosing to look again) and
+`OrphanedAttachments.tsx` (a thumbnail grid, loaded once per visit rather
+than kept live, since `findOrphanedAttachments` re-parses every note in the
+vault). Both reuse the existing `.overlay`/`.settings-buttons` dialog
+chrome rather than inventing new chrome. `FolderTree.tsx` gained a fourth
+footer entry next to Trash/Settings/Help for the cleanup screen — nothing
+about it is urgent the way a sync conflict is, so it stays down there
+rather than anywhere more prominent. The banner itself needed its own
+layout fix: `.library`'s three-column grid had no row to put a banner in
+without breaking it, so `Library.tsx` now renders a `.library-shell` flex
+wrapper (banner, then the grid) instead of the grid being the direct child
+of the window — a real, if small, restructuring, not just an added
+component.
+
+**Xvfb verification found and fixed a real bug this pass**: the orphaned-
+attachments preview's `data:` URL was silently blocked by `library.html`'s
+CSP (`default-src 'self'` with no `img-src`), which only surfaced as a
+console warning, not a thrown error — the preview would have rendered as a
+quietly broken image with nothing pointing at why. Fixed by adding
+`img-src 'self' data:` to that one window's CSP. Beyond that: a real
+conflict pair was created, resolved via `--click-button` clicking "Keep
+this one", and confirmed the conflict copy actually landed in `_trash/` and
+the original was untouched, banner gone, tree refreshed; a real orphaned
+attachment was created, deleted via the same mechanism, and confirmed
+trashed on disk with the screen falling back to its empty state. Not
+simulated — the actual file operations, through the actual IPC handlers,
+on files a real Electron process wrote.
 
 ## Unexplained, worth settling
 

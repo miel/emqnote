@@ -36,22 +36,31 @@ import {
 } from "./vault.js";
 import {
   createFolder,
+  diffConflict,
   renameFolder,
   moveNote,
   openNote,
   readFolderTree,
   renameNote,
+  resolveConflict,
   saveNote,
+  trashAttachment,
   trashNote,
 } from "./vault-io.js";
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
 // note is re-read and an unchanged one is not. A capture landing mid-session costs the
 // stat walk, not another full read.
-import { facets, notesMatching, searchNotes } from "./vault-scan.js";
+import { conflicts, facets, notesMatching, searchNotes } from "./vault-scan.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
-import type { SaveNoteRequest, Selection } from "../shared/vault-types.js";
+import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
+import type {
+  ConflictChoice,
+  ConflictPair,
+  SaveNoteRequest,
+  Selection,
+} from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
 // Windows: Roaming AppData can be synchronised by a corporate profile, which is exactly
@@ -495,6 +504,44 @@ function registerLibraryIpc(): void {
     return vault === null || indexDb === null
       ? { tags: [], people: [], available: false }
       : await facets(vault, indexDb, writer.uncommittedNewPath() ?? undefined);
+  });
+
+  ipcMain.handle(IPC.libraryConflicts, async () => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null ? [] : await conflicts(vault, indexDb);
+  });
+
+  ipcMain.handle(IPC.libraryConflictDiff, (_event, pair: ConflictPair) => {
+    const vault = vaultPath();
+    return vault === null ? [] : diffConflict(vault, pair);
+  });
+
+  ipcMain.handle(
+    IPC.libraryResolveConflict,
+    (_event, pair: ConflictPair, choice: ConflictChoice) => {
+      const vault = vaultPath();
+      if (vault === null) return;
+      resolveConflict(vault, pair, choice);
+      notifyLibrary();
+    },
+  );
+
+  ipcMain.handle(IPC.libraryOrphanedAttachments, () => {
+    const vault = vaultPath();
+    return vault === null ? [] : findOrphanedAttachments(vault);
+  });
+
+  ipcMain.handle(IPC.libraryAttachmentPreview, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? null : attachmentPreview(vault, path);
+  });
+
+  ipcMain.handle(IPC.libraryTrashAttachment, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    const trashed = trashAttachment(vault, path);
+    notifyLibrary();
+    return trashed;
   });
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {

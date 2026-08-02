@@ -1,5 +1,6 @@
 import { foldTag } from "../markdown/index.js";
 import type { Facet, Facets, NoteSummary, Selection } from "../shared/vault-types.js";
+import { findConflictCopies, type ConflictPair } from "./conflicts.js";
 import { allNotes, getNote, search, type IndexDb, type NoteMeta } from "./index-db.js";
 import { fullScan } from "./index-scan.js";
 import type { ParsedQuery } from "./search-query.js";
@@ -74,6 +75,14 @@ function ranked(seen: Map<string, Facet>): Facet[] {
   return [...seen.values()].sort(
     (a, b) => b.count - a.count || a.name.localeCompare(b.name, undefined, { numeric: true }),
   );
+}
+
+/** Every OneDrive conflict pair currently in the vault, from the same index the note list already reads. */
+export async function conflicts(vault: string, db: IndexDb): Promise<ConflictPair[]> {
+  await ensureScanned(vault, db);
+  if (!available) return [];
+
+  return findConflictCopies(allNotes(db).map((note) => note.path));
 }
 
 export async function facets(vault: string, db: IndexDb, excludePath?: string): Promise<Facets> {

@@ -1,5 +1,8 @@
 import type { Locale } from "./i18n.js";
 import type {
+  ConflictChoice,
+  ConflictPair,
+  DiffLine,
   Facets,
   FolderNode,
   NoteSummary,
@@ -60,6 +63,19 @@ export const IPC = {
   libraryRefresh: "library:refresh",
   /** Whether the note at this path is still free to save — see `OpenedNote.editable`. */
   libraryNoteEditable: "library:note-editable",
+
+  /** OneDrive conflict copies currently in the vault — §5.2. */
+  libraryConflicts: "library:conflicts",
+  /** The line-by-line diff for one conflict pair. */
+  libraryConflictDiff: "library:conflict-diff",
+  /** Keep this one, or keep the conflict copy instead — never "merge", which touches no file. */
+  libraryResolveConflict: "library:resolve-conflict",
+
+  /** `_attachments/` files no note refers to any more — §6.5. */
+  libraryOrphanedAttachments: "library:orphaned-attachments",
+  /** A data URL for one attachment, for the cleanup screen's thumbnail — null if it is not an image. */
+  libraryAttachmentPreview: "library:attachment-preview",
+  libraryTrashAttachment: "library:trash-attachment",
 
   /** Locale, platform and hotkey — everything a window needs before it draws. */
   bootstrap: "app:bootstrap",
@@ -151,6 +167,16 @@ export interface LibraryApi {
   /** Shows the capture window for a brand new note, exactly like the hotkey. */
   newNote: () => void;
   onRefresh: (handler: () => void) => () => void;
+
+  conflicts: () => Promise<ConflictPair[]>;
+  conflictDiff: (pair: ConflictPair) => Promise<DiffLine[]>;
+  /** No `"merge"` branch here — that choice touches no file, so the renderer never calls this for it. */
+  resolveConflict: (pair: ConflictPair, choice: ConflictChoice) => Promise<void>;
+
+  orphanedAttachments: () => Promise<string[]>;
+  /** `null` when the file is not a browser-renderable image type, or could not be read. */
+  attachmentPreview: (path: string) => Promise<string | null>;
+  trashAttachment: (path: string) => Promise<string>;
 }
 
 export interface CaptureApi {

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createFolder,
+  diffConflict,
   flattenFolders,
   moveNote,
   openNote,
@@ -19,7 +20,9 @@ import {
   readNotesIn,
   renameFolder,
   renameNote,
+  resolveConflict,
   saveNote,
+  trashAttachment,
 } from "../src/main/vault-io.js";
 import { FOLDER_ERROR, TRASH_FOLDER } from "../src/shared/vault-types.js";
 import { paragraphs } from "./helpers/doc.js";
@@ -520,5 +523,73 @@ describe("renaming a folder", () => {
       expect(existsSync(join(vault, "..", "escaped"))).toBe(false);
       expect(flattenFolders(readFolderTree(vault))).toContain("10 Projects/Klant X");
     });
+  });
+});
+
+describe("trashing an attachment", () => {
+  it("moves the file into the vault's own trash", () => {
+    writeFileSync(join(vault, "_attachments", "2026", "07", "foto.png"), "binary");
+
+    const result = trashAttachment(vault, "_attachments/2026/07/foto.png");
+
+    expect(result).toBe(`${TRASH_FOLDER}/foto.png`);
+    expect(existsSync(join(vault, "_attachments", "2026", "07", "foto.png"))).toBe(false);
+    expect(existsSync(join(vault, TRASH_FOLDER, "foto.png"))).toBe(true);
+  });
+
+  it("keeps the real extension on a collision, unlike a note's own uniquePath", () => {
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+    writeFileSync(join(vault, TRASH_FOLDER, "foto.png"), "ouder");
+    writeFileSync(join(vault, "_attachments", "2026", "07", "foto.png"), "nieuw");
+
+    const result = trashAttachment(vault, "_attachments/2026/07/foto.png");
+
+    expect(result).toBe(`${TRASH_FOLDER}/foto (2).png`);
+    expect(existsSync(join(vault, TRASH_FOLDER, "foto (2).png"))).toBe(true);
+  });
+});
+
+describe("diffing a OneDrive conflict", () => {
+  it("reads both files and diffs them line by line", () => {
+    writeFileSync(join(vault, "00 Inbox", "Kickoff.md"), "een\ntwee\n");
+    writeFileSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"), "een\ndrie\n");
+
+    const lines = diffConflict(vault, {
+      original: "00 Inbox/Kickoff.md",
+      conflict: "00 Inbox/Kickoff-LAPTOP-ABC123.md",
+    });
+
+    expect(lines).toContainEqual({ kind: "same", text: "een" });
+    expect(lines).toContainEqual({ kind: "removed", text: "twee" });
+    expect(lines).toContainEqual({ kind: "added", text: "drie" });
+  });
+});
+
+describe("resolving a OneDrive conflict", () => {
+  const pair = {
+    original: "00 Inbox/Kickoff.md",
+    conflict: "00 Inbox/Kickoff-LAPTOP-ABC123.md",
+  };
+
+  beforeEach(() => {
+    writeFileSync(join(vault, "00 Inbox", "Kickoff.md"), "origineel");
+    writeFileSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"), "conflict");
+  });
+
+  it("keepOriginal trashes the conflict copy and leaves the original untouched", () => {
+    resolveConflict(vault, pair, "keepOriginal");
+
+    expect(readFileSync(join(vault, "00 Inbox", "Kickoff.md"), "utf8")).toBe("origineel");
+    expect(existsSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"))).toBe(false);
+    expect(existsSync(join(vault, TRASH_FOLDER, "Kickoff-LAPTOP-ABC123.md"))).toBe(true);
+  });
+
+  it("keepConflict trashes the original — not a permanent delete — and takes its place", () => {
+    resolveConflict(vault, pair, "keepConflict");
+
+    expect(readFileSync(join(vault, "00 Inbox", "Kickoff.md"), "utf8")).toBe("conflict");
+    expect(existsSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"))).toBe(false);
+    expect(existsSync(join(vault, TRASH_FOLDER, "Kickoff.md"))).toBe(true);
+    expect(readFileSync(join(vault, TRASH_FOLDER, "Kickoff.md"), "utf8")).toBe("origineel");
   });
 });
