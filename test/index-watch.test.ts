@@ -59,6 +59,12 @@ describe("the vault watcher", () => {
 
   it("does not index what already existed before watching started", async () => {
     writeFileSync(join(vault, "00 Inbox", "Bestond.md"), noteContents("Bestond"));
+    // macOS's fsevents backend can still report a file written moments ago as a live
+    // event once watching starts — fsevents' stream isn't perfectly synchronised with
+    // the crawl `ignoreInitial` governs, so a write immediately followed by `watch()`
+    // is a real race there, not a Linux-only inotify quirk this settle time papers
+    // over. Caught by the release CI's macOS runner, not by anything that runs here.
+    await settle();
     watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
 
     await settle();
