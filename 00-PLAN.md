@@ -60,11 +60,13 @@ npm run pack:mac   # verpakte app (zip) in release/
 npm run pack:win   # installer in release/, sinds B22
 ```
 
-`npm test` draait 325 tests over 16 van de 18 testbestanden in deze sandbox; de
-overige twee (`schema-dom.test.ts`, `checkbox-widget.test.ts`) laden hier niet — jsdom
-vereist ESM en deze omgeving heeft Node 18, ouder dan dat toestaat. Geen bekend
-codeprobleem, alleen een sandbox-beperking; op de echte ontwikkelmachine draait de
-volledige suite.
+`npm test` draait de volledige suite van 346 tests over alle 18 testbestanden. Tot
+2 augustus 2026 liep deze sandbox op Node 18 — te oud voor `jsdom` (ESM) en voor
+`better-sqlite3` (segfault, ≥22 vereist) — waardoor `schema-dom.test.ts` en
+`checkbox-widget.test.ts` hier niet laadden. Een `nvm`-install van Node 24 (naast het
+systeem-Node, via een symlink in `~/.local/bin` vooraan het `PATH`) loste beide op. Wat
+nog steeds ontbreekt: een beeldscherm, dus de app zelf opstarten en op scherm
+verifiëren blijft alleen op de echte ontwikkelmachine mogelijk.
 
 Twee handige haakjes:
 

@@ -53,10 +53,15 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 
 None of these is reachable through the app's `--screenshot` / `--click-button`
 flags, so they weren't covered before `v0.1.0` was tagged, and nothing since
-has closed them — this environment still cannot launch Electron (Node 18 vs.
-the `electron@43` requirement), so they carry forward unverified. `npm test`,
-`npm run typecheck` and `npm run build` all still pass (325 tests now, up from
-322, across two commits of new test coverage).
+has closed them — this environment still has no display, so the app itself
+can't be watched running, and these carry forward unverified. (The Node
+version is no longer the reason: an `nvm` install of Node 24 on 2 August 2026
+fixed both the jsdom-based tests and `better-sqlite3`, which segfaulted under
+the sandbox's previous Node 18 — see `00-PLAN.md`. Whether `Xvfb`, which
+happens to be installed here, makes a real headless launch possible is itself
+untested; nobody's tried.) `npm test`, `npm run typecheck` and `npm run build`
+all still pass — 346 tests now, the full suite, up from 325 across two
+commits of new test coverage plus the 12 jsdom tests Node 24 unlocked.
 
 - [ ] Rename a folder while a note inside it is **open and dirty**. Confirm no
       duplicate old folder appears, the note keeps its caret and undo history,
