@@ -14,7 +14,7 @@ Last updated 1 August 2026, at `v0.2.1`.
 | 2 — the editor | Done. |
 | 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Started. Still the largest unknown in the project** — the `mso-list` reconstruction described in `02-technisch-ontwerp.md` §6.3. A `--dump-clipboard=<prefix>` flag exists now (see `CLAUDE.md`) so the next step is real Outlook/Word samples, not code — see below. |
-| 5 — index and search | Started. `src/main/index-db.ts` holds the SQLite/FTS5 index itself, tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). `vault-scan.ts`'s Map is still what's actually wired up; nothing reads from the new index yet — see "Settled" below. |
+| 5 — index and search | Started. `index-db.ts` (SQLite/FTS5) and `index-scan.ts` (the full-scan builder) both exist and are tested for real now that the sandbox runs Node 24 (see "Verification still owed" below). `vault-scan.ts`'s Map is still what's actually wired up; nothing reads from the new index yet — see "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
 Since `v0.1.0`, one thing landed outside the phase plan: **B22, a Windows
@@ -206,14 +206,32 @@ entry (see the note in `CLAUDE.md`); it needed nothing beyond `npm install`
 to work here — it ships prebuilt N-API binaries for every platform in the
 package itself, no `node-gyp`/`electron-rebuild` step required, which is
 also presumably why it was the anticipated choice over Tauri's Rust
-equivalent in B2. What's still open: nothing in `vault-scan.ts` or `index.ts`
-reads from this yet — the Map is still what's live. Next: a full-scan
-builder that walks the vault the way `vault-scan.ts` already does and calls
-`upsertNote` per file, then swapping `vault-scan.ts`'s Map for reads against
-this index, then the `chokidar` watcher, then the search bar's own query
-parser (`type:`/`attendee:`/`tag:`/date range) in front of `search()`, then
-conflict-copy recognition and orphaned-attachment cleanup — see §7.2/§5.2/§6.5
-in `02-technisch-ontwerp.md`.
+equivalent in B2.
+
+**The full-scan builder that fills the index now exists too, also tested
+against a real database and a real temp vault, still not wired in.**
+`src/main/index-scan.ts`'s `fullScan(vault, db, onProgress?)` walks the
+vault with `vault-scan.ts`'s own `collectFiles`/`isDataless` — now exported
+so the two walks share one set of hidden-folder and OneDrive-placeholder
+rules rather than risking two copies drifting apart — and calls `upsertNote`
+per file that is new or has a changed `mtime`/`size`, then deletes any
+indexed row whose file is gone. One thing it does deliberately differently
+from the Map, explained in the module's own comment: a dataless (evicted)
+file keeps its last-indexed row rather than being dropped, because the Map
+is rebuilt from nothing every time so "not shown until it hydrates" costs
+nothing, while dropping a row from a *persistent* index would mean a note
+someone could search for on Monday silently stops matching on Tuesday
+because OneDrive evicted a file nobody touched. `checkFilesOnDemand`'s
+`"ondemand"` short-circuit is wired through but its actual trigger path
+(`process.platform === "darwin"`) cannot be exercised on this Linux sandbox,
+same limitation that function already had before phase 5. What's still
+open: nothing in `vault-io.ts` or `index.ts` reads from the index yet — the
+Map is still what's live, and no IPC channel or worker calls `fullScan` at
+all. Next: swapping `vault-scan.ts`'s Map for reads against the index, then
+the `chokidar` watcher for incremental reindexing, then the search bar's own
+query parser (`type:`/`attendee:`/`tag:`/date range) in front of `search()`,
+then conflict-copy recognition and orphaned-attachment cleanup — see
+§7.2/§5.2/§6.5 in `02-technisch-ontwerp.md`.
 
 ## Unexplained, worth settling
 

@@ -10,10 +10,13 @@ import { checkFilesOnDemand } from "./vault.js";
  * Reading the whole vault, for the views that cut across folders.
  *
  * Browsing a folder needs one `readdir`; filtering by tag or by person needs every note.
- * There is no index yet — that is phase 5 — so this is a cache in front of the
- * filesystem, deliberately shaped like the `notes` table that phase 5 will build: same
- * fields, same mtime-and-size refresh. When SQLite arrives it replaces the Map, not the
- * interface. It stays free of Electron so it can move into a worker unchanged.
+ * This is still what is wired up: a cache in front of the filesystem, deliberately
+ * shaped like the `notes` table `index-db.ts` now builds — same fields, same
+ * mtime-and-size refresh. `index-scan.ts` is phase 5's persistent replacement for this
+ * Map and shares this module's `collectFiles`/`isDataless` (same hidden-folder rules,
+ * same OneDrive placeholder detection) so the two walks cannot silently diverge; nothing
+ * reads from it yet, so this Map stays live until that swap happens. This module stays
+ * free of Electron so it can move into a worker unchanged.
  *
  * Nothing here is persisted. A second on-disk format would be a second thing to migrate
  * away from, and a cold scan is cheap enough not to need one: measured over three
@@ -45,7 +48,7 @@ function toPosix(path: string): string {
 }
 
 /** Every `.md` in the vault, skipping the folders the app owns and the trash. */
-function collectFiles(vault: string): string[] {
+export function collectFiles(vault: string): string[] {
   const files: string[] = [];
 
   const walk = (absolute: string, depth: number): void => {
@@ -80,7 +83,7 @@ function collectFiles(vault: string): string[] {
  * Reading one forces a download. On macOS that is detectable per file; on Windows it is
  * not, which is why there is also the up-front check in `scan`.
  */
-function isDataless(stats: { size: number; blocks: number }): boolean {
+export function isDataless(stats: { size: number; blocks: number }): boolean {
   return process.platform === "darwin" && stats.size > 0 && stats.blocks === 0;
 }
 
