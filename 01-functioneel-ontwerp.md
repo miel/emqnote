@@ -44,17 +44,23 @@ en daarbovenop terugvinden en structuur bieden (anders is het geen verbetering).
 ### 3.1 Snel iets vastleggen
 
 Je drukt de global hotkey. Er verschijnt onmiddellijk een klein venster met de cursor
-al knipperend in de tekst. Je typt. Er is geen dialoog, geen vraag waar het heen moet,
-geen "nieuwe notitie"-knop.
+al knipperend in het onderwerpveld. Druk je meteen Enter, dan spring je zonder onderwerp
+door naar de tekst; typ je eerst een onderwerp, dan doet Enter hetzelfde. Er is geen
+dialoog, geen vraag waar het heen moet, geen "nieuwe notitie"-knop.
 
 Boven de tekst staat een smal kopblok met **datum/tijd** (automatisch ingevuld, maar
 overschrijfbaar) en **onderwerp**. Het onderwerp mag leeg blijven; dan wordt de eerste
 regel van de tekst de titel.
 
-Je sluit het venster met **Ctrl+Enter** — hetzelfde gebaar waarmee je in Outlook een
+Je sluit het venster met **Ctrl+Enter** (op de Mac Cmd+Enter — de sneltoetsen worden
+overal getoond zoals het platform ze spelt) — hetzelfde gebaar waarmee je in Outlook een
 bericht verstuurt. De notitie is opgeslagen in `00 Inbox/`. Er verschijnt geen
 bevestiging, geen dialoog, geen "weet je het zeker". Opslaan gebeurt ook al tijdens het
 typen, zodat een crash of een dichtgeklapte laptop niets kost.
+
+Het sluitknopje van het venster doet precies hetzelfde, en Cmd+Q op de Mac ook: bewaren en
+wegleggen. Geen van drieën beëindigt de app — die blijft resident, want daar hangt de
+hele snelheid van af (B25). Stoppen doe je via het tray-icoon.
 
 Wegklikken sluit het venster **niet**. Je tabt naar Teams om iets op te zoeken en komt
 terug bij je notitie zoals je hem achterliet; wat er stond is intussen weggeschreven.
@@ -71,7 +77,7 @@ heeft één vaste vorm van twee rijen, met een smalle kolom labels ervoor.
 
 | | |
 |---|---|
-| **Wanneer** | datum en tijd, aanklikbaar om te wijzigen; daarnaast de knop *Vergadering* |
+| **Wanneer** | datum en tijd, aanklikbaar om te wijzigen |
 | **Tags** | vrije tekst, met aanvulling op eerder gebruikte tags |
 | **Waar** | vrije tekst |
 | **Wie** | meerdere namen, gescheiden door een komma of een puntkomma, met aanvulling op eerder ingevoerde namen |
@@ -82,11 +88,10 @@ Die vier velden staan er op **elke** notitie, niet alleen op een vergadering —
 Een leeg veld schrijft niets, dus een notitie zonder die gegevens leest terug zoals hij
 altijd deed.
 
-De knop *Vergadering* zet `type: meeting` in de frontmatter, zodat je later op
-vergaderingen kunt zoeken. Het is een etiket en niet meer dan dat: het bepaalt niet welke
-velden er zijn, en omzetten verandert dus één regel in het bestand. In het
-bibliotheekvenster verschijnt de knop alleen op een notitie die nog géén vergadering is —
-daar promoveert hij alleen.
+Een vergadering markeer je met een tag, niet met een knop — die knop is er niet meer (zie
+B23 in [05-besluitenlog.md](05-besluitenlog.md)). `type: meeting` blijft wel in de
+frontmatter bestaan en een bestaande vergadernotitie leest en bewaart nog steeds
+bytegelijk; het is alleen geen UI-concept meer met een eigen zet- en terugzetknop.
 
 Bijlagen horen ook bij een vergadering, maar zijn nog niet te bewerken vanuit het kopblok;
 `attachments:` in de frontmatter wordt wel gelezen en behouden.
@@ -113,6 +118,12 @@ de hele vault dat erbij hoort, met per notitie de map waar hij staat — want zo
 een lijst titels uit vijf verschillende mappen niet te lezen. De prullenbak telt niet
 mee: een weggegooide notitie hoort niet via zijn tag terug te komen.
 
+Verwijderen blijft verplaatsen naar die prullenbak, nooit meer dan dat. Selecteer je hem
+wél, dan staat op de plek van *Nieuwe notitie* de knop **Prullenbak legen** — de enige
+plek in de app waar werkelijk iets definitief verdwijnt, en dus met een bevestiging die
+zegt om hoeveel notities het gaat en dat het niet terug te draaien is. Automatisch
+opruimen gebeurt niet (B24).
+
 De lijsten worden pas opgebouwd wanneer je er een openklapt. Dat scheelt het doorlezen
 van de hele vault bij elke keer dat het bibliotheekvenster opengaat, en het houdt de
 capture-kant er volledig buiten.
@@ -124,17 +135,16 @@ capture-venster, met dezelfde vier velden: wanneer, tags, waar en wie. Een verke
 gespelde naam of een vergeten tag is daarmee ter plekke te herstellen; tot nu toe kon dat
 alleen door het bestand buiten de app te openen.
 
-Eén ding zit er bewust *niet* in:
+Twee dingen zitten er bewust *niet* in:
 
 - **Het onderwerpveld.** De titel wijzig je met *Hernoemen*, want die actie past ook de
   bestandsnaam aan. Een tweede plek om hem te wijzigen zou de twee uit elkaar laten
   lopen.
-
-En één ding staat er maar half in: de **vergaderknop** verschijnt alleen op een notitie
-die nog geen vergadering is. Vroeger ontbrak hij helemaal, omdat terugzetten naar een
-snelle notitie locatie en aanwezigen wíste — één misklik en een deelnemerslijst was weg.
-Sinds B20 wist het niets meer, maar de omgekeerde richting blijft achterwege: er is geen
-reden om een vergadering te dégraderen, en wat onbereikbaar is kan niet misgaan.
+- **Een vergaderknop.** Die bestond hier ooit half — hij verscheen alleen op een notitie
+  die nog geen vergadering was, omdat terugzetten naar een snelle notitie vóór B20
+  locatie en aanwezigen wíste, en de veilige richting dus de enige was. Sinds B23 is de
+  knop in geen van beide vensters meer aanwezig: een vergadering markeer je met een tag,
+  en `type: meeting` blijft alleen nog een bytegelijk etiket in het bestand zelf.
 
 Wijzigingen worden op dezelfde manier bewaard als de tekst: 800 ms na de laatste
 aanslag, en alleen wanneer de bytes werkelijk anders zijn (B10).
@@ -232,6 +242,10 @@ De kern van de zaak. Wat moet werken:
 - **`Enter`** maakt een nieuw item op hetzelfde niveau. **`Shift+Enter`** maakt een
   nieuwe regel bínnen het item. **`Enter` op een leeg item** springt een niveau uit, en
   op niveau 1 verlaat het de lijst.
+- **`Backspace` op een leeg item** doet hetzelfde, en nog een keer drukken zet de cursor
+  achter het laatste teken van het vorige item. Dat was de bug die het meest opviel: de
+  tweede druk tóverde het zojuist verdwenen bulletje terug, dus je kon eindeloos heen en
+  weer klikken zonder ooit terug in de lijst te komen.
 - **Nummering blijft doorlopen** als er tussenliggende inhoud staat.
 
 ### 4.4 Plakken

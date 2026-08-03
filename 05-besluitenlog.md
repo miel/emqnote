@@ -513,6 +513,106 @@ tag-automatisering: een release blijft `package.json`'s versie bijwerken,
 
 ---
 
+## B23 — De vergadering verdwijnt uit de interface, `type:` blijft in het formaat
+
+**Genomen** op 3 augustus 2026, na gebruik van de macOS-release. Er is geen
+*Vergadering*-knop meer, in geen van beide vensters, en `Ctrl+Shift+G` is uit het
+sneltoetsenregister. Wie een notitie als vergadering wil merken, zet er een tag op.
+
+**Dit maakt B20 af.** B20 degradeerde `type: meeting` al tot etiket: het bepaalde niet
+langer welke velden er zijn, en juist daardoor werd omzetten één regel in het bestand in
+plaats van een destructieve handeling. Wat B20 openliet was de vraag waarom dat etiket dan
+nog een eigen knop verdient naast een tagveld dat er vlak naast staat en hetzelfde werk
+doet — beter, want er is meer dan één soort notitie die je wilt terugvinden. Twee
+mechanismen voor één handeling is er één te veel; de tag wint omdat hij algemeen is.
+
+**Wat er níet verandert, en dat is het hele punt.** `type:` blijft een verplicht
+frontmatterveld, `NoteType` houdt beide waarden, de zeven corpusbestanden met
+`type: meeting` zijn ongemoeid, een bestaande vergadernotitie leest en bewaart bytegelijk,
+en `type:meeting` blijft werken in de zoekbalk. Alleen de knop, de sneltoets, de
+CSS en de vier vertaalsleutels zijn weg; de hele `NoteKind`-doorvoer van renderer naar
+`saveNote` staat er nog en geeft door wat er al stond.
+
+**Verworpen: `type:` uit het formaat slopen.** Dat zag er verleidelijk consequent uit —
+een workflow die weg is heeft geen veld nodig — maar het betekent dat de eerste de beste
+bewaaractie van een bestaande vergadernotitie stilzwijgend zijn frontmatter herschrijft.
+Dat is B10 ("een notitie openen raakt het bestand niet") van de verkeerde kant benaderd en
+het breekt B7: `type:` staat in `03-markdown-dialect.md` §2 als verplicht veld, en de
+vault moet leesbaar blijven zoals hij is. Een veld dat niemand meer zet maar dat wel
+overleeft kost niets; een vault die onder je handen verandert kost vertrouwen.
+
+**Prijs:** de `HeaderBlock`-alinea in `CLAUDE.md`, §3.2 en §4 van
+`01-functioneel-ontwerp.md`. `02-technisch-ontwerp.md` §7 blijft staan waar het het
+*formaat* beschrijft — `type: meeting  # quick | meeting` is nog steeds waar.
+
+---
+
+## B24 — De prullenbak kan geleegd worden, definitief, maar alleen met de hand
+
+**Genomen** op 3 augustus 2026. Tot nu toe verwijderde de app nooit iets: elke
+verwijdering was een `rename` naar `_trash` en die map groeide voor altijd door. Dat was
+geen beleid maar de afwezigheid ervan — de vraag "wat is eigenlijk het beleid voor het
+legen van de prullenbak?" had als eerlijke antwoord "er is er geen." Nu staat er op de
+notitielijst van de prullenbak, op de plek van *Nieuwe notitie*, een knop **Prullenbak
+legen**, met een bevestiging die zegt hoeveel notities het betreft en dat het niet terug
+te draaien is.
+
+**Dit is de eerste definitieve verwijdering die de app doet**, en daarom staat er een
+grendel omheen die niets met de interface te maken heeft: `emptyTrash` in `vault-io.ts`
+controleert via `realpathSync` dat wat het weggooit werkelijk `<vault>/_trash` is en
+binnen de vault ligt. `resolve()` alleen zou een `_trash` die een symlink naar elders
+blijkt te zijn gewoon volgen.
+
+**Verworpen: automatisch opruimen na dertig dagen.** Dat is precies het soort stille
+destructieve handeling waar deze app zich de hele tijd verre van houdt — schrijven gebeurt
+alleen bij echt verschillende bytes, openen raakt het bestand niet, een verwijdering is
+een verplaatsing. Een opruiming die zonder aanleiding afgaat past daar niet bij, en het is
+ook niet nodig: een map die je zelf leegt als hij je opvalt is geen probleem.
+
+**Verworpen: `shell.trashItem` naar de systeemprullenbak** als extra vangnet. Een
+OneDrive-bestand in de Windows-prullenbak wordt niet gesynchroniseerd — dat is precies de
+reden dat `_trash` bestaat. Het zou het bestand op de andere machine weghalen zonder weg
+terug, en dus het tegenovergestelde van een vangnet zijn.
+
+**Wat gelijk blijft:** verwijderen zelf blijft nooit definitief. De acceptatie-eis
+"verwijderen naar prullenbak, nooit definitief" in `04-bouwplan.md` fase 3 gaat over die
+handeling en staat overeind; legen is een aparte, uitdrukkelijke tweede handeling.
+
+---
+
+## B25 — Cmd+Q sluit een venster, het beëindigt de app niet
+
+**Genomen** op 3 augustus 2026. `installMinimalMenu` verving Electron's standaardmenu door
+alleen de Edit-rollen en gaf de Quit-rol nooit terug, dus op macOS deed Cmd+Q helemaal
+niets. Het menu heeft nu een echte applicatie-submenu — maar met een eigen
+klikafhandeling in plaats van `{ role: "quit" }`: vanuit het bibliotheekvenster sluit
+Cmd+Q dát venster, vanuit het notitievenster bewaart het de notitie en legt het venster
+weg. **Het residente proces blijft in beide gevallen draaien.**
+
+**Waarom niet gewoon de Quit-rol.** Omdat het proces residentie *is* de architectuur.
+B2/B3: de koude start wordt één keer per dag betaald, bij het inloggen, en dat is wat de
+keuze voor Electron verdedigbaar maakt. Een toetsaanslag die in elke andere app "sluit dit
+venster" betekent, mag hier niet de sneltoets voor de rest van de dag onbruikbaar maken.
+Het tray-item *Quit emqnote* blijft de enige echte uitgang, en dat is een bewuste keuze
+en geen omissie.
+
+**De afwijking staat op zijn kop in het menu, en dat is bekend.** Het item heet nog steeds
+"Quit emqnote" en zit op de standaardplek met de standaardsneltoets, terwijl het het
+proces niet beëindigt. Dat is de prijs voor spiergeheugen: wie Cmd+Q drukt wil dit venster
+weg, niet de hotkey kwijt. Wie de app werkelijk wil stoppen doet dat waar dat altijd al
+kon.
+
+**Wat hier bij hoorde.** Hetzelfde onderzoek legde bloot dat het capture-venster helemaal
+geen `close`-afhandeling had: op macOS zijn de stoplichten echt, dus de rode knop
+vernietigde het venster. De module houdt precies één `BrowserWindow` vast, dus daarna
+faalde `reveal()` voorgoed op `isDestroyed()` (hotkey en *Nieuwe notitie* dood) en liep
+`writer.finish()` nooit, zodat de geladen notitie voor altijd geclaimd bleef — "open ter
+bewerking" in een venster dat niet meer bestond. Sluiten verbergt nu, net als
+`IPC.captureClose` al deed, met een `before-quit`-vlag zodat een echte afsluiting niet
+blijft hangen op de `preventDefault()`.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

@@ -121,7 +121,9 @@ zit, is dat een architectuurprobleem — niet iets wat je later "optimaliseert".
 - "Verplaats naar…" met fuzzy zoeken over de hele boom
 - Slepen in de boom
 - Hernoemen: titel in frontmatter én bestandsnaam
-- Verwijderen naar prullenbak, nooit definitief
+- Verwijderen naar prullenbak, nooit definitief. Legen kan sinds B24 wél, maar dat is een
+  aparte, uitdrukkelijke handeling met een bevestiging — nooit iets wat verwijderen
+  stilzwijgend meebrengt
 - Mappen aanmaken en hernoemen
 - Kopblok ook in het hoofdvenster: datum, tags, en bij een vergadering locatie en
   aanwezigen. Zelfde component als in het capture-venster, zonder onderwerpveld — de
