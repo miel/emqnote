@@ -15,8 +15,6 @@ export const LOCALES: Locale[] = ["en-US", "nl-NL"];
 const DUTCH: Record<string, string> = {
   // Capture window
   "capture.subject": "Onderwerp (optioneel)",
-  "capture.meeting": "Vergadering",
-  "capture.markMeeting": "Markeer als vergadering",
   "capture.location": "Locatie",
   // De scheidingstekens blijven in de tekst staan: `parseAttendees` splitst op komma
   // *en* puntkomma, omdat Outlook puntkomma's gebruikt.
@@ -28,7 +26,7 @@ const DUTCH: Record<string, string> = {
   "capture.who": "Wie",
   "capture.tagsLabel": "Tags",
   "capture.placeholder": "Typ maar.",
-  "capture.dismiss": "Ctrl+Enter sluit",
+  "capture.dismiss": "sluit",
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
@@ -66,7 +64,6 @@ const DUTCH: Record<string, string> = {
   "shortcut.undo": "Ongedaan maken",
   "shortcut.redo": "Opnieuw",
   "shortcut.close": "Bewaren en sluiten",
-  "shortcut.markMeeting": "Vergadering aan of uit",
   "shortcut.openLibrary": "Bibliotheek openen",
   "shortcut.help": "Dit overzicht",
   "shortcut.newNote": "Nieuwe notitie (overal)",
@@ -168,8 +165,6 @@ export function translate(locale: Locale, key: string): string {
 
 const ENGLISH: Record<string, string> = {
   "capture.subject": "Subject (optional)",
-  "capture.meeting": "Meeting",
-  "capture.markMeeting": "Mark as a meeting",
   "capture.location": "Location",
   // The separator clause stays: `parseAttendees` splits on a comma *and* a semicolon,
   // because Outlook uses semicolons and fingers expect it.
@@ -181,7 +176,7 @@ const ENGLISH: Record<string, string> = {
   "capture.who": "Who",
   "capture.tagsLabel": "Tags",
   "capture.placeholder": "Just type.",
-  "capture.dismiss": "Ctrl+Enter closes",
+  "capture.dismiss": "closes",
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
   "capture.changeTime": "Click to change the date and time",
@@ -219,7 +214,6 @@ const ENGLISH: Record<string, string> = {
   "shortcut.undo": "Undo",
   "shortcut.redo": "Redo",
   "shortcut.close": "Save and close",
-  "shortcut.markMeeting": "Meeting on or off",
   "shortcut.openLibrary": "Open the library",
   "shortcut.help": "This sheet",
   "shortcut.newNote": "New note (from anywhere)",

@@ -180,6 +180,13 @@ export interface LibraryApi {
 }
 
 export interface CaptureApi {
+  /**
+   * Read synchronously off `process.platform` in the preload, rather than waiting for
+   * `bootstrap()` to round-trip — a sandboxed preload can still see it. Without this,
+   * the first paint always assumes Windows (`useBootstrap`'s `FALLBACK`), and a shortcut
+   * label briefly shows "Ctrl" on a Mac before flipping to "⌘".
+   */
+  platform: NodeJS.Platform;
   onShow: (handler: (payload: ShowPayload) => void) => () => void;
   onReset: (handler: () => void) => () => void;
   onStatus: (handler: (payload: StatusPayload) => void) => () => void;
