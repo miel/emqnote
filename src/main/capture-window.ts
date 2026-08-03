@@ -18,6 +18,19 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 
 let window: BrowserWindow | null = null;
 
+/**
+ * Set once, from `before-quit`, so the `close` handler below knows the difference
+ * between "the user dismissed the note window" (hide it, keep the app resident) and
+ * "the app is actually exiting" (let the window really close, or the tray's "Quit
+ * emqnote" would hang forever waiting for a close that `preventDefault()` never lets
+ * happen).
+ */
+let quitting = false;
+
+export function setQuitting(value: boolean): void {
+  quitting = value;
+}
+
 export function createCaptureWindow(): BrowserWindow {
   const created = new BrowserWindow({
     width: 720,
@@ -58,6 +71,19 @@ export function createCaptureWindow(): BrowserWindow {
   // that window is the thing being replaced.
   created.on("blur", () => {
     if (created.isVisible()) onBlur();
+  });
+
+  // On macOS the traffic lights are real (see `titleBarStyle` above), so the red button
+  // would otherwise destroy this BrowserWindow outright — and the module only ever
+  // holds one, assigned once below and never reassigned, so every path built on `window`
+  // (the hotkey's `reveal()`, "New note", the library's double-click-to-edit) would find
+  // it destroyed forever. Treat a close exactly like `IPC.captureClose` already does:
+  // commit through `onHide()` — the same save-and-put-away contract `TitleBar.tsx`
+  // documents for its own close button — and keep the window around, hidden.
+  created.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    hideCaptureWindow();
   });
 
   const devServer = process.env.ELECTRON_RENDERER_URL;
@@ -117,7 +143,18 @@ export function focusCaptureWindow(): void {
 
 function reveal(token: number): void {
   const target = window;
-  if (target === null || target.isDestroyed()) return;
+  if (target === null || target.isDestroyed()) {
+    // Should not happen now that `close` above keeps the window alive — but a stale
+    // build, a crash, or some other native teardown outside our control could still
+    // leave `window` pointing at a destroyed BrowserWindow, and the old behaviour here
+    // (silently returning) bricked the hotkey and "New note" until the app was
+    // restarted. Recreating and waiting for the fresh window to paint turns that into
+    // one slow appearance instead of a dead shortcut; not a cost the hot path pays,
+    // since it only runs when the window is already gone.
+    const created = createCaptureWindow();
+    created.once("ready-to-show", () => reveal(token));
+    return;
+  }
 
   if (process.platform === "darwin") {
     // A menu bar app has no dock icon and therefore does not receive keyboard focus
