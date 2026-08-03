@@ -15,6 +15,7 @@ import {
   stateAt,
   stateAtStartOf,
   stateOnEmptyLineAfter,
+  stateOnLineAfter,
   type,
 } from "./helpers/editing.js";
 
@@ -170,6 +171,80 @@ describe("Backspace at the start of a list item", () => {
     // point here is only that our handler declines and lets it through.
     const state = stateAt("- One\n- Two\n", "Tw");
     expect(backspace(state, () => {})).toBe(false);
+  });
+});
+
+describe("Backspace on the empty line after a list", () => {
+  // The first Backspace (or Enter, Enter) already left the caret exactly where
+  // `stateOnEmptyLineAfter` puts it, lifting the empty item out of the list — ordinary
+  // `liftListItem` behaviour, already covered above. What used to go wrong is the next
+  // press: the default keymap's `joinBackward` -> `deleteBarrier` re-wraps the empty
+  // paragraph as a fresh list item instead of joining it into the list, so the bullet
+  // reappeared and a third press undid that again, forever.
+
+  it("lands the caret at the end of the previous item, and a third press does not resurrect the bullet", () => {
+    let state = stateOnEmptyLineAfter("- One\n- Two\n");
+
+    expect(backspace(state, () => {})).toBe(true);
+    state = run(state, pressBackspace);
+    expect(markdownOf(state)).toBe("- One\n- Two\n");
+
+    // Caret at the end of "Two", inside the item — not on a new paragraph after it.
+    const { $from } = state.selection;
+    expect($from.parent.type.name).toBe("paragraph");
+    expect($from.parent.textContent).toBe("Two");
+    expect($from.parentOffset).toBe("Two".length);
+    expect($from.node($from.depth - 1).type.name).toBe("listItem");
+
+    // A third press is now an ordinary Backspace in the middle of "Two": every command
+    // in the chain declines (single-character deletion there is native browser
+    // behaviour, never a ProseMirror command — see "does not claim the key in the
+    // middle of a line" above), so nothing dispatches. The point is what does *not*
+    // happen: no bullet reappears.
+    expect(pressBackspace(state, () => {})).toBe(false);
+    expect(markdownOf(run(state, pressBackspace))).toBe("- One\n- Two\n");
+  });
+
+  it("does the same for an ordered list", () => {
+    let state = stateOnEmptyLineAfter("1. One\n2. Two\n");
+
+    state = run(state, pressBackspace);
+    expect(markdownOf(state)).toBe("1. One\n2. Two\n");
+
+    const { $from } = state.selection;
+    expect($from.parent.textContent).toBe("Two");
+    expect($from.parentOffset).toBe("Two".length);
+
+    expect(pressBackspace(state, () => {})).toBe(false);
+    expect(markdownOf(run(state, pressBackspace))).toBe("1. One\n2. Two\n");
+  });
+
+  it("joins the text of a non-empty paragraph into the previous item, rather than rewrapping it", () => {
+    // Not every top-level paragraph after a list is empty — you can type into it first.
+    // Backspace at its start should merge that text onto the end of the last item, the
+    // same way Backspace joins any two adjacent paragraphs elsewhere in the note.
+    let state = stateOnLineAfter("- One\n- Two\n", "Bevestigd");
+
+    expect(backspace(state, () => {})).toBe(true);
+    state = run(state, pressBackspace);
+
+    expect(markdownOf(state)).toBe("- One\n- TwoBevestigd\n");
+    const { $from } = state.selection;
+    expect($from.parent.textContent).toBe("TwoBevestigd");
+    expect($from.parentOffset).toBe("Two".length);
+  });
+
+  it("does not assume the last item ends in a paragraph", () => {
+    // The last item here ends in a nested list, not a paragraph, so the fixed `- 2`
+    // arithmetic `indentIntoPrecedingList` uses would land in the wrong place. The
+    // caret has to reach the deepest textblock — the nested item's own text.
+    let state = stateOnEmptyLineAfter("- One\n  - Nested\n");
+    state = run(state, pressBackspace);
+
+    expect(markdownOf(state)).toBe("- One\n  - Nested\n");
+    const { $from } = state.selection;
+    expect($from.parent.textContent).toBe("Nested");
+    expect($from.parentOffset).toBe("Nested".length);
   });
 });
 
