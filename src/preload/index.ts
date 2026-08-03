@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     renameNote: (path: string, title: string) =>
       ipcRenderer.invoke(IPC.libraryRenameNote, path, title),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
+    emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),
     createFolder: (parent: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),
     renameFolder: (path: string, name: string) =>

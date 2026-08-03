@@ -47,6 +47,7 @@ import {
 import {
   createFolder,
   diffConflict,
+  emptyTrash,
   renameFolder,
   moveNote,
   openNote,
@@ -663,6 +664,14 @@ function registerLibraryIpc(): void {
     trashNote(vault, path);
     notifyLibrary();
     return true;
+  });
+
+  ipcMain.handle(IPC.libraryEmptyTrash, (_event) => {
+    const vault = vaultPath();
+    if (vault === null) return 0;
+    const count = emptyTrash(vault);
+    notifyLibrary();
+    return count;
   });
 
   ipcMain.handle(IPC.libraryCreateFolder, (_event, parent: string, name: string) => {

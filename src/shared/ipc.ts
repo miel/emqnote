@@ -51,6 +51,8 @@ export const IPC = {
   libraryMoveNote: "library:move-note",
   libraryRenameNote: "library:rename-note",
   libraryTrashNote: "library:trash-note",
+  /** Permanently empties `_trash` — the one delete this app performs with no way back. */
+  libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
   libraryRevealNote: "library:reveal-note",
@@ -152,6 +154,8 @@ export interface LibraryApi {
   moveNote: (path: string, folder: string) => Promise<string>;
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;
+  /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
+  emptyTrash: () => Promise<number>;
   createFolder: (parent: string, name: string) => Promise<string>;
   /**
    * Renames a folder in place and answers with its new path. Rejects rather than

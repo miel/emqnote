@@ -89,6 +89,7 @@ const DUTCH: Record<string, string> = {
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
   "library.newNote": "Nieuwe notitie",
+  "library.clearTrash": "Prullenbak legen",
   "library.newFolder": "Nieuwe map",
   "library.renameFolder": "Map hernoemen",
   "library.openInCapture": "Open voor bewerking in het invoervenster",
@@ -110,6 +111,8 @@ const DUTCH: Record<string, string> = {
   "ask.newFolderIn": "Nieuwe map in",
   "ask.renameFolderTitle": "Nieuwe naam voor de map",
   "ask.confirmDelete": "naar de prullenbak verplaatsen?",
+  "ask.confirmClearTrash":
+    "permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
@@ -237,6 +240,7 @@ const ENGLISH: Record<string, string> = {
   "library.reveal": "Reveal",
   "library.delete": "Delete",
   "library.newNote": "New note",
+  "library.clearTrash": "Clear trash",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
   "library.openInCapture": "Open for editing in the capture window",
@@ -257,6 +261,7 @@ const ENGLISH: Record<string, string> = {
   "ask.newFolderIn": "New folder in",
   "ask.renameFolderTitle": "New name for the folder",
   "ask.confirmDelete": "Move to the trash?",
+  "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
 

@@ -2,9 +2,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createFolder,
   diffConflict,
+  emptyTrash,
   flattenFolders,
   moveNote,
   openNote,
@@ -23,6 +26,7 @@ import {
   resolveConflict,
   saveNote,
   trashAttachment,
+  trashNote,
 } from "../src/main/vault-io.js";
 import { FOLDER_ERROR, TRASH_FOLDER } from "../src/shared/vault-types.js";
 import { paragraphs } from "./helpers/doc.js";
@@ -591,5 +595,46 @@ describe("resolving a OneDrive conflict", () => {
     expect(existsSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"))).toBe(false);
     expect(existsSync(join(vault, TRASH_FOLDER, "Kickoff.md"))).toBe(true);
     expect(readFileSync(join(vault, TRASH_FOLDER, "Kickoff.md"), "utf8")).toBe("origineel");
+  });
+});
+
+describe("emptying the trash", () => {
+  it("removes every file and nested folder directly inside _trash", () => {
+    trashNote(vault, "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md");
+    mkdirSync(join(vault, TRASH_FOLDER, "Oud", "Nested"), { recursive: true });
+    writeFileSync(join(vault, TRASH_FOLDER, "Oud", "Nested", "foto.png"), "binary");
+
+    const count = emptyTrash(vault);
+
+    expect(count).toBe(2);
+    expect(readdirSync(join(vault, TRASH_FOLDER))).toEqual([]);
+    // The vault itself, and everything outside _trash, is untouched.
+    expect(
+      existsSync(join(vault, "00 Inbox", "2026-07-25 1432 Kickoff project Alpha.md")),
+    ).toBe(false);
+    expect(existsSync(join(vault, "00 Inbox"))).toBe(true);
+  });
+
+  it("does nothing and answers 0 when _trash does not exist yet", () => {
+    expect(existsSync(join(vault, TRASH_FOLDER))).toBe(false);
+    expect(emptyTrash(vault)).toBe(0);
+  });
+
+  it("does nothing and answers 0 when _trash is already empty", () => {
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+    expect(emptyTrash(vault)).toBe(0);
+  });
+
+  it("refuses to follow a _trash that is a symlink outside the vault", () => {
+    const outside = mkdtempSync(join(tmpdir(), "emqnote-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "not the vault's to delete");
+    symlinkSync(outside, join(vault, TRASH_FOLDER));
+
+    expect(() => emptyTrash(vault)).toThrow(
+      "refusing to empty a path outside the vault's own trash folder",
+    );
+    expect(existsSync(join(outside, "secret.txt"))).toBe(true);
+
+    rmSync(outside, { recursive: true, force: true });
   });
 });

@@ -1,4 +1,10 @@
-import type { NoteSummary, Selection, SortKey } from "../../shared/vault-types.js";
+import {
+  folderOf,
+  TRASH_FOLDER,
+  type NoteSummary,
+  type Selection,
+  type SortKey,
+} from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
 
 interface Props {
@@ -18,17 +24,13 @@ interface Props {
   /** The only way in is otherwise the global hotkey; this opens the capture window for
    * a brand new note, the same as pressing it. */
   onNewNote: () => void;
+  /** Permanently empties `_trash`. Only ever offered while Trash itself is selected. */
+  onClearTrash: () => void;
   locale: Locale;
   t: (key: string) => string;
 }
 
 const SORTS: SortKey[] = ["modified", "created", "title"];
-
-/** The folder a note sits in, for a list that is not itself one folder. */
-function folderOf(notePath: string): string {
-  const cut = notePath.lastIndexOf("/");
-  return cut === -1 ? "" : notePath.slice(0, cut);
-}
 
 export function NoteList({
   notes,
@@ -42,9 +44,14 @@ export function NoteList({
   onSelect,
   onOpenInCapture,
   onNewNote,
+  onClearTrash,
   locale,
   t,
 }: Props): React.ReactElement {
+  // Trash is not a folder you add notes to — Clear trash replaces + New note there, the
+  // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
+  // `canRenameFolder`/`canCreateFolder`).
+  const inTrash = showing.kind === "folder" && showing.path === TRASH_FOLDER;
   return (
     <div className="notes">
       <div className="notes-search">
@@ -74,9 +81,15 @@ export function NoteList({
             </button>
           ))}
         </div>
-        <button type="button" className="new-note" onClick={onNewNote}>
-          + {t("library.newNote")}
-        </button>
+        {inTrash ? (
+          <button type="button" className="new-note danger" onClick={onClearTrash}>
+            {t("library.clearTrash")}
+          </button>
+        ) : (
+          <button type="button" className="new-note" onClick={onNewNote}>
+            + {t("library.newNote")}
+          </button>
+        )}
       </div>
 
       <ul className="notes-list">

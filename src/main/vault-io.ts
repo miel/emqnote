@@ -4,7 +4,9 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -356,6 +358,34 @@ export function trashNote(vault: string, notePath: string): string {
   renameSync(from, to);
 
   return toPosix(relative(vault, to));
+}
+
+/**
+ * Permanently deletes everything directly inside the vault's trash folder — files and
+ * nested folders alike — and answers how many entries were removed.
+ *
+ * The first permanent delete the app has ever performed, so it gets a guard that a
+ * rename or a move has never needed: `path.resolve` only normalises text, it does not
+ * follow anything on disk, so a `_trash` that turned out to be a symlink elsewhere would
+ * sail straight through a text-only check while `rmSync` happily deleted whatever the
+ * link actually pointed at. `realpathSync` is what actually asks the filesystem, so it
+ * is what runs here, on both sides of the comparison, before anything is removed.
+ */
+export function emptyTrash(vault: string): number {
+  const trashDirectory = join(vault, TRASH);
+  if (!existsSync(trashDirectory)) return 0;
+
+  const realTrash = realpathSync(trashDirectory);
+  const realVault = realpathSync(vault);
+  if (realTrash !== join(realVault, TRASH)) {
+    throw new Error("refusing to empty a path outside the vault's own trash folder");
+  }
+
+  const entries = readdirSync(trashDirectory);
+  for (const entry of entries) {
+    rmSync(join(trashDirectory, entry), { recursive: true, force: true });
+  }
+  return entries.length;
 }
 
 /**
