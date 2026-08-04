@@ -5,9 +5,10 @@ import type {
   NoteSummary,
   ScanProgress,
   Selection,
+  TaskItem,
 } from "../shared/vault-types.js";
 import { findConflictCopies, type ConflictPair } from "./conflicts.js";
-import { allNotes, getNote, search, type IndexDb, type NoteMeta } from "./index-db.js";
+import { allNotes, getNote, search, tasksIn, type IndexDb, type NoteMeta } from "./index-db.js";
 import { fullScan, type ScanResult } from "./index-scan.js";
 import type { ParsedQuery } from "./search-query.js";
 import { readNotesIn } from "./vault-io.js";
@@ -274,4 +275,25 @@ export async function searchNotes(
   });
 
   return filtered.map(toSummary);
+}
+
+/**
+ * Every task item under a folder scope, for the aggregated Tasks view.
+ *
+ * Reads `note_tasks`, filled by `buildRecord` during a scan or a watcher reindex —
+ * never by walking the vault itself here. Re-parsing a folder's worth of notes on
+ * demand was measured at 470–535 ms of main-thread stall on a 4000-note vault before
+ * the scan moved to a worker (`index-scan.ts`'s own comment); asking the index instead
+ * costs a join over rows that are already there.
+ */
+export async function tasks(
+  vault: string,
+  db: IndexDb,
+  scope: string,
+  openOnly: boolean,
+): Promise<TaskItem[]> {
+  await ensureScanned(vault, db);
+  if (!available) return [];
+
+  return tasksIn(db, scope, openOnly);
 }

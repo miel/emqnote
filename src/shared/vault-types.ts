@@ -160,6 +160,20 @@ export interface Facets {
   available: boolean;
 }
 
+/**
+ * One task item as the aggregated Tasks view shows it — a `note_tasks` row joined with
+ * its note's title. `ordinal` counts task items within that one note, in document order;
+ * it is not a global id, and the pair `(path, ordinal)` is what names one item, the same
+ * pair `toggleTask` takes to flip it.
+ */
+export interface TaskItem {
+  path: string;
+  title: string;
+  ordinal: number;
+  checked: boolean;
+  text: string;
+}
+
 /** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */
 export interface ConflictPair {
   original: string;

@@ -1,5 +1,5 @@
 import { Schema } from "prosemirror-model";
-import type { MarkSpec, NodeSpec } from "prosemirror-model";
+import type { MarkSpec, Node as PMNode, NodeSpec } from "prosemirror-model";
 
 /**
  * The ProseMirror schema of emqnote, derived one-to-one from 03-markdown-dialect.md.
@@ -304,3 +304,44 @@ export const MARK_NESTING_ORDER = [
   "strike",
   "code",
 ] as const;
+
+/** One task item — a `listItem` with a non-null `checked` — and where it sits in the document. */
+export interface TaskItemAt {
+  pos: number;
+  node: PMNode;
+}
+
+/**
+ * Every task item in a document, in document order.
+ *
+ * Shared by two callers that must agree on what "item 3" means without ever talking to
+ * each other directly: `index-scan.ts`'s `buildRecord` walks a freshly parsed doc to fill
+ * `note_tasks`, and `vault-io.ts`'s `toggleTask` walks a freshly re-parsed doc to flip
+ * one. Two separate walks with the same rule (`listItem` nodes with `attrs.checked !==
+ * null`, depth-first, same as `descendants` always visits) stay in step with each other
+ * for free; two *different* rules would not, and the mismatch would only show up as the
+ * wrong checkbox flipping.
+ */
+export function taskItemsIn(doc: PMNode): TaskItemAt[] {
+  const items: TaskItemAt[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type !== schema.nodes.listItem || node.attrs.checked === null) return true;
+    items.push({ pos, node });
+    return true;
+  });
+  return items;
+}
+
+/**
+ * A task item's own text — its first paragraph's plain text.
+ *
+ * The schema's `listItem` content (`paragraph block*`) guarantees a task item's first
+ * child is a paragraph, but this stays defensive rather than asserting it: `Node.create`
+ * does not itself enforce a content expression, so a node built by hand (a test, or a
+ * future caller) can violate it without either party finding out until something reads
+ * the result. Anything that is not a paragraph reads as "" rather than throwing.
+ */
+export function taskItemText(item: PMNode): string {
+  const first = item.firstChild;
+  return first !== null && first.type === schema.nodes.paragraph ? first.textContent : "";
+}
