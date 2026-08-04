@@ -56,6 +56,10 @@ export const IPC = {
   libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
+  /** How many notes and subfolders a folder holds, for the delete confirmation to name. */
+  libraryFolderContents: "library:folder-contents",
+  /** Moves a folder into `_trash`, along with everything inside it — never a permanent delete (B24). */
+  libraryTrashFolder: "library:trash-folder",
   libraryRevealNote: "library:reveal-note",
   listVaults: "vault:list",
   chooseVault: "vault:choose",
@@ -176,6 +180,16 @@ export interface LibraryApi {
    * silently different name would leave it pointing at nothing.
    */
   renameFolder: (path: string, name: string) => Promise<string>;
+  /** Notes and subfolders anywhere inside a folder, for a delete confirmation to name. */
+  folderContents: (path: string) => Promise<{ notes: number; folders: number }>;
+  /**
+   * Moves a folder into `_trash`. `locked` when a note somewhere inside it is claimed
+   * by the capture window — the same hazard `moveNote` guards against, extended to a
+   * whole subtree rather than one file. Anything else wrong with the path (the root,
+   * one of the app's own folders, a folder already gone) rejects with a `FOLDER_ERROR`
+   * code instead, exactly like `renameFolder`.
+   */
+  trashFolder: (path: string) => Promise<{ trashed: boolean; locked?: boolean }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;

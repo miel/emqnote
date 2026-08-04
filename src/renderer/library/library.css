@@ -54,6 +54,11 @@
   color: var(--accent);
 }
 
+.tree-toolbar .danger:hover:not(:disabled) {
+  border-color: #c42b1c;
+  color: #c42b1c;
+}
+
 /* The vault root and the trash cannot be renamed, so the button says so rather than
    waiting to refuse. */
 .tree-toolbar button:disabled {

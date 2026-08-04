@@ -26,8 +26,12 @@ interface Props {
   onNewFolder: () => void;
   /** Renames the last folder that was selected, the same one "+ New folder" fills in. */
   onRenameFolder: () => void;
+  /** Deletes the last folder that was selected — same target as Rename. */
+  onDeleteFolder: () => void;
   /** False for the vault root and the trash, neither of which can be renamed. */
   canRenameFolder: boolean;
+  /** False for the vault root and the trash, neither of which can be deleted either. */
+  canDeleteFolder: boolean;
   /** False for the trash, which is a destination for deleted notes, not a place to file. */
   canCreateFolder: boolean;
   onOpenSettings: () => void;
@@ -35,6 +39,7 @@ interface Props {
   onOpenOrphanedAttachments: () => void;
   newFolderLabel: string;
   renameFolderLabel: string;
+  deleteFolderLabel: string;
   helpLabel: string;
   settingsLabel: string;
   orphanedAttachmentsLabel: string;
@@ -199,13 +204,16 @@ export function FolderTree({
   onCreateFolder,
   onNewFolder,
   onRenameFolder,
+  onDeleteFolder,
   canRenameFolder,
+  canDeleteFolder,
   canCreateFolder,
   onOpenSettings,
   onOpenHelp,
   onOpenOrphanedAttachments,
   newFolderLabel,
   renameFolderLabel,
+  deleteFolderLabel,
   helpLabel,
   settingsLabel,
   orphanedAttachmentsLabel,
@@ -238,6 +246,16 @@ export function FolderTree({
             renaming had no gesture at all, hidden or otherwise. */}
         <button type="button" onClick={onRenameFolder} disabled={!canRenameFolder}>
           {renameFolderLabel}
+        </button>
+        {/* A folder never had a way out of the app's own trash discipline before this —
+            only Explorer/Finder, outside the app entirely. */}
+        <button
+          type="button"
+          className="danger"
+          onClick={onDeleteFolder}
+          disabled={!canDeleteFolder}
+        >
+          {deleteFolderLabel}
         </button>
       </div>
 

@@ -392,16 +392,12 @@ export function emptyTrash(vault: string): number {
  * `uniquePath`'s own collision suffix is hardcoded to `.md` — exactly right for a note,
  * silently wrong for anything else: a colliding `photo.png` would come back
  * `photo (2).md`, an image quietly turned into a markdown file by its own trash
- * operation. `trashAttachment` below needs a collision suffix that keeps whatever
- * extension the file actually has.
+ * operation. `uniqueAttachmentPath` and `uniqueFolderPath` below both need a collision
+ * suffix that respects what the path actually is, so the counting loop lives here once.
  */
-function uniqueAttachmentPath(directory: string, fileName: string): string {
-  const candidate = join(directory, fileName);
+function withCollisionSuffix(directory: string, base: string, extension: string): string {
+  const candidate = join(directory, `${base}${extension}`);
   if (!existsSync(candidate)) return candidate;
-
-  const dot = fileName.lastIndexOf(".");
-  const base = dot === -1 ? fileName : fileName.slice(0, dot);
-  const extension = dot === -1 ? "" : fileName.slice(dot);
 
   for (let counter = 2; counter < 1000; counter += 1) {
     const next = join(directory, `${base} (${counter})${extension}`);
@@ -409,6 +405,23 @@ function uniqueAttachmentPath(directory: string, fileName: string): string {
   }
 
   return join(directory, `${base} (${Date.now()})${extension}`);
+}
+
+/** For one file under `_attachments/` — keeps the real extension on a collision. */
+function uniqueAttachmentPath(directory: string, fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  const base = dot === -1 ? fileName : fileName.slice(0, dot);
+  const extension = dot === -1 ? "" : fileName.slice(dot);
+  return withCollisionSuffix(directory, base, extension);
+}
+
+/**
+ * For a whole folder moved into trash. No extension to peel off — a dot in a folder's
+ * own name (`"Klant 2.0"`) is part of the name, not something `uniqueAttachmentPath`'s
+ * splitting would be right to cut from it.
+ */
+function uniqueFolderPath(directory: string, folderName: string): string {
+  return withCollisionSuffix(directory, folderName, "");
 }
 
 /** Same reasoning as `trashNote`, for one file under `_attachments/` — §6.5's manual, explicit cleanup, never automatic. */
@@ -508,6 +521,81 @@ export function renameFolder(vault: string, folderPath: string, name: string): s
 
   renameSync(from, to);
   return target;
+}
+
+/**
+ * Notes and subfolders anywhere inside a folder, for a delete confirmation to name
+ * before it commits to anything. The app's own folders are never browsed into and so
+ * never counted, the same rule `readFolderTree` follows — and the same depth limit,
+ * for the same reason: a pathological symlink loop should not hang a click.
+ */
+export function folderContents(
+  vault: string,
+  folderPath: string,
+): { notes: number; folders: number } {
+  const absolute = folderPath === "" ? vault : join(vault, folderPath);
+  let notes = 0;
+  let folders = 0;
+
+  const walk = (directory: string, depth: number): void => {
+    if (depth >= 12) return;
+
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (isHidden(entry.name)) continue;
+        folders += 1;
+        walk(join(directory, entry.name), depth + 1);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        notes += 1;
+      }
+    }
+  };
+
+  walk(absolute, 0);
+  return { notes, folders };
+}
+
+/**
+ * Moves a folder — and everything inside it — into the vault's own trash, the same
+ * rename `trashNote` uses for one file. Never `rmSync`: `emptyTrash` stays the only
+ * code in the app that permanently deletes anything (B24).
+ *
+ * Mirrors `renameFolder`'s validation idiom exactly, refusal for refusal — the two
+ * operations share the same hazards (the root, the app's own folders, a path that
+ * would resolve outside the vault) and so the same codes, which is what lets the
+ * renderer decode both through the one `folderErrorOf`.
+ */
+export function trashFolder(vault: string, folderPath: string): string {
+  if (folderPath === "") throw new Error(FOLDER_ERROR.root);
+
+  const segments = folderPath.split("/");
+  if (segments[0] === TRASH_FOLDER || segments.some(isHidden)) {
+    throw new Error(FOLDER_ERROR.reserved);
+  }
+
+  const from = join(vault, folderPath);
+
+  // Same defense as `renameFolder`: there is no typed name here for sanitising to have
+  // already taken apart, but the resolved-path check costs nothing and catches
+  // anything the segment check above did not.
+  if (!resolve(from).startsWith(resolve(vault) + sep)) throw new Error(FOLDER_ERROR.outside);
+
+  if (!existsSync(from)) throw new Error(FOLDER_ERROR.missing);
+
+  const trashDirectory = join(vault, TRASH);
+  mkdirSync(trashDirectory, { recursive: true });
+
+  const to = uniqueFolderPath(trashDirectory, basename(folderPath));
+  renameSync(from, to);
+
+  return toPosix(relative(vault, to));
 }
 
 /** Every folder in the vault as a flat list, for the "move to…" search. */

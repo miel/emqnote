@@ -48,6 +48,7 @@ import {
   createFolder,
   diffConflict,
   emptyTrash,
+  folderContents,
   renameFolder,
   moveNote,
   openNote,
@@ -56,6 +57,7 @@ import {
   resolveConflict,
   saveNote,
   trashAttachment,
+  trashFolder,
   trashNote,
 } from "./vault-io.js";
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
@@ -808,6 +810,31 @@ function registerLibraryIpc(): void {
     const renamed = renameFolder(vault, path, name);
     notifyLibrary();
     return renamed;
+  });
+
+  ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? { notes: 0, folders: 0 } : folderContents(vault, path);
+  });
+
+  // Same hazard `IPC.libraryMoveNote` guards against, one level up: `CaptureWriter`'s
+  // session pins the path it will write to when a note is loaded, and moving — or here,
+  // trashing — the folder underneath it does not update that path. The next debounced
+  // write would then recreate the note at its old location inside a folder that no
+  // longer otherwise exists. Checked before `trashFolder` runs, not after, so a note
+  // mid-edit is never even momentarily moved into `_trash`.
+  ipcMain.handle(IPC.libraryTrashFolder, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return { trashed: false };
+
+    const active = writer.activePath();
+    if (active !== null && active.startsWith(`${path}/`)) {
+      return { trashed: false, locked: true };
+    }
+
+    trashFolder(vault, path);
+    notifyLibrary();
+    return { trashed: true };
   });
 
   ipcMain.on(IPC.libraryRevealNote, (_event, path: string) => {

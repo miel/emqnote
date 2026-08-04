@@ -95,6 +95,11 @@ const DUTCH: Record<string, string> = {
   "library.clearTrash": "Prullenbak legen",
   "library.newFolder": "Nieuwe map",
   "library.renameFolder": "Map hernoemen",
+  "library.deleteFolder": "Map verwijderen",
+  "library.deleteFolderLocked":
+    "Een notitie in deze map staat open in het notitievenster. Sluit hem daar eerst, dan kan de map verwijderd worden.",
+  "library.folder": "map",
+  "library.folders": "mappen",
   "library.openInCapture": "Open voor bewerking in het invoervenster",
   "library.vaultRoot": "Hoofdmap",
   "library.trash": "Prullenbak",
@@ -114,20 +119,24 @@ const DUTCH: Record<string, string> = {
   "ask.newFolderIn": "Nieuwe map in",
   "ask.renameFolderTitle": "Nieuwe naam voor de map",
   "ask.confirmDelete": "naar de prullenbak verplaatsen?",
+  "ask.confirmDeleteFolder": "naar de prullenbak verplaatsen, met alles erin?",
   "ask.confirmClearTrash":
     "permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
-  // Waarom een map niet hernoemd kon worden. De namen komen als code uit het
-  // hoofdproces, zodat de melding hier in de juiste taal staat.
-  "folder.folder-is-root": "De vault zelf kan niet hernoemd worden.",
+  // Waarom een map niet hernoemd of verwijderd kon worden. De namen komen als code uit
+  // het hoofdproces, zodat de melding hier in de juiste taal staat. Dezelfde codes
+  // gelden voor allebei — alleen de generieke `folder.failed`/`folder.deleteFailed`
+  // verschillen per actie.
+  "folder.folder-is-root": "De vault zelf kan niet hernoemd of verwijderd worden.",
   "folder.folder-is-reserved": "Die map is van de app zelf.",
   "folder.folder-name-empty": "Een map heeft een naam nodig.",
   "folder.folder-leaves-vault": "Die naam wijst buiten de vault.",
   "folder.folder-not-found": "Die map bestaat niet meer.",
   "folder.folder-already-exists": "Er is al een map met die naam.",
   "folder.failed": "De map kon niet hernoemd worden.",
+  "folder.deleteFailed": "De map kon niet verwijderd worden.",
 
   // Settings
   "settings.title": "Instellingen",
@@ -249,6 +258,11 @@ const ENGLISH: Record<string, string> = {
   "library.clearTrash": "Clear trash",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
+  "library.deleteFolder": "Delete folder",
+  "library.deleteFolderLocked":
+    "A note in this folder is open in the note window. Close it there first, then the folder can be deleted.",
+  "library.folder": "folder",
+  "library.folders": "folders",
   "library.openInCapture": "Open for editing in the capture window",
   "library.vaultRoot": "Vault root",
   "library.trash": "Trash",
@@ -267,17 +281,21 @@ const ENGLISH: Record<string, string> = {
   "ask.newFolderIn": "New folder in",
   "ask.renameFolderTitle": "New name for the folder",
   "ask.confirmDelete": "Move to the trash?",
+  "ask.confirmDeleteFolder": "Move to the trash, along with everything inside it?",
   "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
 
-  "folder.folder-is-root": "The vault itself cannot be renamed.",
+  // Why a folder could not be renamed or deleted. The same codes cover both — only the
+  // generic `folder.failed`/`folder.deleteFailed` fallback differs per action.
+  "folder.folder-is-root": "The vault itself cannot be renamed or deleted.",
   "folder.folder-is-reserved": "That folder belongs to the app.",
   "folder.folder-name-empty": "A folder needs a name.",
   "folder.folder-leaves-vault": "That name points outside the vault.",
   "folder.folder-not-found": "That folder no longer exists.",
   "folder.folder-already-exists": "There is already a folder with that name.",
   "folder.failed": "The folder could not be renamed.",
+  "folder.deleteFailed": "The folder could not be deleted.",
 
   "settings.title": "Settings",
   "settings.language": "Language",

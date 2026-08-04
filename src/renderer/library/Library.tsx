@@ -54,6 +54,7 @@ type Dialog =
   | { kind: "newFolder"; parent: string }
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
+  | { kind: "deleteFolder"; path: string; notes: number; folders: number }
   | { kind: "clearTrash"; count: number }
   | { kind: "problem"; message: string };
 
@@ -472,6 +473,58 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Moves a folder — and everything inside it — into `_trash`, the same trash discipline
+   * a single note follows (B24). There is nothing to rebase a path onto afterwards, the
+   * way a rename rebases: the selection and the open note (if it was somewhere inside)
+   * simply move up to the parent, the one place guaranteed to still exist.
+   *
+   * The pending save is flushed first, for the same reason `renameFolderAt` flushes one:
+   * a debounced write landing after the folder is already gone would recreate it with
+   * `writeAtomic`'s `mkdirSync`, leaving one note behind in a folder everyone else
+   * believes was just deleted.
+   */
+  const deleteFolderAt = async (path: string): Promise<void> => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (dirty) await save();
+
+    let result: { trashed: boolean; locked?: boolean };
+    try {
+      result = await window.emqnote.library.trashFolder(path);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.deleteFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.deleteFolderLocked") });
+      return;
+    }
+
+    const parent = folderOf(path);
+
+    // The reader may be showing a note that just went into `_trash` along with the rest
+    // of the folder — put it away rather than leave it pointing at a path that is gone.
+    const current = openRef.current;
+    if (current !== null && current.path.startsWith(`${path}/`)) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    const target: Selection = { kind: "folder", path: parent };
+    setSelection(target);
+    selectionRef.current = target;
+    setLastFolder(parent);
+
+    await loadTree();
+    await loadNotes(target);
+    refreshFacets();
+  };
+
+  /**
    * Files a note into a folder. Both ways of asking for that — the "Move to…" dialog and
    * dragging a row onto the tree — come through here, so the two cannot drift apart.
    *
@@ -607,13 +660,21 @@ export function Library(): React.ReactElement {
               initial: lastFolder.split("/").pop() ?? "",
             })
           }
+          onDeleteFolder={() => {
+            const path = lastFolder;
+            void window.emqnote.library.folderContents(path).then((contents) => {
+              setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
+            });
+          }}
           canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
+          canDeleteFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
           canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenOrphanedAttachments={() => setOrphanedAttachmentsOpen(true)}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
+          deleteFolderLabel={app.t("library.deleteFolder")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           orphanedAttachmentsLabel={app.t("orphans.title")}
@@ -767,7 +828,13 @@ export function Library(): React.ReactElement {
                     ? dialog.message
                     : dialog.kind === "clearTrash"
                       ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
-                      : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+                      : dialog.kind === "deleteFolder"
+                        ? `"${dialog.path}"${
+                            dialog.notes === 0 && dialog.folders === 0
+                              ? ""
+                              : ` (${dialog.notes} ${app.t(dialog.notes === 1 ? "library.note" : "library.notes")}, ${dialog.folders} ${app.t(dialog.folders === 1 ? "library.folder" : "library.folders")})`
+                          } — ${app.t("ask.confirmDeleteFolder")}`
+                        : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
           }
           initial={
             dialog.kind === "rename" || dialog.kind === "renameFolder"
@@ -777,14 +844,18 @@ export function Library(): React.ReactElement {
                 : undefined
           }
           confirmLabel={
-            dialog.kind === "delete"
+            dialog.kind === "delete" || dialog.kind === "deleteFolder"
               ? app.t("library.delete")
               : dialog.kind === "clearTrash"
                 ? app.t("library.clearTrash")
                 : app.t("ask.ok")
           }
           cancelLabel={app.t("ask.cancel")}
-          danger={dialog.kind === "delete" || dialog.kind === "clearTrash"}
+          danger={
+            dialog.kind === "delete" ||
+            dialog.kind === "clearTrash" ||
+            dialog.kind === "deleteFolder"
+          }
           dismissOnly={dialog.kind === "problem"}
           onCancel={() => setDialog(null)}
           onConfirm={(value) => {
@@ -792,6 +863,7 @@ export function Library(): React.ReactElement {
             setDialog(null);
             if (current.kind === "rename") void rename(value);
             if (current.kind === "delete") void trash();
+            if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "clearTrash") void clearTrash();
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);
