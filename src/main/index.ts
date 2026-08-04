@@ -61,7 +61,15 @@ import {
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
 // note is re-read and an unchanged one is not. A capture landing mid-session costs the
 // stat walk, not another full read.
-import { conflicts, facets, notesMatching, searchNotes, startScan } from "./vault-scan.js";
+import {
+  conflicts,
+  facets,
+  notesMatching,
+  searchNotes,
+  setScanRunner,
+  startScan,
+} from "./vault-scan.js";
+import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
@@ -203,7 +211,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  indexDb = openIndex(join(app.getPath("userData"), "index.sqlite"));
+  // One connection here for the questions the library asks; the scan runs in a worker
+  // that opens the same file itself, which is why the path is handed over rather than
+  // the handle (`scan-host.ts`).
+  const indexPath = join(app.getPath("userData"), "index.sqlite");
+  indexDb = openIndex(indexPath);
+  setScanRunner(workerScanRunner(indexPath));
 
   // Menu bar app: no dock icon, no app switcher entry. The main window in phase 4 will
   // temporarily restore this when it opens.
@@ -827,5 +840,8 @@ app.on("will-quit", () => {
   // already uses, so it is not still reindexing into a database that just closed under
   // it — not a hard guarantee, just narrowing the race rather than ignoring it.
   if (vaultWatcher !== null) void vaultWatcher.close();
+  // Same reasoning one line further: the scan worker holds its own connection to the
+  // index, so it has to stop before the file's other connection closes underneath it.
+  stopScanWorker();
   if (indexDb !== null) closeIndex(indexDb);
 });

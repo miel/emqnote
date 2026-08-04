@@ -22,7 +22,15 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: "src/main/index.ts",
+        // Two entries: the main process, and the scan worker it starts (§7.2). A worker
+        // needs a file of its own to point at, and it has to sit next to `index.js` —
+        // `scan-host.ts` resolves it relative to itself. What the two share (the parser,
+        // the index, `vault-io.ts`) rollup puts in a chunk both import; `check:bundle`
+        // walks every file emitted here, not just the entries, for that reason.
+        input: {
+          index: "src/main/index.ts",
+          "scan-worker": "src/main/scan-worker.ts",
+        },
         // electron-updater and better-sqlite3 both do dynamic requires that don't
         // survive bundling — better-sqlite3's is how it locates its native `.node`
         // binary, so it could not be bundled even in principle. Both ship instead via
