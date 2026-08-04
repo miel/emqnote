@@ -3,6 +3,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
 import {
   folderErrorOf,
+  folderOf,
   selectionKey,
   TRASH_FOLDER,
   type ConflictPair,
@@ -36,12 +37,6 @@ function flatten(node: FolderNode): string[] {
   return [node.path, ...node.children.flatMap(flatten)];
 }
 
-/** The folder a note sits in; "" for the vault root. */
-function folderOf(notePath: string): string {
-  const cut = notePath.lastIndexOf("/");
-  return cut === -1 ? "" : notePath.slice(0, cut);
-}
-
 function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   const sorted = [...notes];
   if (key === "title") {
@@ -58,6 +53,7 @@ type Dialog =
   | { kind: "newFolder"; parent: string }
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
+  | { kind: "clearTrash"; count: number }
   | { kind: "problem"; message: string };
 
 export function Library(): React.ReactElement {
@@ -280,6 +276,24 @@ export function Library(): React.ReactElement {
       openRef.current = loaded;
       setDocToken((token) => token + 1);
 
+      /**
+       * A search result can name a note from anywhere in the vault, and until now
+       * clicking one left the tree pointing at whatever was selected before — the note
+       * and the highlighted folder disagreeing about where it lived. Deliberately not
+       * routed through the tree's own `onSelect`: that clears `searchQuery` and cancels
+       * the pending debounce, which would drop the result list out from under the click
+       * that just landed on it. Guarded on `searching`: outside a search a note in a
+       * folder listing is always already in the selected folder, and re-selecting the
+       * folder under a tag or person filter would silently discard the filter instead.
+       */
+      if (searchQueryRef.current.trim() !== "") {
+        const folder = folderOf(loaded.path);
+        const target: Selection = { kind: "folder", path: folder };
+        setSelection(target);
+        setLastFolder(folder);
+        selectionRef.current = target;
+      }
+
       const fields: HeaderValues = {
         kind: loaded.kind,
         subject: loaded.title,
@@ -438,6 +452,20 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Permanently empties `_trash`. The open note may be one of the files just deleted —
+   * there is no way to tell without re-checking against a path that no longer exists —
+   * so it is put away unconditionally, the same as `trash()` does with the one note it
+   * removes.
+   */
+  const clearTrash = async (): Promise<void> => {
+    await window.emqnote.library.emptyTrash();
+    setOpen(null);
+    openRef.current = null;
+    await loadTree();
+    void loadNotes(selectionRef.current);
+  };
+
+  /**
    * Hands a note to the capture window for quick editing.
    *
    * If this same note is open here, the reader locks itself immediately rather than
@@ -524,6 +552,7 @@ export function Library(): React.ReactElement {
           onSelect={(path) => void openNote(path)}
           onOpenInCapture={(path) => void openInCapture(path)}
           onNewNote={() => window.emqnote.library.newNote()}
+          onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
           locale={app.locale}
           t={app.t}
         />
@@ -660,7 +689,9 @@ export function Library(): React.ReactElement {
                   ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
                   : dialog.kind === "problem"
                     ? dialog.message
-                    : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+                    : dialog.kind === "clearTrash"
+                      ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
+                      : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
           }
           initial={
             dialog.kind === "rename" || dialog.kind === "renameFolder"
@@ -669,9 +700,15 @@ export function Library(): React.ReactElement {
                 ? ""
                 : undefined
           }
-          confirmLabel={dialog.kind === "delete" ? app.t("library.delete") : app.t("ask.ok")}
+          confirmLabel={
+            dialog.kind === "delete"
+              ? app.t("library.delete")
+              : dialog.kind === "clearTrash"
+                ? app.t("library.clearTrash")
+                : app.t("ask.ok")
+          }
           cancelLabel={app.t("ask.cancel")}
-          danger={dialog.kind === "delete"}
+          danger={dialog.kind === "delete" || dialog.kind === "clearTrash"}
           dismissOnly={dialog.kind === "problem"}
           onCancel={() => setDialog(null)}
           onConfirm={(value) => {
@@ -679,6 +716,7 @@ export function Library(): React.ReactElement {
             setDialog(null);
             if (current.kind === "rename") void rename(value);
             if (current.kind === "delete") void trash();
+            if (current.kind === "clearTrash") void clearTrash();
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);
             }

@@ -119,12 +119,6 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "lose that way.",
   },
   {
-    id: "markMeeting",
-    keys: ["Mod-Shift-g"],
-    where: "capture",
-    group: "note",
-  },
-  {
     id: "openLibrary",
     keys: ["Mod-o"],
     where: "capture",
@@ -271,6 +265,17 @@ export function formatBinding(binding: string, isMac: boolean): string {
 /** Every alias for one entry, as one string: "Ctrl+1 or Ctrl+Alt+1". */
 export function formatEntry(entry: ShortcutEntry, isMac: boolean, or: string): string {
   return entry.keys.map((binding) => formatBinding(binding, isMac)).join(` ${or} `);
+}
+
+/**
+ * Just the lead binding for one entry — "⌘Enter" rather than `formatEntry`'s full
+ * "⌘Enter or ⌘W". For a spot like the status bar's dismiss hint, where the alias is not
+ * worth the width.
+ */
+export function formatFirstKey(id: string, isMac: boolean): string {
+  const [first] = shortcut(id).keys;
+  if (first === undefined) throw new Error(`${id} has no keys`);
+  return formatBinding(first, isMac);
 }
 
 /**

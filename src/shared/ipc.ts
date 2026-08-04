@@ -51,6 +51,8 @@ export const IPC = {
   libraryMoveNote: "library:move-note",
   libraryRenameNote: "library:rename-note",
   libraryTrashNote: "library:trash-note",
+  /** Permanently empties `_trash` — the one delete this app performs with no way back. */
+  libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
   libraryRevealNote: "library:reveal-note",
@@ -152,6 +154,8 @@ export interface LibraryApi {
   moveNote: (path: string, folder: string) => Promise<string>;
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;
+  /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
+  emptyTrash: () => Promise<number>;
   createFolder: (parent: string, name: string) => Promise<string>;
   /**
    * Renames a folder in place and answers with its new path. Rejects rather than
@@ -180,6 +184,13 @@ export interface LibraryApi {
 }
 
 export interface CaptureApi {
+  /**
+   * Read synchronously off `process.platform` in the preload, rather than waiting for
+   * `bootstrap()` to round-trip — a sandboxed preload can still see it. Without this,
+   * the first paint always assumes Windows (`useBootstrap`'s `FALLBACK`), and a shortcut
+   * label briefly shows "Ctrl" on a Mac before flipping to "⌘".
+   */
+  platform: NodeJS.Platform;
   onShow: (handler: (payload: ShowPayload) => void) => () => void;
   onReset: (handler: () => void) => () => void;
   onStatus: (handler: (payload: StatusPayload) => void) => () => void;

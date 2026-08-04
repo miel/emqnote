@@ -62,21 +62,36 @@ export function stateSelecting(markdown: string, needle: string): EditorState {
 }
 
 /**
+ * A state whose caret sits at the start of a top-level paragraph directly after the
+ * given markdown, optionally already holding `text` — exactly where you land after
+ * pressing Enter twice to leave a list, whether or not you have since typed something.
+ */
+export function stateOnLineAfter(markdown: string, text = ""): EditorState {
+  const listBlocks: PMNode[] = [];
+  docFromMarkdown(markdown).forEach((child) => listBlocks.push(child));
+
+  // The position where the new paragraph will start is exactly the size of what comes
+  // before it — top-level positions and content offsets coincide for a `doc` node.
+  const paragraphStart = schema.nodes.doc!.create(null, listBlocks).content.size;
+  const paragraph = schema.nodes.paragraph!.create(
+    null,
+    text === "" ? undefined : schema.text(text),
+  );
+
+  const doc = schema.nodes.doc!.create(null, [...listBlocks, paragraph]);
+  return EditorState.create({
+    schema,
+    doc,
+    selection: TextSelection.create(doc, paragraphStart + 1),
+  });
+}
+
+/**
  * A state whose caret sits on an empty paragraph directly after the given markdown —
  * exactly where you land after pressing Enter twice to leave a list.
  */
 export function stateOnEmptyLineAfter(markdown: string): EditorState {
-  const parsed = docFromMarkdown(markdown);
-  const blocks: PMNode[] = [];
-  parsed.forEach((child) => blocks.push(child));
-  blocks.push(schema.nodes.paragraph!.create());
-
-  const doc = schema.nodes.doc!.create(null, blocks);
-  return EditorState.create({
-    schema,
-    doc,
-    selection: TextSelection.create(doc, doc.content.size - 1),
-  });
+  return stateOnLineAfter(markdown);
 }
 
 /** Types text at the caret, so a command's result can be filled in and inspected. */
@@ -112,4 +127,21 @@ export function run(state: EditorState, command: Command): EditorState {
 
 /** The Enter and Backspace bindings as the keymap actually wires them. */
 export const pressEnter = chainCommands(enter, baseKeymap.Enter!);
-export const pressBackspace = chainCommands(backspace, baseKeymap.Backspace!);
+
+/**
+ * Backspace exactly as the real editor resolves it, across both keymap plugins.
+ *
+ * `state.ts` installs `keymap(outlookKeymap(...))` and then, at lower priority, a
+ * second bare `keymap(baseKeymap)`. `chainCommands(backspace, baseKeymap.Backspace)`
+ * alone only models the first plugin's own binding; if the custom `backspace` command
+ * ever declined a case it should have handled, the first plugin's fallback would mask
+ * that here just as it would in the app, but a broken command that returns `false`
+ * *after* dispatching would not be caught by the chain alone. Falling through to the
+ * second plugin here as well — exactly as ProseMirror would when the first plugin's key
+ * handler declines outright — keeps this helper an honest model of `keymap.ts`.
+ */
+export const pressBackspace: Command = (state, dispatch) => {
+  const firstPlugin = chainCommands(backspace, baseKeymap.Backspace!);
+  if (firstPlugin(state, dispatch)) return true;
+  return baseKeymap.Backspace!(state, dispatch);
+};

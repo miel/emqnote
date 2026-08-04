@@ -25,6 +25,10 @@ function subscribe<T>(channel: string, handler: (payload: T) => void): () => voi
 }
 
 contextBridge.exposeInMainWorld("emqnote", {
+  // Synchronous, unlike `bootstrap()`: `useBootstrap`'s fallback seeds from this so the
+  // very first paint already knows Ctrl from Cmd, rather than assuming Windows until the
+  // IPC round trip resolves.
+  platform: process.platform,
   onShow: (handler: (payload: ShowPayload) => void) =>
     subscribe<ShowPayload>(IPC.captureShow, handler),
   onReset: (handler: () => void) => subscribe<void>(IPC.captureReset, handler),
@@ -57,6 +61,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     renameNote: (path: string, title: string) =>
       ipcRenderer.invoke(IPC.libraryRenameNote, path, title),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
+    emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),
     createFolder: (parent: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),
     renameFolder: (path: string, name: string) =>

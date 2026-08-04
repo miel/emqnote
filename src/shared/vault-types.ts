@@ -127,6 +127,12 @@ export function selectionKey(selection: Selection): string {
     : `${selection.kind}:${selection.name}`;
 }
 
+/** The folder a note sits in, from its vault-relative path; "" for the vault root. */
+export function folderOf(notePath: string): string {
+  const cut = notePath.lastIndexOf("/");
+  return cut === -1 ? "" : notePath.slice(0, cut);
+}
+
 /** One entry in the Tags or People list: what it is called and how many notes carry it. */
 export interface Facet {
   name: string;

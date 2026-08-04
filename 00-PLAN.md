@@ -44,7 +44,15 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
-auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.0`.
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.1`.
+
+Op 3 augustus 2026 volgde een reeks van negen correcties uit het gebruik van de
+macOS-release, waarvan er drie één oorzaak deelden: het opnamevenster ving zijn eigen
+`close` niet af, dus de rode stoplichtknop vernietigde het en nam de hotkey en de
+notitievergrendeling mee. Drie ervan staan als besluit vast: **B23** (de vergaderknop
+verdwijnt, `type:` blijft in het formaat), **B24** (de prullenbak kan met de hand
+definitief geleegd worden) en **B25** (Cmd+Q sluit een venster, het beëindigt de app
+niet).
 
 Actuele hotkey→cursor-metingen staan in `CLAUDE.md`, met machine en beeldscherm erbij —
 dat hoort erbij, een getal zonder die twee betekent niets. Laatste stand: Mac mini M4 op

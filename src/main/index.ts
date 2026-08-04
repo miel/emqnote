@@ -1,4 +1,13 @@
-import { app, dialog, globalShortcut, ipcMain, Menu, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  shell,
+  type MenuItemConstructorOptions,
+} from "electron";
 import { join } from "node:path";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
@@ -12,6 +21,7 @@ import {
   sendStatus,
   setBlurHandler,
   setHideHandler,
+  setQuitting,
   showCaptureWindow,
 } from "./capture-window.js";
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
@@ -37,6 +47,7 @@ import {
 import {
   createFolder,
   diffConflict,
+  emptyTrash,
   renameFolder,
   moveNote,
   openNote,
@@ -221,23 +232,54 @@ async function main(): Promise<void> {
  * Cmd+V work at all.
  */
 function installMinimalMenu(): void {
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Edit",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "pasteAndMatchStyle" },
-          { role: "selectAll" },
-        ],
-      },
-    ]),
-  );
+  const template: MenuItemConstructorOptions[] = [];
+
+  if (process.platform === "darwin") {
+    template.push({
+      label: "emqnote",
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        {
+          // Deliberately not `role: "quit"`. Cmd+Q is window-scoped here, not an app
+          // quit — a user decision, not a platform oversight: from the library window
+          // it closes that window (already clean, see `library-window.ts`'s "closed"
+          // handler); from the note window it commits and hides it, the same
+          // save-and-put-away contract the traffic light and `IPC.captureClose` follow.
+          // The resident app keeps running either way — the tray's "Quit emqnote" stays
+          // the only true exit. The label matches that tray item on purpose, for muscle
+          // memory, even though this one does not quit the process.
+          label: "Quit emqnote",
+          accelerator: "Command+Q",
+          click: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused === getCaptureWindow()) hideCaptureWindow();
+            else focused?.close();
+          },
+        },
+      ],
+    });
+  }
+
+  template.push({
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "selectAll" },
+    ],
+  });
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 /** Optional `--open-note=<part of a title>` so a screenshot can show a real note. */
@@ -567,6 +609,14 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.captureLoad, async (_event, path: string) => {
     const vault = vaultPath();
     if (vault === null) return false;
+    // A destroyed or missing window cannot be shown, so do not claim the note before
+    // finding that out: `writer.load` below marks it as being edited, and until this
+    // window is dismissed nothing else — including a retry from the library — can write
+    // to it. Claiming it here and then failing to reveal the window would leave the
+    // note permanently reported as locked, for real this time, rather than a window that
+    // recovers on its own next appearance.
+    const target = getCaptureWindow();
+    if (target === null || target.isDestroyed()) return false;
     const note = openNote(vault, path);
     if (note === null) return false;
 
@@ -614,6 +664,14 @@ function registerLibraryIpc(): void {
     trashNote(vault, path);
     notifyLibrary();
     return true;
+  });
+
+  ipcMain.handle(IPC.libraryEmptyTrash, (_event) => {
+    const vault = vaultPath();
+    if (vault === null) return 0;
+    const count = emptyTrash(vault);
+    notifyLibrary();
+    return count;
   });
 
   ipcMain.handle(IPC.libraryCreateFolder, (_event, parent: string, name: string) => {
@@ -677,6 +735,17 @@ function registerLibraryIpc(): void {
 
 app.on("window-all-closed", () => {
   // A resident app keeps running when its window is closed; that is the whole point.
+});
+
+// The capture window's own `close` handler now calls `preventDefault()` so the
+// traffic-light/Alt+F4 close commits the note and hides the window instead of
+// destroying it (see `capture-window.ts`). That would make a real quit — the tray's
+// "Quit emqnote", or the OS shutting the app down — hang forever waiting for a close
+// that never happens, unless something tells that handler to stand down first.
+// `before-quit` fires before Electron starts closing windows, so it is the one place
+// early enough to flip the flag before any window's `close` event is even dispatched.
+app.on("before-quit", () => {
+  setQuitting(true);
 });
 
 app.on("will-quit", () => {

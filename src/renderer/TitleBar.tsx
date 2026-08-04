@@ -1,7 +1,11 @@
+import { formatFirstKey } from "../shared/shortcuts.js";
+
 interface Props {
   onClose: () => void;
   /** macOS draws its own traffic lights; we only fill the bar. */
   native: boolean;
+  isMac: boolean;
+  t: (key: string) => string;
 }
 
 /**
@@ -12,7 +16,8 @@ interface Props {
  * and there was no visible way to close it. Closing is the same as Ctrl+Enter: it saves
  * and puts the note away.
  */
-export function TitleBar({ onClose, native }: Props): React.ReactElement {
+export function TitleBar({ onClose, native, isMac, t }: Props): React.ReactElement {
+  const closeLabel = t("shortcut.close");
   return (
     <div className={`titlebar${native ? " titlebar-native" : ""}`}>
       <span className="titlebar-name">emqnote</span>
@@ -46,8 +51,8 @@ export function TitleBar({ onClose, native }: Props): React.ReactElement {
         <button
           type="button"
           className="titlebar-button titlebar-close"
-          title="Save and close (Ctrl+Enter)"
-          aria-label="Save and close"
+          title={`${closeLabel} (${formatFirstKey("close", isMac)})`}
+          aria-label={closeLabel}
           onClick={onClose}
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">

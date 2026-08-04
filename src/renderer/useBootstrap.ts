@@ -9,9 +9,16 @@ export interface Bootstrapped extends Bootstrap {
   reload: () => Promise<void>;
 }
 
+/**
+ * Everything but `platform` is a guess until `bootstrap()` answers. `platform` does not
+ * have to be: the preload can read `process.platform` synchronously (see
+ * `src/preload/index.ts`), so the fallback is seeded from that rather than a hardcoded
+ * `"win32"` — otherwise every shortcut label on a Mac briefly says "Ctrl" before flipping
+ * to "⌘" once the round trip resolves.
+ */
 const FALLBACK: Bootstrap = {
   locale: "en-US",
-  platform: "win32",
+  platform: window.emqnote.platform,
   hotkey: DEFAULT_HOTKEY,
   vaultPath: null,
 };

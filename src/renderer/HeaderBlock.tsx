@@ -16,12 +16,12 @@ export interface HeaderValues {
 /**
  * Where the block is being shown, which decides what belongs in it.
  *
- * `capture` is the original: subject, time, the meeting toggle and tags. `reader` is the
- * library, where the title is owned by Rename — that renames the file too, so a second
- * way to change it would let the two drift.
+ * `capture` is the original: subject, time and tags. `reader` is the library, where the
+ * title is owned by Rename — that renames the file too, so a second way to change it
+ * would let the two drift.
  *
  * The fields themselves no longer differ. Both variants show When, Where, Who and Tags;
- * only the subject and which direction the kind button goes depend on the window.
+ * only the subject depends on the window.
  */
 export type HeaderVariant = "capture" | "reader";
 
@@ -32,6 +32,12 @@ interface Props {
   locale: Locale;
   t: (key: string) => string;
   variant?: HeaderVariant;
+  /**
+   * The subject input, so the capture window can put the caret there on `show()`
+   * instead of in the editor. Only meaningful in the `capture` variant — the reader
+   * renders no subject field at all, since its title belongs to Rename.
+   */
+  subjectRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 /**
@@ -74,6 +80,7 @@ export function HeaderBlock({
   locale,
   t,
   variant = "capture",
+  subjectRef,
 }: Props): React.ReactElement {
   const inCapture = variant === "capture";
   const [editingTime, setEditingTime] = useState(false);
@@ -99,8 +106,6 @@ export function HeaderBlock({
   const set = <K extends keyof HeaderValues>(key: K, value: HeaderValues[K]): void => {
     onChange({ ...values, [key]: value });
   };
-
-  const isMeeting = values.kind === "meeting";
 
   // Comma and semicolon both separate; Outlook uses semicolons, so fingers expect it.
   const parseAttendees = (text: string): string[] =>
@@ -154,8 +159,9 @@ export function HeaderBlock({
     <div className={`header header-${variant}`}>
       {inCapture && (
         <input
+          ref={subjectRef}
           className="subject"
-          placeholder={isMeeting ? t("capture.meeting") : t("capture.subject")}
+          placeholder={t("capture.subject")}
           value={values.subject}
           onChange={(event) => set("subject", event.target.value)}
           onKeyDown={leaveOnEnter}
@@ -185,21 +191,6 @@ export function HeaderBlock({
               onClick={() => setEditingTime(true)}
             >
               {formatDateTime(locale, values.created)}
-            </button>
-          )}
-
-          {/* Two-way in capture, where you set it before typing. In the reader it
-              appears only on a note that is not a meeting yet, so the button only ever
-              promotes — with the fields no longer gated on the kind, that is a one-line
-              change to `type:` and nothing else, which is what B10 wants. */}
-          {(inCapture || !isMeeting) && (
-            <button
-              type="button"
-              className={`kind${isMeeting ? " kind-on" : ""}`}
-              title="Ctrl+Shift+G"
-              onClick={() => set("kind", isMeeting ? "quick" : "meeting")}
-            >
-              {inCapture ? t("capture.meeting") : t("capture.markMeeting")}
             </button>
           )}
         </div>

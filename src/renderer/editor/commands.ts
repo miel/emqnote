@@ -1,5 +1,6 @@
 import type { Node as PMNode, NodeType, ResolvedPos } from "prosemirror-model";
 import {
+  Selection,
   TextSelection,
   type Command,
   type EditorState,
@@ -343,6 +344,51 @@ function enclosingItem($pos: ResolvedPos): PMNode | null {
 }
 
 /**
+ * Merges a top-level paragraph that sits directly after a list into that list's last
+ * item, joining any text it holds onto the end of the last item's deepest textblock.
+ *
+ * This is the second half of "leave a list, then Backspace again". `joinBackward`'s
+ * `deleteBarrier` cannot do this itself: `bulletList.contentMatchAt(childCount)` finds
+ * a *wrapping* for the paragraph (`[listItem]`, since `listItem` carries no `group` and
+ * so is never a valid `block`) before it ever considers joining, and takes that branch
+ * instead — which is exactly what re-creates the bullet the first Backspace removed.
+ *
+ * The join target is resolved with `Selection.near(..., -1)` rather than the fixed
+ * `- 2` `indentIntoPrecedingList` uses, because that arithmetic only lands inside a
+ * paragraph when the last item's own last child *is* one. `listItem` is
+ * `paragraph block*`, so the last item can end in a nested list or a table instead —
+ * `Selection.near` walks past those closing tags to the actual deepest textblock,
+ * wherever it is.
+ */
+function joinIntoPrecedingList(
+  state: EditorState,
+  paragraphPos: number,
+  paragraphNode: PMNode,
+  dispatch: Dispatch,
+): boolean {
+  if (dispatch) {
+    const tr = state.tr;
+    const target = Selection.near(state.doc.resolve(paragraphPos - 1), -1);
+
+    // The paragraph itself is removed first; the target position sits earlier in the
+    // document, so it is unaffected by that deletion and needs no mapping before use.
+    tr.delete(paragraphPos, paragraphPos + paragraphNode.nodeSize);
+    if (paragraphNode.content.size > 0) {
+      tr.insert(target.from, paragraphNode.content);
+    }
+
+    // `-1` bias: the position sits between the old content and whatever was just
+    // inserted after it, and the caret belongs on the near side of that boundary — "the
+    // last character of the previous item" the bug report asked for, not past the text
+    // that got glued on.
+    tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(target.from, -1)));
+    dispatch(tr.scrollIntoView());
+  }
+
+  return true;
+}
+
+/**
  * Backspace at the very start of a list item promotes it, and at the top level takes
  * it out of the list.
  *
@@ -354,6 +400,17 @@ function enclosingItem($pos: ResolvedPos): PMNode | null {
 export const backspace: Command = (state, dispatch) => {
   const { $from, empty } = state.selection;
   if (!empty || $from.parentOffset !== 0) return false;
+
+  // A top-level paragraph immediately after a list: this is where the first Backspace
+  // (or Enter-Enter) left the caret on leaving the list. See `joinIntoPrecedingList`
+  // for why the default keymap gets this one wrong.
+  if ($from.depth === 1 && $from.parent.type === paragraph) {
+    const paragraphPos = $from.before(1);
+    const before = paragraphPos > 0 ? state.doc.resolve(paragraphPos).nodeBefore : null;
+    if (before !== null && (before.type === bulletList || before.type === orderedList)) {
+      return joinIntoPrecedingList(state, paragraphPos, $from.parent, dispatch);
+    }
+  }
 
   const itemDepth = $from.depth - 1;
   if (itemDepth < 1 || $from.node(itemDepth).type !== listItem) return false;

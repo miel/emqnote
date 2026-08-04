@@ -6,7 +6,7 @@ import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
 import { LinkPrompt } from "./LinkPrompt.js";
 import { TitleBar } from "./TitleBar.js";
-import { matches, shortcut } from "../shared/shortcuts.js";
+import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
 import { useBootstrap } from "./useBootstrap.js";
@@ -28,6 +28,7 @@ function freshHeader(): HeaderValues {
 export function Capture(): React.ReactElement {
   const app = useBootstrap();
   const editor = useRef<EditorHandle>(null);
+  const subjectInput = useRef<HTMLInputElement>(null);
   const [header, setHeader] = useState<HeaderValues>(freshHeader);
   // True once an existing note has been handed over from the library window. The
   // subject field disappears then, the same way it does in the reader — the title
@@ -83,7 +84,12 @@ export function Capture(): React.ReactElement {
 
   useEffect(() => {
     const stopShow = window.emqnote.onShow(({ token }) => {
-      editor.current?.focus();
+      // The title, unless there is none to put a caret in: the subject field only
+      // renders for a brand-new note (`variant === "capture"`). A note handed over from
+      // the library has no subject field at all — its title belongs to Rename — so the
+      // ref is simply never attached and this falls back to the editor.
+      if (subjectInput.current !== null) subjectInput.current.focus();
+      else editor.current?.focus();
 
       // Wait two frames: the first is only scheduled, after the second something is
       // actually on screen. Only then is "hotkey to blinking caret" measured honestly.
@@ -143,8 +149,8 @@ export function Capture(): React.ReactElement {
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // While the link box is open it owns the keyboard. Otherwise Ctrl+Shift+G threw
-      // focus back into the note and left the box hanging there.
+      // While the link box is open it owns the keyboard, or a window-level shortcut
+      // would throw focus back into the note and leave the box hanging there.
       if (linkOpenRef.current) return;
 
       const fires = (id: string): boolean => matches(shortcut(id), event, app.isMac);
@@ -166,27 +172,23 @@ export function Capture(): React.ReactElement {
         window.emqnote.openLibrary();
         return;
       }
-
-      if (fires("markMeeting")) {
-        event.preventDefault();
-        onHeaderChange({
-          ...headerRef.current,
-          kind: headerRef.current.kind === "meeting" ? "quick" : "meeting",
-        });
-        editor.current?.focus();
-      }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onHeaderChange, app.isMac]);
+  }, [app.isMac]);
 
   const overBudget =
     status.lastLatencyMs !== null && status.lastLatencyMs > LATENCY_BUDGET_MS;
 
   return (
     <div className="window">
-      <TitleBar onClose={() => window.emqnote.close()} native={app.isMac} />
+      <TitleBar
+        onClose={() => window.emqnote.close()}
+        native={app.isMac}
+        isMac={app.isMac}
+        t={app.t}
+      />
 
       <HeaderBlock
         variant={existing ? "reader" : "capture"}
@@ -195,6 +197,7 @@ export function Capture(): React.ReactElement {
         onLeave={() => editor.current?.focus()}
         locale={app.locale}
         t={app.t}
+        subjectRef={subjectInput}
       />
 
       <Editor
@@ -233,7 +236,9 @@ export function Capture(): React.ReactElement {
         </span>
         {/* Moved out of the header when the tag field took its place. A learn-once
             hint belongs in the ambient chrome anyway, not in a row of fields. */}
-        <span className="dismiss-hint">{app.t("capture.dismiss")}</span>
+        <span className="dismiss-hint">
+          {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
+        </span>
         <button
           type="button"
           className="help-button"

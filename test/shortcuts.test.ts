@@ -3,6 +3,7 @@ import {
   formatAccelerator,
   formatBinding,
   formatEntry,
+  formatFirstKey,
   matches,
   SHORTCUTS,
   shortcut,
@@ -122,6 +123,13 @@ describe("formatting, on both platforms", () => {
   it("collapses an entry's aliases into one row", () => {
     expect(formatEntry(shortcut("heading1"), false, "or")).toBe("Ctrl+1 or Ctrl+Alt+1");
     expect(formatEntry(shortcut("indent"), true, "of")).toBe("Tab of ⌘M");
+  });
+
+  it("formats only the lead binding, not every alias", () => {
+    // `close` has two aliases; the status bar's dismiss hint wants just the one people
+    // actually use, not `formatEntry`'s full "⌘Enter or ⌘W".
+    expect(formatFirstKey("close", true)).toBe("⌘Enter");
+    expect(formatFirstKey("close", false)).toBe("Ctrl+Enter");
   });
 
   it("translates the stored Electron accelerator", () => {
