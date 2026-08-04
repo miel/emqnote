@@ -639,12 +639,21 @@ function registerLibraryIpc(): void {
     return saveNote(vault, request);
   });
 
+  // Refuses a note the capture window has claimed, the same way `librarySaveNote` does
+  // and for a sharper reason: `CaptureWriter`'s session holds the path it is going to
+  // write to, decided when the note was loaded. Moving the file out from under it does
+  // not update that path, so the next debounced write recreates the note where it used
+  // to be — one note, now in two folders, the second one written by a window that
+  // believes it is still editing the first. The move dialog could only reach a note the
+  // reader had open; dragging can reach any row in the list, which is what makes the
+  // guard worth having rather than worth noting.
   ipcMain.handle(IPC.libraryMoveNote, (_event, path: string, folder: string) => {
     const vault = vaultPath();
-    if (vault === null) return path;
+    if (vault === null) return { path };
+    if (writer.activePath() === path) return { path, locked: true };
     const moved = moveNote(vault, path, folder);
     notifyLibrary();
-    return moved;
+    return { path: moved };
   });
 
   ipcMain.handle(IPC.libraryRenameNote, (_event, path: string, title: string) => {

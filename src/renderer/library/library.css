@@ -159,6 +159,15 @@
   font-weight: 600;
 }
 
+/* The folder a dragged note would land in. An outline rather than a fill, so it reads as
+   "this one" against `.branch-on`'s fill without the two fighting when the note is being
+   dragged into the folder that happens to be selected. `inset` because the row has no
+   border of its own and a real one would shift every sibling by a pixel. */
+.branch-drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 4px;
+}
+
 .twisty {
   width: 16px;
   border: 0;

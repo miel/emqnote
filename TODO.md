@@ -12,7 +12,7 @@ Last updated 4 August 2026, at `v0.3.1`.
 | 0 — markdown round trip | Done. 27 corpus files, byte-identical both ways. |
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
-| 3 — the library window | Done. Shipped before phase 4; the two were swapped in practice. |
+| 3 — the library window | **Done, now including dragging in the tree** — the one work item that was still outstanding, built 4 August 2026. Shipped before phase 4; the two were swapped in practice. |
 | 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
 | 5 — index and search | **Done.** Search bar, conflict banner (diff + keep/keep/merge) and the orphaned-attachments cleanup screen are all wired end to end — IPC, preload, real UI — and confirmed actually working via `Xvfb`: a real conflict pair resolved on disk, a real orphaned attachment trashed on disk, not just rendered. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |

@@ -7,12 +7,17 @@ import {
   type Selection,
 } from "../../shared/vault-types.js";
 import { FilterSection } from "./FilterSection.js";
+import { canDropNote, NOTE_DRAG_TYPE } from "./drag.js";
 
 interface Props {
   root: FolderNode;
   selected: Selection;
   facets: Facets;
   onSelect: (selection: Selection) => void;
+  /** The note being dragged over the tree, or null. See `NoteList`'s `onDragNote`. */
+  dragging: string | null;
+  /** Drops a dragged note into a folder — the direct form of "Move to…". */
+  onDropNote: (notePath: string, folder: string) => void;
   /** Fired when a filter list is unfolded, so the vault is only scanned on demand. */
   onExpandFilters: () => void;
   /** Right-clicking a folder: the new folder goes inside that one. */
@@ -68,6 +73,8 @@ function Branch({
   selected,
   onSelect,
   onCreateFolder,
+  dragging,
+  onDropNote,
   glyph,
 }: {
   node: FolderNode;
@@ -75,6 +82,14 @@ function Branch({
   selected: Selection;
   onSelect: (selection: Selection) => void;
   onCreateFolder: (parent: string) => void;
+  /** The note currently under the pointer, or null. See `NoteList`'s `onDragNote`. */
+  dragging: string | null;
+  /**
+   * Files the dragged note here. Absent on the trash branch, which is what makes the
+   * trash refuse a drop rather than merely look like it does — `canDropNote` says no as
+   * well, but the branch that cannot accept one should not be wired to try.
+   */
+  onDropNote?: (notePath: string, folder: string) => void;
   /**
    * An icon in the slot Tags and People use, for the one branch that is a destination
    * rather than a folder.
@@ -89,17 +104,51 @@ function Branch({
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
   const [open, setOpen] = useState(depth < 1);
+  const [over, setOver] = useState(false);
   const hasChildren = node.children.length > 0;
+
+  const accepts =
+    onDropNote !== undefined && dragging !== null && canDropNote(dragging, node.path);
 
   return (
     <li>
       <div
-        className={`branch${selectionKey(selected) === `folder:${node.path}` ? " branch-on" : ""}`}
+        className={
+          `branch${selectionKey(selected) === `folder:${node.path}` ? " branch-on" : ""}` +
+          `${over && accepts ? " branch-drop" : ""}`
+        }
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
         onClick={() => onSelect({ kind: "folder", path: node.path })}
         onContextMenu={(event) => {
           event.preventDefault();
           onCreateFolder(node.path);
+        }}
+        // `preventDefault` on dragover is what marks an element as a drop target at all;
+        // without it the browser's default "no drop here" wins and the drop never fires.
+        onDragOver={(event) => {
+          if (!accepts) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          if (!over) setOver(true);
+        }}
+        // `dragleave` also fires on the way into a child element, so the highlight is
+        // dropped on the element the pointer actually left, not on every crossing.
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setOver(false);
+        }}
+        // Asks `canDropNote` again with the path out of the drop itself, rather than
+        // trusting the `accepts` above. That one depends on `dragging` having made it
+        // through a re-render, which is true for any real drag — there are frames between
+        // picking a row up and moving the pointer — but it makes the consequential half
+        // of this depend on a render having happened, and the answer is right here.
+        onDrop={(event) => {
+          setOver(false);
+          if (onDropNote === undefined) return;
+          const notePath = event.dataTransfer.getData(NOTE_DRAG_TYPE);
+          if (notePath === "" || !canDropNote(notePath, node.path)) return;
+          event.preventDefault();
+          onDropNote(notePath, node.path);
         }}
       >
         <button
@@ -129,6 +178,8 @@ function Branch({
               selected={selected}
               onSelect={onSelect}
               onCreateFolder={onCreateFolder}
+              dragging={dragging}
+              onDropNote={onDropNote}
             />
           ))}
         </ul>
@@ -142,6 +193,8 @@ export function FolderTree({
   selected,
   facets,
   onSelect,
+  dragging,
+  onDropNote,
   onExpandFilters,
   onCreateFolder,
   onNewFolder,
@@ -195,6 +248,8 @@ export function FolderTree({
           selected={selected}
           onSelect={onSelect}
           onCreateFolder={onCreateFolder}
+          dragging={dragging}
+          onDropNote={onDropNote}
         />
       </ul>
 
@@ -239,6 +294,10 @@ export function FolderTree({
               // No new folders inside the trash: it is a destination for deleted notes,
               // not a place to organise.
               onCreateFolder={() => {}}
+              // And no drops either: Delete is what puts a note in here, and it asks
+              // first. `onDropNote` left off entirely rather than passed as a no-op, so
+              // the branch never even offers to accept one.
+              dragging={dragging}
             />
           </ul>
         )}

@@ -151,7 +151,12 @@ export interface LibraryApi {
   saveNote: (
     request: SaveNoteRequest,
   ) => Promise<{ written: boolean; path: string; locked?: boolean }>;
-  moveNote: (path: string, folder: string) => Promise<string>;
+  /**
+   * Answers the note's path after the move — unchanged, with `locked`, when the capture
+   * window has it claimed. Silently answering the old path would look like a move that
+   * did nothing, which is the one outcome a drag must never be allowed to look like.
+   */
+  moveNote: (path: string, folder: string) => Promise<{ path: string; locked?: boolean }>;
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;
   /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
