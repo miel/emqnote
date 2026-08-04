@@ -27,7 +27,9 @@ import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
+import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
 import { Settings } from "./Settings.js";
+import { Splitter } from "./Splitter.js";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -105,6 +107,48 @@ export function Library(): React.ReactElement {
   // Null when nothing is scanning, which is the normal state — the bar only appears on a
   // cold start with a vault big enough for the walk to be worth mentioning.
   const [scan, setScan] = useState<ScanProgress | null>(null);
+
+  /**
+   * The tree/notes pane widths, dragged live by `Splitter.tsx` and persisted through
+   * `IPC.setPaneWidths` only once a drag ends — see `onPaneDragEnd` below.
+   *
+   * Starts on the hardcoded default, same as `useBootstrap`'s `FALLBACK`, because
+   * `app.libraryPaneWidths` is only real once the `bootstrap()` round trip resolves.
+   * `paneWidthsLoaded` guards the effect that applies it so a later `app.reload()` (the
+   * settings panel calls it after a locale change) cannot overwrite a width mid-drag.
+   */
+  const [paneWidths, setPaneWidths] = useState<PaneWidths>(DEFAULT_PANE_WIDTHS);
+  const paneWidthsRef = useRef(paneWidths);
+  paneWidthsRef.current = paneWidths;
+  const paneWidthsLoaded = useRef(false);
+  const libraryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (paneWidthsLoaded.current || app.libraryPaneWidths === null) return;
+    paneWidthsLoaded.current = true;
+    setPaneWidths(app.libraryPaneWidths);
+  }, [app.libraryPaneWidths]);
+
+  /**
+   * Applies one splitter's pointer/keyboard movement, clamped so the reader can never be
+   * squeezed away — see `clampPaneWidths`'s own comment for why the pane being dragged is
+   * the one that gives way instead.
+   */
+  const onPaneDrag = useCallback((pane: "tree" | "notes", deltaX: number) => {
+    const available = libraryRef.current?.clientWidth ?? 0;
+    setPaneWidths((current) => {
+      const proposed: PaneWidths =
+        pane === "tree"
+          ? { tree: current.tree + deltaX, notes: current.notes }
+          : { tree: current.tree, notes: current.notes + deltaX };
+      return clampPaneWidths(proposed, pane, available);
+    });
+  }, []);
+
+  /** Persisted on drag end only — not on every pointer move, which would be one write per pixel. */
+  const onPaneDragEnd = useCallback(() => {
+    window.emqnote.setPaneWidths(paneWidthsRef.current);
+  }, []);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -575,7 +619,16 @@ export function Library(): React.ReactElement {
         onMerge={(path) => void openNote(path)}
       />
 
-      <div className="library">
+      <div
+        className="library"
+        ref={libraryRef}
+        style={
+          {
+            "--tree-width": `${paneWidths.tree}px`,
+            "--notes-width": `${paneWidths.notes}px`,
+          } as React.CSSProperties
+        }
+      >
         <FolderTree
           root={tree}
           selected={selection}
@@ -624,7 +677,14 @@ export function Library(): React.ReactElement {
           unavailableLabel={app.t("library.filterUnavailable")}
           filterLabel={app.t("library.filterSearch")}
         />
-  
+
+        <Splitter
+          left="var(--tree-width)"
+          label="Resize the folder tree"
+          onDrag={(deltaX) => onPaneDrag("tree", deltaX)}
+          onDragEnd={onPaneDragEnd}
+        />
+
         <NoteList
           notes={sorted}
           selected={open?.path ?? null}
@@ -642,7 +702,14 @@ export function Library(): React.ReactElement {
           locale={app.locale}
           t={app.t}
         />
-  
+
+        <Splitter
+          left="calc(var(--tree-width) + var(--notes-width))"
+          label="Resize the note list"
+          onDrag={(deltaX) => onPaneDrag("notes", deltaX)}
+          onDragEnd={onPaneDragEnd}
+        />
+
         <section className="reader">
           {open === null ? (
             <div className="reader-empty">

@@ -537,6 +537,7 @@ function registerAppIpc(): void {
       platform: process.platform,
       hotkey: settings.hotkey,
       vaultPath: settings.vaultPath,
+      libraryPaneWidths: settings.libraryPaneWidths,
     };
   });
 
@@ -563,6 +564,12 @@ function registerAppIpc(): void {
     saveSettings({ hotkey });
     buildTrayMenu();
     return true;
+  });
+
+  // Fire-and-forget: the drag itself is already reflected on screen, this only has to
+  // survive a restart. Debounced on the renderer side to a drag's end, not every move.
+  ipcMain.on(IPC.setPaneWidths, (_event, widths: { tree: number; notes: number }) => {
+    saveSettings({ libraryPaneWidths: widths });
   });
 }
 

@@ -91,6 +91,8 @@ export const IPC = {
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
   setHotkey: "app:set-hotkey",
+  /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
+  setPaneWidths: "app:set-pane-widths",
 } as const;
 
 export interface Bootstrap {
@@ -99,6 +101,8 @@ export interface Bootstrap {
   hotkey: string;
   /** Where the notes are, so the settings panel can mark the current one. */
   vaultPath: string | null;
+  /** The library's tree/notes pane widths, or null if the splitters were never dragged. */
+  libraryPaneWidths: { tree: number; notes: number } | null;
 }
 
 /**
@@ -221,6 +225,8 @@ export interface CaptureApi {
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
+  setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */
   listVaults: () => Promise<VaultLocation[]>;
   /** Opens the folder picker and answers with the chosen path, or null. */

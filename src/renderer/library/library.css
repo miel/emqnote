@@ -12,10 +12,17 @@
 
 /* `minmax(0, …)` on every track: a grid item defaults to a minimum size of its own
    content, so a long note title was pushing the third column wider than the window and
-   the whole layout jittered while resizing. */
+   the whole layout jittered while resizing. The first two tracks are driven by
+   `--tree-width`/`--notes-width`, set inline from React state in `Library.tsx` — the
+   fallback here is only what a window painted before `Splitter.tsx`'s first drag, or
+   before `Library.tsx`'s effect applies a value read back from settings, ever sees.
+   `position: relative` anchors the two `.pane-splitter` strips, which are siblings of
+   the three panes and positioned by the same custom properties. */
 .library {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 236px) minmax(0, 300px) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, var(--tree-width, 236px)) minmax(0, var(--notes-width, 300px)) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -25,6 +32,26 @@
 .library > * {
   min-width: 0;
   min-height: 0;
+}
+
+/* The grab strip between two tracks. Centred on the boundary rather than sitting flush
+   against it, so there is a few pixels of hit area on both sides of the 1px border the
+   tree and note list already draw. */
+.pane-splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  z-index: 1;
+  touch-action: none;
+}
+
+.pane-splitter:hover,
+.pane-splitter:focus-visible {
+  background: rgba(127, 127, 127, 0.18);
+  outline: 0;
 }
 
 .tree-toolbar {
