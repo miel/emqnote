@@ -44,7 +44,7 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
-auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.1`.
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.2`.
 
 Op 3 augustus 2026 volgde een reeks van negen correcties uit het gebruik van de
 macOS-release, waarvan er drie één oorzaak deelden: het opnamevenster ving zijn eigen
