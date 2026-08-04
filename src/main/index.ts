@@ -5,10 +5,13 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  net,
+  protocol,
   shell,
   type MenuItemConstructorOptions,
 } from "electron";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
@@ -74,6 +77,7 @@ import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
+import { resolveAttachment } from "./attachments.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -88,6 +92,18 @@ import type { Locale } from "../shared/i18n.js";
 if (process.platform === "win32" && process.env.LOCALAPPDATA !== undefined) {
   app.setPath("userData", join(process.env.LOCALAPPDATA, "emqnote"));
 }
+
+// Must be registered before 'ready' — Electron refuses it any later. `standard: true`
+// is what lets a relative-looking `emqnote-attachment://name.png` resolve at all;
+// `secure: true` keeps it out of mixed-content warnings even though it never leaves
+// the machine. A `data:` URL was rejected for this on purpose: it would cross IPC as
+// base64 on every render and bloat a screenshot by a third — see attachments.ts.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "emqnote-attachment",
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+]);
 
 const launch = readLaunchOptions();
 
@@ -226,6 +242,7 @@ async function main(): Promise<void> {
   const settings = loadSettings();
 
   installMinimalMenu();
+  registerAttachmentProtocol();
   registerIpc();
   createCaptureWindow();
 
@@ -349,6 +366,31 @@ function installMinimalMenu(): void {
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/**
+ * Serves `_attachments/` files to a renderer as `emqnote-attachment://<name>`.
+ *
+ * `net.fetch` on a `file://` URL is the modern replacement for the old
+ * `protocol.registerFileProtocol` — it streams rather than buffering the whole file
+ * into memory first, which matters once this is a multi-megabyte screenshot. Every
+ * request re-resolves the vault from settings rather than capturing it once, the same
+ * reasoning `registerLibraryIpc`'s own comment gives: the vault is only known after
+ * first run on some machines, and `resolveAttachment` is the security boundary here —
+ * a request for a name that does not resolve to a real file inside `_attachments/`
+ * gets a 404, never a peek outside it.
+ */
+function registerAttachmentProtocol(): void {
+  protocol.handle("emqnote-attachment", (request) => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return new Response(null, { status: 404 });
+
+    const name = decodeURIComponent(request.url.slice("emqnote-attachment://".length));
+    const resolved = resolveAttachment(vault, name);
+    if (resolved === null) return new Response(null, { status: 404 });
+
+    return net.fetch(pathToFileURL(resolved).toString());
+  });
 }
 
 /** Optional `--open-note=<part of a title>` so a screenshot can show a real note. */

@@ -3,6 +3,7 @@ import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { applyLink, linkAt, selectLink } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
+import { attachmentNodeView } from "./attachment-view.js";
 
 export interface EditorHandle {
   focus: () => void;
@@ -72,6 +73,12 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         class: "editor-content",
         spellcheck: "false",
         ...(placeholder === undefined ? {} : { "data-placeholder": placeholder }),
+      },
+      // Only `wikiEmbed` gets a NodeView: it is the node that can be a picture, and
+      // `schema.ts`'s own `toDOM` already renders `wikiLink` as the chip it needs to
+      // look like.
+      nodeViews: {
+        wikiEmbed: attachmentNodeView,
       },
     });
 
