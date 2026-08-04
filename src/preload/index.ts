@@ -84,5 +84,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
     attachmentPreview: (path: string) => ipcRenderer.invoke(IPC.libraryAttachmentPreview, path),
     trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
+
+    toggleTask: (path: string, ordinal: number, expectedText: string) =>
+      ipcRenderer.invoke(IPC.libraryToggleTask, path, ordinal, expectedText),
   },
 });

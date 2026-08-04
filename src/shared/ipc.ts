@@ -87,6 +87,9 @@ export const IPC = {
   libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
+  /** Ticks or unticks one task item — goes through the serializer, never the raw text. */
+  libraryToggleTask: "library:toggle-task",
+
   /** Locale, platform and hotkey — everything a window needs before it draws. */
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
@@ -197,6 +200,19 @@ export interface LibraryApi {
   /** `null` when the file is not a browser-renderable image type, or could not be read. */
   attachmentPreview: (path: string) => Promise<string | null>;
   trashAttachment: (path: string) => Promise<string>;
+
+  /**
+   * Flips one task item. `locked` mirrors `moveNote`'s shape: the capture window has this
+   * note claimed, so the toggle was refused rather than racing its debounced write.
+   * `toggled` false with no `locked` means the index row was stale — the item's text no
+   * longer matched what disk actually has — and the caller should revert its optimistic
+   * flip either way.
+   */
+  toggleTask: (
+    path: string,
+    ordinal: number,
+    expectedText: string,
+  ) => Promise<{ toggled: boolean; locked?: boolean }>;
 }
 
 export interface CaptureApi {

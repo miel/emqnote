@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { Fragment, Slice } from "prosemirror-model";
 import {
   cleanTagInput,
   extractTags,
@@ -20,6 +21,8 @@ import {
   schema,
   serializeNote,
   splitNote,
+  taskItemsIn,
+  taskItemText,
   type Frontmatter,
 } from "../markdown/index.js";
 import {
@@ -296,6 +299,63 @@ function withoutModified(markdown: string): string {
 
 function sameApartFromModified(a: string, b: string): boolean {
   return withoutModified(a) === withoutModified(b);
+}
+
+/**
+ * Ticks or unticks one task item from the aggregated Tasks view.
+ *
+ * Re-reads and re-parses the file rather than trusting the index that named the item:
+ * that index is a cache, filled by a scan or a watcher reindex that can be a save or two
+ * behind whatever is actually on disk, and flipping the wrong line in a file the user is
+ * not looking at is the one failure mode worth designing against here. `ordinal` counts
+ * task items in document order — `taskItemsIn` walks the same way `buildRecord`'s own
+ * extraction does (`index-scan.ts`), so the two agree on what "item 3" means. Refuses,
+ * returning false, when the item's own text no longer matches `expectedText`: a stale
+ * row must lose, never flip a line it no longer describes.
+ *
+ * Reuses `sameApartFromModified` the same way `saveNote` does: write only when the
+ * serialized bytes actually differ (B10). In practice a flip on a *reachable* task item
+ * always does — GFM only recognises `[ ]`/`[x]` as a checkbox when something follows it
+ * on the line (verified directly: `- [ ] ` with nothing after it parses as the literal
+ * text `"[ ]"` on a plain, non-task bullet, never as `checked: false` on an empty one),
+ * so every item `taskItemsIn` can find here has non-empty text and its marker's middle
+ * character always changes. The guard stays anyway, for the same reason `saveNote` keeps
+ * its own: this is a write path, and "compare before writing" costs nothing next to the
+ * alternative of a rewritten note if that invariant is ever wrong or the dialect changes.
+ */
+export function toggleTask(
+  vault: string,
+  notePath: string,
+  ordinal: number,
+  expectedText: string,
+): boolean {
+  const file = join(vault, notePath);
+  if (!existsSync(file)) return false;
+
+  const existing = readFileSync(file, "utf8");
+  const note = parseNote(existing);
+
+  const item = taskItemsIn(note.doc)[ordinal];
+  if (item === undefined || taskItemText(item.node) !== expectedText) return false;
+
+  const flipped = item.node.type.create(
+    { ...item.node.attrs, checked: item.node.attrs.checked !== true },
+    item.node.content,
+    item.node.marks,
+  );
+  const doc = note.doc.replace(
+    item.pos,
+    item.pos + item.node.nodeSize,
+    new Slice(Fragment.from(flipped), 0, 0),
+  );
+
+  const contents = serializeNote({
+    frontmatter: { ...note.frontmatter, modified: isoWithOffset(new Date()) },
+    doc,
+  });
+
+  if (!sameApartFromModified(existing, contents)) writeAtomic(file, contents);
+  return true;
 }
 
 /** Moves a note to another folder, without ever overwriting what is already there. */

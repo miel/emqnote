@@ -55,6 +55,7 @@ import {
   renameNote,
   resolveConflict,
   saveNote,
+  toggleTask,
   trashAttachment,
   trashNote,
 } from "./vault-io.js";
@@ -659,6 +660,22 @@ function registerLibraryIpc(): void {
     notifyLibrary();
     return trashed;
   });
+
+  // Refuses a note the capture window has claimed, the same guard `IPC.libraryMoveNote`
+  // uses and for the same reason: the write goes straight to the file, bypassing the
+  // capture window's own session, and its next debounced write would otherwise land on
+  // top of — or right after — this one with no conflict copy on either side.
+  ipcMain.handle(
+    IPC.libraryToggleTask,
+    (_event, path: string, ordinal: number, expectedText: string) => {
+      const vault = vaultPath();
+      if (vault === null) return { toggled: false };
+      if (writer.activePath() === path) return { toggled: false, locked: true };
+      const toggled = toggleTask(vault, path, ordinal, expectedText);
+      if (toggled) notifyLibrary();
+      return { toggled };
+    },
+  );
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
     const vault = vaultPath();
