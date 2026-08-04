@@ -324,11 +324,18 @@ belangrijker voor Nederlands: dat je op *Ruben* zoekt en *Rubén* vindt.
 
 ### 7.2 Bijwerken
 
-- Eerste start: volledige scan met voortgangsbalk, in een worker. De scan start sinds
-  4 augustus 2026 bij het opstarten (`startScan` in `vault-scan.ts`) en heeft zijn
-  voortgangsbalk bovenin het bibliotheekvenster; de worker is er nog niet — `fullScan`
-  geeft elke honderd bestanden de event-loop terug en is Electron-vrij, zodat die stap
-  later nog te zetten is
+- Eerste start: volledige scan met voortgangsbalk, in een worker. Alle drie bestaan sinds
+  4 augustus 2026: de scan start bij het opstarten (`startScan` in `vault-scan.ts`), de
+  voortgangsbalk staat bovenin het bibliotheekvenster, en het lopen zelf gebeurt in een
+  worker-thread (`scan-worker.ts`, aangestuurd door `scan-host.ts`). `vault-scan.ts` weet
+  daar niets van — het kent alleen een `ScanRunner`, en houdt zelf bij dat er nooit twee
+  scans tegelijk lopen. De worker opent de index zélf, want een `better-sqlite3`-handle
+  gaat niet over een threadgrens heen; dat kan omdat WAL een lezer nooit op een schrijver
+  laat wachten, en elke vraag van de bibliotheek is een lezing. Gemeten op een gegenereerd
+  vault van 4000 notities: de langste blokkade van de hoofdthread ging van ~500 ms (40
+  keer boven de 80 ms van het sneltoetsbudget, één per honderd bestanden — precies tussen
+  twee keer event-loop teruggeven in) naar hoogstens 29 ms, zonder dat de scan zelf langer
+  duurde
 - Daarna: `chokidar` met 300 ms debounce → per gewijzigd bestand herindexeren
 - Vergelijking op `mtime` + `size`, en pas bij twijfel de inhoud-hash — dat scheelt bij
   een OneDrive-synchronisatie die honderden bestanden aanraakt zonder ze te wijzigen

@@ -53,6 +53,14 @@ export type IndexDb = Database.Database;
  */
 function migrate(db: IndexDb): void {
   db.pragma("journal_mode = WAL");
+  // Two connections write to this file: the main thread (the watcher's incremental
+  // reindex) and the scan worker (`scan-worker.ts`), which opens it a second time because
+  // a better-sqlite3 handle cannot cross a thread. WAL already means a reader never
+  // waits on a writer, which is the case that matters — every library question is a read.
+  // Two *writers* still take the lock in turn, and without a timeout the loser throws
+  // SQLITE_BUSY on the spot and drops the update instead of waiting the sub-millisecond
+  // it takes for one note's transaction to commit.
+  db.pragma("busy_timeout = 5000");
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
       path TEXT PRIMARY KEY,

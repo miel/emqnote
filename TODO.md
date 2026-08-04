@@ -311,11 +311,51 @@ from disk, so the window always drew immediately. What waited was everything
 index-backed — Tags, People, search and the conflict check — and it waited
 silently, which is the part that is fixed.
 
-Still not done, and still what §7.2 asks for: the scan runs on the main
-thread, not in a worker. `fullScan` yields to the event loop every hundred
-files and is deliberately Electron-free so it can be moved, but 11 s of work
-next to a hotkey with an 80 ms budget deserves a real measurement before that
-is called fine.
+**And the scan now runs in a worker — §7.2's last outstanding piece, closed
+the same day, with the measurement it owed.** `src/main/scan-worker.ts` is
+the worker entry (a second input in `electron.vite.config.ts`'s main build,
+emitted beside `index.js`); `src/main/scan-host.ts` starts it, forwards its
+progress, and falls back to the main thread if it cannot start.
+`vault-scan.ts` never learns a thread exists: it gained a `ScanRunner` seam
+and kept the collapse, which still belongs on its side — two workers walking
+the same vault into the same database would be worse than two in-process
+walks, not better.
+
+Measured on a generated 4000-note vault, on this Linux sandbox (not the Mac
+mini — the absolute numbers will differ there, the shape should not), with an
+event-loop lag monitor running on the main thread. Two runs of each:
+
+| | total | worst main-thread stall | stalls > 80 ms |
+|---|---|---|---|
+| in-process (what shipped before) | 14.4 s / 14.0 s | 535 ms / 469 ms | 40 / 40 |
+| in the worker | 14.0 s / 15.1 s | 6.9 ms / 29.4 ms | 0 / 0 |
+
+The in-process row is the one worth remembering: forty stalls clean over the
+hotkey's *entire* 80 ms budget, one per hundred files, because a hundred files
+is about half a second of work — `fullScan` yielding every hundred bounded
+nothing at that granularity. Total scan time is unchanged, so nothing was
+traded away for it.
+
+What the worker forced, all deliberate, all written down in `CLAUDE.md`: a
+database connection of its own (a `better-sqlite3` handle cannot cross a
+thread; WAL is what makes a second one safe, plus a `busy_timeout` so the
+watcher and the worker do not drop a write when they collide); an
+Electron-free import graph, which is a rollup-chunking property rather than a
+source-tree one and is now checked by `check:bundle` rather than hoped for;
+and a loud main-thread fallback, since a worker entry missing from the package
+would otherwise show up as an index that silently never gets built.
+
+Confirmed in the real app under `Xvfb`, not only in tests: a 3000-note vault
+indexed end to end, the library drawing its tree and note list immediately
+with the progress bar running above them, all 3000 rows and FTS entries
+present afterwards, the Tags facet reading 20 tags × 150 notes through the
+main thread's own connection, and no fallback message on stderr in any run.
+That ESM workers load from inside a packed `app.asar` at all — shared chunks
+and all — was checked before the design leaned on it, not after.
+
+Not confirmed: the same on Windows and macOS. The asar check was done on
+Linux with the same Electron version, and neither packaged app has been
+rebuilt since.
 
 **The `chokidar` watcher for incremental reindexing now exists too, wired
 into `index.ts`, not just written.** `src/main/index-watch.ts`'s

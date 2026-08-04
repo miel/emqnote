@@ -8,7 +8,7 @@ import type {
 } from "../shared/vault-types.js";
 import { findConflictCopies, type ConflictPair } from "./conflicts.js";
 import { allNotes, getNote, search, type IndexDb, type NoteMeta } from "./index-db.js";
-import { fullScan } from "./index-scan.js";
+import { fullScan, type ScanResult } from "./index-scan.js";
 import type { ParsedQuery } from "./search-query.js";
 import { readNotesIn } from "./vault-io.js";
 
@@ -21,20 +21,49 @@ import { readNotesIn } from "./vault-io.js";
  * `index-scan.ts` are that table now, and this module is a thin query layer in front of
  * it: `ensureScanned` brings the index up to date (still collapsing concurrent callers
  * onto one running scan, the same reason it always did — opening the library while a
- * capture is being written must not start a second walk on top of the first, on the one
- * thread the hotkey also runs on) and `facets`/`notesMatching` read from it. Nothing
- * here touches Electron, so it still moves into a worker unchanged.
+ * capture is being written must not start a second walk on top of the first) and
+ * `facets`/`notesMatching` read from it. Nothing here touches Electron.
+ *
+ * *Where* the walk runs is not this module's business: `setScanRunner` swaps in the
+ * worker (`scan-host.ts`) and the default is the plain in-process `fullScan`. The
+ * collapse has to sit on this side of that seam either way — two workers walking the
+ * same vault into the same database would be worse than two in-process walks, not
+ * better.
  */
 
 let available = true;
 let running: Promise<void> | null = null;
+
+/**
+ * What actually walks the vault. `fullScan`'s own signature, so the in-process default is
+ * simply `fullScan` itself.
+ */
+export type ScanRunner = (
+  vault: string,
+  db: IndexDb,
+  onProgress?: (progress: ScanProgress) => void,
+) => Promise<ScanResult>;
+
+let runner: ScanRunner = fullScan;
+
+/**
+ * Chooses where scanning happens. `null` restores the in-process default.
+ *
+ * `index.ts` installs the worker runner once the index path is known. Tests leave it
+ * alone and get the direct walk, which is what makes everything below testable without
+ * a build step: the worker is a built file next to `index.js`, and there is no such file
+ * when the suite runs from source.
+ */
+export function setScanRunner(next: ScanRunner | null): void {
+  runner = next ?? fullScan;
+}
 
 async function scan(
   vault: string,
   db: IndexDb,
   onProgress?: (progress: ScanProgress) => void,
 ): Promise<void> {
-  available = (await fullScan(vault, db, onProgress)) === "ok";
+  available = (await runner(vault, db, onProgress)) === "ok";
 }
 
 /** Brings the index up to date, collapsing concurrent callers onto one scan. */

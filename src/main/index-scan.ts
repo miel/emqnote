@@ -9,9 +9,12 @@ import { checkFilesOnDemand } from "./vault.js";
 
 /**
  * Building the SQLite index from what is actually on disk — `02-technisch-ontwerp.md`
- * §7.2's "eerste start: volledige scan met voortgangsbalk, in een worker". The worker
- * part is not here yet; this is written to be Electron-free so it can move into one
- * unchanged, the same reasoning `vault-io.ts` and `vault-scan.ts` already follow.
+ * §7.2's "eerste start: volledige scan met voortgangsbalk, in een worker". Being
+ * Electron-free was what let this move into that worker unchanged, and is now what keeps
+ * it there: `scan-worker.ts` runs this file on a thread where Electron's modules do not
+ * exist, so an import of one here would break the scan rather than merely widen a bundle.
+ * `check:bundle` fails on that, and `scan-host.ts` falls back to the main thread if it
+ * ever happens anyway. It still runs in-process too — that fallback, and every test.
  *
  * `collectFiles`/`isDataless` used to live in `vault-scan.ts` and be shared from there,
  * back when that module did its own walk over an in-memory Map. Now that `vault-scan.ts`
@@ -103,6 +106,12 @@ export function buildRecord(vault: string, file: string, raw: string, stats: Sta
   };
 }
 
+/**
+ * A hundred files is roughly half a second of work, so this never was the thing keeping
+ * the main thread's stalls inside the hotkey's 80 ms budget — measured at 470–535 ms
+ * worst case before the scan moved off it (see `TODO.md`). What it does buy, on the
+ * worker's own thread, is that progress messages can actually leave while the walk runs.
+ */
 const YIELD_EVERY = 100;
 
 function breathe(): Promise<void> {

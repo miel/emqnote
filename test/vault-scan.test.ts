@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeIndex, openIndex, type IndexDb } from "../src/main/index-db.js";
 import { parseSearchQuery } from "../src/main/search-query.js";
-import { conflicts, facets, notesMatching, searchNotes, startScan } from "../src/main/vault-scan.js";
+import {
+  conflicts,
+  facets,
+  notesMatching,
+  searchNotes,
+  setScanRunner,
+  startScan,
+  type ScanRunner,
+} from "../src/main/vault-scan.js";
 import type { ScanProgress } from "../src/shared/vault-types.js";
 
 let vault: string;
@@ -38,6 +46,8 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(vault, { recursive: true, force: true });
   closeIndex(db);
+  // Module-level state: a test that swapped the runner must not hand it to the next one.
+  setScanRunner(null);
 });
 
 describe("gathering tags and people across the vault", () => {
@@ -402,5 +412,78 @@ describe("the startup scan", () => {
 
     expect(seen).toEqual([]);
     expect((await facets(vault, db)).available).toBe(true);
+  });
+});
+
+/**
+ * The seam the scan worker hangs off (`scan-host.ts`, §7.2). This module deliberately
+ * knows nothing about threads: it knows that *something* walks the vault, and that only
+ * one such walk may be in flight. Those two properties are what break if the worker is
+ * wired in carelessly, so they are what is asserted here — against a substitute runner,
+ * since the real one needs a built worker file that does not exist when the suite runs
+ * from source.
+ */
+describe("where the scan runs", () => {
+  it("uses the runner it was given instead of walking the vault itself", async () => {
+    note("00 Inbox", "Een", { tags: "klantx" });
+
+    let calls = 0;
+    const runner: ScanRunner = async () => {
+      calls += 1;
+      return "ok";
+    };
+    setScanRunner(runner);
+    await startScan(vault, db);
+
+    expect(calls).toBe(1);
+    // Nothing was indexed, because the substitute did not index anything — proof the
+    // answer came from the runner rather than from a walk still happening underneath it.
+    expect((await facets(vault, db)).tags).toEqual([]);
+  });
+
+  it("still collapses two callers onto one run of it", async () => {
+    let calls = 0;
+    setScanRunner(async () => {
+      calls += 1;
+      await new Promise((done) => setTimeout(done, 5));
+      return "ok";
+    });
+
+    await Promise.all([startScan(vault, db), facets(vault, db)]);
+
+    expect(calls).toBe(1);
+  });
+
+  it("passes its progress through to whoever started the scan", async () => {
+    setScanRunner(async (_vault, _db, onProgress) => {
+      onProgress?.({ done: 1, total: 2 });
+      onProgress?.({ done: 2, total: 2 });
+      return "ok";
+    });
+
+    const seen: ScanProgress[] = [];
+    await startScan(vault, db, (progress) => seen.push(progress));
+
+    expect(seen).toEqual([
+      { done: 1, total: 2 },
+      { done: 2, total: 2 },
+    ]);
+  });
+
+  it("treats a runner's 'ondemand' the same as an in-process one", async () => {
+    setScanRunner(async () => "ondemand");
+    await startScan(vault, db);
+
+    expect(await facets(vault, db)).toEqual({ tags: [], people: [], available: false });
+  });
+
+  it("goes back to walking the vault itself when the runner is cleared", async () => {
+    note("00 Inbox", "Een", { tags: "klantx" });
+
+    setScanRunner(async () => "ok");
+    setScanRunner(null);
+    await startScan(vault, db);
+
+    expect((await facets(vault, db)).tags).toEqual([{ name: "klantx", count: 1 }]);
   });
 });
