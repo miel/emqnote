@@ -88,6 +88,9 @@ const DUTCH: Record<string, string> = {
   "library.move": "Verplaatsen",
   "library.moveLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij verplaatst worden.",
+  "library.taskLocked":
+    "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kunnen de taken hier aangevinkt worden.",
+  "library.tasks": "Taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
@@ -159,6 +162,13 @@ const DUTCH: Record<string, string> = {
   "orphans.title": "Verweesde bijlagen",
   "orphans.loading": "Bezig met zoeken…",
   "orphans.empty": "Geen verweesde bijlagen gevonden.",
+
+  // Aggregated Tasks view
+  "tasks.openOnly": "Alleen openstaand",
+  "tasks.none": "Geen taken gevonden",
+  "tasks.one": "taak",
+  "tasks.many": "taken",
+  "tasks.empty": "(leeg)",
 };
 
 export function translate(locale: Locale, key: string): string {
@@ -242,6 +252,9 @@ const ENGLISH: Record<string, string> = {
   "library.move": "Move",
   "library.moveLocked":
     "This note is open in the note window. Close it there first, then it can be moved.",
+  "library.taskLocked":
+    "This note is open in the note window. Close it there first, then its tasks can be ticked here.",
+  "library.tasks": "Tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   "library.delete": "Delete",
@@ -308,6 +321,13 @@ const ENGLISH: Record<string, string> = {
   "orphans.title": "Orphaned attachments",
   "orphans.loading": "Looking…",
   "orphans.empty": "No orphaned attachments found.",
+
+  // Aggregated Tasks view
+  "tasks.openOnly": "Open only",
+  "tasks.none": "No tasks found",
+  "tasks.one": "task",
+  "tasks.many": "tasks",
+  "tasks.empty": "(empty)",
 };
 
 /**

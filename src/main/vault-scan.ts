@@ -192,6 +192,10 @@ export async function notesMatching(
 
 async function notesFor(vault: string, db: IndexDb, selection: Selection): Promise<NoteSummary[]> {
   if (selection.kind === "folder") return readNotesIn(vault, selection.path);
+  // The Tasks view has its own list, read through `tasks()` below rather than this one —
+  // it shows task rows, not notes, and a "tasks" selection never reaches `notesMatching`
+  // from the renderer. This exists only so the union stays exhaustive here.
+  if (selection.kind === "tasks") return [];
 
   await ensureScanned(vault, db);
   if (!available) return [];

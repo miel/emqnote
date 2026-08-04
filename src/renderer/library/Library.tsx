@@ -28,6 +28,7 @@ import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
 import { Settings } from "./Settings.js";
+import { TaskList } from "./TaskList.js";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -552,6 +553,40 @@ export function Library(): React.ReactElement {
     await window.emqnote.library.openInCapture(path);
   };
 
+  /**
+   * Selects the Tasks view — vault-wide, open items only, the same defaults every other
+   * footer entry resets to when it is clicked fresh. Clears a pending search the same way
+   * the tree's own `onSelect` does below, so a half-typed query does not sit there
+   * disagreeing with what is now showing.
+   */
+  const openTasks = (): void => {
+    setSelection({ kind: "tasks", scope: "", openOnly: true });
+    if (searchQuery !== "") {
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+      setSearchQuery("");
+    }
+  };
+
+  /**
+   * Flips one task item. The actual write happens in the main process, through
+   * `toggleTask` in `vault-io.ts` — this only relays the call and turns `locked` into the
+   * same kind of message `moveNoteTo` shows for the same reason: the capture window has
+   * the note claimed, so the toggle was refused rather than raced against its own
+   * debounced write.
+   */
+  const toggleTask = async (
+    path: string,
+    ordinal: number,
+    expectedText: string,
+  ): Promise<boolean> => {
+    const result = await window.emqnote.library.toggleTask(path, ordinal, expectedText);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.taskLocked") });
+      return false;
+    }
+    return result.toggled;
+  };
+
   return (
     <div className="library-shell">
       {/* Above the conflict banner, and thinner: this one says "not everything is here
@@ -612,11 +647,14 @@ export function Library(): React.ReactElement {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenOrphanedAttachments={() => setOrphanedAttachmentsOpen(true)}
+          onOpenTasks={openTasks}
+          tasksSelected={selection.kind === "tasks"}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           orphanedAttachmentsLabel={app.t("orphans.title")}
+          tasksLabel={app.t("library.tasks")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
           peopleLabel={app.t("library.people")}
@@ -625,23 +663,38 @@ export function Library(): React.ReactElement {
           filterLabel={app.t("library.filterSearch")}
         />
   
-        <NoteList
-          notes={sorted}
-          selected={open?.path ?? null}
-          showing={selection}
-          searching={searchQuery.trim() !== ""}
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          sort={sort}
-          onSort={setSort}
-          onSelect={(path) => void openNote(path)}
-          onOpenInCapture={(path) => void openInCapture(path)}
-          onNewNote={() => window.emqnote.library.newNote()}
-          onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
-          onDragNote={setDragging}
-          locale={app.locale}
-          t={app.t}
-        />
+        {selection.kind === "tasks" ? (
+          <TaskList
+            scope={selection.scope}
+            openOnly={selection.openOnly}
+            folders={folders}
+            onScopeChange={(scope) => setSelection({ kind: "tasks", scope, openOnly: selection.openOnly })}
+            onOpenOnlyChange={(openOnly) =>
+              setSelection({ kind: "tasks", scope: selection.scope, openOnly })
+            }
+            onOpenNote={(path) => void openNote(path)}
+            onToggle={toggleTask}
+            t={app.t}
+          />
+        ) : (
+          <NoteList
+            notes={sorted}
+            selected={open?.path ?? null}
+            showing={selection}
+            searching={searchQuery.trim() !== ""}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            sort={sort}
+            onSort={setSort}
+            onSelect={(path) => void openNote(path)}
+            onOpenInCapture={(path) => void openInCapture(path)}
+            onNewNote={() => window.emqnote.library.newNote()}
+            onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
+            onDragNote={setDragging}
+            locale={app.locale}
+            t={app.t}
+          />
+        )}
   
         <section className="reader">
           {open === null ? (

@@ -1,0 +1,180 @@
+import { useEffect, useRef, useState } from "react";
+import type { TaskItem } from "../../shared/vault-types.js";
+import { drawBox } from "../editor/checkbox.js";
+
+interface Props {
+  scope: string;
+  openOnly: boolean;
+  /** Every folder in the vault, flattened — the same list `MoveDialog` builds from the tree, for the scope dropdown. */
+  folders: string[];
+  onScopeChange: (scope: string) => void;
+  onOpenOnlyChange: (openOnly: boolean) => void;
+  /** Opens the note in the reader beside this list — clicking a row's text, not its checkbox. */
+  onOpenNote: (path: string) => void;
+  /**
+   * Flips one item through the serializer, in the main process — never here. Resolves to
+   * whether the flip actually landed, so this component can revert its own optimistic
+   * change when it did not (a stale row, or the capture window has the note claimed).
+   */
+  onToggle: (path: string, ordinal: number, expectedText: string) => Promise<boolean>;
+  t: (key: string) => string;
+}
+
+/** One row's identity: `ordinal` alone is only unique within its own note. */
+function rowKey(item: TaskItem): string {
+  return `${item.path}#${item.ordinal}`;
+}
+
+/**
+ * The checkbox on one row, drawn through the same `drawBox` the editor's own task
+ * checkboxes use (`checkbox.ts`), so the two places a box appears cannot drift apart.
+ * `drawBox` returns a raw `SVGElement` rather than JSX — it was written for a ProseMirror
+ * widget decoration — so this mounts it by hand instead of translating it into markup a
+ * second time.
+ */
+function TaskCheckbox({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+}): React.ReactElement {
+  const holder = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    holder.current?.replaceChildren(drawBox(checked));
+  }, [checked]);
+
+  return (
+    <button
+      type="button"
+      ref={holder}
+      className="task-row-check"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    />
+  );
+}
+
+/**
+ * The aggregated Tasks view — item 6 of the plan. A fourth `Selection` kind rather than a
+ * lens on the folder currently browsed: it reads across the whole vault by default, with
+ * its own scope dropdown to narrow it, because the open items in a project are usually
+ * spread across several notes in one folder tree, not sitting in whichever one happens to
+ * be selected on the left.
+ *
+ * Loads its own data and reloads on every `library:refresh` — the same event the rest of
+ * the window already reacts to, since a toggle from here, a toggle made inside the editor,
+ * or an edit that added or removed a task item all funnel through that one broadcast.
+ */
+export function TaskList({
+  scope,
+  openOnly,
+  folders,
+  onScopeChange,
+  onOpenOnlyChange,
+  onOpenNote,
+  onToggle,
+  t,
+}: Props): React.ReactElement {
+  const [items, setItems] = useState<TaskItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async (): Promise<void> => {
+      const found = await window.emqnote.library.tasks(scope, openOnly);
+      if (!cancelled) setItems(found);
+    };
+
+    void load();
+    const stop = window.emqnote.library.onRefresh(() => void load());
+
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [scope, openOnly]);
+
+  const toggle = async (item: TaskItem): Promise<void> => {
+    setItems((current) =>
+      current.map((entry) =>
+        rowKey(entry) === rowKey(item) ? { ...entry, checked: !entry.checked } : entry,
+      ),
+    );
+
+    const ok = await onToggle(item.path, item.ordinal, item.text);
+    if (!ok) {
+      // Reverts to `item.checked` — the value from before the optimistic flip above —
+      // rather than to `!item.checked`, so a second failed toggle on the same stale row
+      // does not walk the displayed state further from what disk actually has.
+      setItems((current) =>
+        current.map((entry) =>
+          rowKey(entry) === rowKey(item) ? { ...entry, checked: item.checked } : entry,
+        ),
+      );
+    }
+  };
+
+  return (
+    <div className="notes task-list">
+      <div className="task-toolbar">
+        <select
+          className="task-scope"
+          value={scope}
+          onChange={(event) => onScopeChange(event.target.value)}
+        >
+          <option value="">{t("library.vaultRoot")}</option>
+          {folders
+            .filter((folder) => folder !== "")
+            .map((folder) => (
+              <option key={folder} value={folder}>
+                {folder}
+              </option>
+            ))}
+        </select>
+
+        <label className="task-open-only">
+          <input
+            type="checkbox"
+            checked={openOnly}
+            onChange={(event) => onOpenOnlyChange(event.target.checked)}
+          />
+          {t("tasks.openOnly")}
+        </label>
+      </div>
+
+      <div className="notes-header">
+        <span className="notes-count">
+          {items.length === 0
+            ? t("tasks.none")
+            : `${items.length} ${t(items.length === 1 ? "tasks.one" : "tasks.many")}`}
+        </span>
+      </div>
+
+      <ul className="task-rows">
+        {items.map((item) => (
+          <li key={rowKey(item)} className="task-row">
+            <TaskCheckbox checked={item.checked} onToggle={() => void toggle(item)} />
+            <button
+              type="button"
+              className="task-row-text"
+              onClick={() => onOpenNote(item.path)}
+            >
+              <span className="task-row-title">
+                {item.text === "" ? t("tasks.empty") : item.text}
+              </span>
+              <span className="task-row-note">
+                {item.title} · {item.path}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

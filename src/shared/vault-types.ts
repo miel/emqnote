@@ -118,13 +118,16 @@ export type SortKey = "modified" | "created" | "title";
 export type Selection =
   | { kind: "folder"; path: string }
   | { kind: "tag"; name: string }
-  | { kind: "person"; name: string };
+  | { kind: "person"; name: string }
+  | { kind: "tasks"; scope: string; openOnly: boolean };
 
 /** Stable string form, for React keys, highlight comparison and effect dependencies. */
 export function selectionKey(selection: Selection): string {
-  return selection.kind === "folder"
-    ? `folder:${selection.path}`
-    : `${selection.kind}:${selection.name}`;
+  if (selection.kind === "folder") return `folder:${selection.path}`;
+  if (selection.kind === "tasks") {
+    return `tasks:${selection.scope}:${selection.openOnly ? "open" : "all"}`;
+  }
+  return `${selection.kind}:${selection.name}`;
 }
 
 /** The folder a note sits in, from its vault-relative path; "" for the vault root. */

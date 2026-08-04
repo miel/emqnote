@@ -69,6 +69,7 @@ import {
   searchNotes,
   setScanRunner,
   startScan,
+  tasks as tasksMatching,
 } from "./vault-scan.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
@@ -659,6 +660,13 @@ function registerLibraryIpc(): void {
     const trashed = trashAttachment(vault, path);
     notifyLibrary();
     return trashed;
+  });
+
+  ipcMain.handle(IPC.libraryTasks, async (_event, scope: string, openOnly: boolean) => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null
+      ? []
+      : await tasksMatching(vault, indexDb, scope, openOnly);
   });
 
   // Refuses a note the capture window has claimed, the same guard `IPC.libraryMoveNote`

@@ -10,6 +10,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  TaskItem,
   VaultLocation,
 } from "./vault-types.js";
 
@@ -87,6 +88,8 @@ export const IPC = {
   libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
+  /** The aggregated Tasks view: every task item under a folder scope. */
+  libraryTasks: "library:tasks",
   /** Ticks or unticks one task item — goes through the serializer, never the raw text. */
   libraryToggleTask: "library:toggle-task",
 
@@ -201,6 +204,8 @@ export interface LibraryApi {
   attachmentPreview: (path: string) => Promise<string | null>;
   trashAttachment: (path: string) => Promise<string>;
 
+  /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */
+  tasks: (scope: string, openOnly: boolean) => Promise<TaskItem[]>;
   /**
    * Flips one task item. `locked` mirrors `moveNote`'s shape: the capture window has this
    * note claimed, so the toggle was refused rather than racing its debounced write.
