@@ -324,7 +324,11 @@ belangrijker voor Nederlands: dat je op *Ruben* zoekt en *Rubén* vindt.
 
 ### 7.2 Bijwerken
 
-- Eerste start: volledige scan met voortgangsbalk, in een worker
+- Eerste start: volledige scan met voortgangsbalk, in een worker. De scan start sinds
+  4 augustus 2026 bij het opstarten (`startScan` in `vault-scan.ts`) en heeft zijn
+  voortgangsbalk bovenin het bibliotheekvenster; de worker is er nog niet — `fullScan`
+  geeft elke honderd bestanden de event-loop terug en is Electron-vrij, zodat die stap
+  later nog te zetten is
 - Daarna: `chokidar` met 300 ms debounce → per gewijzigd bestand herindexeren
 - Vergelijking op `mtime` + `size`, en pas bij twijfel de inhoud-hash — dat scheelt bij
   een OneDrive-synchronisatie die honderden bestanden aanraakt zonder ze te wijzigen

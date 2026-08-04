@@ -740,6 +740,33 @@
 
 /* ---- conflict banner ---- */
 
+/* The startup index scan. Deliberately quieter than the conflict banner below it: this
+   one resolves itself and needs nothing from anybody, so it states what is happening and
+   gets out of the way. The fill sits behind the text rather than beside it, so the strip
+   stays one line tall however long the count gets. */
+.scan-bar {
+  position: relative;
+  width: 100%;
+  padding: 5px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.scan-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(127, 127, 127, 0.18);
+  transition: width 120ms linear;
+}
+
+.scan-label {
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
+
 .conflict-banner {
   display: block;
   width: 100%;

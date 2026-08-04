@@ -288,13 +288,34 @@ swap. All 17 of `vault-scan.test.ts`'s existing tests pass unchanged in
 behaviour against the new implementation, which is the real evidence the
 swap preserved the interface.
 
-What was still open at that point: no IPC channel or worker called
-`fullScan` on its own — a capture or an app launch reaching
-`facets`/`notesMatching` was still what triggered it, same as the Map
-always was, so the *first* library open after a cold start paid for the
-initial full scan inline rather than during a progress-bar startup step.
-That part is still true today — nothing about the watcher below changes it,
-since the watcher only takes over *after* that first scan has run.
+What was still open at that point: nothing called `fullScan` on its own — a
+capture or an app launch reaching `facets`/`notesMatching` was still what
+triggered it, same as the Map always was, so the first thing to ask the index
+a question after a cold start paid for the whole walk.
+
+**Closed on 4 August 2026.** `vault-scan.ts`'s `startScan` is called from
+`main()` right after `prepareVault()`, beside the watcher and skipped during
+`--selftest` for the same reason, and reports progress into a thin bar at the
+top of the library window (`IPC.libraryScanProgress`, plus
+`IPC.libraryScanState` for a window that opened partway through and missed the
+events). It shares `ensureScanned`'s collapse, so a question arriving mid-walk
+joins the scan already running instead of starting a rival one — asserted on
+promise identity in `vault-scan.test.ts`, since a second walk would produce
+the same answers at twice the cost and so could not be caught by its output.
+
+Measured on a generated 4000-note vault under `Xvfb`: about 15 s from launch
+to the bar disappearing, roughly 11 s of it scanning. That is the wait that
+used to begin when the library was first opened. Worth being exact about what
+it did *not* do even then: the tree and the folder note list read straight
+from disk, so the window always drew immediately. What waited was everything
+index-backed — Tags, People, search and the conflict check — and it waited
+silently, which is the part that is fixed.
+
+Still not done, and still what §7.2 asks for: the scan runs on the main
+thread, not in a worker. `fullScan` yields to the event loop every hundred
+files and is deliberately Electron-free so it can be moved, but 11 s of work
+next to a hotkey with an 80 ms budget deserves a real measurement before that
+is called fine.
 
 **The `chokidar` watcher for incremental reindexing now exists too, wired
 into `index.ts`, not just written.** `src/main/index-watch.ts`'s

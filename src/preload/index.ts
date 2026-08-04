@@ -10,6 +10,7 @@ import type {
   ConflictPair,
   OpenedNote,
   SaveNoteRequest,
+  ScanProgress,
   Selection,
 } from "../shared/vault-types.js";
 
@@ -71,6 +72,9 @@ contextBridge.exposeInMainWorld("emqnote", {
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
     newNote: () => ipcRenderer.send(IPC.captureNew),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
+    scanState: () => ipcRenderer.invoke(IPC.libraryScanState),
+    onScanProgress: (handler: (progress: ScanProgress | null) => void) =>
+      subscribe<ScanProgress | null>(IPC.libraryScanProgress, handler),
 
     conflicts: () => ipcRenderer.invoke(IPC.libraryConflicts),
     conflictDiff: (pair: ConflictPair) => ipcRenderer.invoke(IPC.libraryConflictDiff, pair),

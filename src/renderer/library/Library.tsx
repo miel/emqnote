@@ -11,6 +11,7 @@ import {
   type FolderNode,
   type NoteSummary,
   type OpenedNote,
+  type ScanProgress,
   type Selection,
   type SortKey,
 } from "../../shared/vault-types.js";
@@ -101,6 +102,9 @@ export function Library(): React.ReactElement {
    * pays that cost up front instead.
    */
   const [conflicts, setConflicts] = useState<ConflictPair[]>([]);
+  // Null when nothing is scanning, which is the normal state — the bar only appears on a
+  // cold start with a vault big enough for the walk to be worth mentioning.
+  const [scan, setScan] = useState<ScanProgress | null>(null);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -207,6 +211,28 @@ export function Library(): React.ReactElement {
     });
     return stop;
   }, [loadTree, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
+
+  /**
+   * The startup index scan, which usually ran long before this window existed — the app
+   * starts at login and gets opened hours later. So it is asked for once here as well as
+   * subscribed to: on a vault that scans in under a second there may never be an event
+   * to receive, and on a slow one this window opened partway through and missed the rest.
+   *
+   * When the scan finishes, everything that reads the index is reloaded. Tags, People and
+   * search were answering out of a half-built index up to that moment, which is honest —
+   * a partial answer beats a spinner — but it should not stay the last word.
+   */
+  useEffect(() => {
+    void window.emqnote.library.scanState().then(setScan);
+    return window.emqnote.library.onScanProgress((progress) => {
+      setScan(progress);
+      if (progress === null) {
+        refreshFacets();
+        void loadNotes(selectionRef.current);
+        void loadConflicts();
+      }
+    });
+  }, [refreshFacets, loadNotes, loadConflicts]);
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
@@ -528,6 +554,21 @@ export function Library(): React.ReactElement {
 
   return (
     <div className="library-shell">
+      {/* Above the conflict banner, and thinner: this one says "not everything is here
+          yet", the banner says "something needs deciding". The scan is also the only one
+          of the two that goes away on its own. */}
+      {scan !== null && (
+        <div className="scan-bar" role="status">
+          <div
+            className="scan-fill"
+            style={{ width: `${Math.round((scan.done / Math.max(scan.total, 1)) * 100)}%` }}
+          />
+          <span className="scan-label">
+            {app.t("library.indexing")} {scan.done} / {scan.total}
+          </span>
+        </div>
+      )}
+
       <ConflictBanner
         pairs={conflicts}
         t={app.t}

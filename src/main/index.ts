@@ -61,7 +61,7 @@ import {
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
 // note is re-read and an unchanged one is not. A capture landing mid-session costs the
 // stat walk, not another full read.
-import { conflicts, facets, notesMatching, searchNotes } from "./vault-scan.js";
+import { conflicts, facets, notesMatching, searchNotes, startScan } from "./vault-scan.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
@@ -70,6 +70,7 @@ import type {
   ConflictChoice,
   ConflictPair,
   SaveNoteRequest,
+  ScanProgress,
   Selection,
 } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
@@ -124,6 +125,60 @@ function notifyLibrary(): void {
   if (library !== null && !library.isDestroyed()) {
     library.webContents.send(IPC.libraryRefresh);
   }
+}
+
+/**
+ * How far the startup scan has got, or null when nothing is scanning.
+ *
+ * Kept here as well as pushed, because the library window is usually not open when the
+ * scan runs — the app starts at login and gets opened hours later — so a window that
+ * appears halfway through has missed every event and has to ask.
+ */
+let scanProgress: ScanProgress | null = null;
+let scanReported = 0;
+
+/** No faster than this: one IPC message per file is a few thousand for one bar. */
+const SCAN_REPORT_INTERVAL_MS = 120;
+
+function sendScanProgress(progress: ScanProgress | null): void {
+  scanProgress = progress;
+  const library = getLibraryWindow();
+  if (library !== null && !library.isDestroyed()) {
+    library.webContents.send(IPC.libraryScanProgress, progress);
+  }
+}
+
+/**
+ * Walks the vault at launch rather than leaving the first question to pay for it.
+ *
+ * `vault-scan.ts`'s `ensureScanned` has always run the scan lazily, on whatever asked the
+ * index something first — which in practice is the library's own conflict check, run
+ * eagerly on mount. So the first library open after a cold start sat there walking the
+ * entire vault before it drew a thing, with nothing on screen to explain the wait.
+ * Starting here costs the same work at a moment when nobody is waiting on it, and
+ * `startScan` shares the same collapse, so a library opened mid-walk joins the scan in
+ * progress instead of starting a second one beside it.
+ *
+ * Deliberately after `prepareVault()` and deliberately not awaited: this must not sit in
+ * front of the tray, the hotkey or the capture window's first paint. `fullScan` yields to
+ * the event loop every hundred files for the same reason — the hotkey runs on this thread
+ * too, and its budget is 80 ms.
+ *
+ * Skipped entirely during a measurement run, exactly like the watcher above and for the
+ * same reason: a full vault walk is precisely the unaccounted-for noise the hotkey→caret
+ * numbers cannot afford to pick up.
+ */
+function beginStartupScan(vault: string, db: IndexDb): void {
+  void startScan(vault, db, (progress) => {
+    const now = Date.now();
+    // Always let the last one through, or the bar freezes just short of full and the
+    // window it is in never hears that it is done.
+    if (progress.done < progress.total && now - scanReported < SCAN_REPORT_INTERVAL_MS) {
+      return;
+    }
+    scanReported = now;
+    sendScanProgress(progress);
+  }).finally(() => sendScanProgress(null));
 }
 
 const writer = new CaptureWriter(
@@ -198,6 +253,7 @@ async function main(): Promise<void> {
   const watchedVault = loadSettings().vaultPath;
   if (selfTestRounds === 0 && watchedVault !== null && indexDb !== null) {
     vaultWatcher = watchVault(watchedVault, indexDb, { onChange: notifyLibrary });
+    beginStartupScan(watchedVault, indexDb);
   }
 
   if (selfTestRounds === 0) maybeCheckForUpdatesOnStartup();
@@ -547,6 +603,11 @@ function registerLibraryIpc(): void {
       ? { tags: [], people: [], available: false }
       : await facets(vault, indexDb, writer.uncommittedNewPath() ?? undefined);
   });
+
+  // A library window that opened partway through the startup scan missed every progress
+  // event that came before it existed, so it asks once on mount rather than waiting for
+  // the next one — on a vault that finishes quickly there may not be a next one.
+  ipcMain.handle(IPC.libraryScanState, () => scanProgress);
 
   ipcMain.handle(IPC.libraryConflicts, async () => {
     const vault = vaultPath();

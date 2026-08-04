@@ -88,6 +88,7 @@ const DUTCH: Record<string, string> = {
   "library.move": "Verplaatsen",
   "library.moveLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij verplaatst worden.",
+  "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
   "library.newNote": "Nieuwe notitie",
@@ -241,6 +242,7 @@ const ENGLISH: Record<string, string> = {
   "library.move": "Move",
   "library.moveLocked":
     "This note is open in the note window. Close it there first, then it can be moved.",
+  "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   "library.delete": "Delete",
   "library.newNote": "New note",
