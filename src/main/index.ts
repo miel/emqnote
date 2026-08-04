@@ -10,7 +10,8 @@ import {
   shell,
   type MenuItemConstructorOptions,
 } from "electron";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
@@ -77,7 +78,7 @@ import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
-import { resolveAttachment } from "./attachments.js";
+import { resolveAttachment, saveAttachment } from "./attachments.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -605,6 +606,35 @@ function registerAppIpc(): void {
     saveSettings({ hotkey });
     buildTrayMenu();
     return true;
+  });
+
+  ipcMain.handle(
+    IPC.saveAttachment,
+    (_event, bytes: ArrayBuffer, originalName: string) => {
+      const vault = loadSettings().vaultPath;
+      if (vault === null) return null;
+      return saveAttachment(vault, new Uint8Array(bytes), originalName);
+    },
+  );
+
+  // The picker reads the chosen file itself rather than round-tripping its bytes
+  // through the renderer first — unlike a paste or a drop, which start out as bytes
+  // already in the browser's hands and have no file on disk to read from directly.
+  ipcMain.handle(IPC.pickAttachment, async () => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return null;
+
+    const choice = await dialog.showOpenDialog({
+      title: "Insert an attachment",
+      properties: ["openFile"],
+      filters: [
+        { name: "Images and PDFs", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"] },
+      ],
+    });
+    if (choice.canceled || choice.filePaths[0] === undefined) return null;
+
+    const path = choice.filePaths[0];
+    return saveAttachment(vault, readFileSync(path), basename(path));
   });
 }
 

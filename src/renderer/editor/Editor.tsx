@@ -1,9 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
-import { applyLink, linkAt, selectLink } from "./commands.js";
+import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
 import { attachmentNodeView } from "./attachment-view.js";
+import {
+  handleAttachmentDrop,
+  handleAttachmentPaste,
+  insertAttachment,
+} from "./insert-attachment.js";
 
 export interface EditorHandle {
   focus: () => void;
@@ -25,11 +30,15 @@ export interface EditorHandle {
    */
   beginLinkEdit: () => { href: string } | null;
   applyLink: (href: string) => void;
+  /** Replaces the selection with a wiki reference to an already-stored attachment. */
+  insertAttachment: (name: string) => void;
 }
 
 interface Props {
   onChange: (doc: PMNode) => void;
   onLinkRequested: () => void;
+  /** The toolbar button and the keyboard shortcut both funnel through this. */
+  onAttachmentRequested: () => void;
   /** Shown while the document is empty, via CSS. */
   placeholder?: string;
 }
@@ -43,7 +52,7 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onLinkRequested, placeholder },
+  { onChange, onLinkRequested, onAttachmentRequested, placeholder },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -51,16 +60,21 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
-  const handlers = useRef({ onChange, onLinkRequested });
-  handlers.current = { onChange, onLinkRequested };
+  const handlers = useRef({ onChange, onLinkRequested, onAttachmentRequested });
+  handlers.current = { onChange, onLinkRequested, onAttachmentRequested };
+
+  // Built fresh each time rather than stored, since it only ever wraps the ref above —
+  // there is nothing here `state.ts`'s `createEditorState` needs to hold onto.
+  const commandContext = (): CommandContext => ({
+    openLinkPrompt: () => handlers.current.onLinkRequested(),
+    requestAttachment: () => handlers.current.onAttachmentRequested(),
+  });
 
   useEffect(() => {
     if (host.current === null) return;
 
     const created = new EditorView(host.current, {
-      state: createEditorState(emptyDocument(), () =>
-        handlers.current.onLinkRequested(),
-      ),
+      state: createEditorState(emptyDocument(), commandContext()),
       dispatchTransaction(transaction) {
         const next = created.state.apply(transaction);
         created.updateState(next);
@@ -80,6 +94,12 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       nodeViews: {
         wikiEmbed: attachmentNodeView,
       },
+      // A screenshot pasted from the clipboard or a file dropped from Explorer/Finder —
+      // see `insert-attachment.ts` for why a paste is image-only while a drop also
+      // takes a PDF, and why both decline (return false) on anything else so the
+      // ordinary text/HTML paste path is untouched.
+      handlePaste: handleAttachmentPaste,
+      handleDrop: handleAttachmentDrop,
     });
 
     view.current = created;
@@ -96,17 +116,13 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     reset: () => {
       const current = view.current;
       if (current === null) return;
-      current.updateState(
-        createEditorState(emptyDocument(), () => handlers.current.onLinkRequested()),
-      );
+      current.updateState(createEditorState(emptyDocument(), commandContext()));
     },
     getDoc: () => view.current?.state.doc ?? null,
     setDoc: (doc: PMNode) => {
       const current = view.current;
       if (current === null) return;
-      current.updateState(
-        createEditorState(doc, () => handlers.current.onLinkRequested()),
-      );
+      current.updateState(createEditorState(doc, commandContext()));
     },
     beginLinkEdit: () => {
       const current = view.current;
@@ -125,6 +141,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (current === null) return;
       applyLink(href)(current.state, current.dispatch);
       current.focus();
+    },
+    insertAttachment: (name: string) => {
+      const current = view.current;
+      if (current === null) return;
+      insertAttachment(current, name);
     },
   }));
 

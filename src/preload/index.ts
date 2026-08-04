@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld("emqnote", {
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),
+  saveAttachment: (bytes: ArrayBuffer, originalName: string) =>
+    ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
+  pickAttachment: () => ipcRenderer.invoke(IPC.pickAttachment),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),

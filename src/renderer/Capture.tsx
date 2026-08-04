@@ -41,6 +41,14 @@ export function Capture(): React.ReactElement {
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // The one path the toolbar button, the keyboard shortcut and (via `Editor`) a drop
+  // or a paste all eventually reach — but only this one, the picker, is triggered from
+  // outside the editor, so it is the only one that needs a handler up here.
+  const pickAndInsertAttachment = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment();
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
   // Held in refs so the listeners below never close over stale values.
   const headerRef = useRef(header);
   headerRef.current = header;
@@ -205,6 +213,7 @@ export function Capture(): React.ReactElement {
         placeholder={app.t("capture.placeholder")}
         onChange={onDocChange}
         onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
+        onAttachmentRequested={() => void pickAndInsertAttachment()}
       />
 
       {link !== null && (
@@ -239,6 +248,14 @@ export function Capture(): React.ReactElement {
         <span className="dismiss-hint">
           {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
         </span>
+        <button
+          type="button"
+          className="help-button"
+          title={app.t("shortcut.attachment")}
+          onClick={() => void pickAndInsertAttachment()}
+        >
+          📎
+        </button>
         <button
           type="button"
           className="help-button"
