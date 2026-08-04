@@ -11,6 +11,7 @@ import {
   type FolderNode,
   type NoteSummary,
   type OpenedNote,
+  type ScanProgress,
   type Selection,
   type SortKey,
 } from "../../shared/vault-types.js";
@@ -84,6 +85,10 @@ export function Library(): React.ReactElement {
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
   const [moving, setMoving] = useState(false);
+  // The note being dragged over the tree. Held here rather than in either component,
+  // because the row that knows which note it is and the branch that has to decide
+  // whether it will take it are on opposite sides of the window.
+  const [dragging, setDragging] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -97,6 +102,9 @@ export function Library(): React.ReactElement {
    * pays that cost up front instead.
    */
   const [conflicts, setConflicts] = useState<ConflictPair[]>([]);
+  // Null when nothing is scanning, which is the normal state — the bar only appears on a
+  // cold start with a vault big enough for the walk to be worth mentioning.
+  const [scan, setScan] = useState<ScanProgress | null>(null);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -203,6 +211,28 @@ export function Library(): React.ReactElement {
     });
     return stop;
   }, [loadTree, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
+
+  /**
+   * The startup index scan, which usually ran long before this window existed — the app
+   * starts at login and gets opened hours later. So it is asked for once here as well as
+   * subscribed to: on a vault that scans in under a second there may never be an event
+   * to receive, and on a slow one this window opened partway through and missed the rest.
+   *
+   * When the scan finishes, everything that reads the index is reloaded. Tags, People and
+   * search were answering out of a half-built index up to that moment, which is honest —
+   * a partial answer beats a spinner — but it should not stay the last word.
+   */
+  useEffect(() => {
+    void window.emqnote.library.scanState().then(setScan);
+    return window.emqnote.library.onScanProgress((progress) => {
+      setScan(progress);
+      if (progress === null) {
+        refreshFacets();
+        void loadNotes(selectionRef.current);
+        void loadConflicts();
+      }
+    });
+  }, [refreshFacets, loadNotes, loadConflicts]);
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
@@ -441,6 +471,41 @@ export function Library(): React.ReactElement {
     refreshFacets();
   };
 
+  /**
+   * Files a note into a folder. Both ways of asking for that — the "Move to…" dialog and
+   * dragging a row onto the tree — come through here, so the two cannot drift apart.
+   *
+   * Only the note that is actually open needs saving first; a dragged row is usually not
+   * it, and flushing an unrelated pending save would write one note because another one
+   * moved. The reopen at the end is likewise conditional: following the note into its new
+   * folder is right when you moved the note you were reading, and wrong when you flicked
+   * a different row out of the Inbox and are still reading what you had.
+   */
+  const moveNoteTo = async (notePath: string, target: string): Promise<void> => {
+    const current = openRef.current;
+    const wasOpen = current !== null && current.path === notePath;
+    if (wasOpen && dirty) await save();
+
+    const result = await window.emqnote.library.moveNote(notePath, target);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.moveLocked") });
+      return;
+    }
+
+    // Following the note only makes sense when a folder is what you were looking at.
+    // From a tag or person view it would drop the filter you chose.
+    if (wasOpen && selectionRef.current.kind === "folder") {
+      setSelection({ kind: "folder", path: target });
+      selectionRef.current = { kind: "folder", path: target };
+      setLastFolder(target);
+    }
+
+    await loadTree();
+    if (wasOpen) await openNote(result.path);
+    else await loadNotes(selectionRef.current);
+    refreshFacets();
+  };
+
   const trash = async (): Promise<void> => {
     const current = openRef.current;
     if (current === null) return;
@@ -489,6 +554,21 @@ export function Library(): React.ReactElement {
 
   return (
     <div className="library-shell">
+      {/* Above the conflict banner, and thinner: this one says "not everything is here
+          yet", the banner says "something needs deciding". The scan is also the only one
+          of the two that goes away on its own. */}
+      {scan !== null && (
+        <div className="scan-bar" role="status">
+          <div
+            className="scan-fill"
+            style={{ width: `${Math.round((scan.done / Math.max(scan.total, 1)) * 100)}%` }}
+          />
+          <span className="scan-label">
+            {app.t("library.indexing")} {scan.done} / {scan.total}
+          </span>
+        </div>
+      )}
+
       <ConflictBanner
         pairs={conflicts}
         t={app.t}
@@ -500,6 +580,11 @@ export function Library(): React.ReactElement {
           root={tree}
           selected={selection}
           facets={facets}
+          dragging={dragging}
+          onDropNote={(notePath, folder) => {
+            setDragging(null);
+            void moveNoteTo(notePath, folder);
+          }}
           onSelect={(target) => {
             setSelection(target);
             if (target.kind === "folder") setLastFolder(target.path);
@@ -553,6 +638,7 @@ export function Library(): React.ReactElement {
           onOpenInCapture={(path) => void openInCapture(path)}
           onNewNote={() => window.emqnote.library.newNote()}
           onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
+          onDragNote={setDragging}
           locale={app.locale}
           t={app.t}
         />
@@ -663,17 +749,7 @@ export function Library(): React.ReactElement {
           onCancel={() => setMoving(false)}
           onMove={(target) => {
             setMoving(false);
-            void (async () => {
-              await save();
-              const path = await window.emqnote.library.moveNote(open.path, target);
-              // Following the note to its new folder only makes sense when a folder is
-              // what you were looking at. From a tag view it would drop the filter.
-              if (selectionRef.current.kind === "folder") {
-                setSelection({ kind: "folder", path: target });
-                setLastFolder(target);
-              }
-              await openNote(path);
-            })();
+            void moveNoteTo(open.path, target);
           }}
         />
       )}

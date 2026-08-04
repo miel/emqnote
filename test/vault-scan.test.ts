@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeIndex, openIndex, type IndexDb } from "../src/main/index-db.js";
 import { parseSearchQuery } from "../src/main/search-query.js";
-import { conflicts, facets, notesMatching, searchNotes } from "../src/main/vault-scan.js";
+import { conflicts, facets, notesMatching, searchNotes, startScan } from "../src/main/vault-scan.js";
+import type { ScanProgress } from "../src/shared/vault-types.js";
 
 let vault: string;
 let db: IndexDb;
@@ -329,5 +330,77 @@ describe("finding OneDrive conflicts from the index", () => {
     note("00 Inbox", "Twee");
 
     expect(await conflicts(vault, db)).toEqual([]);
+  });
+});
+
+/**
+ * The scan the app now starts at launch rather than leaving to whatever asks the index a
+ * question first. What matters is not that it walks the vault — `index-scan.test.ts`
+ * covers that — but that it reports as it goes and that a question arriving mid-walk
+ * joins it instead of starting a second one.
+ */
+describe("the startup scan", () => {
+  it("reports progress, ending at the file count", async () => {
+    note("00 Inbox", "Een");
+    note("00 Inbox", "Twee");
+    note("10 Projects", "Drie");
+
+    const seen: ScanProgress[] = [];
+    await startScan(vault, db, (progress) => seen.push(progress));
+
+    expect(seen.length).toBe(3);
+    expect(seen.at(-1)).toEqual({ done: 3, total: 3 });
+    // Monotonic, and never claiming more than there is.
+    expect(seen.map((p) => p.done)).toEqual([1, 2, 3]);
+    expect(seen.every((p) => p.total === 3)).toBe(true);
+  });
+
+  it("indexes the vault, so the first question after it costs no second walk", async () => {
+    note("00 Inbox", "Kickoff", { tags: "klantx" });
+    await startScan(vault, db);
+
+    expect((await facets(vault, db)).tags).toEqual([{ name: "klantx", count: 1 }]);
+  });
+
+  // The whole reason `startScan` shares `ensureScanned`'s collapse: opening the library
+  // while the startup walk is still running must join it, not start a rival walk over the
+  // same files on the one thread the hotkey also runs on. Asserted on promise identity
+  // rather than on a side effect — a second walk would produce the same *answers*, just
+  // at twice the cost, so counting callbacks would not have caught it.
+  it("hands a second caller the scan already running rather than starting another", () => {
+    for (let i = 0; i < 12; i += 1) note("00 Inbox", `Note ${i}`);
+
+    const first = startScan(vault, db);
+    const second = startScan(vault, db);
+
+    expect(second).toBe(first);
+    return first;
+  });
+
+  it("starts a fresh scan once the last one has finished", async () => {
+    note("00 Inbox", "Een");
+
+    const first = startScan(vault, db);
+    await first;
+
+    expect(startScan(vault, db)).not.toBe(first);
+  });
+
+  it("brings a mid-scan question up to date too", async () => {
+    for (let i = 0; i < 12; i += 1) note("00 Inbox", `Note ${i}`, { tags: "klantx" });
+
+    const started = startScan(vault, db);
+    const joined = facets(vault, db);
+    const [, answered] = await Promise.all([started, joined]);
+
+    expect(answered.tags).toEqual([{ name: "klantx", count: 12 }]);
+  });
+
+  it("answers an empty vault without pretending to have scanned something", async () => {
+    const seen: ScanProgress[] = [];
+    await startScan(vault, db, (progress) => seen.push(progress));
+
+    expect(seen).toEqual([]);
+    expect((await facets(vault, db)).available).toBe(true);
   });
 });

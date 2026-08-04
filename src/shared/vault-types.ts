@@ -133,6 +133,16 @@ export function folderOf(notePath: string): string {
   return cut === -1 ? "" : notePath.slice(0, cut);
 }
 
+/**
+ * How far the index scan has got. Lives here rather than in `index-scan.ts` because it
+ * crosses the IPC boundary now that the library draws a progress bar from it — the same
+ * reason `ConflictPair` moved out of `src/main/`.
+ */
+export interface ScanProgress {
+  done: number;
+  total: number;
+}
+
 /** One entry in the Tags or People list: what it is called and how many notes carry it. */
 export interface Facet {
   name: string;

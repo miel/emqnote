@@ -6,6 +6,7 @@ import {
   type SortKey,
 } from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
+import { NOTE_DRAG_TYPE } from "./drag.js";
 
 interface Props {
   notes: NoteSummary[];
@@ -26,6 +27,13 @@ interface Props {
   onNewNote: () => void;
   /** Permanently empties `_trash`. Only ever offered while Trash itself is selected. */
   onClearTrash: () => void;
+  /**
+   * Which note is being dragged, or null when none is. The tree needs the path to decide
+   * whether a folder is a legal destination *while the drag is still in the air*, and
+   * `dataTransfer.getData` deliberately answers "" during `dragover` — a page may see
+   * what types are on offer, never their contents, until the drop actually happens.
+   */
+  onDragNote: (path: string | null) => void;
   locale: Locale;
   t: (key: string) => string;
 }
@@ -45,6 +53,7 @@ export function NoteList({
   onOpenInCapture,
   onNewNote,
   onClearTrash,
+  onDragNote,
   locale,
   t,
 }: Props): React.ReactElement {
@@ -99,6 +108,16 @@ export function NoteList({
             className={`note${selected === note.path ? " note-on" : ""}`}
             onClick={() => onSelect(note.path)}
             onDoubleClick={() => onOpenInCapture(note.path)}
+            // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
+            // dialog stays the way to reach a folder four levels deep without hunting
+            // for it; this is the one for a folder already in front of you.
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
+              event.dataTransfer.effectAllowed = "move";
+              onDragNote(note.path);
+            }}
+            onDragEnd={() => onDragNote(null)}
           >
             <div className="note-top">
               <span className="note-title">{note.title}</span>

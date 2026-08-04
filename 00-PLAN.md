@@ -38,7 +38,7 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 0 Markdown-rondgang | Bytegelijk in beide richtingen, 27 corpusbestanden |
 | 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
 | 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
-| 3 Hoofdvenster | Mappenboom, notitielijst, lezen en bewerken, verplaatsen, prullenbak — op slepen in de boom na, dat werk-item is nog niet gebouwd |
+| 3 Hoofdvenster | **Klaar.** Mappenboom, notitielijst, lezen en bewerken, verplaatsen, prullenbak, en sinds 4 augustus 2026 ook slepen in de boom — het laatste werk-item van deze fase |
 | 4 Plakken en afbeeldingen | Nog niet begonnen — de volgende fase, en het grootste onbekende stuk werk |
 | 5 Zoeken en synchronisatie | **Klaar.** SQLite/FTS5-index, volledige scan, `chokidar`-watcher, zoekbalk, conflictbanner met verschil en drie keuzes, opruimscherm voor verweesde bijlagen — alles bevestigd werkend via `Xvfb`, echte bestandsoperaties op schijf, niet alleen gerenderd |
 | 6 E-mail | Nog niet begonnen |

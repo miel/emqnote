@@ -1,5 +1,11 @@
 import { foldTag } from "../markdown/index.js";
-import type { Facet, Facets, NoteSummary, Selection } from "../shared/vault-types.js";
+import type {
+  Facet,
+  Facets,
+  NoteSummary,
+  ScanProgress,
+  Selection,
+} from "../shared/vault-types.js";
 import { findConflictCopies, type ConflictPair } from "./conflicts.js";
 import { allNotes, getNote, search, type IndexDb, type NoteMeta } from "./index-db.js";
 import { fullScan } from "./index-scan.js";
@@ -23,21 +29,52 @@ import { readNotesIn } from "./vault-io.js";
 let available = true;
 let running: Promise<void> | null = null;
 
-async function scan(vault: string, db: IndexDb): Promise<void> {
-  available = (await fullScan(vault, db)) === "ok";
+async function scan(
+  vault: string,
+  db: IndexDb,
+  onProgress?: (progress: ScanProgress) => void,
+): Promise<void> {
+  available = (await fullScan(vault, db, onProgress)) === "ok";
 }
 
 /** Brings the index up to date, collapsing concurrent callers onto one scan. */
 async function ensureScanned(vault: string, db: IndexDb): Promise<void> {
-  if (running !== null) {
-    await running;
-    return;
-  }
+  await begin(vault, db);
+}
 
-  running = scan(vault, db).finally(() => {
+/**
+ * Starts the first scan at launch instead of leaving it for whatever asks the index a
+ * question first.
+ *
+ * That used to be the library's own conflict check, which runs eagerly on mount — so
+ * opening the library for the first time after a cold start sat there walking the whole
+ * vault before it drew anything, with nothing on screen to say why. Nothing about the
+ * work changes; only when it happens, and that someone is watching.
+ *
+ * Goes through the same collapse as everything else, so a library opened halfway
+ * through joins the scan already running rather than starting a second walk beside it.
+ * `onProgress` therefore belongs to whoever got here first — a caller that merely wants
+ * the index current uses `ensureScanned` and passes none.
+ */
+export function startScan(
+  vault: string,
+  db: IndexDb,
+  onProgress?: (progress: ScanProgress) => void,
+): Promise<void> {
+  return begin(vault, db, onProgress);
+}
+
+function begin(
+  vault: string,
+  db: IndexDb,
+  onProgress?: (progress: ScanProgress) => void,
+): Promise<void> {
+  if (running !== null) return running;
+
+  running = scan(vault, db, onProgress).finally(() => {
     running = null;
   });
-  await running;
+  return running;
 }
 
 function toSummary(note: NoteMeta): NoteSummary {

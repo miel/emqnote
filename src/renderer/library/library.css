@@ -159,6 +159,15 @@
   font-weight: 600;
 }
 
+/* The folder a dragged note would land in. An outline rather than a fill, so it reads as
+   "this one" against `.branch-on`'s fill without the two fighting when the note is being
+   dragged into the folder that happens to be selected. `inset` because the row has no
+   border of its own and a real one would shift every sibling by a pixel. */
+.branch-drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 4px;
+}
+
 .twisty {
   width: 16px;
   border: 0;
@@ -730,6 +739,33 @@
 }
 
 /* ---- conflict banner ---- */
+
+/* The startup index scan. Deliberately quieter than the conflict banner below it: this
+   one resolves itself and needs nothing from anybody, so it states what is happening and
+   gets out of the way. The fill sits behind the text rather than beside it, so the strip
+   stays one line tall however long the count gets. */
+.scan-bar {
+  position: relative;
+  width: 100%;
+  padding: 5px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.scan-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(127, 127, 127, 0.18);
+  transition: width 120ms linear;
+}
+
+.scan-label {
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
 
 .conflict-banner {
   display: block;

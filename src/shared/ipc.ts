@@ -8,6 +8,7 @@ import type {
   NoteSummary,
   OpenedNote,
   SaveNoteRequest,
+  ScanProgress,
   Selection,
   VaultLocation,
 } from "./vault-types.js";
@@ -63,6 +64,13 @@ export const IPC = {
   libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
+  /** main → library renderer: how far the startup index scan has got. */
+  libraryScanProgress: "library:scan-progress",
+  /**
+   * Where the scan is right now, for a library window that opened partway through and so
+   * missed the events. Null once it has finished — or if it never had to run.
+   */
+  libraryScanState: "library:scan-state",
   /** Whether the note at this path is still free to save — see `OpenedNote.editable`. */
   libraryNoteEditable: "library:note-editable",
 
@@ -151,7 +159,12 @@ export interface LibraryApi {
   saveNote: (
     request: SaveNoteRequest,
   ) => Promise<{ written: boolean; path: string; locked?: boolean }>;
-  moveNote: (path: string, folder: string) => Promise<string>;
+  /**
+   * Answers the note's path after the move — unchanged, with `locked`, when the capture
+   * window has it claimed. Silently answering the old path would look like a move that
+   * did nothing, which is the one outcome a drag must never be allowed to look like.
+   */
+  moveNote: (path: string, folder: string) => Promise<{ path: string; locked?: boolean }>;
   renameNote: (path: string, title: string) => Promise<string>;
   trashNote: (path: string) => Promise<boolean>;
   /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
@@ -171,6 +184,9 @@ export interface LibraryApi {
   /** Shows the capture window for a brand new note, exactly like the hotkey. */
   newNote: () => void;
   onRefresh: (handler: () => void) => () => void;
+  /** How far the startup index scan has got, or null when nothing is scanning. */
+  scanState: () => Promise<ScanProgress | null>;
+  onScanProgress: (handler: (progress: ScanProgress | null) => void) => () => void;
 
   conflicts: () => Promise<ConflictPair[]>;
   conflictDiff: (pair: ConflictPair) => Promise<DiffLine[]>;

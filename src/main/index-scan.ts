@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, type Dirent, type Stats } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { parseNote, plainText } from "../markdown/index.js";
-import { TRASH_FOLDER } from "../shared/vault-types.js";
+import { TRASH_FOLDER, type ScanProgress } from "../shared/vault-types.js";
 import { allNotes, deleteNote, needsRefresh, upsertNote, type IndexDb, type NoteRecord } from "./index-db.js";
 import { isHidden, summarise } from "./vault-io.js";
 import { checkFilesOnDemand } from "./vault.js";
@@ -68,11 +68,6 @@ function collectFiles(vault: string): string[] {
  */
 function isDataless(stats: { size: number; blocks: number }): boolean {
   return process.platform === "darwin" && stats.size > 0 && stats.blocks === 0;
-}
-
-export interface ScanProgress {
-  done: number;
-  total: number;
 }
 
 export type ScanResult = "ok" | "ondemand";
