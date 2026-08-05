@@ -387,13 +387,22 @@ describe("the startup scan", () => {
     return first;
   });
 
+  // The second scan is awaited, not just compared. `begin`'s collapse is module state
+  // that outlives a test: leaving a scan running past the end of this one means the
+  // *next* test's `startScan` is handed this one's promise — still walking a vault
+  // `afterEach` has already deleted, against a database it has already closed — and then
+  // asks the fresh, empty index what it found. That is a real failure that only appears
+  // where a scan is slow enough to still be running when the next test starts, which is
+  // Windows, where every scan spawns `attrib`. It cost a release to find.
   it("starts a fresh scan once the last one has finished", async () => {
     note("00 Inbox", "Een");
 
     const first = startScan(vault, db);
     await first;
 
-    expect(startScan(vault, db)).not.toBe(first);
+    const second = startScan(vault, db);
+    expect(second).not.toBe(first);
+    await second;
   });
 
   it("brings a mid-scan question up to date too", async () => {
