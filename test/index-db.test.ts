@@ -1,4 +1,8 @@
+import Database from "better-sqlite3";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   allNotes,
   closeIndex,
@@ -7,6 +11,7 @@ import {
   needsRefresh,
   openIndex,
   search,
+  tasksIn,
   upsertNote,
   type IndexDb,
   type NoteRecord,
@@ -28,6 +33,7 @@ function record(overrides: Partial<NoteRecord> = {}): NoteRecord {
     size: 200,
     hash: "abc123",
     body: "Kickoff met de klant over project Alpha.",
+    tasks: [],
     ...overrides,
   };
 }
@@ -194,6 +200,178 @@ describe("the SQLite index", () => {
         }),
       );
       expect(search(db, '"aanhalingstekens"')).toEqual(["00 Inbox/Aanhaling.md"]);
+    });
+  });
+
+  describe("note_tasks", () => {
+    it("appears with an upsert and is readable through tasksIn", () => {
+      upsertNote(
+        db,
+        record({
+          tasks: [
+            { ordinal: 0, checked: false, text: "Offerte versturen" },
+            { ordinal: 1, checked: true, text: "Kickoff plannen" },
+          ],
+        }),
+      );
+
+      expect(tasksIn(db, "", false)).toEqual([
+        {
+          path: "00 Inbox/Kickoff project Alpha.md",
+          title: "Kickoff project Alpha",
+          ordinal: 0,
+          checked: false,
+          text: "Offerte versturen",
+        },
+        {
+          path: "00 Inbox/Kickoff project Alpha.md",
+          title: "Kickoff project Alpha",
+          ordinal: 1,
+          checked: true,
+          text: "Kickoff plannen",
+        },
+      ]);
+    });
+
+    it("replaces the previous rows on a second upsert rather than appending to them", () => {
+      upsertNote(db, record({ tasks: [{ ordinal: 0, checked: false, text: "Eerste versie" }] }));
+      upsertNote(db, record({ tasks: [{ ordinal: 0, checked: false, text: "Tweede versie" }] }));
+
+      const rows = tasksIn(db, "", false);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.text).toBe("Tweede versie");
+    });
+
+    it("drops every task row when a note loses them all", () => {
+      upsertNote(db, record({ tasks: [{ ordinal: 0, checked: false, text: "Iets doen" }] }));
+      upsertNote(db, record({ tasks: [] }));
+
+      expect(tasksIn(db, "", false)).toEqual([]);
+    });
+
+    it("disappears on delete along with the note", () => {
+      upsertNote(db, record({ tasks: [{ ordinal: 0, checked: false, text: "Iets doen" }] }));
+      deleteNote(db, record().path);
+
+      expect(tasksIn(db, "", false)).toEqual([]);
+    });
+
+    it("only shows open tasks when asked for open only", () => {
+      upsertNote(
+        db,
+        record({
+          tasks: [
+            { ordinal: 0, checked: false, text: "Openstaand" },
+            { ordinal: 1, checked: true, text: "Al gedaan" },
+          ],
+        }),
+      );
+
+      expect(tasksIn(db, "", true).map((row) => row.text)).toEqual(["Openstaand"]);
+    });
+
+    it("scopes to a folder and everything nested under it", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Klant X/Kickoff.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Binnen de scope" }],
+        }),
+      );
+      upsertNote(
+        db,
+        record({
+          path: "20 Areas/Iets.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Buiten de scope" }],
+        }),
+      );
+
+      expect(tasksIn(db, "10 Projects", false).map((row) => row.text)).toEqual([
+        "Binnen de scope",
+      ]);
+    });
+
+    it("treats an empty scope as the whole vault, same as the root case elsewhere", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Klant X/Kickoff.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Overal" }],
+        }),
+      );
+
+      expect(tasksIn(db, "", false)).toHaveLength(1);
+    });
+  });
+
+  describe("schema versioning", () => {
+    it("rebuilds a database left at a stale schema version instead of reading it", () => {
+      const path = join(mkdtempSync(join(tmpdir(), "emqnote-index-db-")), "index.db");
+
+      // A database from before `note_tasks` existed: `user_version` still at its default
+      // of 0, and a `notes` row already in it — the shape `openIndex` would have produced
+      // before this feature landed.
+      const stale = new Database(path);
+      stale.exec(`
+        CREATE TABLE notes (
+          path TEXT PRIMARY KEY,
+          fileName TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT NOT NULL,
+          created TEXT NOT NULL,
+          modified TEXT NOT NULL,
+          location TEXT NOT NULL,
+          attendees TEXT NOT NULL,
+          tags TEXT NOT NULL,
+          excerpt TEXT NOT NULL,
+          mtime REAL NOT NULL,
+          size INTEGER NOT NULL,
+          hash TEXT NOT NULL
+        );
+      `);
+      stale
+        .prepare(
+          `INSERT INTO notes (path, fileName, title, type, created, modified, location, attendees, tags, excerpt, mtime, size, hash)
+           VALUES ('oud.md', 'oud.md', 'Oud', 'quick', '', '', '', '[]', '[]', '', 1, 1, 'x')`,
+        )
+        .run();
+      stale.close();
+
+      const reopened = openIndex(path);
+      try {
+        // Dropped and rebuilt from nothing rather than read as-is — a stale index is a
+        // derived cache (B9), so losing its old rows costs one rescan and nothing else,
+        // and this proves it did not simply `ALTER TABLE` the old `notes` in place.
+        expect(allNotes(reopened)).toEqual([]);
+        expect(reopened.pragma("user_version", { simple: true })).toBeGreaterThan(0);
+
+        // The rebuilt schema actually has `note_tasks` this time.
+        upsertNote(reopened, record({ tasks: [{ ordinal: 0, checked: false, text: "Nieuw" }] }));
+        expect(tasksIn(reopened, "", false)).toHaveLength(1);
+      } finally {
+        closeIndex(reopened);
+        rmSync(path, { force: true });
+        rmSync(`${path}-wal`, { force: true });
+        rmSync(`${path}-shm`, { force: true });
+      }
+    });
+
+    it("does not rebuild an index already at the current version", () => {
+      const path = join(mkdtempSync(join(tmpdir(), "emqnote-index-db-")), "index.db");
+
+      const first = openIndex(path);
+      upsertNote(first, record());
+      closeIndex(first);
+
+      const second = openIndex(path);
+      try {
+        expect(allNotes(second)).toHaveLength(1);
+      } finally {
+        closeIndex(second);
+        rmSync(path, { force: true });
+        rmSync(`${path}-wal`, { force: true });
+        rmSync(`${path}-shm`, { force: true });
+      }
     });
   });
 });

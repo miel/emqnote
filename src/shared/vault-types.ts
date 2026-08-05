@@ -118,13 +118,16 @@ export type SortKey = "modified" | "created" | "title";
 export type Selection =
   | { kind: "folder"; path: string }
   | { kind: "tag"; name: string }
-  | { kind: "person"; name: string };
+  | { kind: "person"; name: string }
+  | { kind: "tasks"; scope: string; openOnly: boolean };
 
 /** Stable string form, for React keys, highlight comparison and effect dependencies. */
 export function selectionKey(selection: Selection): string {
-  return selection.kind === "folder"
-    ? `folder:${selection.path}`
-    : `${selection.kind}:${selection.name}`;
+  if (selection.kind === "folder") return `folder:${selection.path}`;
+  if (selection.kind === "tasks") {
+    return `tasks:${selection.scope}:${selection.openOnly ? "open" : "all"}`;
+  }
+  return `${selection.kind}:${selection.name}`;
 }
 
 /** The folder a note sits in, from its vault-relative path; "" for the vault root. */
@@ -158,6 +161,20 @@ export interface Facets {
    * rather than claiming there are no tags.
    */
   available: boolean;
+}
+
+/**
+ * One task item as the aggregated Tasks view shows it — a `note_tasks` row joined with
+ * its note's title. `ordinal` counts task items within that one note, in document order;
+ * it is not a global id, and the pair `(path, ordinal)` is what names one item, the same
+ * pair `toggleTask` takes to flip it.
+ */
+export interface TaskItem {
+  path: string;
+  title: string;
+  ordinal: number;
+  checked: boolean;
+  text: string;
 }
 
 /** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */
