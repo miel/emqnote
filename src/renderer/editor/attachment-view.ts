@@ -61,3 +61,35 @@ export function attachmentNodeView(
   const target = node.attrs.target as string;
   return isImageAttachment(target) ? imageView(target) : chipView(target);
 }
+
+/**
+ * `wikiLink`'s real face: the same chip `toDOM` already draws, plus a click that opens
+ * a stored attachment (a PDF, in practice — an image is `wikiEmbed` instead) in the
+ * system viewer. `toDOM` stays untouched for the same reason as above.
+ *
+ * This NodeView applies to *every* `wikiLink`, note-to-note links included, since the
+ * node carries nothing that tells the two apart on its own — only whether the target
+ * resolves inside `_attachments/` does, and only main can answer that. `IPC.openAttachment`
+ * refuses silently on a name it cannot resolve (`resolveAttachment` returning `null`),
+ * which is exactly what a note-to-note link needs to do until note navigation exists:
+ * nothing, not an error.
+ */
+export function wikiLinkNodeView(node: PMNode): NodeView {
+  const target = node.attrs.target as string;
+  const alias = node.attrs.alias as string | null;
+
+  const span = document.createElement("span");
+  span.className = "wiki-link";
+  span.dataset.target = target;
+  span.textContent = alias ?? target;
+
+  // Held down, not clicked: a click on an atom node would otherwise also try to place
+  // the caret inside it, and `mousedown` is what ProseMirror uses to decide that.
+  span.addEventListener("mousedown", (event) => event.preventDefault());
+  span.addEventListener("click", (event) => {
+    event.preventDefault();
+    void window.emqnote.openAttachment(target);
+  });
+
+  return { dom: span };
+}

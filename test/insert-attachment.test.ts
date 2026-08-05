@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
 import { EditorState, TextSelection } from "prosemirror-state";
@@ -85,6 +87,30 @@ describe("insertAttachment", () => {
 
     const markdown = serializeBody(view.state.doc);
     expect(serializeBody(docFromMarkdown(markdown))).toBe(markdown);
+    view.destroy();
+  });
+
+  it("a PDF inserted this way serializes byte-identically to the corpus's own line", () => {
+    // test/corpus/21-links-en-bijlagen.md:10 is the specification for what this line
+    // is meant to look like; this asserts against the corpus file itself rather than a
+    // copy of it, so the two cannot drift apart silently.
+    const corpus = readFileSync(
+      join(process.cwd(), "test/corpus/21-links-en-bijlagen.md"),
+      "utf8",
+    );
+    const expectedLine = corpus
+      .split("\n")
+      .find((line) => line.startsWith("Bijlage als bestand: "));
+    expect(expectedLine).toBe("Bijlage als bestand: [[2026-07-25-1055-offerte.pdf]]");
+
+    const view = mount("Bijlage als bestand: X\n", "X");
+    const doc = view.state.doc;
+    const from = caretAfter(doc, "Bijlage als bestand: ");
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, from, from + 1)));
+
+    insertAttachment(view, "2026-07-25-1055-offerte.pdf");
+
+    expect(serializeBody(view.state.doc)).toBe(`${expectedLine}\n`);
     view.destroy();
   });
 });

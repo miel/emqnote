@@ -100,6 +100,8 @@ export const IPC = {
   saveAttachment: "app:save-attachment",
   /** The file picker for an image or PDF, filtered in main; reads and stores the file itself. */
   pickAttachment: "app:pick-attachment",
+  /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
+  openAttachment: "app:open-attachment",
 } as const;
 
 export interface Bootstrap {
@@ -248,6 +250,8 @@ export interface CaptureApi {
   saveAttachment: (bytes: ArrayBuffer, originalName: string) => Promise<string | null>;
   /** The native file picker, filtered to images and PDFs; reads and stores the choice itself. */
   pickAttachment: () => Promise<string | null>;
+  /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
+  openAttachment: (name: string) => Promise<void>;
 
   library: LibraryApi;
 }

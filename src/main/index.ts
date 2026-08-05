@@ -636,6 +636,19 @@ function registerAppIpc(): void {
     const path = choice.filePaths[0];
     return saveAttachment(vault, readFileSync(path), basename(path));
   });
+
+  // The click that opens a `wikiLink` chip pointing at a real attachment (a PDF, in
+  // practice — an image goes through `wikiEmbed` and is shown inline instead). A
+  // `wikiLink` can just as easily name a note-to-note link, which `resolveAttachment`
+  // will simply never find inside `_attachments/`, so refusing silently on `null` is
+  // the right answer for both cases: nothing to open is not an error.
+  ipcMain.handle(IPC.openAttachment, (_event, name: string) => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return;
+    const resolved = resolveAttachment(vault, name);
+    if (resolved === null) return;
+    void shell.openPath(resolved);
+  });
 }
 
 /**

@@ -3,7 +3,7 @@ import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
-import { attachmentNodeView } from "./attachment-view.js";
+import { attachmentNodeView, wikiLinkNodeView } from "./attachment-view.js";
 import {
   handleAttachmentDrop,
   handleAttachmentPaste,
@@ -88,11 +88,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         spellcheck: "false",
         ...(placeholder === undefined ? {} : { "data-placeholder": placeholder }),
       },
-      // Only `wikiEmbed` gets a NodeView: it is the node that can be a picture, and
-      // `schema.ts`'s own `toDOM` already renders `wikiLink` as the chip it needs to
-      // look like.
+      // `wikiEmbed` can be a picture; `wikiLink` needs no different a look, only a
+      // click that opens whatever it names in the system viewer.
       nodeViews: {
         wikiEmbed: attachmentNodeView,
+        wikiLink: wikiLinkNodeView,
       },
       // A screenshot pasted from the clipboard or a file dropped from Explorer/Finder —
       // see `insert-attachment.ts` for why a paste is image-only while a drop also
