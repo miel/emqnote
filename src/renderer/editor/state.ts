@@ -5,6 +5,7 @@ import { baseKeymap } from "prosemirror-commands";
 import { EditorState, type Transaction } from "prosemirror-state";
 import type { Node as PMNode, ResolvedPos } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
+import type { CommandContext } from "./commands.js";
 import { outlookKeymap } from "./keymap.js";
 import { tagHighlight } from "./tag-decoration.js";
 import { taskCheckboxes } from "./checkbox.js";
@@ -113,7 +114,7 @@ export function emptyDocument(): PMNode {
 
 export function createEditorState(
   doc: PMNode,
-  openLinkPrompt: () => void,
+  context: CommandContext,
 ): EditorState {
   return EditorState.create({
     doc,
@@ -122,7 +123,7 @@ export function createEditorState(
       autoformat,
       tagHighlight(),
       taskCheckboxes(),
-      keymap(outlookKeymap(openLinkPrompt)),
+      keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],
   });

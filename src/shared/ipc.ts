@@ -10,6 +10,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  TaskItem,
   VaultLocation,
 } from "./vault-types.js";
 
@@ -56,6 +57,10 @@ export const IPC = {
   libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
+  /** How many notes and subfolders a folder holds, for the delete confirmation to name. */
+  libraryFolderContents: "library:folder-contents",
+  /** Moves a folder into `_trash`, along with everything inside it — never a permanent delete (B24). */
+  libraryTrashFolder: "library:trash-folder",
   libraryRevealNote: "library:reveal-note",
   listVaults: "vault:list",
   chooseVault: "vault:choose",
@@ -87,10 +92,28 @@ export const IPC = {
   libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
+  /** The aggregated Tasks view: every task item under a folder scope. */
+  libraryTasks: "library:tasks",
+  /** Ticks or unticks one task item — goes through the serializer, never the raw text. */
+  libraryToggleTask: "library:toggle-task",
+
   /** Locale, platform and hotkey — everything a window needs before it draws. */
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
   setHotkey: "app:set-hotkey",
+  /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
+  setPaneWidths: "app:set-pane-widths",
+
+  /**
+   * Both windows write into `_attachments/` through this one channel — a screenshot is
+   * as likely to land in the capture window as in the reader, so it sits beside
+   * `bootstrap` rather than under `library`.
+   */
+  saveAttachment: "app:save-attachment",
+  /** The file picker for an image or PDF, filtered in main; reads and stores the file itself. */
+  pickAttachment: "app:pick-attachment",
+  /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
+  openAttachment: "app:open-attachment",
 } as const;
 
 export interface Bootstrap {
@@ -99,6 +122,8 @@ export interface Bootstrap {
   hotkey: string;
   /** Where the notes are, so the settings panel can mark the current one. */
   vaultPath: string | null;
+  /** The library's tree/notes pane widths, or null if the splitters were never dragged. */
+  libraryPaneWidths: { tree: number; notes: number } | null;
 }
 
 /**
@@ -176,6 +201,16 @@ export interface LibraryApi {
    * silently different name would leave it pointing at nothing.
    */
   renameFolder: (path: string, name: string) => Promise<string>;
+  /** Notes and subfolders anywhere inside a folder, for a delete confirmation to name. */
+  folderContents: (path: string) => Promise<{ notes: number; folders: number }>;
+  /**
+   * Moves a folder into `_trash`. `locked` when a note somewhere inside it is claimed
+   * by the capture window — the same hazard `moveNote` guards against, extended to a
+   * whole subtree rather than one file. Anything else wrong with the path (the root,
+   * one of the app's own folders, a folder already gone) rejects with a `FOLDER_ERROR`
+   * code instead, exactly like `renameFolder`.
+   */
+  trashFolder: (path: string) => Promise<{ trashed: boolean; locked?: boolean }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;
@@ -197,6 +232,21 @@ export interface LibraryApi {
   /** `null` when the file is not a browser-renderable image type, or could not be read. */
   attachmentPreview: (path: string) => Promise<string | null>;
   trashAttachment: (path: string) => Promise<string>;
+
+  /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */
+  tasks: (scope: string, openOnly: boolean) => Promise<TaskItem[]>;
+  /**
+   * Flips one task item. `locked` mirrors `moveNote`'s shape: the capture window has this
+   * note claimed, so the toggle was refused rather than racing its debounced write.
+   * `toggled` false with no `locked` means the index row was stale — the item's text no
+   * longer matched what disk actually has — and the caller should revert its optimistic
+   * flip either way.
+   */
+  toggleTask: (
+    path: string,
+    ordinal: number,
+    expectedText: string,
+  ) => Promise<{ toggled: boolean; locked?: boolean }>;
 }
 
 export interface CaptureApi {
@@ -221,6 +271,8 @@ export interface CaptureApi {
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
+  setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */
   listVaults: () => Promise<VaultLocation[]>;
   /** Opens the folder picker and answers with the chosen path, or null. */
@@ -230,6 +282,18 @@ export interface CaptureApi {
    * a live switch is not on offer.
    */
   switchVault: (path: string) => Promise<void>;
+
+  /**
+   * Stores bytes already in hand — a clipboard image or a dropped file read into an
+   * `ArrayBuffer` in the renderer — into `_attachments/` and answers the name it landed
+   * under, or `null` if the vault is not known yet.
+   */
+  saveAttachment: (bytes: ArrayBuffer, originalName: string) => Promise<string | null>;
+  /** The native file picker, filtered to images and PDFs; reads and stores the choice itself. */
+  pickAttachment: () => Promise<string | null>;
+  /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
+  openAttachment: (name: string) => Promise<void>;
+
   library: LibraryApi;
 }
 

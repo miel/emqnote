@@ -5,10 +5,14 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  net,
+  protocol,
   shell,
   type MenuItemConstructorOptions,
 } from "electron";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
@@ -48,6 +52,7 @@ import {
   createFolder,
   diffConflict,
   emptyTrash,
+  folderContents,
   renameFolder,
   moveNote,
   openNote,
@@ -55,7 +60,9 @@ import {
   renameNote,
   resolveConflict,
   saveNote,
+  toggleTask,
   trashAttachment,
+  trashFolder,
   trashNote,
 } from "./vault-io.js";
 // No explicit invalidation on writes: the scan stats every file anyway, so a changed
@@ -68,12 +75,14 @@ import {
   searchNotes,
   setScanRunner,
   startScan,
+  tasks as tasksMatching,
 } from "./vault-scan.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
+import { resolveAttachment, saveAttachment } from "./attachments.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -88,6 +97,18 @@ import type { Locale } from "../shared/i18n.js";
 if (process.platform === "win32" && process.env.LOCALAPPDATA !== undefined) {
   app.setPath("userData", join(process.env.LOCALAPPDATA, "emqnote"));
 }
+
+// Must be registered before 'ready' — Electron refuses it any later. `standard: true`
+// is what lets a relative-looking `emqnote-attachment://name.png` resolve at all;
+// `secure: true` keeps it out of mixed-content warnings even though it never leaves
+// the machine. A `data:` URL was rejected for this on purpose: it would cross IPC as
+// base64 on every render and bloat a screenshot by a third — see attachments.ts.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "emqnote-attachment",
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+]);
 
 const launch = readLaunchOptions();
 
@@ -226,6 +247,7 @@ async function main(): Promise<void> {
   const settings = loadSettings();
 
   installMinimalMenu();
+  registerAttachmentProtocol();
   registerIpc();
   createCaptureWindow();
 
@@ -349,6 +371,31 @@ function installMinimalMenu(): void {
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/**
+ * Serves `_attachments/` files to a renderer as `emqnote-attachment://<name>`.
+ *
+ * `net.fetch` on a `file://` URL is the modern replacement for the old
+ * `protocol.registerFileProtocol` — it streams rather than buffering the whole file
+ * into memory first, which matters once this is a multi-megabyte screenshot. Every
+ * request re-resolves the vault from settings rather than capturing it once, the same
+ * reasoning `registerLibraryIpc`'s own comment gives: the vault is only known after
+ * first run on some machines, and `resolveAttachment` is the security boundary here —
+ * a request for a name that does not resolve to a real file inside `_attachments/`
+ * gets a 404, never a peek outside it.
+ */
+function registerAttachmentProtocol(): void {
+  protocol.handle("emqnote-attachment", (request) => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return new Response(null, { status: 404 });
+
+    const name = decodeURIComponent(request.url.slice("emqnote-attachment://".length));
+    const resolved = resolveAttachment(vault, name);
+    if (resolved === null) return new Response(null, { status: 404 });
+
+    return net.fetch(pathToFileURL(resolved).toString());
+  });
 }
 
 /** Optional `--open-note=<part of a title>` so a screenshot can show a real note. */
@@ -537,6 +584,7 @@ function registerAppIpc(): void {
       platform: process.platform,
       hotkey: settings.hotkey,
       vaultPath: settings.vaultPath,
+      libraryPaneWidths: settings.libraryPaneWidths,
     };
   });
 
@@ -563,6 +611,54 @@ function registerAppIpc(): void {
     saveSettings({ hotkey });
     buildTrayMenu();
     return true;
+  });
+
+  ipcMain.handle(
+    IPC.saveAttachment,
+    (_event, bytes: ArrayBuffer, originalName: string) => {
+      const vault = loadSettings().vaultPath;
+      if (vault === null) return null;
+      return saveAttachment(vault, new Uint8Array(bytes), originalName);
+    },
+  );
+
+  // The picker reads the chosen file itself rather than round-tripping its bytes
+  // through the renderer first — unlike a paste or a drop, which start out as bytes
+  // already in the browser's hands and have no file on disk to read from directly.
+  ipcMain.handle(IPC.pickAttachment, async () => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return null;
+
+    const choice = await dialog.showOpenDialog({
+      title: "Insert an attachment",
+      properties: ["openFile"],
+      filters: [
+        { name: "Images and PDFs", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"] },
+      ],
+    });
+    if (choice.canceled || choice.filePaths[0] === undefined) return null;
+
+    const path = choice.filePaths[0];
+    return saveAttachment(vault, readFileSync(path), basename(path));
+  });
+
+  // The click that opens a `wikiLink` chip pointing at a real attachment (a PDF, in
+  // practice — an image goes through `wikiEmbed` and is shown inline instead). A
+  // `wikiLink` can just as easily name a note-to-note link, which `resolveAttachment`
+  // will simply never find inside `_attachments/`, so refusing silently on `null` is
+  // the right answer for both cases: nothing to open is not an error.
+  ipcMain.handle(IPC.openAttachment, (_event, name: string) => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return;
+    const resolved = resolveAttachment(vault, name);
+    if (resolved === null) return;
+    void shell.openPath(resolved);
+  });
+
+  // Fire-and-forget: the drag itself is already reflected on screen, this only has to
+  // survive a restart. Debounced on the renderer side to a drag's end, not every move.
+  ipcMain.on(IPC.setPaneWidths, (_event, widths: { tree: number; notes: number }) => {
+    saveSettings({ libraryPaneWidths: widths });
   });
 }
 
@@ -659,6 +755,29 @@ function registerLibraryIpc(): void {
     notifyLibrary();
     return trashed;
   });
+
+  ipcMain.handle(IPC.libraryTasks, async (_event, scope: string, openOnly: boolean) => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null
+      ? []
+      : await tasksMatching(vault, indexDb, scope, openOnly);
+  });
+
+  // Refuses a note the capture window has claimed, the same guard `IPC.libraryMoveNote`
+  // uses and for the same reason: the write goes straight to the file, bypassing the
+  // capture window's own session, and its next debounced write would otherwise land on
+  // top of — or right after — this one with no conflict copy on either side.
+  ipcMain.handle(
+    IPC.libraryToggleTask,
+    (_event, path: string, ordinal: number, expectedText: string) => {
+      const vault = vaultPath();
+      if (vault === null) return { toggled: false };
+      if (writer.activePath() === path) return { toggled: false, locked: true };
+      const toggled = toggleTask(vault, path, ordinal, expectedText);
+      if (toggled) notifyLibrary();
+      return { toggled };
+    },
+  );
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
     const vault = vaultPath();
@@ -808,6 +927,31 @@ function registerLibraryIpc(): void {
     const renamed = renameFolder(vault, path, name);
     notifyLibrary();
     return renamed;
+  });
+
+  ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? { notes: 0, folders: 0 } : folderContents(vault, path);
+  });
+
+  // Same hazard `IPC.libraryMoveNote` guards against, one level up: `CaptureWriter`'s
+  // session pins the path it will write to when a note is loaded, and moving — or here,
+  // trashing — the folder underneath it does not update that path. The next debounced
+  // write would then recreate the note at its old location inside a folder that no
+  // longer otherwise exists. Checked before `trashFolder` runs, not after, so a note
+  // mid-edit is never even momentarily moved into `_trash`.
+  ipcMain.handle(IPC.libraryTrashFolder, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return { trashed: false };
+
+    const active = writer.activePath();
+    if (active !== null && active.startsWith(`${path}/`)) {
+      return { trashed: false, locked: true };
+    }
+
+    trashFolder(vault, path);
+    notifyLibrary();
+    return { trashed: true };
   });
 
   ipcMain.on(IPC.libraryRevealNote, (_event, path: string) => {

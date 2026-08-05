@@ -26,18 +26,28 @@ interface Props {
   onNewFolder: () => void;
   /** Renames the last folder that was selected, the same one "+ New folder" fills in. */
   onRenameFolder: () => void;
+  /** Deletes the last folder that was selected — same target as Rename. */
+  onDeleteFolder: () => void;
   /** False for the vault root and the trash, neither of which can be renamed. */
   canRenameFolder: boolean;
+  /** False for the vault root and the trash, neither of which can be deleted either. */
+  canDeleteFolder: boolean;
   /** False for the trash, which is a destination for deleted notes, not a place to file. */
   canCreateFolder: boolean;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
   onOpenOrphanedAttachments: () => void;
+  /** Selects the Tasks view — vault-wide by default, with a scope dropdown inside the view itself. */
+  onOpenTasks: () => void;
+  /** Whether the Tasks view is what is currently showing, for the same highlight the Trash branch gets. */
+  tasksSelected: boolean;
   newFolderLabel: string;
   renameFolderLabel: string;
+  deleteFolderLabel: string;
   helpLabel: string;
   settingsLabel: string;
   orphanedAttachmentsLabel: string;
+  tasksLabel: string;
   trashLabel: string;
   tagsLabel: string;
   peopleLabel: string;
@@ -61,6 +71,34 @@ const trashGlyph = (
       fill="none"
       stroke="currentColor"
       strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * A small ticked box, in the same drawn-not-typed spirit as `trashGlyph` — this is the
+ * footer menu entry, not the checkbox on a task row itself, so it does not go through
+ * `drawBox` in `checkbox.ts` (see `TaskList.tsx` for that one).
+ */
+const tasksGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect
+      x="2.6"
+      y="2.6"
+      width="10.8"
+      height="10.8"
+      rx="2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+    />
+    <path
+      d="M5.2 8.1 7.2 10.2 10.9 5.9"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -199,16 +237,22 @@ export function FolderTree({
   onCreateFolder,
   onNewFolder,
   onRenameFolder,
+  onDeleteFolder,
   canRenameFolder,
+  canDeleteFolder,
   canCreateFolder,
   onOpenSettings,
   onOpenHelp,
   onOpenOrphanedAttachments,
+  onOpenTasks,
+  tasksSelected,
   newFolderLabel,
   renameFolderLabel,
+  deleteFolderLabel,
   helpLabel,
   settingsLabel,
   orphanedAttachmentsLabel,
+  tasksLabel,
   trashLabel,
   tagsLabel,
   peopleLabel,
@@ -238,6 +282,16 @@ export function FolderTree({
             renaming had no gesture at all, hidden or otherwise. */}
         <button type="button" onClick={onRenameFolder} disabled={!canRenameFolder}>
           {renameFolderLabel}
+        </button>
+        {/* A folder never had a way out of the app's own trash discipline before this —
+            only Explorer/Finder, outside the app entirely. */}
+        <button
+          type="button"
+          className="danger"
+          onClick={onDeleteFolder}
+          disabled={!canDeleteFolder}
+        >
+          {deleteFolderLabel}
         </button>
       </div>
 
@@ -324,6 +378,20 @@ export function FolderTree({
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">?</span>
           <span className="branch-name">{helpLabel}</span>
+        </div>
+
+        {/* A fourth `Selection` kind, not a lens on the currently browsed folder — vault-
+            wide by default, with its own scope dropdown inside the view. Highlighted the
+            same way the Trash branch is, since unlike Settings/Help/Orphaned below it is
+            a real destination that can stay selected. */}
+        <div
+          className={`branch tree-settings${tasksSelected ? " branch-on" : ""}`}
+          style={{ paddingLeft: "8px" }}
+          onClick={onOpenTasks}
+        >
+          <span className="twisty twisty-empty" />
+          <span className="filter-glyph">{tasksGlyph}</span>
+          <span className="branch-name">{tasksLabel}</span>
         </div>
 
         {/* §6.5's manual, explicit cleanup action — deliberately down here with Settings

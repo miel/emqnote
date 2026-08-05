@@ -53,8 +53,11 @@ const SVG = "http://www.w3.org/2000/svg";
  *
  * `currentColor` throughout, so the muted/accent/hover colours stay in the stylesheet
  * with every other colour decision.
+ *
+ * Exported so `TaskList.tsx`'s aggregated view can put the same box in front of a task
+ * row — one drawing, so the two places a checkbox appears cannot drift apart visually.
  */
-function drawBox(checked: boolean): SVGElement {
+export function drawBox(checked: boolean): SVGElement {
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
   svg.setAttribute("aria-hidden", "true");

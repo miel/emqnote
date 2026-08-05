@@ -13,6 +13,13 @@ import Database from "better-sqlite3";
  * database — the caller decides the path, this module never assumes one.
  */
 
+/** One task item as `buildRecord` extracts it — see `taskItemsIn` in `src/markdown/schema.ts`. */
+export interface TaskExtract {
+  ordinal: number;
+  checked: boolean;
+  text: string;
+}
+
 export interface NoteRecord {
   path: string;
   fileName: string;
@@ -32,12 +39,30 @@ export interface NoteRecord {
   hash: string;
   /** Plain text — see `src/markdown/plain-text.ts` — for FTS5 to index; not returned by queries. */
   body: string;
+  /** Every task item in the note, in document order — fills `note_tasks`, not the `notes` table itself. */
+  tasks: TaskExtract[];
 }
 
-/** A stored row without `body`: what every read returns, since nothing reads the indexed text back out. */
-export type NoteMeta = Omit<NoteRecord, "body">;
+/**
+ * A stored row without `body` or `tasks`: what every metadata read returns. `body` is
+ * never read back out — it only ever feeds FTS5. `tasks` lives in its own table with its
+ * own query (`tasksIn`), not attached to every note row the way `title` or `tags` are,
+ * since nothing that reads `NoteMeta` today needs it.
+ */
+export type NoteMeta = Omit<NoteRecord, "body" | "tasks">;
 
 export type IndexDb = Database.Database;
+
+/**
+ * Bumped whenever a change means an index built before it exists cannot simply gain the
+ * new data on its own. `note_tasks` is the first such change: `needsRefresh` only forces
+ * a re-read when a file's `mtime` or `size` moved, and neither does merely by this table
+ * existing, so an index scanned before today would carry every note *except* its tasks,
+ * silently, forever. `migrate` drops and rebuilds below that version instead of trying to
+ * migrate forward in place — the index is a derived cache in the app-data folder (B9),
+ * never in the vault, so rebuilding it from scratch costs one scan and destroys nothing.
+ */
+const SCHEMA_VERSION = 1;
 
 /**
  * One search-only virtual table rather than the `content=''` "contentless" table
@@ -61,6 +86,21 @@ function migrate(db: IndexDb): void {
   // SQLITE_BUSY on the spot and drops the update instead of waiting the sub-millisecond
   // it takes for one note's transaction to commit.
   db.pragma("busy_timeout = 5000");
+
+  // See `SCHEMA_VERSION`'s own comment. `user_version` defaults to 0 on a database that
+  // has never set it — every index built before this table existed — so this also covers
+  // a completely fresh `:memory:` or file database, where the `DROP TABLE IF EXISTS`s
+  // below are simply no-ops.
+  const version = db.pragma("user_version", { simple: true }) as number;
+  if (version < SCHEMA_VERSION) {
+    db.exec(`
+      DROP TABLE IF EXISTS notes_fts;
+      DROP TABLE IF EXISTS note_tasks;
+      DROP TABLE IF EXISTS notes;
+    `);
+    db.pragma(`user_version = ${SCHEMA_VERSION}`);
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
       path TEXT PRIMARY KEY,
@@ -86,6 +126,16 @@ function migrate(db: IndexDb): void {
       tags,
       tokenize = 'unicode61 remove_diacritics 2'
     );
+
+    CREATE TABLE IF NOT EXISTS note_tasks (
+      path TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      checked INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      PRIMARY KEY (path, ordinal)
+    );
+
+    CREATE INDEX IF NOT EXISTS note_tasks_open ON note_tasks(checked, path);
   `);
 }
 
@@ -122,9 +172,18 @@ const upsertNoteStatements = (db: IndexDb) => ({
     INSERT INTO notes_fts (path, title, body, attendees, tags)
     VALUES (@path, @title, @body, @attendees, @tags)
   `),
+  deleteTasks: db.prepare(`DELETE FROM note_tasks WHERE path = ?`),
+  insertTask: db.prepare(`
+    INSERT INTO note_tasks (path, ordinal, checked, text)
+    VALUES (@path, @ordinal, @checked, @text)
+  `),
 });
 
-/** Inserts or replaces one note. A single transaction, so a search never sees the metadata row without its FTS entry or the other way round. */
+/**
+ * Inserts or replaces one note, including its tasks. A single transaction, so a search
+ * or a Tasks-view read never sees the metadata row without its FTS entry, or with a
+ * `note_tasks` set that belongs to the note's previous contents rather than these.
+ */
 export function upsertNote(db: IndexDb, record: NoteRecord): void {
   const statements = upsertNoteStatements(db);
   const row = {
@@ -147,6 +206,19 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
     statements.note.run(row);
     statements.deleteFts.run(record.path);
     statements.insertFts.run({ ...row, body: record.body });
+    // Delete-then-insert, the same shape as the FTS row above and for the same reason:
+    // a note can lose a task entirely (the line was deleted), and there is no `excluded.`
+    // trick for "this row from last time has no counterpart this time" the way `ON
+    // CONFLICT` has for a row that persists.
+    statements.deleteTasks.run(record.path);
+    for (const task of record.tasks) {
+      statements.insertTask.run({
+        path: record.path,
+        ordinal: task.ordinal,
+        checked: task.checked ? 1 : 0,
+        text: task.text,
+      });
+    }
   })();
 }
 
@@ -154,6 +226,7 @@ export function deleteNote(db: IndexDb, path: string): void {
   db.transaction(() => {
     db.prepare(`DELETE FROM notes WHERE path = ?`).run(path);
     db.prepare(`DELETE FROM notes_fts WHERE path = ?`).run(path);
+    db.prepare(`DELETE FROM note_tasks WHERE path = ?`).run(path);
   })();
 }
 
@@ -245,4 +318,56 @@ export function search(db: IndexDb, query: string): string[] {
     .prepare(`SELECT path FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank`)
     .all(toMatchQuery(query)) as { path: string }[];
   return rows.map((row) => row.path);
+}
+
+/** One task item for the aggregated Tasks view: `note_tasks`, joined with the note it lives in for the title the row shows beside it. */
+export interface TaskRow {
+  path: string;
+  title: string;
+  ordinal: number;
+  checked: boolean;
+  text: string;
+}
+
+interface StoredTaskRow {
+  path: string;
+  title: string;
+  ordinal: number;
+  checked: number;
+  text: string;
+}
+
+/**
+ * Every task item under a folder scope and everything nested beneath it — `""` is the
+ * vault root, meaning no restriction, the same rule `searchNotes` uses in
+ * `vault-scan.ts` for its own `scope` option. Filtered in JS against the join's own rows
+ * rather than with a SQL `LIKE ${scope}/%`: a folder name that happens to contain a `%`
+ * or a `_` (both wildcards to `LIKE`) would otherwise match more, or less, than the
+ * folder actually named that, and nothing else in this file needs to escape a `LIKE`
+ * pattern to get this rule right.
+ */
+export function tasksIn(db: IndexDb, folderPrefix: string, openOnly: boolean): TaskRow[] {
+  const rows = db
+    .prepare(
+      `
+      SELECT note_tasks.path AS path, notes.title AS title, note_tasks.ordinal AS ordinal,
+             note_tasks.checked AS checked, note_tasks.text AS text
+      FROM note_tasks
+      JOIN notes ON notes.path = note_tasks.path
+      ${openOnly ? "WHERE note_tasks.checked = 0" : ""}
+      ORDER BY notes.path, note_tasks.ordinal
+      `,
+    )
+    .all() as StoredTaskRow[];
+
+  const scoped =
+    folderPrefix === "" ? rows : rows.filter((row) => row.path.startsWith(`${folderPrefix}/`));
+
+  return scoped.map((row) => ({
+    path: row.path,
+    title: row.title,
+    ordinal: row.ordinal,
+    checked: row.checked === 1,
+    text: row.text,
+  }));
 }

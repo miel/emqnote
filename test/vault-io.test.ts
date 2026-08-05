@@ -17,6 +17,7 @@ import {
   diffConflict,
   emptyTrash,
   flattenFolders,
+  folderContents,
   moveNote,
   openNote,
   readFolderTree,
@@ -26,6 +27,7 @@ import {
   resolveConflict,
   saveNote,
   trashAttachment,
+  trashFolder,
   trashNote,
 } from "../src/main/vault-io.js";
 import { FOLDER_ERROR, TRASH_FOLDER } from "../src/shared/vault-types.js";
@@ -526,6 +528,76 @@ describe("renaming a folder", () => {
 
       expect(existsSync(join(vault, "..", "escaped"))).toBe(false);
       expect(flattenFolders(readFolderTree(vault))).toContain("10 Projects/Klant X");
+    });
+  });
+});
+
+describe("counting what is inside a folder", () => {
+  it("counts notes and nested subfolders, but not the app's own folders", () => {
+    writeFileSync(
+      join(vault, "10 Projects", "Klant X", "Project Alpha", "2026-07-25 1500 Iets.md"),
+      NOTE,
+    );
+
+    // 10 Projects/Klant X and .../Klant X/Project Alpha — two folders, one note.
+    expect(folderContents(vault, "10 Projects")).toEqual({ notes: 1, folders: 2 });
+  });
+
+  it("answers zero for an empty folder", () => {
+    createFolder(vault, "10 Projects", "Klant Y");
+    expect(folderContents(vault, "10 Projects/Klant Y")).toEqual({ notes: 0, folders: 0 });
+  });
+
+  it("counts the whole vault at the root", () => {
+    // 00 Inbox, 10 Projects, Klant X, Project Alpha — _attachments is not counted, the
+    // same rule readFolderTree follows.
+    expect(folderContents(vault, "")).toEqual({ notes: 1, folders: 4 });
+  });
+});
+
+describe("trashing a folder", () => {
+  it("moves the folder, and everything inside it, into _trash", () => {
+    writeFileSync(join(vault, "10 Projects", "Klant X", "2026-07-25 1432 Iets.md"), NOTE);
+
+    const trashed = trashFolder(vault, "10 Projects/Klant X");
+
+    expect(trashed).toBe(`${TRASH_FOLDER}/Klant X`);
+    expect(existsSync(join(vault, "10 Projects", "Klant X"))).toBe(false);
+    expect(readNotesIn(vault, trashed)).toHaveLength(1);
+    expect(flattenFolders(readFolderTree(vault))).toContain(
+      `${TRASH_FOLDER}/Klant X/Project Alpha`,
+    );
+  });
+
+  it("uniquifies on a name collision, keeping the whole folder rather than a note's `.md` suffix", () => {
+    mkdirSync(join(vault, TRASH_FOLDER, "Klant X"), { recursive: true });
+
+    const trashed = trashFolder(vault, "10 Projects/Klant X");
+
+    expect(trashed).toBe(`${TRASH_FOLDER}/Klant X (2)`);
+    expect(existsSync(join(vault, TRASH_FOLDER, "Klant X (2)", "Project Alpha"))).toBe(true);
+  });
+
+  describe("refuses rather than corrects", () => {
+    it("the vault root", () => {
+      expect(() => trashFolder(vault, "")).toThrow(FOLDER_ERROR.root);
+    });
+
+    it("the trash itself, and anything inside it", () => {
+      mkdirSync(join(vault, TRASH_FOLDER, "Oud"), { recursive: true });
+
+      expect(() => trashFolder(vault, TRASH_FOLDER)).toThrow(FOLDER_ERROR.reserved);
+      expect(() => trashFolder(vault, `${TRASH_FOLDER}/Oud`)).toThrow(FOLDER_ERROR.reserved);
+    });
+
+    it("a folder the app owns", () => {
+      expect(() => trashFolder(vault, "_attachments")).toThrow(FOLDER_ERROR.reserved);
+    });
+
+    it("a folder that is gone", () => {
+      expect(() => trashFolder(vault, "10 Projects/Weg")).toThrow(FOLDER_ERROR.missing);
+      // The point of refusing: nothing on disk moved, not even the trash folder itself.
+      expect(existsSync(join(vault, TRASH_FOLDER))).toBe(false);
     });
   });
 });

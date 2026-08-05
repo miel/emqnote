@@ -46,9 +46,15 @@ contextBridge.exposeInMainWorld("emqnote", {
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
+  setPaneWidths: (widths: { tree: number; notes: number }) =>
+    ipcRenderer.send(IPC.setPaneWidths, widths),
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),
+  saveAttachment: (bytes: ArrayBuffer, originalName: string) =>
+    ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
+  pickAttachment: () => ipcRenderer.invoke(IPC.pickAttachment),
+  openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
@@ -67,6 +73,8 @@ contextBridge.exposeInMainWorld("emqnote", {
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),
     renameFolder: (path: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryRenameFolder, path, name),
+    folderContents: (path: string) => ipcRenderer.invoke(IPC.libraryFolderContents, path),
+    trashFolder: (path: string) => ipcRenderer.invoke(IPC.libraryTrashFolder, path),
     revealNote: (path: string) => ipcRenderer.send(IPC.libraryRevealNote, path),
     noteEditable: (path: string) => ipcRenderer.invoke(IPC.libraryNoteEditable, path),
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
@@ -84,5 +92,10 @@ contextBridge.exposeInMainWorld("emqnote", {
     orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
     attachmentPreview: (path: string) => ipcRenderer.invoke(IPC.libraryAttachmentPreview, path),
     trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
+
+    tasks: (scope: string, openOnly: boolean) =>
+      ipcRenderer.invoke(IPC.libraryTasks, scope, openOnly),
+    toggleTask: (path: string, ordinal: number, expectedText: string) =>
+      ipcRenderer.invoke(IPC.libraryToggleTask, path, ordinal, expectedText),
   },
 });

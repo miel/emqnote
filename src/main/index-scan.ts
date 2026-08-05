@@ -1,9 +1,18 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, type Dirent, type Stats } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { parseNote, plainText } from "../markdown/index.js";
+import type { Node as PMNode } from "prosemirror-model";
+import { parseNote, plainText, taskItemsIn, taskItemText } from "../markdown/index.js";
 import { TRASH_FOLDER, type ScanProgress } from "../shared/vault-types.js";
-import { allNotes, deleteNote, needsRefresh, upsertNote, type IndexDb, type NoteRecord } from "./index-db.js";
+import {
+  allNotes,
+  deleteNote,
+  needsRefresh,
+  upsertNote,
+  type IndexDb,
+  type NoteRecord,
+  type TaskExtract,
+} from "./index-db.js";
 import { isHidden, summarise } from "./vault-io.js";
 import { checkFilesOnDemand } from "./vault.js";
 
@@ -83,6 +92,22 @@ function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
+/**
+ * Every task item in a parsed document, in document order — what fills `note_tasks`.
+ *
+ * `taskItemsIn` is the one place that decides what counts as a task item and in what
+ * order; `toggleTask` in `vault-io.ts` walks the same way when it re-parses a file to
+ * flip one, so "ordinal 3" names the same `listItem` on both sides of the index/file
+ * boundary without the two ever having to coordinate directly.
+ */
+export function extractTasks(doc: PMNode): TaskExtract[] {
+  return taskItemsIn(doc).map(({ node }, ordinal) => ({
+    ordinal,
+    checked: node.attrs.checked === true,
+    text: taskItemText(node),
+  }));
+}
+
 /** Shared with `index-watch.ts`, so an incremental reindex builds a note the same way a full scan does. */
 export function buildRecord(vault: string, file: string, raw: string, stats: Stats): NoteRecord {
   const summary = summarise(vault, file, raw, stats.mtime);
@@ -103,6 +128,7 @@ export function buildRecord(vault: string, file: string, raw: string, stats: Sta
     size: stats.size,
     hash: hashOf(raw),
     body: plainText(doc),
+    tasks: extractTasks(doc),
   };
 }
 

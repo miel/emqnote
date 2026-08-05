@@ -21,6 +21,7 @@ const FALLBACK: Bootstrap = {
   platform: window.emqnote.platform,
   hotkey: DEFAULT_HOTKEY,
   vaultPath: null,
+  libraryPaneWidths: null,
 };
 
 /**

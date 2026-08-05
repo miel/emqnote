@@ -25,8 +25,7 @@ import {
  * `Mod` is Cmd on macOS and Ctrl everywhere else; ProseMirror resolves it per platform,
  * which is why the registry spells bindings its way.
  */
-export function outlookKeymap(openLinkPrompt: () => void): Record<string, Command> {
-  const context: CommandContext = { openLinkPrompt };
+export function outlookKeymap(context: CommandContext): Record<string, Command> {
   const keys: Record<string, Command> = {};
 
   for (const entry of shortcutsWhere("editor")) {

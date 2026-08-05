@@ -27,7 +27,10 @@ import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
+import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
 import { Settings } from "./Settings.js";
+import { Splitter } from "./Splitter.js";
+import { TaskList } from "./TaskList.js";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -54,6 +57,7 @@ type Dialog =
   | { kind: "newFolder"; parent: string }
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
+  | { kind: "deleteFolder"; path: string; notes: number; folders: number }
   | { kind: "clearTrash"; count: number }
   | { kind: "problem"; message: string };
 
@@ -105,6 +109,48 @@ export function Library(): React.ReactElement {
   // Null when nothing is scanning, which is the normal state — the bar only appears on a
   // cold start with a vault big enough for the walk to be worth mentioning.
   const [scan, setScan] = useState<ScanProgress | null>(null);
+
+  /**
+   * The tree/notes pane widths, dragged live by `Splitter.tsx` and persisted through
+   * `IPC.setPaneWidths` only once a drag ends — see `onPaneDragEnd` below.
+   *
+   * Starts on the hardcoded default, same as `useBootstrap`'s `FALLBACK`, because
+   * `app.libraryPaneWidths` is only real once the `bootstrap()` round trip resolves.
+   * `paneWidthsLoaded` guards the effect that applies it so a later `app.reload()` (the
+   * settings panel calls it after a locale change) cannot overwrite a width mid-drag.
+   */
+  const [paneWidths, setPaneWidths] = useState<PaneWidths>(DEFAULT_PANE_WIDTHS);
+  const paneWidthsRef = useRef(paneWidths);
+  paneWidthsRef.current = paneWidths;
+  const paneWidthsLoaded = useRef(false);
+  const libraryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (paneWidthsLoaded.current || app.libraryPaneWidths === null) return;
+    paneWidthsLoaded.current = true;
+    setPaneWidths(app.libraryPaneWidths);
+  }, [app.libraryPaneWidths]);
+
+  /**
+   * Applies one splitter's pointer/keyboard movement, clamped so the reader can never be
+   * squeezed away — see `clampPaneWidths`'s own comment for why the pane being dragged is
+   * the one that gives way instead.
+   */
+  const onPaneDrag = useCallback((pane: "tree" | "notes", deltaX: number) => {
+    const available = libraryRef.current?.clientWidth ?? 0;
+    setPaneWidths((current) => {
+      const proposed: PaneWidths =
+        pane === "tree"
+          ? { tree: current.tree + deltaX, notes: current.notes }
+          : { tree: current.tree, notes: current.notes + deltaX };
+      return clampPaneWidths(proposed, pane, available);
+    });
+  }, []);
+
+  /** Persisted on drag end only — not on every pointer move, which would be one write per pixel. */
+  const onPaneDragEnd = useCallback(() => {
+    window.emqnote.setPaneWidths(paneWidthsRef.current);
+  }, []);
 
   /**
    * The editable frontmatter of the open note, held apart from `open`.
@@ -340,6 +386,20 @@ export function Library(): React.ReactElement {
     [dirty, save],
   );
 
+  /**
+   * The picker path, for the reader's own toolbar button and its keyboard shortcut.
+   *
+   * Nothing guards `open === null` or `!open.editable` here beyond the button being
+   * disabled for those states: `editor.current?.insertAttachment` dispatches a
+   * transaction that reaches `onDocChange` like any other edit, and that is where the
+   * `editable` refusal already lives — the same belt-and-braces reasoning `onDocChange`
+   * itself documents for a keystroke that slips through while the overlay is up.
+   */
+  const pickAndInsertAttachment = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment();
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
   const onDocChange = useCallback(() => {
     // Belt and braces alongside the `pointer-events: none` overlay: a note can go
     // read-only while the editor already has focus from before, and a keystroke that
@@ -472,6 +532,58 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Moves a folder — and everything inside it — into `_trash`, the same trash discipline
+   * a single note follows (B24). There is nothing to rebase a path onto afterwards, the
+   * way a rename rebases: the selection and the open note (if it was somewhere inside)
+   * simply move up to the parent, the one place guaranteed to still exist.
+   *
+   * The pending save is flushed first, for the same reason `renameFolderAt` flushes one:
+   * a debounced write landing after the folder is already gone would recreate it with
+   * `writeAtomic`'s `mkdirSync`, leaving one note behind in a folder everyone else
+   * believes was just deleted.
+   */
+  const deleteFolderAt = async (path: string): Promise<void> => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (dirty) await save();
+
+    let result: { trashed: boolean; locked?: boolean };
+    try {
+      result = await window.emqnote.library.trashFolder(path);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.deleteFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.deleteFolderLocked") });
+      return;
+    }
+
+    const parent = folderOf(path);
+
+    // The reader may be showing a note that just went into `_trash` along with the rest
+    // of the folder — put it away rather than leave it pointing at a path that is gone.
+    const current = openRef.current;
+    if (current !== null && current.path.startsWith(`${path}/`)) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    const target: Selection = { kind: "folder", path: parent };
+    setSelection(target);
+    selectionRef.current = target;
+    setLastFolder(parent);
+
+    await loadTree();
+    await loadNotes(target);
+    refreshFacets();
+  };
+
+  /**
    * Files a note into a folder. Both ways of asking for that — the "Move to…" dialog and
    * dragging a row onto the tree — come through here, so the two cannot drift apart.
    *
@@ -552,6 +664,40 @@ export function Library(): React.ReactElement {
     await window.emqnote.library.openInCapture(path);
   };
 
+  /**
+   * Selects the Tasks view — vault-wide, open items only, the same defaults every other
+   * footer entry resets to when it is clicked fresh. Clears a pending search the same way
+   * the tree's own `onSelect` does below, so a half-typed query does not sit there
+   * disagreeing with what is now showing.
+   */
+  const openTasks = (): void => {
+    setSelection({ kind: "tasks", scope: "", openOnly: true });
+    if (searchQuery !== "") {
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+      setSearchQuery("");
+    }
+  };
+
+  /**
+   * Flips one task item. The actual write happens in the main process, through
+   * `toggleTask` in `vault-io.ts` — this only relays the call and turns `locked` into the
+   * same kind of message `moveNoteTo` shows for the same reason: the capture window has
+   * the note claimed, so the toggle was refused rather than raced against its own
+   * debounced write.
+   */
+  const toggleTask = async (
+    path: string,
+    ordinal: number,
+    expectedText: string,
+  ): Promise<boolean> => {
+    const result = await window.emqnote.library.toggleTask(path, ordinal, expectedText);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.taskLocked") });
+      return false;
+    }
+    return result.toggled;
+  };
+
   return (
     <div className="library-shell">
       {/* Above the conflict banner, and thinner: this one says "not everything is here
@@ -575,7 +721,16 @@ export function Library(): React.ReactElement {
         onMerge={(path) => void openNote(path)}
       />
 
-      <div className="library">
+      <div
+        className="library"
+        ref={libraryRef}
+        style={
+          {
+            "--tree-width": `${paneWidths.tree}px`,
+            "--notes-width": `${paneWidths.notes}px`,
+          } as React.CSSProperties
+        }
+      >
         <FolderTree
           root={tree}
           selected={selection}
@@ -607,16 +762,27 @@ export function Library(): React.ReactElement {
               initial: lastFolder.split("/").pop() ?? "",
             })
           }
+          onDeleteFolder={() => {
+            const path = lastFolder;
+            void window.emqnote.library.folderContents(path).then((contents) => {
+              setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
+            });
+          }}
           canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
+          canDeleteFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
           canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenOrphanedAttachments={() => setOrphanedAttachmentsOpen(true)}
+          onOpenTasks={openTasks}
+          tasksSelected={selection.kind === "tasks"}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
+          deleteFolderLabel={app.t("library.deleteFolder")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           orphanedAttachmentsLabel={app.t("orphans.title")}
+          tasksLabel={app.t("library.tasks")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
           peopleLabel={app.t("library.people")}
@@ -624,25 +790,54 @@ export function Library(): React.ReactElement {
           unavailableLabel={app.t("library.filterUnavailable")}
           filterLabel={app.t("library.filterSearch")}
         />
-  
-        <NoteList
-          notes={sorted}
-          selected={open?.path ?? null}
-          showing={selection}
-          searching={searchQuery.trim() !== ""}
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          sort={sort}
-          onSort={setSort}
-          onSelect={(path) => void openNote(path)}
-          onOpenInCapture={(path) => void openInCapture(path)}
-          onNewNote={() => window.emqnote.library.newNote()}
-          onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
-          onDragNote={setDragging}
-          locale={app.locale}
-          t={app.t}
+
+        <Splitter
+          left="var(--tree-width)"
+          label={app.t("library.resizeTree")}
+          onDrag={(deltaX) => onPaneDrag("tree", deltaX)}
+          onDragEnd={onPaneDragEnd}
         />
-  
+
+        {selection.kind === "tasks" ? (
+          <TaskList
+            scope={selection.scope}
+            openOnly={selection.openOnly}
+            folders={folders}
+            onScopeChange={(scope) => setSelection({ kind: "tasks", scope, openOnly: selection.openOnly })}
+            onOpenOnlyChange={(openOnly) =>
+              setSelection({ kind: "tasks", scope: selection.scope, openOnly })
+            }
+            onOpenNote={(path) => void openNote(path)}
+            onToggle={toggleTask}
+            t={app.t}
+          />
+        ) : (
+          <NoteList
+            notes={sorted}
+            selected={open?.path ?? null}
+            showing={selection}
+            searching={searchQuery.trim() !== ""}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            sort={sort}
+            onSort={setSort}
+            onSelect={(path) => void openNote(path)}
+            onOpenInCapture={(path) => void openInCapture(path)}
+            onNewNote={() => window.emqnote.library.newNote()}
+            onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
+            onDragNote={setDragging}
+            locale={app.locale}
+            t={app.t}
+          />
+        )}
+
+        <Splitter
+          left="calc(var(--tree-width) + var(--notes-width))"
+          label={app.t("library.resizeNotes")}
+          onDrag={(deltaX) => onPaneDrag("notes", deltaX)}
+          onDragEnd={onPaneDragEnd}
+        />
+
         <section className="reader">
           {open === null ? (
             <div className="reader-empty">
@@ -662,6 +857,14 @@ export function Library(): React.ReactElement {
                       ? app.t(dirty ? "library.saving" : "library.saved")
                       : app.t("library.openInCapture")}
                   </span>
+                  <button
+                    type="button"
+                    disabled={!open.editable}
+                    title={app.t("shortcut.attachment")}
+                    onClick={() => void pickAndInsertAttachment()}
+                  >
+                    📎
+                  </button>
                   <button
                     type="button"
                     onClick={() => setDialog({ kind: "rename", initial: open.title })}
@@ -711,6 +914,7 @@ export function Library(): React.ReactElement {
                   ref={editor}
                   onChange={onDocChange}
                   onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
+                  onAttachmentRequested={() => void pickAndInsertAttachment()}
                 />
               </div>
   
@@ -767,7 +971,13 @@ export function Library(): React.ReactElement {
                     ? dialog.message
                     : dialog.kind === "clearTrash"
                       ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
-                      : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+                      : dialog.kind === "deleteFolder"
+                        ? `"${dialog.path}"${
+                            dialog.notes === 0 && dialog.folders === 0
+                              ? ""
+                              : ` (${dialog.notes} ${app.t(dialog.notes === 1 ? "library.note" : "library.notes")}, ${dialog.folders} ${app.t(dialog.folders === 1 ? "library.folder" : "library.folders")})`
+                          } — ${app.t("ask.confirmDeleteFolder")}`
+                        : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
           }
           initial={
             dialog.kind === "rename" || dialog.kind === "renameFolder"
@@ -777,14 +987,18 @@ export function Library(): React.ReactElement {
                 : undefined
           }
           confirmLabel={
-            dialog.kind === "delete"
+            dialog.kind === "delete" || dialog.kind === "deleteFolder"
               ? app.t("library.delete")
               : dialog.kind === "clearTrash"
                 ? app.t("library.clearTrash")
                 : app.t("ask.ok")
           }
           cancelLabel={app.t("ask.cancel")}
-          danger={dialog.kind === "delete" || dialog.kind === "clearTrash"}
+          danger={
+            dialog.kind === "delete" ||
+            dialog.kind === "clearTrash" ||
+            dialog.kind === "deleteFolder"
+          }
           dismissOnly={dialog.kind === "problem"}
           onCancel={() => setDialog(null)}
           onConfirm={(value) => {
@@ -792,6 +1006,7 @@ export function Library(): React.ReactElement {
             setDialog(null);
             if (current.kind === "rename") void rename(value);
             if (current.kind === "delete") void trash();
+            if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "clearTrash") void clearTrash();
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);

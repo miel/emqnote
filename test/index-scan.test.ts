@@ -129,6 +129,7 @@ describe("the full scan", () => {
       tags: ["getampered"],
       hash: "not-the-real-hash",
       body: "",
+      tasks: [],
     });
 
     await fullScan(vault, db);

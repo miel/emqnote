@@ -41,6 +41,13 @@ export const SHORTCUTS: ShortcutEntry[] = [
   { id: "highlight", keys: ["Mod-Alt-h"], where: "editor", group: "text" },
   { id: "code", keys: ["Mod-Shift-c"], where: "editor", group: "text" },
   { id: "link", keys: ["Mod-k"], where: "editor", group: "text" },
+  {
+    id: "attachment",
+    keys: ["Mod-Shift-i"],
+    where: "editor",
+    group: "text",
+    why: "Same family as Mod-K for a link: the letter of what gets inserted, shifted.",
+  },
 
   // ---- lists ----
   {
