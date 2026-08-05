@@ -113,6 +113,8 @@ const DUTCH: Record<string, string> = {
   "library.filterUnavailable":
     "De vault staat op Files On-Demand. Zet de map op 'Altijd behouden op dit apparaat' om te kunnen filteren.",
   "library.filterSearch": "Filteren…",
+  "library.resizeTree": "Breedte van de mappenboom aanpassen",
+  "library.resizeNotes": "Breedte van de notitielijst aanpassen",
   "library.search":
     "Zoeken… type:meeting tag:klantx attendee:\"Jan de Vries\" after:2026-01-01",
   "library.moveWhere": "Naar welke map?",
@@ -287,6 +289,8 @@ const ENGLISH: Record<string, string> = {
   "library.filterUnavailable":
     "The vault is on Files On-Demand. Set the folder to 'Always keep on this device' to filter.",
   "library.filterSearch": "Filter…",
+  "library.resizeTree": "Resize the folder tree",
+  "library.resizeNotes": "Resize the note list",
   "library.search":
     'Search… type:meeting tag:klantx attendee:"Jan de Vries" after:2026-01-01',
   "library.moveWhere": "Move to which folder?",

@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld("emqnote", {
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
+  setPaneWidths: (widths: { tree: number; notes: number }) =>
+    ipcRenderer.send(IPC.setPaneWidths, widths),
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),

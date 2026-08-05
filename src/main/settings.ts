@@ -20,6 +20,12 @@ export interface Settings {
   filesOnDemandWarned: string[];
   /** `Date.now()` of the last automatic update check, to throttle it to once a day. */
   updateLastCheckedAt: number | null;
+  /**
+   * The library window's two draggable splitters, in pixels. Null until the first drag —
+   * before that the CSS default (`library.css`'s `--tree-width`/`--notes-width` fallback)
+   * applies, so there is no separate "unset" width to keep in sync with it.
+   */
+  libraryPaneWidths: { tree: number; notes: number } | null;
 }
 
 export { DEFAULT_HOTKEY };
@@ -32,6 +38,7 @@ function defaults(): Settings {
     openAtLogin: true,
     filesOnDemandWarned: [],
     updateLastCheckedAt: null,
+    libraryPaneWidths: null,
   };
 }
 
