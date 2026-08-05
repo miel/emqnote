@@ -101,6 +101,17 @@ export const IPC = {
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
   setHotkey: "app:set-hotkey",
+
+  /**
+   * Both windows write into `_attachments/` through this one channel — a screenshot is
+   * as likely to land in the capture window as in the reader, so it sits beside
+   * `bootstrap` rather than under `library`.
+   */
+  saveAttachment: "app:save-attachment",
+  /** The file picker for an image or PDF, filtered in main; reads and stores the file itself. */
+  pickAttachment: "app:pick-attachment",
+  /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
+  openAttachment: "app:open-attachment",
 } as const;
 
 export interface Bootstrap {
@@ -265,6 +276,18 @@ export interface CaptureApi {
    * a live switch is not on offer.
    */
   switchVault: (path: string) => Promise<void>;
+
+  /**
+   * Stores bytes already in hand — a clipboard image or a dropped file read into an
+   * `ArrayBuffer` in the renderer — into `_attachments/` and answers the name it landed
+   * under, or `null` if the vault is not known yet.
+   */
+  saveAttachment: (bytes: ArrayBuffer, originalName: string) => Promise<string | null>;
+  /** The native file picker, filtered to images and PDFs; reads and stores the choice itself. */
+  pickAttachment: () => Promise<string | null>;
+  /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
+  openAttachment: (name: string) => Promise<void>;
+
   library: LibraryApi;
 }
 

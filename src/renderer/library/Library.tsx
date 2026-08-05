@@ -342,6 +342,20 @@ export function Library(): React.ReactElement {
     [dirty, save],
   );
 
+  /**
+   * The picker path, for the reader's own toolbar button and its keyboard shortcut.
+   *
+   * Nothing guards `open === null` or `!open.editable` here beyond the button being
+   * disabled for those states: `editor.current?.insertAttachment` dispatches a
+   * transaction that reaches `onDocChange` like any other edit, and that is where the
+   * `editable` refusal already lives — the same belt-and-braces reasoning `onDocChange`
+   * itself documents for a keystroke that slips through while the overlay is up.
+   */
+  const pickAndInsertAttachment = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment();
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
   const onDocChange = useCallback(() => {
     // Belt and braces alongside the `pointer-events: none` overlay: a note can go
     // read-only while the editor already has focus from before, and a keystroke that
@@ -778,6 +792,14 @@ export function Library(): React.ReactElement {
                   </span>
                   <button
                     type="button"
+                    disabled={!open.editable}
+                    title={app.t("shortcut.attachment")}
+                    onClick={() => void pickAndInsertAttachment()}
+                  >
+                    📎
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setDialog({ kind: "rename", initial: open.title })}
                   >
                     {app.t("library.rename")}
@@ -825,6 +847,7 @@ export function Library(): React.ReactElement {
                   ref={editor}
                   onChange={onDocChange}
                   onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
+                  onAttachmentRequested={() => void pickAndInsertAttachment()}
                 />
               </div>
   

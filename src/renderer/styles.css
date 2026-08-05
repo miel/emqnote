@@ -465,6 +465,27 @@ body {
   font-size: 0.9em;
 }
 
+/* Every `wiki-link` is clickable now (`attachment-view.ts`'s `wikiLinkNodeView`): a
+   real attachment opens in the system viewer, and a note-to-note link is a silent
+   no-op until note navigation exists. The pointer cursor is honest about the first
+   case and harmless for the second. */
+.editor-content .wiki-link {
+  cursor: pointer;
+}
+
+/* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
+   target is a browser-renderable image. Capped rather than left at native size: a
+   full-resolution screenshot pasted mid-paragraph should not be able to push the rest
+   of the note off screen. Still inline, since the dialect allows an embed mid-sentence
+   (`test/corpus/21-links-en-bijlagen.md`'s underlined example) and a forced block
+   display would break that layout. */
+.editor-content .wiki-embed-image {
+  max-width: 100%;
+  max-height: 480px;
+  vertical-align: text-bottom;
+  border-radius: 4px;
+}
+
 /* ---- link prompt ---- */
 
 .link-prompt {
