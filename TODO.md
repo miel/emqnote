@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 4 August 2026, at `v0.3.2`.
+Last updated 5 August 2026, at `v0.3.3`.
 
 ## Where the project stands
 
