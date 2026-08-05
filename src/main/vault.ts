@@ -137,6 +137,66 @@ function sampleFiles(directory: string, limit: number): string[] {
 }
 
 /**
+ * Where an `attrib` line's path begins: a drive letter or a UNC prefix. Everything to
+ * the left of it is the attribute field.
+ */
+const ATTRIB_PATH = /[A-Za-z]:\\|\\\\/;
+
+/**
+ * Only these can appear in the attribute field: archive, read-only, system, hidden,
+ * not-content-indexed, offline, pinned, unpinned, no-scrub, integrity, and the two
+ * `attrib` prints without documenting. Lowercase is deliberately absent — it is what
+ * tells an attribute field apart from a sentence.
+ */
+const ATTRIB_FLAGS = /^[ARSHIOPUXVBL ]*$/;
+
+/**
+ * What `attrib <vault>\* /s` says about Files On-Demand: `U` is unpinned (may be
+ * evicted), `P` is pinned.
+ *
+ * Split out from `checkFilesOnDemand` so it can be tested without a Windows machine or a
+ * subprocess — the same reason `update-check.ts` keeps its parsing separate from the
+ * `fetch` around it.
+ *
+ * The attribute field is found by looking for where the path starts, not by slicing a
+ * fixed 21 characters off the front. That fixed slice is what made this function wrong:
+ * `attrib` answers a directory with no files in it with `File not found - C:\Users\…`,
+ * whose first 21 characters are `File not found - C:\U` — the `U` of `Users`, read as
+ * an evicted placeholder. A brand new vault on Windows has folders and no notes yet, so
+ * *first run* reported the whole vault un-hydrated: no tags, no people, no search, and a
+ * banner explaining a problem that did not exist.
+ *
+ * Hence both halves of the rule. A line only counts if a path can be found in it at all
+ * *and* what precedes that path is nothing but attribute letters, which no diagnostic
+ * message ever is. That also holds on a localised Windows, where the message is not
+ * English but is still a sentence.
+ */
+export function readAttribOutput(stdout: string): OnDemandState {
+  const flags: string[] = [];
+
+  for (const line of stdout.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+
+    const path = line.search(ATTRIB_PATH);
+    if (path === -1) continue;
+
+    const field = line.slice(0, path);
+    if (!ATTRIB_FLAGS.test(field)) continue;
+
+    flags.push(field);
+  }
+
+  // No line was an attribute line: an empty folder, a message this does not recognise,
+  // a drive that answered in a way nobody anticipated. All of them mean "no evidence",
+  // which is `unknown` — and `unknown` never blocks a scan.
+  if (flags.length === 0) return "unknown";
+
+  if (flags.some((field) => field.includes("U"))) return "ondemand";
+  if (flags.some((field) => field.includes("P"))) return "ok";
+  return "unknown";
+}
+
+/**
  * Is the vault set to "always keep on this device"?
  *
  * OneDrive's Files On-Demand leaves files on disk as empty placeholders. An indexer
@@ -163,18 +223,12 @@ export async function checkFilesOnDemand(vault: string): Promise<OnDemandState> 
   }
 
   if (process.platform === "win32") {
-    // attrib shows U for unpinned (may be evicted) and P for pinned.
     try {
       const { stdout } = await run("attrib", [join(vault, "*"), "/s"], {
         windowsHide: true,
         timeout: 5000,
       });
-      const lines = stdout.split(/\r?\n/).filter((line) => line.trim() !== "");
-      if (lines.length === 0) return "unknown";
-      const flags = lines.map((line) => line.slice(0, 21));
-      if (flags.some((line) => line.includes("U"))) return "ondemand";
-      if (flags.some((line) => line.includes("P"))) return "ok";
-      return "unknown";
+      return readAttribOutput(stdout);
     } catch {
       return "unknown";
     }
