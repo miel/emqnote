@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -86,9 +87,20 @@ describe("saveAttachment", () => {
 });
 
 describe("resolveAttachment", () => {
+  /**
+   * Compared against the *real* path, not the one `mkdtemp` handed back.
+   *
+   * `resolveAttachment` returns what `realpathSync` says, deliberately: following the
+   * symlinks is the guard, not a side effect of it. On macOS that shows up right here,
+   * because `/var` is itself a symlink to `/private/var` — so a temp vault under
+   * `/var/folders/…` resolves to `/private/var/folders/…` and an assertion against the
+   * unresolved path fails on macOS while passing on Linux and Windows. Which is exactly
+   * how this was found: the per-platform `npm test` in `build.yml` caught it on the
+   * first pull request after it was added.
+   */
   it("resolves a file that is really there", () => {
     const name = saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
-    expect(resolveAttachment(vault, name)).toBe(join(vault, "_attachments", name));
+    expect(resolveAttachment(vault, name)).toBe(realpathSync(join(vault, "_attachments", name)));
   });
 
   it("refuses a name that tries to escape _attachments/", () => {
