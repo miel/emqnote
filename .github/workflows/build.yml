@@ -51,6 +51,17 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # The suite again, per platform. `check` above already ran it, on Linux — which
+      # says nothing about the code that only executes somewhere else: `vault.ts` shells
+      # out to `attrib` on Windows and stats block counts on macOS, `filename.ts` exists
+      # for Windows' reserved names, and every path comparison in the app meets a
+      # backslash for the first time here. A Files On-Demand bug shipped in v0.3.2
+      # precisely because this line was missing and only `release.yml` ran the suite on
+      # Windows: the failure appeared when the release was cut, not when the commit
+      # landed. Cheap next to the pack step it precedes, and it fails first.
+      - run: npm test
+
       - run: npm run icons
       - run: npm run ${{ matrix.command }}
         env:
