@@ -13,7 +13,7 @@ Last updated 5 August 2026, at `v0.3.3`.
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
 | 3 — the library window | **Done, now including dragging in the tree** — the one work item that was still outstanding, built 4 August 2026. Shipped before phase 4; the two were swapped in practice. |
-| 4 — **pasting and images** | **Deferred, deliberately.** Real samples finally arrived and reshaped what's actually unknown here — see below — but confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Picking this back up then. |
+| 4 — **pasting and images** | **Split, and half of it is done.** *Images* landed 5 August 2026: an image or PDF can be pasted, dropped or picked, lands in `_attachments/`, and renders inline (B28). *Pasting from Outlook* — the `mso-list` reconstruction — is still **deferred, deliberately**: real samples reshaped what's actually unknown here (see below), and confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Note that `handlePaste` deliberately claims image files only and passes everything else through, precisely so that work is neither preempted nor complicated. |
 | 5 — index and search | **Done.** Search bar, conflict banner (diff + keep/keep/merge) and the orphaned-attachments cleanup screen are all wired end to end — IPC, preload, real UI — and confirmed actually working via `Xvfb`: a real conflict pair resolved on disk, a real orphaned attachment trashed on disk, not just rendered. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
@@ -28,6 +28,21 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 ---
 
 ## Open items worth your attention
+
+- **Two things from PR #2 are built but were never seen working.** Neither
+  could be reached by automation, so neither is claimed as tested: whether the
+  **capture window** really draws an inline attachment (its CSP and NodeView
+  are in place, and the same code demonstrably works in the library, but no
+  image was ever got into that window under `Xvfb`), and the **Tasks view's
+  click → IPC wiring** (`toggleTask` was driven directly against real files and
+  behaves correctly; the click that calls it is unexercised, because
+  `--click-button` does not match task rows). `TEST-PROTOCOL.md` §4 and §6 walk
+  through both. Do this before the next tag.
+- **The index rebuilds itself once, on first launch after PR #2.** `migrate()`
+  now carries a `PRAGMA user_version` and drops its tables on a bump (B26), so
+  the first start re-scans the whole vault with the progress bar showing. That
+  is expected, happens once per machine, and touches nothing in the vault — the
+  index lives in the app-data folder (B9).
 
 - **Did `v0.2.0` ever actually reach your Mac?** If you updated to `v0.2.0`
   between its release and the `v0.2.1` fix, the `.app` would have refused to

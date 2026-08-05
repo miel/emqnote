@@ -46,6 +46,18 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
 auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.3`.
 
+Op 5 augustus 2026 landden vijf dingen uit het dagelijks gebruik, als PR #2: een
+takenoverzicht over alle notities in een map en zijn submappen, met afvinken vanuit die
+lijst; *Map verwijderen*, met een waarschuwing die noemt wat er meegaat; versleepbare
+kolombreedtes in de bibliotheek, die een herstart overleven; en het invoegen van een
+afbeelding of een PDF via plakken, slepen of de bestandskiezer. Drie ervan staan als
+besluit vast: **B26** (taken zijn een eigen weergave en hun status staat in de index),
+**B27** (een map verwijderen is een verhuizing naar de prullenbak) en **B28** (bijlagen
+komen er via één weg in, geserveerd via een eigen protocol). Twee onderdelen zijn wel
+gebouwd maar nooit werkend gezien — of het opnamevenster een bijlage werkelijk tekent, en
+de klik die het afvinken aanroept; `TEST-PROTOCOL.md` beschrijft hoe je die met de hand
+nagaat.
+
 Op 3 augustus 2026 volgde een reeks van negen correcties uit het gebruik van de
 macOS-release, waarvan er drie één oorzaak deelden: het opnamevenster ving zijn eigen
 `close` niet af, dus de rode stoplichtknop vernietigde het en nam de hotkey en de

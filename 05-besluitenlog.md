@@ -613,6 +613,102 @@ blijft hangen op de `preventDefault()`.
 
 ---
 
+## B26 — Taken zijn een eigen weergave, en hun status staat in de index
+
+**Genomen** op 5 augustus 2026. Het formaat kent afvinkbare taken sinds het begin, maar er
+was geen manier om te zien wat er in een project nog openstaat zonder elke notitie
+afzonderlijk te openen. *Taken* is nu een vierde soort `Selection`, bereikbaar onderaan de
+mappenboom naast *Verweesde bijlagen*: standaard de hele vault, met een mapfilter erin.
+
+**Waarom een eigen weergave en niet een lens op de huidige map.** Een taak hoort bij een
+notitie, en die notitie wil je ernaast kunnen lezen. Als *Taken* een schakelaar boven de
+notitielijst was geweest, was het een derde ding dat om diezelfde kolom vecht — nu staat de
+takenlijst in die kolom en blijft het leesvenster ernaast staan. Een volledig scherm
+erboven, zoals het opruimscherm voor bijlagen, kon om precies dezelfde reden niet.
+
+**Waarom de status in de index staat en niet bij het stellen van de vraag wordt gelezen.**
+`checked` is een attribuut op een `listItem`-knoop, geen tekst. `plainText()` laat het dus
+vallen, de FTS-tabel weet niets van taken, en geen enkele bestaande kolom kan de vraag
+beantwoorden. Blijft over: bij het openen van de weergave de hele deelboom opnieuw
+ontleden — en dat is precies de wandeling die op een vault van 4000 notities gemeten werd
+op 470–535 ms blokkade van de hoofdthread. Dat is wat de scan naar een worker heeft
+gedreven; het langs de achterdeur terughalen is geen optie. Er is daarom een `note_tasks`-
+tabel, gevuld door `buildRecord`, die de volledige scan en de watcher toch al deelden.
+
+**De prijs is een herbouw van de index.** Een bestaande index krijgt die rijen nooit
+vanzelf: `needsRefresh` kijkt naar `mtime`+`size` en slaat een ongewijzigd bestand over.
+`migrate()` houdt daarom een `PRAGMA user_version` bij en gooit de tabellen weg bij een
+verhoging. Dat mag, en juist dáárom staat de index buiten de vault (B9): het is een
+afgeleide cache, geen bron. Er gaat niets verloren, het kost één scan, en de voortgangsbalk
+dekt die al.
+
+**Afvinken gaat door de serializer, en controleert eerst.** `toggleTask` leest het bestand
+opnieuw, ontleedt het, loopt naar het n-de taakitem, **controleert dat de tekst nog steeds
+klopt** en weigert anders. Een indexrij kan achterlopen op de schijf, en het verkeerde
+regeltje omzetten in een bestand dat de gebruiker niet voor zich heeft is het ene
+faalgeval dat het waard is om tegen te ontwerpen. Daarna `serializeNote` en `writeAtomic`,
+nooit in de buurt van de tekst — B6 geldt hier net zo goed.
+
+---
+
+## B27 — Een map verwijderen is een verhuizing naar de prullenbak
+
+**Genomen** op 5 augustus 2026. Mappen konden gemaakt en hernoemd worden, maar nooit weg.
+*Map verwijderen* hernoemt de map naar `_trash`, precies zoals een notitie dat doet, achter
+een bevestiging die het aantal notities en submappen noemt dat meegaat.
+
+**Waarom niet definitief verwijderen.** B24 heeft `emptyTrash` bewust tot de enige plek in
+de app gemaakt die werkelijk iets vernietigt, en die staat achter een eigen bevestiging die
+het aantal noemt en zegt dat het niet ongedaan te maken is. Een tweede onomkeerbare knop
+ernaast zetten haalt dat onderscheid weg — zeker een die niet één notitie maar een hele
+boom raakt.
+
+**Waarom niet "alleen als hij leeg is".** Dat is geen waarschuwing maar een weigering, en
+het verplaatst het werk naar de gebruiker: eerst twaalf notities ergens anders heen, dan
+pas de map weg. De vraag die gesteld werd was een waarschuwing bij een niet-lege map, niet
+een verbod erop.
+
+**De weigeringen zijn die van `renameFolder`.** Dezelfde `FOLDER_ERROR`-codes, dezelfde
+volgorde: de wortel niet, de eigen mappen van de app niet, niets dat buiten de vault
+uitkomt, en niets dat er niet meer is. Twee operaties met dezelfde gevaren horen dezelfde
+antwoorden te geven, en het is wat de renderer toelaat beide door één `folderErrorOf` te
+halen. Daar bovenop weigert de IPC-laag een map waarin het opnamevenster een notitie
+geclaimd heeft — hetzelfde gevaar als bij `libraryMoveNote`, een niveau hoger.
+
+---
+
+## B28 — Bijlagen komen er via één weg in, en worden geserveerd via een eigen protocol
+
+**Genomen** op 5 augustus 2026. Plakken, slepen en de bestandskiezer landen alle drie op
+één `insertAttachment`. Het bestand gaat naar `_attachments/` onder de naam
+`YYYY-MM-DD-HHmm-<slug>.ext` die de corpusbestanden al gebruikten; een afbeelding wordt
+`![[…]]` en staat in de editor als de afbeelding zelf, al het andere wordt `[[…]]` en staat
+er als een label dat in de systeemviewer opent.
+
+**Dit bestond nog niet.** `orphaned-attachments.ts` kon een bijlage al opruimen en het
+dialect kon er al naar verwijzen, maar geen enkele regel code kon er één *maken* — een
+bijlage kwam de vault alleen binnen door hem met de hand in de map te zetten.
+
+**Waarom een eigen protocol en geen `data:`-URL.** Het opruimscherm gebruikt er één voor
+zijn miniatuur, en dat mag daar blijven: één bestand, één keer. In een notitie met drie
+schermafdrukken zou het betekenen dat elke afbeelding een derde groter door de IPC gaat en
+bij elke render opnieuw. `emqnote-attachment://` leest van schijf, en `resolveAttachment`
+weigert alles wat via `realpathSync` buiten `_attachments/` uitkomt — het volgen van
+symlinks *is* de bewaking, dezelfde redenering als bij `emptyTrash`. Beide vensters kregen
+`emqnote-attachment:` in hun CSP; het opnamevenster had er nog helemaal geen `img-src`.
+
+**Plakken claimt alleen afbeeldingen.** `handlePaste` geeft alles wat geen afbeelding is
+onaangeroerd door aan de bestaande route. Het plakwerk uit Outlook (§6.3) is uitgesteld en
+niet vergeten, en dit mag het niet vóór de voeten lopen of ingewikkelder maken.
+
+**De `attachments:`-frontmatter wordt niet bijgewerkt.** `saveNote` beheert dat veld niet,
+en het wél bijwerken zou betekenen dat het invoegen van één afbeelding de kop van de
+notitie herschrijft. Dat is B10 van de andere kant benaderd, en hetzelfde bezwaar dat
+`summarise` ervan weerhoudt tags uit de tekst naar de frontmatter te kopiëren. De verwijzing
+in de tekst is wat `collectWikiTargets` leest, en dat is genoeg.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -622,4 +718,5 @@ blijft hangen op de `preventDefault()`.
 | Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
+| Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |
