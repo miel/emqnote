@@ -623,6 +623,25 @@
   white-space: nowrap;
 }
 
+/* Swaps in for the `<h1>` above while the title is being edited — same font-size and
+   font-weight, so the reader header does not visibly jump or reflow when the two trade
+   places. */
+.reader-title-input {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 17px;
+  /* `.reader-header h1` sets no font-weight of its own, so it renders at the browser's
+     default bold for a heading — matched here explicitly, since a plain `<input>` has
+     no such default and would otherwise render lighter than the text it replaces. */
+  font-weight: bold;
+}
+
 .reader-path {
   font-size: 11px;
   color: var(--muted);

@@ -13,10 +13,12 @@ or look at a screen and see that an image is actually there. Everything below is
 gap. Nothing here duplicates a test that already exists — if `npm test` covers it, it is
 not in this document.
 
-Two items in particular have **never been seen working** and are the reason this file
-exists: §4.2 (does the capture window really draw an attachment) and §6.3 (does clicking a
-checkbox in the Tasks view actually reach the file). Both have proven code underneath and
-an unproven click on top. Start there if you only have ten minutes.
+Three items in particular have **never been seen working** and are the reason this file
+exists: §4.2 (does the capture window really draw an attachment), §6.3 (does clicking a
+checkbox in the Tasks view actually reach the file), and §9.2 (does the caret actually step
+across an inline image in the capture window, rather than landing in an invisible node
+selection). All three have proven code underneath and an unproven interaction on top. Start
+there if you only have ten minutes.
 
 ## Before you start
 
@@ -308,6 +310,53 @@ which is not enough, and it is the tighter platform.
 
 ---
 
+## 9. Two editor fixes: scroll room and caret beside an image (6 August 2026)
+
+Both came out of the same commit and the same complaint: the editor felt cramped at the
+bottom of a long note, and arrowing past an inline image did something invisible instead of
+moving the caret.
+
+### 9.1 Scroll room past the last line
+
+`.editor-content` now carries 25vh of blank padding below the last line, so a long note can
+scroll its last line away from the bottom edge instead of sitting jammed against it.
+ProseMirror's own contenteditable region still ends where the content ends — the padding is
+not part of it — which is the part worth actually checking, not just the extra space.
+
+| # | Step | Expected |
+|---|---|---|
+| 9.1a | Open or type a note long enough to fill the window and scroll | With the caret on the last line, there is comfortable room to scroll it up away from the bottom edge, rather than the last line sitting flush against it |
+| 9.1b | Scroll all the way down, then click in the blank space below the last line | The caret does **not** land there — clicking below the content moves it to the end of the last line instead, the way clicking past the end of a text file always has. The blank space is not typeable |
+| 9.1c | Do 9.1a in the **capture window** | Same feel |
+| 9.1d | Do 9.1a in the **library reader** | Same feel |
+| 9.1e | Resize the window shorter, then taller again, while scrolled to the bottom | The padding does not fight the resize — no jump, no runaway scroll position |
+
+This is a "does this feel right" question, not a pass/fail one — there is no CDP selector
+for "comfortable." Judge it the way you would judge any editor's bottom margin.
+
+### 9.2 Caret beside an image in the capture window — NEVER VERIFIED
+
+This is the twin of §4.2's problem, one level further in: nobody has ever gotten an image
+to draw in the capture window under Xvfb, so `moveOverAtom` (`commands.ts`) — which is
+supposed to steer the arrow keys across a `wikiEmbed`/`wikiLink` atom instead of leaving an
+invisible `NodeSelection` — has never been exercised there against a real render either.
+`test/image-caret.test.ts` covers it against a synthetic ProseMirror document, and that is
+all anyone knows about whether it actually works on screen.
+
+| # | Step | Expected |
+|---|---|---|
+| 9.2a | In the capture window, get an image inline (paste a screenshot, or insert one with the attachment button) — this is §4.2's own check, and it has to pass first | The image itself appears inline, not a filename and not a broken-image icon |
+| 9.2b | Put the caret in the text immediately before the image, press the arrow key that would step onto it | The blinking text caret lands on the far side of the image. **Not** a silent, invisible selection — nothing should look like the arrow key did nothing |
+| 9.2c | Click directly on the image | It shows a visible outline (the `.ProseMirror-selectednode` styling this fix added). Before this fix a click here selected the node with nothing on screen saying so |
+| 9.2d | With the image selected that way (from 9.2c), press an arrow key | The text caret appears beside the image, on the side the arrow pointed — the same destination as 9.2b, reached from a node selection instead of a text one |
+| 9.2e | Shift+arrow across the image instead | A visible extended selection that includes the image, not a jump or a no-op |
+| 9.2f | Repeat 9.2b–9.2e in the **library reader**, where an image is already known to draw (§4.1) | Same behaviour. This isolates whether a capture-window failure is about drawing the image at all (§4.2) or about the caret logic specifically — the reader gives a known-good baseline for the same `commands.ts` code |
+
+If 9.2a itself fails — no image ever appears — that is §4.2's bug, not this one, and it
+blocks the rest of this section the same way it blocks §4.2's own remaining steps.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -316,5 +365,5 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2 or §6.3 fails, that is expected-ish rather than alarming: those two
-are why this document exists.
+If something in §4.2, §6.3 or §9.2 fails, that is expected-ish rather than alarming: those
+three are why this document exists.

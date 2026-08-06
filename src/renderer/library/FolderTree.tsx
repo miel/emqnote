@@ -36,7 +36,6 @@ interface Props {
   canCreateFolder: boolean;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
-  onOpenOrphanedAttachments: () => void;
   /** Selects the Tasks view — vault-wide by default, with a scope dropdown inside the view itself. */
   onOpenTasks: () => void;
   /** Whether the Tasks view is what is currently showing, for the same highlight the Trash branch gets. */
@@ -46,7 +45,6 @@ interface Props {
   deleteFolderLabel: string;
   helpLabel: string;
   settingsLabel: string;
-  orphanedAttachmentsLabel: string;
   tasksLabel: string;
   trashLabel: string;
   tagsLabel: string;
@@ -243,7 +241,6 @@ export function FolderTree({
   canCreateFolder,
   onOpenSettings,
   onOpenHelp,
-  onOpenOrphanedAttachments,
   onOpenTasks,
   tasksSelected,
   newFolderLabel,
@@ -251,7 +248,6 @@ export function FolderTree({
   deleteFolderLabel,
   helpLabel,
   settingsLabel,
-  orphanedAttachmentsLabel,
   tasksLabel,
   trashLabel,
   tagsLabel,
@@ -337,27 +333,22 @@ export function FolderTree({
           filterLabel={filterLabel}
         />
 
-        {trash !== null && (
-          <ul>
-            <Branch
-              node={{ ...trash, name: trashLabel }}
-              depth={0}
-              selected={selected}
-              onSelect={onSelect}
-              glyph={trashGlyph}
-              // No new folders inside the trash: it is a destination for deleted notes,
-              // not a place to organise.
-              onCreateFolder={() => {}}
-              // And no drops either: Delete is what puts a note in here, and it asks
-              // first. `onDropNote` left off entirely rather than passed as a no-op, so
-              // the branch never even offers to accept one.
-              dragging={dragging}
-            />
-          </ul>
-        )}
+        {/* A fourth `Selection` kind, not a lens on the currently browsed folder — vault-
+            wide by default, with its own scope dropdown inside the view. Highlighted the
+            same way the Trash branch is, since unlike Settings/Help it is a real
+            destination that can stay selected. */}
+        <div
+          className={`branch tree-settings${tasksSelected ? " branch-on" : ""}`}
+          style={{ paddingLeft: "8px" }}
+          onClick={onOpenTasks}
+        >
+          <span className="twisty twisty-empty" />
+          <span className="filter-glyph">{tasksGlyph}</span>
+          <span className="branch-name">{tasksLabel}</span>
+        </div>
 
         {/* The gear moved out of the twisty slot and into the glyph slot, so all four
-            rows down here — Tags, People, Trash, Settings — put their icon in one
+            rows down here — Tags, People, Tasks, Settings — put their icon in one
             column and their label in the next. It used to sit a slot to the left, and
             "Settings" started half a character before "Tags". */}
         <div
@@ -380,32 +371,24 @@ export function FolderTree({
           <span className="branch-name">{helpLabel}</span>
         </div>
 
-        {/* A fourth `Selection` kind, not a lens on the currently browsed folder — vault-
-            wide by default, with its own scope dropdown inside the view. Highlighted the
-            same way the Trash branch is, since unlike Settings/Help/Orphaned below it is
-            a real destination that can stay selected. */}
-        <div
-          className={`branch tree-settings${tasksSelected ? " branch-on" : ""}`}
-          style={{ paddingLeft: "8px" }}
-          onClick={onOpenTasks}
-        >
-          <span className="twisty twisty-empty" />
-          <span className="filter-glyph">{tasksGlyph}</span>
-          <span className="branch-name">{tasksLabel}</span>
-        </div>
-
-        {/* §6.5's manual, explicit cleanup action — deliberately down here with Settings
-            and Help rather than anywhere more prominent, since nothing about it is
-            urgent the way a sync conflict is. */}
-        <div
-          className="branch tree-settings"
-          style={{ paddingLeft: "8px" }}
-          onClick={onOpenOrphanedAttachments}
-        >
-          <span className="twisty twisty-empty" />
-          <span className="filter-glyph">⎚</span>
-          <span className="branch-name">{orphanedAttachmentsLabel}</span>
-        </div>
+        {trash !== null && (
+          <ul>
+            <Branch
+              node={{ ...trash, name: trashLabel }}
+              depth={0}
+              selected={selected}
+              onSelect={onSelect}
+              glyph={trashGlyph}
+              // No new folders inside the trash: it is a destination for deleted notes,
+              // not a place to organise.
+              onCreateFolder={() => {}}
+              // And no drops either: Delete is what puts a note in here, and it asks
+              // first. `onDropNote` left off entirely rather than passed as a no-op, so
+              // the branch never even offers to accept one.
+              dragging={dragging}
+            />
+          </ul>
+        )}
       </div>
     </nav>
   );

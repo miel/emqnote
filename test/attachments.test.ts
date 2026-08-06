@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -10,7 +11,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { attachmentName, resolveAttachment, saveAttachment } from "../src/main/attachments.js";
+import {
+  attachmentName,
+  copyAttachment,
+  resolveAttachment,
+  saveAttachment,
+} from "../src/main/attachments.js";
 import { findOrphanedAttachments } from "../src/main/orphaned-attachments.js";
 
 /**
@@ -61,27 +67,74 @@ describe("attachmentName", () => {
 });
 
 describe("saveAttachment", () => {
-  it("writes the file into _attachments/ under its generated name and returns the bare name", () => {
-    const name = saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
+  it("writes the file into _attachments/ under its generated name and returns the bare name", async () => {
+    const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
 
     expect(name).not.toContain("/");
     expect(name).not.toContain("\\");
     expect(existsSync(join(vault, "_attachments", name))).toBe(true);
   });
 
-  it("unique-ifies on a name collision without losing either file", () => {
+  it("unique-ifies on a name collision without losing either file", async () => {
     const bytes = new TextEncoder().encode("binary");
-    const first = saveAttachment(vault, bytes, "foto.png");
-    const second = saveAttachment(vault, bytes, "foto.png");
+    const first = await saveAttachment(vault, bytes, "foto.png");
+    const second = await saveAttachment(vault, bytes, "foto.png");
 
     expect(second).not.toBe(first);
     expect(existsSync(join(vault, "_attachments", first))).toBe(true);
     expect(existsSync(join(vault, "_attachments", second))).toBe(true);
   });
 
-  it("creates _attachments/ when the vault does not have one yet", () => {
+  it("creates _attachments/ when the vault does not have one yet", async () => {
     expect(existsSync(join(vault, "_attachments"))).toBe(false);
-    saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
+    await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
+    expect(existsSync(join(vault, "_attachments"))).toBe(true);
+  });
+});
+
+/**
+ * The sibling `saveAttachment` gained so the picker's IPC handler never has to load a
+ * multi-megabyte file into a JS `Buffer` in this process just to hand it straight back
+ * to `writeFile` — `copyFile` streams it directly to the `.tmp` path instead.
+ */
+describe("copyAttachment", () => {
+  function writeSourceFile(name: string, contents: string): string {
+    const path = join(vault, name);
+    writeFileSync(path, contents);
+    return path;
+  }
+
+  it("copies the source file into _attachments/ under its generated name", async () => {
+    const source = writeSourceFile("offerte.pdf", "%PDF-1.4 pretend contents");
+
+    const name = await copyAttachment(vault, source, "offerte.pdf");
+
+    expect(name).not.toContain("/");
+    expect(existsSync(join(vault, "_attachments", name))).toBe(true);
+    expect(readFileSync(join(vault, "_attachments", name), "utf8")).toBe(
+      "%PDF-1.4 pretend contents",
+    );
+    // The source file itself is untouched — this copies, it does not move.
+    expect(existsSync(source)).toBe(true);
+  });
+
+  it("unique-ifies on a name collision without losing either file", async () => {
+    const source = writeSourceFile("offerte.pdf", "eerste versie");
+
+    const first = await copyAttachment(vault, source, "offerte.pdf");
+    const second = await copyAttachment(vault, source, "offerte.pdf");
+
+    expect(second).not.toBe(first);
+    expect(existsSync(join(vault, "_attachments", first))).toBe(true);
+    expect(existsSync(join(vault, "_attachments", second))).toBe(true);
+  });
+
+  it("creates _attachments/ when the vault does not have one yet", async () => {
+    const source = writeSourceFile("offerte.pdf", "inhoud");
+    expect(existsSync(join(vault, "_attachments"))).toBe(false);
+
+    await copyAttachment(vault, source, "offerte.pdf");
+
     expect(existsSync(join(vault, "_attachments"))).toBe(true);
   });
 });
@@ -98,8 +151,8 @@ describe("resolveAttachment", () => {
    * how this was found: the per-platform `npm test` in `build.yml` caught it on the
    * first pull request after it was added.
    */
-  it("resolves a file that is really there", () => {
-    const name = saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
+  it("resolves a file that is really there", async () => {
+    const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
     expect(resolveAttachment(vault, name)).toBe(realpathSync(join(vault, "_attachments", name)));
   });
 
@@ -139,8 +192,8 @@ describe("resolveAttachment", () => {
 });
 
 describe("a saved attachment nothing references yet", () => {
-  it("is found by findOrphanedAttachments", () => {
-    const name = saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
+  it("is found by findOrphanedAttachments", async () => {
+    const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
     expect(findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
   });
 });

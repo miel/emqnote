@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CaptureWriter, type WriteResult } from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
@@ -25,6 +25,10 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(vault, { recursive: true, force: true });
 });
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** The Inbox is only created when there is actually something to write. */
 function notesIn(): string[] {
@@ -284,5 +288,139 @@ describe("newNoteIn", () => {
 
     expect(existsSync(join(vault, relativePath))).toBe(true);
     expect(existsSync(join(vault, "01 Projecten"))).toBe(false);
+  });
+});
+
+/**
+ * A changed subject renames the file, but only once the session is handed away —
+ * `finish`, `load`, or a `flush` (blur, before-install, quit) — never from the debounced
+ * per-keystroke write `update` schedules. Renaming on every one of those would leave a
+ * trail of half-finished/renamed files behind on OneDrive as the user types.
+ */
+describe("renaming on a changed subject", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("never renames from the debounced write, even though the subject changed", async () => {
+    const { writer } = makeWriter();
+
+    // `vi.advanceTimersByTimeAsync` only fakes the timer itself, not the real disk I/O
+    // its callback kicks off, so a short real wait follows each advance — the same
+    // margin `sleep(20)` gives real-timer tests elsewhere in this suite.
+    vi.useFakeTimers();
+    writer.update(payload(paragraphs("Eerste titel")));
+    await vi.advanceTimersByTimeAsync(800);
+    vi.useRealTimers();
+    await sleep(20);
+
+    expect(notesIn()).toEqual([expect.stringContaining("Eerste titel")]);
+
+    vi.useFakeTimers();
+    writer.update(payload(paragraphs("Tweede titel")));
+    await vi.advanceTimersByTimeAsync(800);
+    vi.useRealTimers();
+    await sleep(20);
+
+    // The content caught up (a real write happened), but the file name did not.
+    const afterDebounce = notesIn();
+    expect(afterDebounce).toEqual([expect.stringContaining("Eerste titel")]);
+    expect(readFileSync(join(vault, INBOX, afterDebounce[0]!), "utf8")).toContain(
+      "title: Tweede titel",
+    );
+
+    // Only handing the session away catches the file name up.
+    await writer.finish();
+    const afterCommit = notesIn();
+    expect(afterCommit).toEqual([expect.stringContaining("Tweede titel")]);
+  });
+
+  it("renames on finish() when the subject changed before commit", async () => {
+    const { writer } = makeWriter();
+
+    writer.update(payload(paragraphs("Eerste titel")));
+    await writer.flush();
+    writer.update(payload(paragraphs("Tweede titel")));
+
+    const result = await writer.finish();
+
+    expect(notesIn()).toEqual([expect.stringContaining("Tweede titel")]);
+    expect(basenameOf(result.path!)).toContain("Tweede titel");
+  });
+
+  it("does not rename when the subject never changed", async () => {
+    const { writer } = makeWriter();
+
+    writer.update(payload(paragraphs("Stabiele titel")));
+    await writer.flush();
+    const before = notesIn();
+
+    const result = await writer.finish();
+
+    expect(notesIn()).toEqual(before);
+    expect(basenameOf(result.path!)).toBe(before[0]);
+  });
+
+  it("renames on flush() too, not only on finish()/load()", async () => {
+    const { writer } = makeWriter();
+
+    writer.update(payload(paragraphs("Eerste titel")));
+    await writer.flush();
+    writer.update(payload(paragraphs("Tweede titel")));
+
+    const result = await writer.flush();
+
+    expect(notesIn()).toEqual([expect.stringContaining("Tweede titel")]);
+    expect(result.path).not.toBeNull();
+    expect(basenameOf(result.path!)).toContain("Tweede titel");
+  });
+
+  it("carries the new path to the onWritten callback, never a stale pre-rename one", async () => {
+    const { writer, written } = makeWriter();
+
+    writer.update(payload(paragraphs("Eerste titel")));
+    await writer.flush();
+    writer.update(payload(paragraphs("Tweede titel")));
+    await writer.finish();
+
+    const last = written[written.length - 1]!;
+    expect(basenameOf(last.path!)).toContain("Tweede titel");
+    expect(existsSync(last.path!)).toBe(true);
+  });
+
+  it("never renames a note loaded from an existing file, even on finish()", async () => {
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+    writeFileSync(
+      join(vault, relativePath),
+      "---\ntitle: Kickoff project Alpha\ntype: quick\ncreated: 2026-07-25T14:32:00+02:00\n---\n\nEerste versie.\n",
+    );
+
+    const { writer } = makeWriter();
+    await writer.load(openNote(vault, relativePath)!);
+    writer.update(
+      payload(paragraphs("Eerste versie.", "Nieuwe regel."), {
+        subject: "Een compleet andere titel",
+        created: "2026-07-25T14:32:00+02:00",
+      }),
+    );
+
+    await writer.finish();
+
+    expect(existsSync(join(vault, relativePath))).toBe(true);
+  });
+
+  it("renames in the folder the note was filed into, not the Inbox (B29)", async () => {
+    const { writer } = makeWriter();
+
+    writer.newNoteIn("01 Projecten/Alpha");
+    writer.update(payload(paragraphs("Eerste titel")));
+    await writer.flush();
+    writer.update(payload(paragraphs("Tweede titel")));
+
+    const result = await writer.finish();
+
+    expect(result.path!.startsWith(join(vault, "01 Projecten", "Alpha"))).toBe(true);
+    expect(basenameOf(result.path!)).toContain("Tweede titel");
   });
 });

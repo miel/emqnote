@@ -1,11 +1,5 @@
-import {
-  existsSync,
-  mkdirSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { copyFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { sanitiseTitle } from "./filename.js";
 import { ATTACHMENTS } from "./vault.js";
@@ -86,15 +80,50 @@ function uniqueAttachmentPath(directory: string, fileName: string): string {
  *
  * Atomic like every other write in this app: `.tmp` then `rename()`, so a renderer
  * that reads the protocol mid-write never sees a half-written file.
+ *
+ * Async on purpose: `bytes` can be a multi-megabyte PDF, and a synchronous write of
+ * that on the main thread blocks every IPC channel in both windows for as long as it
+ * takes — the hotkey included, not just this attachment. `copyAttachment` below is the
+ * sibling for the common case where the source is already a file on disk, which never
+ * needs the bytes in a JS `Buffer` here at all.
  */
-export function saveAttachment(vault: string, bytes: Uint8Array, originalName: string): string {
+export async function saveAttachment(
+  vault: string,
+  bytes: Uint8Array,
+  originalName: string,
+): Promise<string> {
   const directory = join(vault, ATTACHMENTS);
-  mkdirSync(directory, { recursive: true });
+  await mkdir(directory, { recursive: true });
 
   const target = uniqueAttachmentPath(directory, attachmentName(originalName, new Date()));
   const temporary = `${target}.tmp`;
-  writeFileSync(temporary, bytes);
-  renameSync(temporary, target);
+  await writeFile(temporary, bytes);
+  await rename(temporary, target);
+
+  return basename(target);
+}
+
+/**
+ * Same destination and naming as `saveAttachment`, but for a file already sitting on
+ * disk — the file picker's own choice, in practice, as opposed to bytes a paste or a
+ * drop already holds in the renderer. `copyFile` streams directly to the `.tmp` path
+ * without ever materialising the file's bytes as a `Buffer` in this process, which is
+ * what makes this worth having as its own function rather than a `readFile` in front of
+ * `saveAttachment`: a multi-megabyte PDF should not cost a multi-megabyte allocation
+ * here just to move it a few folders over.
+ */
+export async function copyAttachment(
+  vault: string,
+  sourcePath: string,
+  originalName: string,
+): Promise<string> {
+  const directory = join(vault, ATTACHMENTS);
+  await mkdir(directory, { recursive: true });
+
+  const target = uniqueAttachmentPath(directory, attachmentName(originalName, new Date()));
+  const temporary = `${target}.tmp`;
+  await copyFile(sourcePath, temporary);
+  await rename(temporary, target);
 
   return basename(target);
 }

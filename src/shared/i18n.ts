@@ -91,6 +91,8 @@ const DUTCH: Record<string, string> = {
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij verplaatst worden.",
   "library.taskLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kunnen de taken hier aangevinkt worden.",
+  "library.renameLocked":
+    "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij hernoemd worden.",
   "library.tasks": "Taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
@@ -174,6 +176,7 @@ const DUTCH: Record<string, string> = {
   "orphans.title": "Verweesde bijlagen",
   "orphans.loading": "Bezig met zoeken…",
   "orphans.empty": "Geen verweesde bijlagen gevonden.",
+  "orphans.settingsHint": "Bestanden in _attachments/ waar geen notitie meer naar verwijst.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
@@ -267,6 +270,8 @@ const ENGLISH: Record<string, string> = {
     "This note is open in the note window. Close it there first, then it can be moved.",
   "library.taskLocked":
     "This note is open in the note window. Close it there first, then its tasks can be ticked here.",
+  "library.renameLocked":
+    "This note is open in the note window. Close it there first, then it can be renamed.",
   "library.tasks": "Tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
@@ -345,6 +350,7 @@ const ENGLISH: Record<string, string> = {
   "orphans.title": "Orphaned attachments",
   "orphans.loading": "Looking…",
   "orphans.empty": "No orphaned attachments found.",
+  "orphans.settingsHint": "Files in _attachments/ that no note points to any more.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",

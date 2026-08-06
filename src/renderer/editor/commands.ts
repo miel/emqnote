@@ -18,8 +18,17 @@ import { schema } from "../../markdown/schema.js";
 
 type Dispatch = ((tr: Transaction) => void) | undefined;
 
-const { bulletList, orderedList, listItem, paragraph, heading, hardBreak, blockquote } =
-  schema.nodes;
+const {
+  bulletList,
+  orderedList,
+  listItem,
+  paragraph,
+  heading,
+  hardBreak,
+  blockquote,
+  wikiEmbed,
+  wikiLink,
+} = schema.nodes;
 
 /**
  * The editing commands behind the Outlook shortcuts.
@@ -489,6 +498,40 @@ export const backspace: Command = (state, dispatch) => {
 
   return liftListItem(listItem!)(state, dispatch);
 };
+
+/**
+ * Arrow-key movement past an inline atom (`wikiEmbed` or `wikiLink`).
+ *
+ * Both nodes are `atom: true`, and ProseMirror's default arrow handling prefers turning
+ * an atom into a `NodeSelection` over moving the text caret past it — which is invisible,
+ * since nothing in `styles.css` used to style `.ProseMirror-selectednode`. A valid text
+ * caret position already exists on either side of the node (it is inline, not a gap that
+ * needs a `prosemirror-gapcursor`), so the fix is only to make an ordinary arrow press
+ * prefer that position over the node selection ProseMirror reaches for first.
+ *
+ * Only engages on a plain caret: a non-empty selection (including one Shift is in the
+ * middle of extending) is left alone, and so is every other case where the adjacent slot
+ * is not one of these two node types — a textblock boundary among them, since
+ * `nodeBefore`/`nodeAfter` are `null` there rather than reaching into a neighbouring
+ * block.
+ */
+export function moveOverAtom(direction: "left" | "right"): Command {
+  return (state, dispatch) => {
+    const { $from, empty } = state.selection;
+    if (!empty) return false;
+
+    const node = direction === "right" ? $from.nodeAfter : $from.nodeBefore;
+    if (node === null || (node.type !== wikiEmbed && node.type !== wikiLink)) return false;
+
+    const target = direction === "right" ? $from.pos + node.nodeSize : $from.pos - node.nodeSize;
+
+    if (dispatch) {
+      dispatch(state.tr.setSelection(TextSelection.create(state.doc, target)).scrollIntoView());
+    }
+
+    return true;
+  };
+}
 
 /** Shift+Enter: a soft break inside the same paragraph or list item. */
 export const softBreak: Command = (state, dispatch) => {

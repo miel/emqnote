@@ -9,8 +9,8 @@ import {
   protocol,
   shell,
   type MenuItemConstructorOptions,
+  type OpenDialogOptions,
 } from "electron";
-import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { IPC, type CapturePayload } from "../shared/ipc.js";
@@ -82,7 +82,7 @@ import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
-import { resolveAttachment, saveAttachment } from "./attachments.js";
+import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -132,6 +132,15 @@ if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
 
 let lastLatency: number | null = null;
 let lastSavedAs: string | null = null;
+/**
+ * The vault path, cached so `registerAttachmentProtocol`'s handler does not read
+ * `settings.json` from disk on every single attachment request — a note with several
+ * inline images re-issues that read on every one of them, and again on every `setDoc`.
+ * Kept in step by `adoptVault`, the only place the path actually changes, and seeded
+ * once at startup in `main`; nothing else needs it, since every other reader here can
+ * afford `loadSettings()`.
+ */
+let cachedVaultPath: string | null = null;
 /**
  * The search index (`02-technisch-ontwerp.md` §7). Opened once in `main`, after
  * `app.whenReady`, since its path lives under `app.getPath("userData")` — B9, same
@@ -245,6 +254,7 @@ async function main(): Promise<void> {
 
   const selfTestRounds = launch.selfTestRounds;
   const settings = loadSettings();
+  cachedVaultPath = settings.vaultPath;
 
   installMinimalMenu();
   registerAttachmentProtocol();
@@ -378,16 +388,19 @@ function installMinimalMenu(): void {
  *
  * `net.fetch` on a `file://` URL is the modern replacement for the old
  * `protocol.registerFileProtocol` — it streams rather than buffering the whole file
- * into memory first, which matters once this is a multi-megabyte screenshot. Every
- * request re-resolves the vault from settings rather than capturing it once, the same
- * reasoning `registerLibraryIpc`'s own comment gives: the vault is only known after
- * first run on some machines, and `resolveAttachment` is the security boundary here —
- * a request for a name that does not resolve to a real file inside `_attachments/`
- * gets a 404, never a peek outside it.
+ * into memory first, which matters once this is a multi-megabyte screenshot.
+ *
+ * Reads `cachedVaultPath` rather than calling `loadSettings()` here: a note with
+ * several inline images re-issues this request on every one of them, and again on
+ * every `setDoc`, so a synchronous JSON read on every single one added up. `adoptVault`
+ * is the only place the vault path actually changes and keeps the cache in step, so
+ * this is never more than one event loop turn behind it. `resolveAttachment` is the
+ * security boundary here regardless — a request for a name that does not resolve to a
+ * real file inside `_attachments/` gets a 404, never a peek outside it.
  */
 function registerAttachmentProtocol(): void {
   protocol.handle("emqnote-attachment", (request) => {
-    const vault = loadSettings().vaultPath;
+    const vault = cachedVaultPath;
     if (vault === null) return new Response(null, { status: 404 });
 
     const name = decodeURIComponent(request.url.slice("emqnote-attachment://".length));
@@ -470,6 +483,7 @@ async function prepareVault(): Promise<void> {
  */
 function adoptVault(path: string): void {
   saveSettings({ vaultPath: path });
+  cachedVaultPath = path;
   rememberVault(path);
 }
 
@@ -615,7 +629,7 @@ function registerAppIpc(): void {
 
   ipcMain.handle(
     IPC.saveAttachment,
-    (_event, bytes: ArrayBuffer, originalName: string) => {
+    async (_event, bytes: ArrayBuffer, originalName: string) => {
       const vault = loadSettings().vaultPath;
       if (vault === null) return null;
       return saveAttachment(vault, new Uint8Array(bytes), originalName);
@@ -625,21 +639,33 @@ function registerAppIpc(): void {
   // The picker reads the chosen file itself rather than round-tripping its bytes
   // through the renderer first — unlike a paste or a drop, which start out as bytes
   // already in the browser's hands and have no file on disk to read from directly.
-  ipcMain.handle(IPC.pickAttachment, async () => {
+  ipcMain.handle(IPC.pickAttachment, async (event) => {
     const vault = loadSettings().vaultPath;
     if (vault === null) return null;
 
-    const choice = await dialog.showOpenDialog({
+    // Without a parent, the OS is free to render this non-modally, and it can end up
+    // behind the library window with the renderer sitting in `await pickAttachment()`
+    // looking exactly like a hang — there is simply nothing on screen saying otherwise.
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    const dialogOptions: OpenDialogOptions = {
       title: "Insert an attachment",
       properties: ["openFile"],
       filters: [
         { name: "Images and PDFs", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"] },
       ],
-    });
+    };
+    const choice =
+      parent === null
+        ? await dialog.showOpenDialog(dialogOptions)
+        : await dialog.showOpenDialog(parent, dialogOptions);
     if (choice.canceled || choice.filePaths[0] === undefined) return null;
 
     const path = choice.filePaths[0];
-    return saveAttachment(vault, readFileSync(path), basename(path));
+    // `copyAttachment` streams the file straight to its destination rather than
+    // reading it into a `Buffer` here first — the difference that matters for a
+    // multi-megabyte PDF, which would otherwise block every IPC channel in both
+    // windows for as long as the read (and then the write) took.
+    return copyAttachment(vault, path, basename(path));
   });
 
   // The click that opens a `wikiLink` chip pointing at a real attachment (a PDF, in
@@ -855,12 +881,18 @@ function registerLibraryIpc(): void {
     return { path: moved };
   });
 
+  // Refuses a note the capture window has claimed, the same way `libraryMoveNote` does
+  // and for the same reason: renaming writes straight to the file, bypassing the capture
+  // window's own session, which holds the path it will write to next. Renaming out from
+  // under it would not update that path, so its next debounced write would recreate the
+  // note under its old name.
   ipcMain.handle(IPC.libraryRenameNote, (_event, path: string, title: string) => {
     const vault = vaultPath();
-    if (vault === null) return path;
+    if (vault === null) return { path };
+    if (writer.activePath() === path) return { path, locked: true };
     const renamed = renameNote(vault, path, title);
     notifyLibrary();
-    return renamed;
+    return { path: renamed };
   });
 
   ipcMain.handle(IPC.libraryTrashNote, (_event, path: string) => {

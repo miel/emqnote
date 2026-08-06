@@ -22,8 +22,19 @@ const WRITE_DEBOUNCE_MS = 800;
 export interface CaptureSession {
   createdAt: Date;
   payload: CapturePayload | null;
-  /** Decided on the first real write and never changed afterwards. */
+  /**
+   * Decided on the first real write. Can change after that, but only at commit time
+   * (see `renameSessionFile`) — never from the debounced per-keystroke write.
+   */
   path: string | null;
+  /**
+   * The title `path`'s filename was actually built from — set alongside `path`, both on
+   * the first write and on every rename after that. `renameSessionFile` compares this
+   * against the freshly computed title to tell "the subject changed since the file was
+   * named" from "nothing to do". Stays `null` for a session loaded from an existing
+   * note, where it is never read (title there belongs to Rename, see `existingTitle`).
+   */
+  pathTitle: string | null;
   /**
    * Where a brand-new note gets filed. Vault-relative, POSIX-separated, `""` for the
    * vault root; the Inbox unless the library said otherwise (see `newNoteIn`). Read once,
@@ -50,6 +61,7 @@ export function beginSession(): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: null,
+    pathTitle: null,
     folder: INBOX,
     lastContent: null,
     existingTitle: null,
@@ -88,6 +100,9 @@ export function loadSession(note: OpenedNote): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: note.path,
+    // Never read: `existingTitle` below is what `renameSessionFile` checks first, and it
+    // is non-null here, so this session never renames.
+    pathTitle: null,
     // Never read: this session already has its file. Kept truthful rather than blank so
     // nothing downstream has to know that.
     folder: INBOX,
@@ -187,9 +202,12 @@ const NOTHING: WriteResult = { path: null, written: false, attendees: [], tags: 
 /**
  * Writes the note, unless there is nothing to write.
  *
- * The file name is decided once, on the first write. If the title changes after that,
- * the file stays where it is: renaming while you type would leave a trail of
- * half-finished files, and moving and renaming is work for the main window (phase 4).
+ * The file name is decided on the first write, and never touched here again: this
+ * function is also what runs on every debounced per-keystroke write, and renaming on
+ * every one of those would leave a trail of half-finished/renamed files behind on
+ * OneDrive as the user types. A changed subject still gets picked up — just not here.
+ * See `renameSessionFile`, which `CaptureWriter` runs only at commit time (closing the
+ * window, handing it to another note, or a quit-time flush), never from the timer.
  */
 export async function writeSession(
   session: CaptureSession,
@@ -248,6 +266,7 @@ export async function writeSession(
       session.folder === "" ? vault : join(vault, ...session.folder.split("/"));
     await mkdir(folder, { recursive: true });
     session.path = uniquePath(folder, noteFileName(frontmatter.title, session.createdAt));
+    session.pathTitle = frontmatter.title;
   }
 
   await writeAtomic(session.path, contents);
@@ -259,6 +278,57 @@ export async function writeSession(
     attendees: frontmatter.attendees ?? [],
     tags: frontmatter.tags ?? [],
   };
+}
+
+/**
+ * Renames a brand-new note's file to match a subject that changed after it was named —
+ * but only at commit time (see the comment on `writeSession`), and only when there is
+ * something to do:
+ *
+ *  - a session loaded from an existing note (`existingTitle !== null`) never renames
+ *    here; its title belongs to Rename (B20), and a second way to change it would let
+ *    the two drift.
+ *  - a session that has not written a file yet (`path === null`) has nothing to rename.
+ *  - a title that has not actually changed since `path` was named is a no-op.
+ *
+ * Resolves the new name in the file's *current* directory, never the Inbox: B29 means a
+ * brand-new note may already have been filed somewhere else by `newNoteIn`, and a rename
+ * must not undo that.
+ */
+export async function renameSessionFile(
+  session: CaptureSession,
+  vault: string,
+): Promise<string | null> {
+  if (session.existingTitle !== null) return null;
+  if (session.path === null) return null;
+
+  const payload = session.payload;
+  if (payload === null) return null;
+
+  const doc = schema.nodeFromJSON(payload.doc);
+  const subject = payload.subject.trim();
+  const title = subject === "" ? firstLineOf(doc) : subject;
+  if (title === "" || title === session.pathTitle) return null;
+
+  const directory = dirname(session.path);
+  const candidateName = noteFileName(title, session.createdAt);
+  const candidatePath = join(directory, candidateName);
+
+  // The freshly computed name can still coincide with the file's current name (title
+  // differed only in something `sanitiseTitle` normalises away, such as trailing
+  // whitespace) — in which case there is nothing to rename, and running it through
+  // `uniquePath` regardless would see the file itself as an existing name in the way
+  // and misfile it under a numbered suffix.
+  if (candidatePath === session.path) {
+    session.pathTitle = title;
+    return null;
+  }
+
+  const target = uniquePath(directory, candidateName);
+  await rename(session.path, target);
+  session.path = target;
+  session.pathTitle = title;
+  return target;
 }
 
 /**
@@ -277,7 +347,7 @@ export class CaptureWriter {
   update(payload: CapturePayload): void {
     this.session.payload = payload;
     this.cancelTimer();
-    this.timer = setTimeout(() => void this.flush(), WRITE_DEBOUNCE_MS);
+    this.timer = setTimeout(() => void this.debouncedWrite(), WRITE_DEBOUNCE_MS);
   }
 
   /**
@@ -337,7 +407,7 @@ export class CaptureWriter {
     const finished = this.session;
     this.session = loadSession(note);
     this.cancelTimer();
-    return this.enqueue(finished);
+    return this.enqueue(finished, true);
   }
 
   /**
@@ -354,24 +424,47 @@ export class CaptureWriter {
     const finished = this.session;
     this.session = beginSession();
     this.cancelTimer();
-    return this.enqueue(finished);
+    return this.enqueue(finished, true);
   }
 
-  /** Writes the current note without ending it. Used on quit. */
+  /** Writes the current note without ending it. Used on quit, and on blur/before-install. */
   async flush(): Promise<WriteResult> {
     this.cancelTimer();
-    return this.enqueue(this.session);
+    return this.enqueue(this.session, true);
   }
 
-  private enqueue(session: CaptureSession): Promise<WriteResult> {
+  /**
+   * The debounced per-keystroke write `update` schedules. Deliberately not `commit`: see
+   * the comment on `writeSession` for why a rename must never happen here.
+   */
+  private async debouncedWrite(): Promise<WriteResult> {
+    this.cancelTimer();
+    return this.enqueue(this.session, false);
+  }
+
+  /**
+   * Runs `writeSession`, and — only when `commit` is true — `renameSessionFile`
+   * afterwards, folding whichever path comes out last into the `WriteResult` so a caller
+   * never sees a stale pre-rename path.
+   *
+   * `commit` is true exactly at the points that hand the session away or off the
+   * machine: `finish`, `load`, and `flush` (blur, before-install, quit). It is false only
+   * for the debounced write `update` schedules on every keystroke.
+   */
+  private enqueue(session: CaptureSession, commit: boolean): Promise<WriteResult> {
     const vault = this.vault();
     if (vault === null) return Promise.resolve(NOTHING);
 
     // Queue the writes so a quick Escape right after a keystroke cannot race the
     // deferred write.
     this.queue = this.queue.then(async () => {
-      const result = await writeSession(session, vault);
-      if (result.written) this.onWritten(result);
+      let result = await writeSession(session, vault);
+
+      let renamed: string | null = null;
+      if (commit) renamed = await renameSessionFile(session, vault);
+      if (renamed !== null) result = { ...result, path: renamed };
+
+      if (result.written || renamed !== null) this.onWritten(result);
       return result;
     });
 

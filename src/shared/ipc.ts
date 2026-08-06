@@ -190,7 +190,13 @@ export interface LibraryApi {
    * did nothing, which is the one outcome a drag must never be allowed to look like.
    */
   moveNote: (path: string, folder: string) => Promise<{ path: string; locked?: boolean }>;
-  renameNote: (path: string, title: string) => Promise<string>;
+  /**
+   * Answers the note's path after the rename — unchanged, with `locked`, when the
+   * capture window has this exact note claimed. Mirrors `moveNote`'s shape for the same
+   * reason: renaming writes straight to the file, bypassing the capture window's own
+   * session.
+   */
+  renameNote: (path: string, title: string) => Promise<{ path: string; locked?: boolean }>;
   trashNote: (path: string) => Promise<boolean>;
   /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
   emptyTrash: () => Promise<number>;
