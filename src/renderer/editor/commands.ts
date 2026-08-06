@@ -344,6 +344,66 @@ function enclosingItem($pos: ResolvedPos): PMNode | null {
 }
 
 /**
+ * Rejoins two lists of the same kind that have ended up directly against each other.
+ *
+ * Markdown cannot write that shape: `mdast-util-to-markdown` alternates the bullet
+ * character to keep them apart, so `- one` is followed by `* two` — which reads back as
+ * two lists again, drawn with a gap between them. Every list here is one list unless the
+ * user put something between them, so wherever an edit removes the thing that was in
+ * between, the two halves belong back together.
+ */
+function joinAdjacentLists(tr: Transaction, pos: number): void {
+  if (pos <= 0 || pos >= tr.doc.content.size) return;
+
+  const $pos = tr.doc.resolve(pos);
+  const before = $pos.nodeBefore;
+  const after = $pos.nodeAfter;
+
+  if (before === null || after === null || before.type !== after.type) return;
+  if (before.type !== bulletList && before.type !== orderedList) return;
+
+  tr.join(pos);
+}
+
+/**
+ * Backspace on an empty item with items on both sides of it: remove the item, leave the
+ * list whole.
+ *
+ * `liftListItem` — what Backspace does to a list item everywhere else — takes the item
+ * out to the top level, and from the middle of a list that means splitting it in two with
+ * an empty paragraph wedged between. That is how "press Enter for a new task, change your
+ * mind, press Backspace" turned one task list into two with a gap down the middle. The
+ * gesture means "undo the item I just made", and there is nothing structural to undo.
+ *
+ * Only for an item that has an item before *and* after it. At the end of a list there is
+ * nothing to split and lifting out is the useful reading — that is where you leave the
+ * list — and at the start there is no previous item to put the caret in.
+ */
+function deleteEmptyItemBetweenSiblings(state: EditorState, dispatch: Dispatch): boolean {
+  const { $from } = state.selection;
+  const itemDepth = $from.depth - 1;
+  if (itemDepth < 1) return false;
+
+  const item = $from.node(itemDepth);
+  if (item.type !== listItem) return false;
+  if (item.childCount !== 1 || item.firstChild!.content.size !== 0) return false;
+
+  const index = $from.index(itemDepth - 1);
+  if (index === 0 || index === $from.node(itemDepth - 1).childCount - 1) return false;
+
+  if (dispatch) {
+    const at = $from.before(itemDepth);
+    const tr = state.tr.delete(at, at + item.nodeSize);
+    // The end of the previous item's deepest textblock, wherever that is: the item may
+    // end in a nested list or a table rather than a paragraph.
+    tr.setSelection(Selection.near(tr.doc.resolve(at), -1));
+    dispatch(tr.scrollIntoView());
+  }
+
+  return true;
+}
+
+/**
  * Merges a top-level paragraph that sits directly after a list into that list's last
  * item, joining any text it holds onto the end of the last item's deepest textblock.
  *
@@ -382,6 +442,12 @@ function joinIntoPrecedingList(
     // last character of the previous item" the bug report asked for, not past the text
     // that got glued on.
     tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(target.from, -1)));
+
+    // That paragraph may have been the only thing holding two halves of one list apart —
+    // it is exactly what `liftListItem` leaves behind when an item is taken out of the
+    // middle of a list. With it gone the two halves are adjacent, and adjacent is not a
+    // shape the file format has.
+    joinAdjacentLists(tr, tr.mapping.map(paragraphPos));
     dispatch(tr.scrollIntoView());
   }
 
@@ -417,6 +483,9 @@ export const backspace: Command = (state, dispatch) => {
 
   // Only the first block of the item; further down, Backspace is ordinary joining.
   if ($from.index(itemDepth) !== 0) return false;
+
+  // Before the lift, because from the middle of a list a lift is what splits it.
+  if (deleteEmptyItemBetweenSiblings(state, dispatch)) return true;
 
   return liftListItem(listItem!)(state, dispatch);
 };

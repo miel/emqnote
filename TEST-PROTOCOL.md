@@ -200,6 +200,75 @@ it is the unproven part.
 
 ---
 
+## 6A. The fixes of 6 August 2026
+
+The file-level halves of these are covered by tests, and new-note filing and the move
+behaviour were driven in the real app over CDP. What is left here is what only a person
+with a mouse and a second application can judge.
+
+### 6A.1 An empty checkbox survives
+
+The bug: a box you had not typed into yet came back from disk as a plain bullet.
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.1a | In the capture window, make a task, type into it, press Enter, and type nothing into the new one. Ctrl+Enter to commit | The empty box is still a box, not a bullet |
+| 6A.1b | Open that `.md` in a text editor | The line reads `- [ ]` exactly — **no trailing space** |
+| 6A.1c | Open the note in the reader | Still an empty checkbox |
+| 6A.1d | Open the same note in Obsidian | Still an empty checkbox there too |
+| 6A.1e | Type a bullet whose entire text is `[ ]` — paste it in, rather than typing it, so no input rule fires | It stays text. The file says `- \[ ]`, and it is still text after a reload |
+
+### 6A.2 One list stays one list
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.2a | In a task list of three, put the caret at the end of the first, press Enter, then Backspace | Back to three items, one list. No gap, and the caret is at the end of the first item |
+| 6A.2b | Save and look at the file | Every bullet is still `-`. A `*` anywhere means the list split |
+| 6A.2c | Same at the end of the list rather than the middle: Enter, then Backspace | Also back to what you had |
+| 6A.2d | Same again but press Enter twice to leave the list first, then Backspace | The list is whole again |
+
+### 6A.3 A new note goes where you are standing (B29)
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.3a | Click **Vault** at the top of the tree, then *+ New note*, type a subject and commit | The file is in the vault root, not the Inbox |
+| 6A.3b | Select a folder several levels deep, *+ New note*, commit | The file is in that folder |
+| 6A.3c | Press the global hotkey instead, commit | Inbox, as always. The hotkey does not know where you were standing and must not guess |
+| 6A.3d | Select **Trash**, look at the note list | *Clear trash* where *+ New note* would be — there is no way to create a note there |
+
+### 6A.4 Moving a note leaves the tree alone (B29)
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.4a | From the Inbox, open a note, *Move* it to another folder | The tree still shows the Inbox selected; the note is gone from the list; the reader still shows it, with its new path underneath the title |
+| 6A.4b | Move three notes out of the Inbox in a row | No clicking back to the Inbox between them. This is the whole point of the change |
+| 6A.4c | Drag a note onto a folder instead | Same thing. The two gestures are one code path |
+
+### 6A.5 Drag feedback
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.5a | Start dragging a note out of the list | The row you picked up fades to about half. What follows the pointer stays solid |
+| 6A.5b | Hold it over a folder | The folder is outlined *and* washed with the accent colour — visible without hunting for it |
+| 6A.5c | Hold it over the folder that is already selected | Both still readable; the two highlights do not cancel each other out |
+| 6A.5d | Hold it over Trash, and over the folder it is already in | Neither lights up. Drop anyway: nothing happens |
+| 6A.5e | Drop it, or press Escape mid-drag | The row goes back to full opacity either way |
+
+### 6A.6 Copying a list
+
+Needs a second application, which is why it is here rather than in a test.
+
+| # | Step | Expected |
+|---|---|---|
+| 6A.6a | Select a bulleted list, copy, paste into a **plain-text** field (Slack, a terminal, Notepad, the search bar) | The bullets came along: `- One`, `- Two` |
+| 6A.6b | Same with a numbered list | `1.`, `2.`, counting from the list's own start |
+| 6A.6c | Same with a task list | `- [ ]` and `- [x]` |
+| 6A.6d | Same with a list nested two or three deep | Indented by the width of the marker above it, so the levels line up |
+| 6A.6e | Paste the same clipboard into **Outlook or Word** | A real list, formatted — the HTML flavour, unchanged by this fix |
+| 6A.6f | Copy an ordinary paragraph containing `[1]` or `#tag` | No backslashes appear. This is plain text, not markdown |
+
+---
+
 ## 7. The things that break quietly
 
 Small, easily missed, each one a bug that actually happened.

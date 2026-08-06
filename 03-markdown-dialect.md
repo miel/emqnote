@@ -147,6 +147,23 @@ daarna de alinea op de inhoudskolom:
 - [x] Agenda rondsturen
 ```
 
+**Een leeg vakje** is één afwijking van GFM, en een bewuste:
+
+```markdown
+- [ ]
+```
+
+GFM eist dat er ná het vakje een spatie én inhoud staat; `- [ ]` op zichzelf is daar een
+gewone bullet met de tekst `[ ]`. Dat is precies de halfgeschreven checklist — een vakje
+dat er staat te wachten tot je erin typt — en het viel bij elke opslag om tot een kale
+bullet. Het wordt daarom geschreven **zonder sluitspatie** (§2 verbiedt witruimte aan het
+regeleinde) en bij het lezen weer als taak herkend. Obsidian leest hem net zo, dus een
+lijst die hier begint en daar verdergaat overleeft de reis.
+
+Letterlijke vierkante haken blijven ontsnapt — `- \[ ]` is een bullet met de tekst `[ ]`,
+geen leeg vakje — en dát onderscheid wordt aan de brontekst gemeten, niet aan de
+geparste tekst, want die twee zijn identiek.
+
 **Losse tegenover strakke lijsten.** CommonMark kent losheid alleen als eigenschap van
 de bróntekst, en ProseMirror bewaart die niet. De serializer moet hem dus afleiden, en
 die afleiding ís de norm:

@@ -174,6 +174,70 @@ describe("Backspace at the start of a list item", () => {
   });
 });
 
+/**
+ * One list stays one list.
+ *
+ * Two lists of the same kind cannot sit against each other in a file: the serializer
+ * alternates the bullet character to keep them apart, so `- one` is followed by `* two`,
+ * which reads back as two lists and draws with a gap down the middle. Every way of
+ * removing an item from the middle of a list therefore has to close the gap behind it —
+ * and `liftListItem`, which is what Backspace does to a list item everywhere else, opens
+ * exactly that gap when it is used from the middle.
+ */
+describe("deleting an item out of the middle of a list", () => {
+  it("does not split the list in two", () => {
+    // The report: press Enter for a new task, change your mind, press Backspace.
+    let state = stateAt("- [ ] One\n- [ ] Two\n- [ ] Three\n", "One");
+    state = run(state, pressEnter);
+    expect(markdownOf(state)).toBe("- [ ] One\n- [ ]\n- [ ] Two\n- [ ] Three\n");
+
+    state = run(state, pressBackspace);
+    expect(markdownOf(state)).toBe("- [ ] One\n- [ ] Two\n- [ ] Three\n");
+  });
+
+  it("leaves the caret at the end of the item above", () => {
+    let state = stateAt("- One\n- Two\n- Three\n", "One");
+    state = run(run(state, pressEnter), pressBackspace);
+
+    const { $from } = state.selection;
+    expect($from.parent.textContent).toBe("One");
+    expect($from.parentOffset).toBe("One".length);
+    expect($from.node($from.depth - 1).type.name).toBe("listItem");
+  });
+
+  it("does the same for a numbered list, renumbering what is left", () => {
+    let state = stateAt("1. One\n2. Two\n3. Three\n", "One");
+    state = run(run(state, pressEnter), pressBackspace);
+    expect(markdownOf(state)).toBe("1. One\n2. Two\n3. Three\n");
+  });
+
+  it("still takes an empty item at the end of a list out of it", () => {
+    // Nothing follows, so nothing can be split — and leaving the list is the useful
+    // reading of Backspace there, the same one Enter has.
+    let state = stateAt("- One\n- Two\n", "Two");
+    state = run(run(state, pressEnter), pressBackspace);
+    expect(markdownOf(state)).toBe("- One\n- Two\n");
+  });
+
+  it("rejoins the halves when the item was lifted out first", () => {
+    // The other route to the same shape: Enter on the empty item leaves the list from
+    // any depth (that is `exitList`, and deliberate), which parks a paragraph between
+    // the two halves. Backspace on that paragraph has to put the list back together,
+    // not merely remove the paragraph.
+    let state = stateAt("- One\n- Two\n- Three\n", "One");
+    state = run(run(state, pressEnter), pressEnter);
+    state = run(state, pressBackspace);
+    expect(markdownOf(state)).toBe("- One\n- Two\n- Three\n");
+  });
+
+  it("does not join two lists that were never one", () => {
+    // A bulleted list, a paragraph, then a numbered list: removing the paragraph leaves
+    // two lists of different kinds, and those are two lists.
+    const state = stateAtStartOf("- One\n\nTussen\n\n1. Een\n", "Tussen");
+    expect(markdownOf(run(state, pressBackspace))).toBe("- OneTussen\n\n1. Een\n");
+  });
+});
+
 describe("Backspace on the empty line after a list", () => {
   // The first Backspace (or Enter, Enter) already left the caret exactly where
   // `stateOnEmptyLineAfter` puts it, lifting the empty item out of the list — ordinary

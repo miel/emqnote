@@ -592,6 +592,12 @@ export function Library(): React.ReactElement {
    * moved. The reopen at the end is likewise conditional: following the note into its new
    * folder is right when you moved the note you were reading, and wrong when you flicked
    * a different row out of the Inbox and are still reading what you had.
+   *
+   * The *tree* never follows, and that is the point of filing: emptying an Inbox means
+   * moving one note after another out of the same folder, and jumping to each destination
+   * meant clicking back to the source between every one of them. The note stays open in
+   * the reader under its new path, so the move is still visibly confirmed — it is simply
+   * no longer in the list on the left, which is what moving it means.
    */
   const moveNoteTo = async (notePath: string, target: string): Promise<void> => {
     const current = openRef.current;
@@ -604,17 +610,11 @@ export function Library(): React.ReactElement {
       return;
     }
 
-    // Following the note only makes sense when a folder is what you were looking at.
-    // From a tag or person view it would drop the filter you chose.
-    if (wasOpen && selectionRef.current.kind === "folder") {
-      setSelection({ kind: "folder", path: target });
-      selectionRef.current = { kind: "folder", path: target };
-      setLastFolder(target);
-    }
-
     await loadTree();
+    // The reader follows the file it is showing; the list reloads for wherever the tree
+    // still points, which is where it pointed before the move.
     if (wasOpen) await openNote(result.path);
-    else await loadNotes(selectionRef.current);
+    await loadNotes(selectionRef.current);
     refreshFacets();
   };
 
@@ -823,7 +823,11 @@ export function Library(): React.ReactElement {
             onSort={setSort}
             onSelect={(path) => void openNote(path)}
             onOpenInCapture={(path) => void openInCapture(path)}
-            onNewNote={() => window.emqnote.library.newNote()}
+            // Filed where you are standing, which includes the vault root — before this
+            // every capture went to the Inbox and the root was browsable but unwritable.
+            // `lastFolder` rather than the selection, for the same reason "+ New folder"
+            // uses it: a tag or the Tasks view is not a place to put a note.
+            onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
             locale={app.locale}

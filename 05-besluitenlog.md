@@ -709,6 +709,37 @@ in de tekst is wat `collectWikiTargets` leest, en dat is genoeg.
 
 ---
 
+## B29 — Een nieuwe notitie belandt waar je staat, de sneltoets houdt de Inbox
+
+**Genomen** op 6 augustus 2026, uit dagelijks gebruik. `+ Nieuwe notitie` in de bibliotheek
+geeft de geselecteerde map mee; het opnamevenster schrijft de notitie daar. De wortel van
+de vault (`""`) hoort daarbij: die kon je aanklikken en doorbladeren, maar er was geen
+enkele regel code die er een bestand in kon zetten.
+
+**De sneltoets en het systeemvak veranderen niet.** Die weten niet waar je staat — er is
+geen venster met een selectie — en de Inbox is precies het antwoord op "ik weet nog niet
+waar dit hoort". Dat is de hele reden dat die map bestaat. Ze sturen dus geen map mee en
+`beginSession` blijft op `INBOX` staan.
+
+**De map wordt gekeurd, niet vertrouwd.** `newNoteFolder` weigert alles wat absoluut is,
+alles wat met `..` omhoog klimt en de prullenbak, en valt terug op de Inbox in plaats van
+te weigeren: een getypte notitie moet érgens landen. De boom biedt alleen echte mappen
+aan, dus dit gaat niet over het eerlijke geval — het gaat erover dat een string die over
+de IPC binnenkomt beslist waar het proces een bestand neerzet.
+
+**Alleen zolang de notitie nog geen bestand heeft.** `writeSession` kiest het pad bij de
+eerste schrijfbeurt en nooit meer daarna (B10 leunt daarop), dus `newNoteIn` weigert zodra
+`session.path` gezet is of de sessie bij een bestaande notitie hoort. Anders zouden deze
+kant en de schijf het oneens worden over waar de notitie staat.
+
+**Verplaatsen laat de boom staan waar hij stond.** Hetzelfde gebruik, andere kant op: een
+Inbox leegmaken is één notitie na de andere uit dezelfde map halen, en meespringen naar
+elke bestemming betekende na élke verplaatsing terugklikken. De notitie zelf blijft open in
+de lezer, onder haar nieuwe pad, dus de verplaatsing is nog steeds zichtbaar bevestigd —
+ze staat alleen niet meer in de lijst links, en dat ís wat verplaatsen betekent.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

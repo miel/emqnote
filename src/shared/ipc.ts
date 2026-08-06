@@ -216,8 +216,13 @@ export interface LibraryApi {
   noteEditable: (path: string) => Promise<boolean>;
   /** Hands the note to the capture window and brings it to the front. */
   openInCapture: (path: string) => Promise<boolean>;
-  /** Shows the capture window for a brand new note, exactly like the hotkey. */
-  newNote: () => void;
+  /**
+   * Shows the capture window for a brand new note, exactly like the hotkey — except that
+   * the library knows where you are standing, and the hotkey does not. `folder` is
+   * vault-relative, `""` for the vault root, and only applies to a note that has not
+   * picked a file yet; the hotkey and the tray leave it out and get the Inbox.
+   */
+  newNote: (folder?: string) => void;
   onRefresh: (handler: () => void) => () => void;
   /** How far the startup index scan has got, or null when nothing is scanning. */
   scanState: () => Promise<ScanProgress | null>;

@@ -3,7 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 5 August 2026, at `v0.3.3`.
+Last updated 6 August 2026. The last tag is `v0.3.3`; PR #2 and the fixes of
+6 August sit on `main` unreleased.
 
 ## Where the project stands
 
@@ -29,6 +30,12 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 
 ## Open items worth your attention
 
+- **PR #2 has never been tagged, and that is now the top of the list.** Tasks,
+  folder delete, attachments, the draggable splitters — none of it is in
+  `v0.3.3`, which is what is running on the Mac. Two of the eight reports from
+  6 August 2026 ("aggregated tasks not visible", "no option to delete a
+  folder") were exactly that and needed no code. Cut a release once the two
+  unseen items below have been walked through.
 - **Two things from PR #2 are built but were never seen working.** Neither
   could be reached by automation, so neither is claimed as tested: whether the
   **capture window** really draws an inline attachment (its CSP and NodeView
@@ -163,6 +170,50 @@ pass — 438 tests, the full suite.
       (`tags-and-people` has no local branch left to delete, only the remote.)
 
 ## Settled
+
+**Six fixes from using the packaged `v0.3.3` build on macOS, 6 August 2026.**
+Eight things were reported; two of them ("aggregated tasks not visible", "no
+option to delete a folder") were PR #2 features on an untagged branch and
+needed no code — see the first open item above. The six that were real:
+
+- **An empty task checkbox came back as a plain bullet after a save.** Both
+  halves of the round trip were broken and neither is visible from the other:
+  `mdast-util-gfm-task-list-item` writes the box by finding the space after the
+  bullet, and an empty item has none, so the box was dropped silently; and GFM
+  will not read `- [ ]` back as a task either, since it requires whitespace
+  *and* content after the box. `pipeline.ts` now has its own `listItem` handler
+  and `empty-tasks.ts` is the matching reader. `to-mdast.ts`'s `isEmptyList`
+  had to learn it too — it drops a list whose items are all empty, as editing
+  residue, and a box is not residue. Written up in `03-markdown-dialect.md`
+  §3.4, because it is a deliberate departure from GFM.
+- **Deleting an empty task out of the middle of a list split the list in two.**
+  `liftListItem` is what Backspace does to a list item everywhere else, and
+  from the middle of a list it lifts the item out to the top level, leaving one
+  list before and one after. Markdown has no way to write two adjacent lists of
+  the same kind, so the serializer alternates the bullet character — which
+  reads back as two lists with a gap. `commands.ts` closes it from both ends:
+  `deleteEmptyItemBetweenSiblings` and `joinAdjacentLists`.
+- **Notes can be created in any folder, including the vault root (B29).** The
+  library's `+ New note` now sends the selected folder; the hotkey and the tray
+  send none and keep the Inbox, which is what that folder is for.
+  `newNoteFolder` vets what arrives over IPC.
+- **Moving a note leaves the tree on the source folder** (also B29), so filing
+  an Inbox does not mean clicking back after every note. The note stays open in
+  the reader under its new path.
+- **The row a drag started from fades while the drag is in the air**, and the
+  folder that would take it gets a wash inside its outline rather than the
+  outline alone.
+- **Copying a list keeps its bullets, numbers and boxes.** ProseMirror's
+  default `text/plain` serializer is `textBetween`, which flattens structure;
+  `clipboard-text.ts` replaces it. The `text/html` flavour was always intact,
+  so this only ever affected plain-text destinations — which is most of them.
+
+The first two of the six are covered by tests at the markdown layer, the
+clipboard by its own file, and `newNoteFolder`/`newNoteIn` by `capture-store`
+and `capture-writer`. New-note filing and the move behaviour were additionally
+driven in the real app under `Xvfb` over CDP: the file landed in the vault root
+and in `01 Projecten`, and the tree stayed on `00 Inbox` after a move with the
+reader following the note to its new path.
 
 **Windows gets a real installer and auto-updater (B22).** Per-user NSIS
 install (`perMachine: false`, no admin rights needed), driven by

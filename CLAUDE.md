@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 491 tests
+npm test               # vitest run — 599 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -151,6 +151,43 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **Paste claims image files only.** `handlePaste` returns false for everything else so the existing text/HTML path is untouched. The Outlook `mso-list` reconstruction (§6.3) is deferred, not abandoned, and this must not preempt or complicate it. Inserting an attachment also deliberately does **not** write the `attachments:` frontmatter array: `saveNote` does not manage that field, and writing it would rewrite the header of every note that gains an image — B10 from the other side, the same objection that keeps body tags out of the frontmatter.
 
+**One list stays one list.** Two lists of the same kind cannot sit against each other in a
+file: the serializer alternates the bullet character to keep them apart, so `- one` is
+followed by `* two`, which reads back as two lists and draws with a gap down the middle.
+`liftListItem` — what Backspace does to a list item everywhere else — opens exactly that
+gap when it is used from the *middle* of a list, which is how "press Enter for a new task,
+change your mind, press Backspace" produced two task lists. `commands.ts` closes it from
+both ends: `deleteEmptyItemBetweenSiblings` removes an empty item with items on either side
+of it rather than lifting it out, and `joinAdjacentLists` rejoins the halves when a
+paragraph between them is removed. An empty item at the *end* of a list still lifts out —
+nothing follows, so nothing can split, and leaving the list is the useful reading there.
+
+**Copying a list carries its markers.** `clipboardTextSerializer` is
+`clipboard-text.ts`, not ProseMirror's default `textBetween`, which knows nothing about
+structure and hands a plain-text target a checklist with every bullet, number and box
+stripped off. The `text/html` flavour was always fine, so this is only about the plain-text
+one — and it stays plain: no escaping, nothing that would make it markdown.
+
+**An empty task item is written `- [ ]`, and reading it back takes its own code.** GFM
+requires a checkbox to be followed by whitespace *and* content, so a box on its own is an
+ordinary bullet whose text happens to be `[ ]` — and `mdast-util-gfm-task-list-item`
+inserts the box by finding the space after the bullet, which an empty item does not have,
+so it dropped the box without a word. A half-written checklist therefore came back from
+disk as plain bullets. `pipeline.ts`'s own `listItem` handler writes it (no trailing space
+— the dialect forbids that, and `roundtrip.test.ts` checks), `empty-tasks.ts` reads it, and
+neither half means anything without the other. `to-mdast.ts`'s `isEmptyList` had to learn
+the same thing: a list of empty items is editing residue and gets dropped, but a box is not
+residue. The escaped form `- \[ ]` still means literal brackets, and that is told apart by
+looking at the *source* at the node's offset — the two parse to identical text.
+
+**A new note is filed where the library is standing; the hotkey keeps the Inbox** (B29).
+`CaptureWriter.newNoteIn` sets the folder for a session that has not picked a file yet, and
+`newNoteFolder` vets what arrives over IPC — absolute paths, `..` and the trash all fall
+back to the Inbox rather than being refused, because a typed note has to land somewhere.
+`""` is the vault root, which was browsable but unwritable before this. Moving a note
+deliberately does *not* move the tree selection with it: filing an Inbox means moving one
+note after another out of the same folder.
+
 **Tags come from two places that never write to each other.** The frontmatter `tags:` field holds what was typed in the capture window's tag field; `#tag` in the body stays in the body. `summarise()` in `vault-io.ts` merges them for display and filtering. Copying body tags into the frontmatter would mean editing one sentence rewrites the header, which is a B10 hazard.
 
 **Timestamps are ISO 8601 with offset, never UTC `Z`** — otherwise a summer note reads back wrong in winter.
@@ -182,6 +219,8 @@ Tags and People filtering landed after phase 3 and pulled one piece of phase 5 f
 **Five features from daily use landed on 5 August 2026, as PR #2**, on top of `v0.3.3`. Three carry decisions: **B26** — Tasks are their own view and their state lives in the index — **B27** — deleting a folder moves it to the trash — and **B28** — attachments come in by one route and are served over their own protocol. The other two need no decision: both library splitters are draggable with their widths persisted in `settings.json`, and inserting a PDF is the non-image half of B28's one insertion path.
 
 Two things in that batch are **implemented but never seen working**, and are written up for a human in `TEST-PROTOCOL.md` rather than quietly assumed: whether the capture window really draws an inline attachment (its CSP and NodeView are in place, but no image was ever got into that window under `Xvfb`), and the Tasks view's click → IPC wiring (the write path underneath it is proven directly; the click that calls it is not, because `--click-button` does not match task rows).
+
+**Six fixes from using the packaged `v0.3.3` build on macOS landed on 6 August 2026.** The first two reports in that batch — "aggregated tasks not visible" and "no option to delete a folder" — were not bugs: both features are PR #2's, and PR #2 has never been tagged, so `v0.3.3` genuinely does not have them. The rest were real. One decision came out of it, **B29** — a new note is filed where the library is standing, and moving a note leaves the tree where it was. Two are format-level and are written up as constraints above: an empty task item now survives a save (`- [ ]`, which GFM does not read back on its own), and one list stays one list when an item is deleted out of the middle of it. The other two: copying a list now puts its bullets, numbers and boxes on the plain-text clipboard, and the row a drag started from fades while the drag is in the air. Both new-note filing and the move behaviour were confirmed in the real app under `Xvfb`, driven over CDP — the file landed in the vault root and in `01 Projecten`, and the tree stayed on the Inbox after a move.
 
 **`v0.3.3` was a bugfix release for one Windows bug** found by that release pipeline: `checkFilesOnDemand` sliced a fixed 21 characters off each `attrib` line as the attribute field, and `attrib` answers an empty folder with `File not found - C:\Users\…`, whose first 21 characters end in the `U` of `Users`. Every Windows vault on its first run therefore reported itself un-hydrated and lost tags, people and search to a warning about a problem that did not exist. `readAttribOutput` now finds where the path begins instead of assuming a column, and only counts a line whose attribute field holds nothing but attribute letters — which no diagnostic message is, in any language.
 

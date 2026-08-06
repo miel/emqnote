@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
 import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
-import type { OpenedNote } from "../shared/vault-types.js";
+import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 import { saveNote } from "./vault-io.js";
 import { INBOX } from "./vault.js";
@@ -25,6 +25,12 @@ export interface CaptureSession {
   /** Decided on the first real write and never changed afterwards. */
   path: string | null;
   /**
+   * Where a brand-new note gets filed. Vault-relative, POSIX-separated, `""` for the
+   * vault root; the Inbox unless the library said otherwise (see `newNoteIn`). Read once,
+   * when `path` is decided, and irrelevant to a session loaded from an existing note.
+   */
+  folder: string;
+  /**
    * Frontmatter and doc serialized *without* `modified`, from the last write — the
    * identity of "nothing changed" that decides whether the next call writes at all.
    * Not the literal bytes on disk: those may carry a `modified` stamp this does not.
@@ -44,9 +50,33 @@ export function beginSession(): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: null,
+    folder: INBOX,
     lastContent: null,
     existingTitle: null,
   };
+}
+
+/**
+ * Vets a folder the renderer asked a new note to be filed in.
+ *
+ * The tree only ever offers real folders, so this is not about the honest case: it is
+ * about a value arriving over IPC deciding where the process writes a file. Anything
+ * absolute, anything that climbs with `..`, and the trash — which is where notes go to be
+ * deleted, not created — falls back to the Inbox rather than being refused, because a
+ * note that was typed has to land somewhere.
+ *
+ * `""` survives as `""`, and means the vault root: filing a note there is the one place
+ * the tree could point at that no code had a way to reach.
+ */
+export function newNoteFolder(folder: string): string {
+  if (/^([\\/]|[a-z]:)/i.test(folder)) return INBOX;
+
+  const parts = folder.split(/[\\/]/).filter((part) => part !== "");
+  if (parts.some((part) => part === "." || part === ".." || part === TRASH_FOLDER)) {
+    return INBOX;
+  }
+
+  return parts.join("/");
 }
 
 /**
@@ -58,6 +88,9 @@ export function loadSession(note: OpenedNote): CaptureSession {
     createdAt: new Date(),
     payload: null,
     path: note.path,
+    // Never read: this session already has its file. Kept truthful rather than blank so
+    // nothing downstream has to know that.
+    folder: INBOX,
     lastContent: null,
     existingTitle: note.title,
   };
@@ -209,9 +242,12 @@ export async function writeSession(
   const contents = serializeNote({ frontmatter, doc });
 
   if (session.path === null) {
-    const inbox = join(vault, INBOX);
-    await mkdir(inbox, { recursive: true });
-    session.path = uniquePath(inbox, noteFileName(frontmatter.title, session.createdAt));
+    // `""` is the vault root, and `join(vault, "")` would answer with a trailing
+    // separator rather than the vault — hence the branch rather than a bare join.
+    const folder =
+      session.folder === "" ? vault : join(vault, ...session.folder.split("/"));
+    await mkdir(folder, { recursive: true });
+    session.path = uniquePath(folder, noteFileName(frontmatter.title, session.createdAt));
   }
 
   await writeAtomic(session.path, contents);
@@ -274,6 +310,22 @@ export class CaptureWriter {
     if (this.session.existingTitle !== null) return path;
     const vault = this.vault();
     return vault === null ? null : toPosix(relative(vault, path));
+  }
+
+  /**
+   * Files the next brand-new note somewhere other than the Inbox.
+   *
+   * The library's "+ New note" means "a note here", and until now there was no way to say
+   * where here was — every capture landed in the Inbox, so the vault root in particular
+   * was a folder you could select and browse but never write to.
+   *
+   * Ignored once the session has picked its file, or when it belongs to an existing note:
+   * the path is decided on the first write and never changes (see `writeSession`), so
+   * retargeting after that would only make this and the file on disk disagree.
+   */
+  newNoteIn(folder: string): void {
+    if (this.session.path !== null || this.session.existingTitle !== null) return;
+    this.session.folder = newNoteFolder(folder);
   }
 
   /**

@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { beginSession, loadSession, writeSession } from "../src/main/capture-store.js";
+import {
+  beginSession,
+  loadSession,
+  newNoteFolder,
+  writeSession,
+} from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
@@ -216,6 +221,68 @@ describe("saving a capture", () => {
 
     expect(second.path).not.toBe(first.path);
     expect(basename(second.path!)).toMatch(/ \(2\)\.md$/);
+  });
+});
+
+/**
+ * Where a brand-new note lands.
+ *
+ * The Inbox unless the library said otherwise. It is the library that knows which folder
+ * you are standing in — the hotkey and the tray do not, and deliberately keep the Inbox —
+ * and the vault root in particular was a folder the tree could select and browse but no
+ * code had a way to write to.
+ *
+ * `newNoteFolder` is the guard on the way in. The tree only ever offers real folders, so
+ * this is not about the honest case: it is about a string that arrived over IPC deciding
+ * where the main process puts a file.
+ */
+describe("choosing the folder for a new note", () => {
+  it("files into the folder the library named", async () => {
+    const session = beginSession();
+    session.folder = newNoteFolder("01 Projecten/Alpha");
+    session.payload = payload(paragraphs("Kickoff"));
+
+    const { path } = await writeSession(session, vault);
+
+    expect(path!).toBe(join(vault, "01 Projecten", "Alpha", basename(path!)));
+    expect(statSync(path!).isFile()).toBe(true);
+  });
+
+  it("files into the vault root itself, which nothing could reach before", async () => {
+    const session = beginSession();
+    session.folder = newNoteFolder("");
+    session.payload = payload(paragraphs("Losse notitie"));
+
+    const { path } = await writeSession(session, vault);
+
+    expect(path!).toBe(join(vault, basename(path!)));
+  });
+
+  it("still uses the Inbox when nobody said otherwise", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Kickoff"));
+
+    const { path } = await writeSession(session, vault);
+
+    expect(path!).toContain(join(vault, INBOX));
+  });
+
+  it("falls back to the Inbox rather than climbing out of the vault", () => {
+    expect(newNoteFolder("../../elders")).toBe(INBOX);
+    expect(newNoteFolder("01 Projecten/../../elders")).toBe(INBOX);
+    expect(newNoteFolder("/etc")).toBe(INBOX);
+    expect(newNoteFolder("\\\\server\\share")).toBe(INBOX);
+    expect(newNoteFolder("C:\\Windows")).toBe(INBOX);
+  });
+
+  it("refuses the trash, which is where notes go to be deleted", () => {
+    expect(newNoteFolder("_trash")).toBe(INBOX);
+    expect(newNoteFolder("_trash/oud")).toBe(INBOX);
+  });
+
+  it("normalises separators, since the tree speaks POSIX and Windows does not", () => {
+    expect(newNoteFolder("01 Projecten\\Alpha")).toBe("01 Projecten/Alpha");
+    expect(newNoteFolder("01 Projecten/")).toBe("01 Projecten");
   });
 });
 
