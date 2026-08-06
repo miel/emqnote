@@ -3,8 +3,9 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 6 August 2026, at `v0.4.0` — the release that finally carries PR
-#2, which had sat on `main` untagged since 5 August.
+Last updated 6 August 2026, at `v0.4.1` — eight fixes from daily use on top of
+`v0.4.0`, which finally carried PR #2 after it had sat on `main` untagged
+since 5 August.
 
 ## Where the project stands
 
@@ -45,7 +46,14 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   behaves correctly; the click that calls it is unexercised, because
   `--click-button` does not match task rows). `TEST-PROTOCOL.md` §4 and §6 walk
   through both. Do this on the `v0.4.0` build, first thing after installing it.
-- **The next release is the first test of the release-notes fix.** Every
+- **Two things from `v0.4.1` are unverified live, for the same reason.** The
+  25vh of scroll room past the last line (bug 3) is a "does this feel right"
+  question no script can answer, and arrowing the caret across an inline image
+  in the *capture* window (bug 4) has never had a real image drawn in it under
+  `Xvfb` — the same gap the item above already describes for the library
+  window, just never closed for the other window either. `TEST-PROTOCOL.md` §9
+  walks through both.
+- **`v0.4.1` is the first test of the release-notes fix.** Every
   release up to and including `v0.4.0` published its *commit* message as its
   notes, not its tag annotation: `gh release create --notes-from-tag` reads the
   tag locally, and `actions/checkout` leaves a lightweight one pointing at the
@@ -53,7 +61,7 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   message reads like a changelog anyway — `v0.4.0` is where it showed, because
   that tag sits on a merge commit and the release came out as one line and a
   trailer. `v0.4.0`'s notes were corrected by hand; `release.yml` now fetches
-  the real tag first. Check the next tag's notes before assuming it worked.
+  the real tag first. Check `v0.4.1`'s published notes before assuming it worked.
 - **The index rebuilds itself once, on first launch after `v0.4.0`.** `migrate()`
   now carries a `PRAGMA user_version` and drops its tables on a bump (B26), so
   the first start re-scans the whole vault with the progress bar showing. That
@@ -179,6 +187,41 @@ pass — 438 tests, the full suite.
       (`tags-and-people` has no local branch left to delete, only the remote.)
 
 ## Settled
+
+**Eight fixes from daily use, 6 August 2026, released as `v0.4.1`.** Built
+across three disjoint areas of the tree in parallel (library chrome, the
+editor, the main process) and merged together, plus one that spanned two of
+them and landed after the merge.
+
+- **The capture window's file now renames on commit**, not never, when the
+  subject changed since the file was first written. `capture-store.ts`'s
+  `renameSessionFile` fires from `finish()`, `load()` and `flush()` — the
+  commit paths — never from the debounced per-keystroke write, so OneDrive
+  still never sees a trail of half-typed subjects.
+- **The reader's note title is click-to-edit**, in place of the old Rename
+  dialog. Enter or blur commits through the same `rename()` the dialog used;
+  Escape cancels. `IPC.libraryRenameNote` also gained the `writer.activePath()`
+  lock guard `libraryMoveNote` and `libraryToggleTask` already had.
+- **The editor has 25vh of scroll room below the last line**, outside the
+  editable flow, so a long note can scroll a full screen past its own end.
+- **An arrow key now moves the caret across an inline image or PDF link**
+  instead of landing on an invisible `NodeSelection` — `moveOverAtom` takes
+  priority in the keymap, and `.ProseMirror-selectednode` is now visible too.
+- **Clicking a task moves the caret to it**, without leaving the Tasks view —
+  `Editor.focusTask` uses the same `taskItemsIn` ordinal the index and
+  `toggleTask` already agree on, and never steals focus from the Tasks list.
+- **Tasks and Trash swapped places in the folder tree's footer**, and
+  **Orphaned Attachments moved out of the footer into Settings.**
+- **Inserting a large PDF no longer freezes the app.** Two independent causes:
+  the file picker dialog now has a parent window, so the OS can't raise it
+  behind the library window while the renderer waits on it; and the actual
+  copy moved off the main thread onto `fs/promises`, measured as cutting the
+  longest IPC-blocking gap during a 19.7 MB copy from the low tens of
+  milliseconds to single digits.
+
+Bugs 1, 2, and the footer/Settings changes were confirmed in the real app
+under `Xvfb`, driven over CDP. The scroll room and the image-caret fix in the
+capture window were not — see the open item above and `TEST-PROTOCOL.md` §9.
 
 **Six fixes from using the packaged `v0.3.3` build on macOS, 6 August 2026.**
 Eight things were reported; two of them ("aggregated tasks not visible", "no

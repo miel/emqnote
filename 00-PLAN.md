@@ -44,8 +44,20 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
-auto-updater (05-besluitenlog.md). Actuele versie: `v0.4.0` — de eerste release met PR #2
-erin, want die was tot dan toe nooit getagd.
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.4.1` — acht correcties uit het
+dagelijks gebruik van `v0.4.0`.
+
+Op 6 augustus 2026 landden, na `v0.4.0`, nog eens acht correcties uit het dagelijks
+gebruik, als `v0.4.1`: het opnamevenster hernoemt zijn bestand nu pas bij het afronden
+(Ctrl+Enter, sluiten of afsluiten) als het onderwerp intussen is gewijzigd, in plaats van
+nooit; de titel in de lezer is nu direct te bewerken door erop te klikken, met dezelfde
+vergrendelingscontrole die verplaatsen en afvinken al hadden; de editor heeft nu ruimte om
+voorbij de laatste regel te scrollen; een pijltoets brengt de cursor nu langs een
+ingevoegde afbeelding of PDF-koppeling in plaats van hem onzichtbaar te maken; een klik op
+een taak in het takenoverzicht zet de cursor op die taak in de lezer, zonder de lijst te
+verlaten; Taken en Prullenbak zijn in de mappenboom van plaats gewisseld; Verweesde
+bijlagen verhuisde van de mappenboom naar de instellingen; en het invoegen van een grote
+PDF bevriest de app niet langer, doordat het kopiëren niet meer op de hoofdthread gebeurt.
 
 Op 5 augustus 2026 landden vijf dingen uit het dagelijks gebruik, als PR #2: een
 takenoverzicht over alle notities in een map en zijn submappen, met afvinken vanuit die
