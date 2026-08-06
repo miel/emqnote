@@ -5,6 +5,7 @@ import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.j
 import { createEditorState, emptyDocument } from "./state.js";
 import { attachmentNodeView, wikiLinkNodeView } from "./attachment-view.js";
 import { clipboardText } from "./clipboard-text.js";
+import { focusTaskAt } from "./focus-task.js";
 import {
   handleAttachmentDrop,
   handleAttachmentPaste,
@@ -33,6 +34,8 @@ export interface EditorHandle {
   applyLink: (href: string) => void;
   /** Replaces the selection with a wiki reference to an already-stored attachment. */
   insertAttachment: (name: string) => void;
+  /** Moves the caret to the ordinal-th task item and scrolls it into view. */
+  focusTask: (ordinal: number) => void;
 }
 
 interface Props {
@@ -150,6 +153,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const current = view.current;
       if (current === null) return;
       insertAttachment(current, name);
+    },
+    focusTask: (ordinal: number) => {
+      const current = view.current;
+      if (current === null) return;
+      focusTaskAt(current, ordinal);
     },
   }));
 

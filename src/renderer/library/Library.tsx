@@ -63,6 +63,14 @@ type Dialog =
 export function Library(): React.ReactElement {
   const app = useBootstrap();
   const editor = useRef<EditorHandle>(null);
+  /**
+   * Set by `openNote` when it is called from the Tasks view, and applied by the
+   * `docToken` effect right after `setDoc` — `focusTask` must run against the document
+   * that was just loaded, not the one still in the editor at the moment `openNote` is
+   * called. Cleared immediately after, so an ordinary click on a note elsewhere never
+   * inherits a stale ordinal from the last task clicked.
+   */
+  const pendingTaskOrdinal = useRef<number | null>(null);
 
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
   const [selection, setSelection] = useState<Selection>({ kind: "folder", path: "00 Inbox" });
@@ -353,13 +361,14 @@ export function Library(): React.ReactElement {
   }, [loadNotes, refreshFacets, refreshEditable]);
 
   const openNote = useCallback(
-    async (path: string) => {
+    async (path: string, taskOrdinal?: number) => {
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
       if (dirty) await save();
 
       const loaded = await window.emqnote.library.openNote(path);
       if (loaded === null) return;
 
+      pendingTaskOrdinal.current = taskOrdinal ?? null;
       setOpen(loaded);
       openRef.current = loaded;
       setDocToken((token) => token + 1);
@@ -460,6 +469,11 @@ export function Library(): React.ReactElement {
     const current = openRef.current;
     if (current === null) return;
     editor.current?.setDoc(schema.nodeFromJSON(current.doc) as PMNode);
+
+    if (pendingTaskOrdinal.current !== null) {
+      editor.current?.focusTask(pendingTaskOrdinal.current);
+      pendingTaskOrdinal.current = null;
+    }
   }, [docToken]);
 
   // Focuses and selects the title input the moment it replaces the `<h1>` — keyed on
@@ -831,7 +845,7 @@ export function Library(): React.ReactElement {
             onOpenOnlyChange={(openOnly) =>
               setSelection({ kind: "tasks", scope: selection.scope, openOnly })
             }
-            onOpenNote={(path) => void openNote(path)}
+            onOpenNote={(path, ordinal) => void openNote(path, ordinal)}
             onToggle={toggleTask}
             t={app.t}
           />

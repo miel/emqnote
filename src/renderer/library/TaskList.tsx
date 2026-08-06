@@ -10,7 +10,7 @@ interface Props {
   onScopeChange: (scope: string) => void;
   onOpenOnlyChange: (openOnly: boolean) => void;
   /** Opens the note in the reader beside this list — clicking a row's text, not its checkbox. */
-  onOpenNote: (path: string) => void;
+  onOpenNote: (path: string, ordinal: number) => void;
   /**
    * Flips one item through the serializer, in the main process — never here. Resolves to
    * whether the flip actually landed, so this component can revert its own optimistic
@@ -163,7 +163,7 @@ export function TaskList({
             <button
               type="button"
               className="task-row-text"
-              onClick={() => onOpenNote(item.path)}
+              onClick={() => onOpenNote(item.path, item.ordinal)}
             >
               <span className="task-row-title">
                 {item.text === "" ? t("tasks.empty") : item.text}
