@@ -3,8 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 6 August 2026. The last tag is `v0.3.3`; PR #2 and the fixes of
-6 August sit on `main` unreleased.
+Last updated 6 August 2026, at `v0.4.0` — the release that finally carries PR
+#2, which had sat on `main` untagged since 5 August.
 
 ## Where the project stands
 
@@ -30,12 +30,12 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 
 ## Open items worth your attention
 
-- **PR #2 has never been tagged, and that is now the top of the list.** Tasks,
-  folder delete, attachments, the draggable splitters — none of it is in
-  `v0.3.3`, which is what is running on the Mac. Two of the eight reports from
-  6 August 2026 ("aggregated tasks not visible", "no option to delete a
-  folder") were exactly that and needed no code. Cut a release once the two
-  unseen items below have been walked through.
+- **`v0.4.0` shipped PR #2 before its two unseen items were walked through**,
+  deliberately and knowingly — the Mac had been running `v0.3.3` for a week
+  without Tasks, folder delete or attachments at all, and two of the eight
+  reports of 6 August 2026 were nothing but that gap. The item below did not
+  stop the release; it is still owed, and now against a build that is actually
+  installed rather than one nobody has.
 - **Two things from PR #2 are built but were never seen working.** Neither
   could be reached by automation, so neither is claimed as tested: whether the
   **capture window** really draws an inline attachment (its CSP and NodeView
@@ -44,8 +44,8 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   click → IPC wiring** (`toggleTask` was driven directly against real files and
   behaves correctly; the click that calls it is unexercised, because
   `--click-button` does not match task rows). `TEST-PROTOCOL.md` §4 and §6 walk
-  through both. Do this before the next tag.
-- **The index rebuilds itself once, on first launch after PR #2.** `migrate()`
+  through both. Do this on the `v0.4.0` build, first thing after installing it.
+- **The index rebuilds itself once, on first launch after `v0.4.0`.** `migrate()`
   now carries a `PRAGMA user_version` and drops its tables on a bump (B26), so
   the first start re-scans the whole vault with the progress bar showing. That
   is expected, happens once per machine, and touches nothing in the vault — the

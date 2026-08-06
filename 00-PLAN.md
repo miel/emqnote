@@ -44,7 +44,8 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
-auto-updater (05-besluitenlog.md). Actuele versie: `v0.3.3`.
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.4.0` — de eerste release met PR #2
+erin, want die was tot dan toe nooit getagd.
 
 Op 5 augustus 2026 landden vijf dingen uit het dagelijks gebruik, als PR #2: een
 takenoverzicht over alle notities in een map en zijn submappen, met afvinken vanuit die
@@ -57,6 +58,16 @@ komen er via één weg in, geserveerd via een eigen protocol). Twee onderdelen z
 gebouwd maar nooit werkend gezien — of het opnamevenster een bijlage werkelijk tekent, en
 de klik die het afvinken aanroept; `TEST-PROTOCOL.md` beschrijft hoe je die met de hand
 nagaat.
+
+Op 6 augustus 2026 volgden zes correcties uit het gebruik van de `v0.3.3`-release. Twee
+van de acht meldingen waren geen fout: het takenoverzicht en *Map verwijderen* zaten in
+PR #2, en PR #2 was nooit getagd — `v0.4.0` is de release die dat rechtzet. De zes echte:
+een leeg vakje overleeft nu een opslagbeurt (`- [ ]`, wat GFM op zichzelf niet als taak
+terugleest), een lijst blijft één lijst als je er in het midden een item uit haalt,
+een notitie kan in elke map worden aangemaakt — ook in de wortel van de vault — en
+verplaatsen laat de boom staan waar hij stond (samen **B29**), een gekopieerde lijst neemt
+zijn bullets, nummers en vakjes mee naar het klembord, en de rij waar een sleep begon
+vervaagt zolang die in de lucht hangt.
 
 Op 3 augustus 2026 volgde een reeks van negen correcties uit het gebruik van de
 macOS-release, waarvan er drie één oorzaak deelden: het opnamevenster ving zijn eigen
