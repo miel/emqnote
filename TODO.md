@@ -45,6 +45,15 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   behaves correctly; the click that calls it is unexercised, because
   `--click-button` does not match task rows). `TEST-PROTOCOL.md` §4 and §6 walk
   through both. Do this on the `v0.4.0` build, first thing after installing it.
+- **The next release is the first test of the release-notes fix.** Every
+  release up to and including `v0.4.0` published its *commit* message as its
+  notes, not its tag annotation: `gh release create --notes-from-tag` reads the
+  tag locally, and `actions/checkout` leaves a lightweight one pointing at the
+  commit. It went unnoticed for four releases because a release commit's
+  message reads like a changelog anyway — `v0.4.0` is where it showed, because
+  that tag sits on a merge commit and the release came out as one line and a
+  trailer. `v0.4.0`'s notes were corrected by hand; `release.yml` now fetches
+  the real tag first. Check the next tag's notes before assuming it worked.
 - **The index rebuilds itself once, on first launch after `v0.4.0`.** `migrate()`
   now carries a `PRAGMA user_version` and drops its tables on a bump (B26), so
   the first start re-scans the whole vault with the progress bar showing. That
