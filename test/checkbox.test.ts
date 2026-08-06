@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { schema } from "../src/markdown/schema.js";
+import { parseNote, serializeBody } from "../src/markdown/index.js";
 import {
   toggleChecked,
   toggleOrderedList,
@@ -26,9 +27,9 @@ import {
  * that produces a shape the serializer cannot write would pass a structural assertion
  * and still be a bug.
  *
- * Where a case ends on a fresh item, the test types into it first. An *empty* task item
- * serializes as a bare `-` — remark drops the checkbox when there is nothing to tick —
- * so asserting on the empty item would be asserting on nothing.
+ * Where a case ends on a fresh item, the test types into it first — that is the gesture
+ * being described, not a workaround. An empty task item is a shape of its own and gets
+ * its own section at the bottom of this file.
  */
 
 /** A selection running from inside one item to inside a later one. */
@@ -209,5 +210,62 @@ describe("input rules", () => {
 
   it("leaves a bracket that is not a checkbox alone", () => {
     expect(ruleThenType("zie [1]", true)).toBe("- zie \\[1] Iets\n");
+  });
+});
+
+/**
+ * A box with nothing in it yet.
+ *
+ * This is the ordinary state of a checklist halfway through being written, and the file
+ * format could not hold it: `mdast-util-gfm-task-list-item` inserts the box by finding
+ * the space after the bullet, an empty item has no space after its bullet, and the box
+ * was dropped without a word. The note came back from disk with a plain bullet where the
+ * empty checkbox had been — which is the report this section exists for.
+ *
+ * GFM will not read `- [ ]` back as a task either (the box must be followed by whitespace
+ * *and* content), so the two halves — `pipeline.ts`'s `listItem` handler and
+ * `empty-tasks.ts` — only mean anything together, and every case here goes both ways.
+ */
+describe("an empty task item", () => {
+  const roundTrip = (markdown: string): string =>
+    serializeBody(parseNote(`---\ntitle: T\ntype: quick\ncreated: 2026-08-06T10:00:00+02:00\n---\n\n${markdown}`).doc);
+
+  it("keeps its box through a save and a reload", () => {
+    expect(roundTrip("- [ ]\n")).toBe("- [ ]\n");
+  });
+
+  it("keeps a ticked one too", () => {
+    expect(roundTrip("- [x]\n")).toBe("- [x]\n");
+  });
+
+  it("survives in the middle of a list, which is where one actually appears", () => {
+    const list = "- [ ] Bel Jan\n- [ ]\n- [x] Klaar\n";
+    expect(roundTrip(list)).toBe(list);
+  });
+
+  it("survives with a sublist hanging under it", () => {
+    const list = "- [ ]\n  - [ ] Onder\n";
+    expect(roundTrip(list)).toBe(list);
+  });
+
+  it("is written by the editor's own gesture, with nothing typed after it", () => {
+    // The bug as reported: make a task, do not type into it, let the note save.
+    const after = run(stateAt("Iets\n", "Iets"), toggleTask);
+    const empty = run(after, pressEnter);
+    expect(markdownOf(empty)).toBe("- [ ] Iets\n- [ ]\n");
+  });
+
+  it("does not swallow a bullet whose text really is a pair of brackets", () => {
+    // `\[ ]` is how this serializer writes literal brackets, and it parses to the same
+    // three characters as an empty box. Only the source can tell them apart, which is
+    // why `restoreEmptyTasks` looks at the offset rather than at the text.
+    expect(roundTrip("- \\[ ]\n")).toBe("- \\[ ]\n");
+    expect(roundTrip("- \\[x] done\n")).toBe("- \\[x] done\n");
+  });
+
+  it("is not mistaken for the empty list left over from editing", () => {
+    // `to-mdast.ts` drops a list in which every item is empty, because that is residue
+    // from pressing the bullet button and changing your mind. A box is not residue.
+    expect(roundTrip("- [ ]\n")).not.toBe("");
   });
 });

@@ -344,14 +344,29 @@ function hasContent(node: PMNode): boolean {
   return found;
 }
 
+/** Does anything under here carry a checkbox? */
+function hasTask(node: PMNode): boolean {
+  let found = false;
+  node.descendants((child) => {
+    if (found) return false;
+    if (child.type.name === "listItem" && child.attrs.checked !== null) found = true;
+    return !found;
+  });
+  return found;
+}
+
 /**
  * A list in which every item is empty is left over from editing, not something anyone
  * typed. Writing it out produces a lone `1)` in the file — with that marker rather than
  * `1.` because mdast alternates markers to keep two adjacent lists apart, which makes
  * the artefact look even stranger than it is.
+ *
+ * An empty *task* is the exception, and not a grudging one: a box waiting to be filled in
+ * is the ordinary way a checklist gets written, and dropping it here is what made an
+ * empty checkbox come back as a plain bullet the moment the note was saved.
  */
 function isEmptyList(node: PMNode): boolean {
-  return LIST_TYPES.has(node.type.name) && !hasContent(node);
+  return LIST_TYPES.has(node.type.name) && !hasContent(node) && !hasTask(node);
 }
 
 function blocksToMdast(nodes: PMNode[]): RootContent[] {

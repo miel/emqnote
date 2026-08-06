@@ -4,6 +4,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
 import { attachmentNodeView, wikiLinkNodeView } from "./attachment-view.js";
+import { clipboardText } from "./clipboard-text.js";
 import {
   handleAttachmentDrop,
   handleAttachmentPaste,
@@ -100,6 +101,9 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       // ordinary text/HTML paste path is untouched.
       handlePaste: handleAttachmentPaste,
       handleDrop: handleAttachmentDrop,
+      // The `text/plain` flavour of a copy. The default flattens a list to its text and
+      // drops every bullet, number and box on the way out — see `clipboard-text.ts`.
+      clipboardTextSerializer: clipboardText,
     });
 
     view.current = created;

@@ -679,7 +679,13 @@ function registerLibraryIpc(): void {
   const vaultPath = (): string | null => loadSettings().vaultPath;
 
   ipcMain.on(IPC.libraryOpen, () => showLibraryWindow());
-  ipcMain.on(IPC.captureNew, () => focusCaptureWindow());
+  // The folder is the library's; the hotkey and the tray send none and get the Inbox.
+  // `newNoteIn` vets it and declines once the session has a file, so this cannot retarget
+  // a note that is already on disk.
+  ipcMain.on(IPC.captureNew, (_event, folder?: string) => {
+    if (typeof folder === "string") writer.newNoteIn(folder);
+    focusCaptureWindow();
+  });
 
   ipcMain.handle(IPC.libraryTree, () => {
     const vault = vaultPath();

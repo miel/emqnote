@@ -78,7 +78,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     revealNote: (path: string) => ipcRenderer.send(IPC.libraryRevealNote, path),
     noteEditable: (path: string) => ipcRenderer.invoke(IPC.libraryNoteEditable, path),
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
-    newNote: () => ipcRenderer.send(IPC.captureNew),
+    newNote: (folder?: string) => ipcRenderer.send(IPC.captureNew, folder),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
     scanState: () => ipcRenderer.invoke(IPC.libraryScanState),
     onScanProgress: (handler: (progress: ScanProgress | null) => void) =>

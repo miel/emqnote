@@ -4,7 +4,9 @@ import remarkStringify from "remark-stringify";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
 import type { Options as StringifyOptions } from "remark-stringify";
+import { defaultHandlers } from "mdast-util-to-markdown";
 import type { Handle, State, Info } from "mdast-util-to-markdown";
+import type { ListItem } from "mdast";
 import { startsWithTag } from "./tags.js";
 
 /**
@@ -108,6 +110,56 @@ const text: Handle = (node, _parent, state, info) => {
   return pieces.join("");
 };
 
+/**
+ * List items, including the one case remark-gfm's own handler drops on the floor: a task
+ * with no text yet.
+ *
+ * `mdast-util-gfm-task-list-item` writes the box by putting the bullet back through
+ * `/^(?:[*+-]|\d+\.)([\r\n]| {1,3})/` and inserting `[ ] ` after the space it captured.
+ * An item with an empty paragraph serializes to a bare `-` — no space, no line end — so
+ * that pattern finds nothing, the replacement never happens, and the checkbox vanishes
+ * silently. Reloading the file then showed a plain bullet where an empty box had been,
+ * which is the whole of that bug: the tick was never in the file to begin with.
+ *
+ * `- [ ]` with nothing after it is deliberately written *without* a trailing space, since
+ * `03-markdown-dialect.md` forbids trailing whitespace and `roundtrip.test.ts` asserts
+ * it. GFM does not read that back as a task — the checkbox must be followed by whitespace
+ * *and content* — so `restoreEmptyTasks` in `empty-tasks.ts` is the matching half, and
+ * neither half means anything without the other.
+ *
+ * The non-empty path reproduces the extension's logic rather than delegating to it,
+ * because a handler cannot call the one it replaces. It stays honest because the corpus
+ * has task lists in it: `roundtrip.test.ts` fails the moment this drifts.
+ */
+const listItem: Handle = (node, parent, state, info) => {
+  const item = node as ListItem;
+  const head = item.children[0];
+  const checkable = typeof item.checked === "boolean" && head?.type === "paragraph";
+
+  if (!checkable) return defaultHandlers.listItem(item, parent, state, info);
+
+  const checkbox = item.checked === true ? "[x] " : "[ ] ";
+  // The tracker keeps column positions right for anything inside the item that cares
+  // (tables, wrapped links) now that the box takes four columns ahead of them.
+  const tracker = state.createTracker(info);
+  tracker.move(checkbox);
+
+  const value = defaultHandlers.listItem(item, parent, state, {
+    ...info,
+    ...tracker.current(),
+  });
+
+  const inline = value.replace(/^(?:[*+-]|\d+\.) {1,3}/, (marker) => marker + checkbox);
+  if (inline !== value) return inline;
+
+  // Nothing followed the marker on its own line, so the box is all the line holds: an
+  // empty task, either on its own or with a sublist hanging under it. `checkbox` carries
+  // the space that would have separated it from content there is none of, so it is
+  // dropped — the dialect forbids trailing whitespace, and `roundtrip.test.ts` checks.
+  const marker = /^(?:[*+-]|\d+\.)/.exec(value)?.[0] ?? "";
+  return `${marker} ${checkbox.trimEnd()}${value.slice(marker.length)}`;
+};
+
 type Align = "left" | "right" | "center" | null;
 
 const DELIMITER: Record<string, string> = {
@@ -172,6 +224,7 @@ export const stringifyOptions: StringifyOptions = {
     wikiLink,
     table,
     text,
+    listItem,
   } as StringifyOptions["handlers"],
 };
 

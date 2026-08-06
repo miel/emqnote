@@ -2,6 +2,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import type { Root, Yaml } from "mdast";
 import { readProcessor, writeProcessor } from "./pipeline.js";
 import { mdastToDoc } from "./from-mdast.js";
+import { restoreEmptyTasks } from "./empty-tasks.js";
 import { docToMdast } from "./to-mdast.js";
 import {
   parseFrontmatter,
@@ -42,6 +43,9 @@ export function splitNote(markdown: string): SplitNote {
 /** Reads a `.md` file from the vault as a note. */
 export function parseNote(markdown: string): Note {
   const root = readProcessor.parse(markdown) as Root;
+  // Before the tree becomes a document: a box with nothing after it is a task GFM will
+  // not admit, and only the source text can say whether it was escaped. See the module.
+  restoreEmptyTasks(root, markdown);
 
   const yamlNode = root.children.find(
     (child): child is Yaml => child.type === "yaml",

@@ -213,3 +213,76 @@ describe("uncommittedNewPath", () => {
 function basenameOf(path: string): string {
   return path.split(/[\\/]/).pop()!;
 }
+
+/**
+ * The library's "+ New note", which means "a note *here*".
+ *
+ * The window is shown rather than recreated, so the same call reaches a session that may
+ * already hold a half-typed note. The rule is about the file: once a session has picked
+ * one — on its first write, never again after that — the folder no longer decides
+ * anything, and pretending otherwise would only make this and the disk disagree.
+ */
+describe("newNoteIn", () => {
+  it("puts the next new note where the library asked", async () => {
+    const { writer } = makeWriter();
+    writer.newNoteIn("01 Projecten");
+    writer.update(payload(paragraphs("Kickoff")));
+
+    const { path } = await writer.flush();
+
+    expect(path!.startsWith(join(vault, "01 Projecten"))).toBe(true);
+  });
+
+  it("reaches the vault root", async () => {
+    const { writer } = makeWriter();
+    writer.newNoteIn("");
+    writer.update(payload(paragraphs("Losse notitie")));
+
+    const { path } = await writer.flush();
+
+    expect(path!).toBe(join(vault, basenameOf(path!)));
+  });
+
+  it("goes back to the Inbox for the note after it", async () => {
+    const { writer } = makeWriter();
+    writer.newNoteIn("01 Projecten");
+    writer.update(payload(paragraphs("Kickoff")));
+    await writer.finish();
+
+    writer.update(payload(paragraphs("Van de sneltoets")));
+    const { path } = await writer.flush();
+
+    expect(path!.startsWith(join(vault, INBOX))).toBe(true);
+  });
+
+  it("does not move a note that has already picked its file", async () => {
+    const { writer } = makeWriter();
+    writer.update(payload(paragraphs("Half getypt")));
+    const first = await writer.flush();
+
+    writer.newNoteIn("01 Projecten");
+    writer.update(payload(paragraphs("Half getypt", "En verder.")));
+    const second = await writer.flush();
+
+    expect(second.path).toBe(first.path);
+    expect(first.path!.startsWith(join(vault, INBOX))).toBe(true);
+  });
+
+  it("does not move a note loaded from an existing file", async () => {
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+    writeFileSync(
+      join(vault, relativePath),
+      "---\ntitle: Kickoff project Alpha\ntype: quick\ncreated: 2026-07-25T14:32:00+02:00\n---\n\nEerste versie.\n",
+    );
+
+    const { writer } = makeWriter();
+    await writer.load(openNote(vault, relativePath)!);
+    writer.newNoteIn("01 Projecten");
+    writer.update(payload(paragraphs("Eerste versie.", "Nieuwe regel.")));
+    await writer.flush();
+
+    expect(existsSync(join(vault, relativePath))).toBe(true);
+    expect(existsSync(join(vault, "01 Projecten"))).toBe(false);
+  });
+});

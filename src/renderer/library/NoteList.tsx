@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   folderOf,
   TRASH_FOLDER,
@@ -61,6 +62,11 @@ export function NoteList({
   // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
   // `canRenameFolder`/`canCreateFolder`).
   const inTrash = showing.kind === "folder" && showing.path === TRASH_FOLDER;
+  // Which row a drag started from, so it can fade while the drag is in the air. Held here
+  // rather than lifted alongside `Library`'s own `dragging`: nothing outside this list
+  // needs it, and the tree already gets the path it needs through `onDragNote`.
+  const [dragging, setDragging] = useState<string | null>(null);
+
   return (
     <div className="notes">
       <div className="notes-search">
@@ -105,7 +111,10 @@ export function NoteList({
         {notes.map((note) => (
           <li
             key={note.path}
-            className={`note${selected === note.path ? " note-on" : ""}`}
+            className={
+              `note${selected === note.path ? " note-on" : ""}` +
+              `${dragging === note.path ? " note-dragging" : ""}`
+            }
             onClick={() => onSelect(note.path)}
             onDoubleClick={() => onOpenInCapture(note.path)}
             // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
@@ -116,8 +125,12 @@ export function NoteList({
               event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
               event.dataTransfer.effectAllowed = "move";
               onDragNote(note.path);
+              setDragging(note.path);
             }}
-            onDragEnd={() => onDragNote(null)}
+            onDragEnd={() => {
+              onDragNote(null);
+              setDragging(null);
+            }}
           >
             <div className="note-top">
               <span className="note-title">{note.title}</span>
