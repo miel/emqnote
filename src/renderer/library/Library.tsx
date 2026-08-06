@@ -53,7 +53,6 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
 
 /** Which small dialog is open, if any. Only ever one at a time. */
 type Dialog =
-  | { kind: "rename"; initial: string }
   | { kind: "newFolder"; parent: string }
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
@@ -94,6 +93,19 @@ export function Library(): React.ReactElement {
   // whether it will take it are on opposite sides of the window.
   const [dragging, setDragging] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  /**
+   * The title being edited in place, or null when the `<h1>` is showing instead.
+   *
+   * A separate piece of state rather than a dialog: the title sits right where it is
+   * read, so editing it should look like clicking into a field, not opening something
+   * on top of the note. Holds the in-progress text — `rename()` below is not called
+   * until Enter or blur commits it.
+   */
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const titleInput = useRef<HTMLInputElement>(null);
+  // Set by Escape just before it blurs the input on purpose, so the blur handler can
+  // tell "cancelled" apart from "committed" — see the input's own `onBlur` below.
+  const cancelingTitle = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
@@ -450,6 +462,16 @@ export function Library(): React.ReactElement {
     editor.current?.setDoc(schema.nodeFromJSON(current.doc) as PMNode);
   }, [docToken]);
 
+  // Focuses and selects the title input the moment it replaces the `<h1>` — keyed on
+  // whether an edit is in progress at all, not on the text itself, so retyping the
+  // title does not re-select it out from under the caret on every keystroke.
+  useEffect(() => {
+    if (editingTitle !== null) {
+      titleInput.current?.focus();
+      titleInput.current?.select();
+    }
+  }, [editingTitle !== null]);
+
   // The trash is not somewhere you move a note to on purpose — Delete is what puts a
   // note there. Offering it in the move list made it look like an ordinary folder.
   const folders = useMemo(
@@ -466,8 +488,12 @@ export function Library(): React.ReactElement {
     if (current === null) return;
 
     await save();
-    const path = await window.emqnote.library.renameNote(current.path, title);
-    await openNote(path);
+    const result = await window.emqnote.library.renameNote(current.path, title);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.renameLocked") });
+      return;
+    }
+    await openNote(result.path);
   };
 
   /**
@@ -773,7 +799,6 @@ export function Library(): React.ReactElement {
           canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
-          onOpenOrphanedAttachments={() => setOrphanedAttachmentsOpen(true)}
           onOpenTasks={openTasks}
           tasksSelected={selection.kind === "tasks"}
           newFolderLabel={app.t("library.newFolder")}
@@ -781,7 +806,6 @@ export function Library(): React.ReactElement {
           deleteFolderLabel={app.t("library.deleteFolder")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
-          orphanedAttachmentsLabel={app.t("orphans.title")}
           tasksLabel={app.t("library.tasks")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
@@ -852,7 +876,47 @@ export function Library(): React.ReactElement {
             <>
               <header className="reader-header">
                 <div className="reader-titles">
-                  <h1>{open.title}</h1>
+                  {editingTitle !== null ? (
+                    <input
+                      ref={titleInput}
+                      className="reader-title-input"
+                      value={editingTitle}
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onBlur={() => {
+                        // Escape already decided this is a cancel — a blur can still
+                        // follow it (removing the focused input from the DOM tends to
+                        // fire one), and without the flag it would rename right after
+                        // being told not to.
+                        if (cancelingTitle.current) {
+                          cancelingTitle.current = false;
+                          setEditingTitle(null);
+                          return;
+                        }
+                        const value = editingTitle ?? "";
+                        setEditingTitle(null);
+                        if (value.trim() !== "") void rename(value);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelingTitle.current = true;
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <h1
+                      onClick={() => {
+                        if (open.editable) setEditingTitle(open.title);
+                      }}
+                    >
+                      {open.title}
+                    </h1>
+                  )}
                   <span className="reader-path">{open.path}</span>
                 </div>
                 <div className="reader-actions">
@@ -869,10 +933,7 @@ export function Library(): React.ReactElement {
                   >
                     📎
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDialog({ kind: "rename", initial: open.title })}
-                  >
+                  <button type="button" onClick={() => setEditingTitle(open.title)}>
                     {app.t("library.rename")}
                   </button>
                   <button type="button" onClick={() => setMoving(true)}>
@@ -965,26 +1026,24 @@ export function Library(): React.ReactElement {
       {dialog !== null && (
         <Ask
           title={
-            dialog.kind === "rename"
-              ? app.t("ask.renameTitle")
-              : dialog.kind === "renameFolder"
-                ? `${app.t("ask.renameFolderTitle")} "${dialog.path}"`
-                : dialog.kind === "newFolder"
-                  ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
-                  : dialog.kind === "problem"
-                    ? dialog.message
-                    : dialog.kind === "clearTrash"
-                      ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
-                      : dialog.kind === "deleteFolder"
-                        ? `"${dialog.path}"${
-                            dialog.notes === 0 && dialog.folders === 0
-                              ? ""
-                              : ` (${dialog.notes} ${app.t(dialog.notes === 1 ? "library.note" : "library.notes")}, ${dialog.folders} ${app.t(dialog.folders === 1 ? "library.folder" : "library.folders")})`
-                          } — ${app.t("ask.confirmDeleteFolder")}`
-                        : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
+            dialog.kind === "renameFolder"
+              ? `${app.t("ask.renameFolderTitle")} "${dialog.path}"`
+              : dialog.kind === "newFolder"
+                ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
+                : dialog.kind === "problem"
+                  ? dialog.message
+                  : dialog.kind === "clearTrash"
+                    ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
+                    : dialog.kind === "deleteFolder"
+                      ? `"${dialog.path}"${
+                          dialog.notes === 0 && dialog.folders === 0
+                            ? ""
+                            : ` (${dialog.notes} ${app.t(dialog.notes === 1 ? "library.note" : "library.notes")}, ${dialog.folders} ${app.t(dialog.folders === 1 ? "library.folder" : "library.folders")})`
+                        } — ${app.t("ask.confirmDeleteFolder")}`
+                      : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
           }
           initial={
-            dialog.kind === "rename" || dialog.kind === "renameFolder"
+            dialog.kind === "renameFolder"
               ? dialog.initial
               : dialog.kind === "newFolder"
                 ? ""
@@ -1008,7 +1067,6 @@ export function Library(): React.ReactElement {
           onConfirm={(value) => {
             const current = dialog;
             setDialog(null);
-            if (current.kind === "rename") void rename(value);
             if (current.kind === "delete") void trash();
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "clearTrash") void clearTrash();
@@ -1034,6 +1092,13 @@ export function Library(): React.ReactElement {
             if (dirty) await save();
           }}
           onClose={() => setSettingsOpen(false)}
+          // Settings closes first, then Orphaned Attachments opens — sequenced rather
+          // than both flags flipped at once, so the two modals are never stacked on top
+          // of each other even for the one render in between.
+          onOpenOrphanedAttachments={() => {
+            setSettingsOpen(false);
+            setOrphanedAttachmentsOpen(true);
+          }}
         />
       )}
 

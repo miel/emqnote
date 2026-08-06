@@ -11,6 +11,12 @@ interface Props {
   /** Flushes anything unsaved before the app restarts into another vault. */
   onBeforeSwitch: () => Promise<void>;
   onClose: () => void;
+  /**
+   * Opens the Orphaned Attachments cleanup screen. Used to live as its own row in
+   * `FolderTree.tsx`'s footer; it moved in here as a less prominent, occasional-use
+   * action rather than one always on screen next to Tags and People.
+   */
+  onOpenOrphanedAttachments: () => void;
 }
 
 const LOCALE_NAMES: Record<Locale, string> = {
@@ -63,6 +69,7 @@ export function Settings({
   onChanged,
   onBeforeSwitch,
   onClose,
+  onOpenOrphanedAttachments,
 }: Props): React.ReactElement {
   const [recording, setRecording] = useState(false);
   const [current, setCurrent] = useState(hotkey);
@@ -189,6 +196,18 @@ export function Settings({
             </div>
           </div>
         )}
+
+        {/* §6.5's manual, explicit cleanup action — moved off the tree footer, where it
+            sat next to Tags and People despite being an occasional action rather than an
+            everyday destination. The row's own label is the description rather than a
+            second copy of the button's text, the same way "Where your notes live" reads
+            next to "Choose another folder…" above. */}
+        <div className="settings-row settings-row-block">
+          <span>{t("orphans.settingsHint")}</span>
+          <button type="button" onClick={onOpenOrphanedAttachments}>
+            {t("orphans.title")}
+          </button>
+        </div>
 
         <div className="settings-buttons">
           <button type="button" className="primary" onClick={onClose}>

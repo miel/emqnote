@@ -855,12 +855,18 @@ function registerLibraryIpc(): void {
     return { path: moved };
   });
 
+  // Refuses a note the capture window has claimed, the same way `libraryMoveNote` does
+  // and for the same reason: renaming writes straight to the file, bypassing the capture
+  // window's own session, which holds the path it will write to next. Renaming out from
+  // under it would not update that path, so its next debounced write would recreate the
+  // note under its old name.
   ipcMain.handle(IPC.libraryRenameNote, (_event, path: string, title: string) => {
     const vault = vaultPath();
-    if (vault === null) return path;
+    if (vault === null) return { path };
+    if (writer.activePath() === path) return { path, locked: true };
     const renamed = renameNote(vault, path, title);
     notifyLibrary();
-    return renamed;
+    return { path: renamed };
   });
 
   ipcMain.handle(IPC.libraryTrashNote, (_event, path: string) => {
