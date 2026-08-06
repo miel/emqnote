@@ -5,6 +5,7 @@ import {
   backspace,
   COMMANDS,
   enter,
+  moveOverAtom,
   tabIndent,
   tabOutdent,
   type CommandContext,
@@ -50,6 +51,15 @@ export function outlookKeymap(context: CommandContext): Record<string, Command> 
   // from any depth, and promoting an item instead of merging two of them.
   keys.Enter = chainCommands(enter, baseKeymap.Enter!);
   keys.Backspace = chainCommands(backspace, baseKeymap.Backspace!);
+
+  // Also not in the registry, and for the same reason: plain arrow-key navigation is not
+  // a "shortcut" the help sheet should list. Beside a `wikiEmbed`/`wikiLink` atom,
+  // ProseMirror's own arrow handling prefers a node selection over moving the caret past
+  // it, which is invisible with nothing styling `.ProseMirror-selectednode` — see
+  // `moveOverAtom` in `commands.ts`. It declines everywhere else, so ordinary caret
+  // movement and Shift-extended selection are unaffected.
+  keys.ArrowLeft = moveOverAtom("left");
+  keys.ArrowRight = moveOverAtom("right");
 
   return keys;
 }
