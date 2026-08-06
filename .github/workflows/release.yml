@@ -27,6 +27,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      # `--notes-from-tag` reads the tag *locally*, and what `checkout` leaves behind is
+      # a lightweight tag pointing straight at the commit — so `%(contents)` answers with
+      # the commit message and the annotation never comes into it. Every release up to
+      # and including v0.3.3 was published with its commit message as its notes, and
+      # nobody noticed, because a release commit's message reads like a changelog anyway.
+      # v0.4.0 is where it showed: that tag sits on a *merge* commit, so the release came
+      # out with one line and a trailer. `--force` is the point of this line — the
+      # lightweight tag already exists, and a plain `--tags` would leave it alone.
+      - run: git fetch --force --tags origin
       - run: gh release create "$GITHUB_REF_NAME" --draft --notes-from-tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
