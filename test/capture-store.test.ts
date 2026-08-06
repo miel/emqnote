@@ -1,11 +1,20 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   beginSession,
   loadSession,
   newNoteFolder,
+  renameSessionFile,
   writeSession,
 } from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
@@ -359,5 +368,108 @@ Eerste versie.
 
     expect(result.written).toBe(false);
     expect(statSync(absolute).mtimeMs).toBe(before);
+  });
+});
+
+/**
+ * `renameSessionFile` is what actually catches a subject up to the file's name — but
+ * only when the caller is `CaptureWriter` handing the session away (`finish`, `load`, a
+ * quit-time `flush`), never from the debounced per-keystroke write. That timing rule
+ * lives in `CaptureWriter` (see `test/capture-writer.test.ts`); this only tests what the
+ * function itself decides once it is actually called.
+ */
+describe("renaming a session's file to match a changed subject", () => {
+  it("renames the file once the subject changed since it was named", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Eerste titel"));
+    const first = await writeSession(session, vault);
+
+    // `renameSessionFile` only ever runs right after `writeSession` has already
+    // caught the content up to the new payload (see `CaptureWriter.enqueue`) — it
+    // renames the file, never rewrites it, so the content check below only makes sense
+    // once `writeSession` has run again with the changed subject.
+    session.payload = payload(paragraphs("Tweede titel"));
+    await writeSession(session, vault);
+    const renamed = await renameSessionFile(session, vault);
+
+    expect(renamed).not.toBeNull();
+    expect(renamed).not.toBe(first.path);
+    expect(basename(renamed!)).toContain("Tweede titel");
+    expect(session.path).toBe(renamed);
+    expect(statSync(first.path!, { throwIfNoEntry: false })).toBeUndefined();
+    expect(readFileSync(renamed!, "utf8")).toContain("title: Tweede titel");
+  });
+
+  it("does nothing when the subject has not changed", async () => {
+    const session = beginSession();
+    session.payload = payload(paragraphs("Ongewijzigde titel"));
+    const first = await writeSession(session, vault);
+
+    const renamed = await renameSessionFile(session, vault);
+
+    expect(renamed).toBeNull();
+    expect(session.path).toBe(first.path);
+    expect(statSync(first.path!).isFile()).toBe(true);
+  });
+
+  it("never renames a session loaded from an existing note", async () => {
+    // Title there belongs to Rename (B20): a second way to change it would let the two
+    // drift.
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+    const absolute = join(vault, relativePath);
+    writeFileSync(
+      absolute,
+      "---\ntitle: Kickoff project Alpha\ntype: quick\ncreated: 2026-07-25T14:32:00+02:00\n---\n\nEerste versie.\n",
+    );
+
+    const opened = openNote(vault, relativePath)!;
+    const session = loadSession(opened);
+    session.payload = payload(paragraphs("Eerste versie."), {
+      subject: "Een heel andere titel",
+      created: opened.created,
+    });
+
+    const renamed = await renameSessionFile(session, vault);
+
+    expect(renamed).toBeNull();
+    expect(session.path).toBe(relativePath);
+    expect(existsSync(absolute)).toBe(true);
+  });
+
+  it("goes through uniquePath when the new name collides with an existing file", async () => {
+    const one = beginSession();
+    one.payload = payload(paragraphs("Zelfde titel"));
+    const first = await writeSession(one, vault);
+
+    const two = beginSession();
+    two.createdAt = one.createdAt;
+    two.payload = payload(paragraphs("Wat anders"));
+    const second = await writeSession(two, vault);
+
+    // Now bring the second session's subject in line with the first's — same minute,
+    // same title, so the natural file name collides with the one `one` already has.
+    two.payload = payload(paragraphs("Zelfde titel"));
+    const renamed = await renameSessionFile(two, vault);
+
+    expect(renamed).not.toBeNull();
+    expect(renamed).not.toBe(first.path);
+    expect(basename(renamed!)).toMatch(/Zelfde titel \(2\)\.md$/);
+    expect(statSync(first.path!).isFile()).toBe(true);
+    expect(statSync(second.path!, { throwIfNoEntry: false })).toBeUndefined();
+  });
+
+  it("renames in place inside the folder the note was filed into, not the Inbox (B29)", async () => {
+    const session = beginSession();
+    session.folder = newNoteFolder("01 Projecten/Alpha");
+    session.payload = payload(paragraphs("Eerste titel"));
+    await writeSession(session, vault);
+
+    session.payload = payload(paragraphs("Tweede titel"));
+    const renamed = await renameSessionFile(session, vault);
+
+    expect(renamed).not.toBeNull();
+    expect(dirname(renamed!)).toBe(join(vault, "01 Projecten", "Alpha"));
+    expect(basename(renamed!)).toContain("Tweede titel");
   });
 });
