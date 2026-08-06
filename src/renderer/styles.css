@@ -498,6 +498,16 @@ body {
   border-radius: 4px;
 }
 
+/* A `task-highlight.ts` decoration: where a Tasks-view click just moved the caret to.
+   Never a mark, so it is gone the moment its plugin state says so — see that file's own
+   comment. `transition` only smooths the appearance; the disappearance after 10 seconds
+   is a plain removal, not an animated fade. */
+.editor-content .task-highlight {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 2px;
+  transition: background-color 200ms ease;
+}
+
 /* ---- link prompt ---- */
 
 .link-prompt {

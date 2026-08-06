@@ -6,11 +6,15 @@ import { createEditorState, emptyDocument } from "./state.js";
 import { attachmentNodeView, wikiLinkNodeView } from "./attachment-view.js";
 import { clipboardText } from "./clipboard-text.js";
 import { focusTaskAt } from "./focus-task.js";
+import { clearTaskHighlight } from "./task-highlight.js";
 import {
   handleAttachmentDrop,
   handleAttachmentPaste,
   insertAttachment,
 } from "./insert-attachment.js";
+
+/** How long a task clicked in the Tasks view stays highlighted before fading on its own. */
+const TASK_HIGHLIGHT_MS = 10_000;
 
 export interface EditorHandle {
   focus: () => void;
@@ -61,6 +65,18 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 ) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // The pending "un-highlight" for `focusTask` below. Cleared and re-armed on every
+  // call, and dropped outright by `reset`/`setDoc`/unmount, so it can never fire against
+  // a note the highlight no longer belongs to — harmless either way since `apply` only
+  // ever clears whatever is there, but a timer with nothing left to do is one less thing
+  // running.
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHighlightTimer = (): void => {
+    if (highlightTimer.current === null) return;
+    clearTimeout(highlightTimer.current);
+    highlightTimer.current = null;
+  };
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
@@ -113,6 +129,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     created.focus();
 
     return () => {
+      clearHighlightTimer();
       created.destroy();
       view.current = null;
     };
@@ -123,12 +140,14 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     reset: () => {
       const current = view.current;
       if (current === null) return;
+      clearHighlightTimer();
       current.updateState(createEditorState(emptyDocument(), commandContext()));
     },
     getDoc: () => view.current?.state.doc ?? null,
     setDoc: (doc: PMNode) => {
       const current = view.current;
       if (current === null) return;
+      clearHighlightTimer();
       current.updateState(createEditorState(doc, commandContext()));
     },
     beginLinkEdit: () => {
@@ -157,7 +176,12 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     focusTask: (ordinal: number) => {
       const current = view.current;
       if (current === null) return;
+      clearHighlightTimer();
       focusTaskAt(current, ordinal);
+      highlightTimer.current = setTimeout(() => {
+        highlightTimer.current = null;
+        if (view.current !== null) clearTaskHighlight(view.current);
+      }, TASK_HIGHLIGHT_MS);
     },
   }));
 

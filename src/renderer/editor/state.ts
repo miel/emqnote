@@ -9,6 +9,7 @@ import type { CommandContext } from "./commands.js";
 import { outlookKeymap } from "./keymap.js";
 import { tagHighlight } from "./tag-decoration.js";
 import { taskCheckboxes } from "./checkbox.js";
+import { taskHighlight } from "./task-highlight.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -123,6 +124,7 @@ export function createEditorState(
       autoformat,
       tagHighlight(),
       taskCheckboxes(),
+      taskHighlight(),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

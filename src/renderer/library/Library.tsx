@@ -71,6 +71,15 @@ export function Library(): React.ReactElement {
    * inherits a stale ordinal from the last task clicked.
    */
   const pendingTaskOrdinal = useRef<number | null>(null);
+  /**
+   * Guards `openNote` against two calls finishing out of order — two tasks in the same
+   * note sit right next to each other in the Tasks list and are the easy way to click
+   * one, then the other, before the first's IPC round trip has actually returned. Each
+   * call claims the next number before awaiting anything; a call whose number no longer
+   * matches when it wakes up knows a newer one has already landed, and defers to it
+   * rather than clobbering its selection (or its task ordinal) with stale data.
+   */
+  const openNoteRequest = useRef(0);
 
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
   const [selection, setSelection] = useState<Selection>({ kind: "folder", path: "00 Inbox" });
@@ -362,11 +371,16 @@ export function Library(): React.ReactElement {
 
   const openNote = useCallback(
     async (path: string, taskOrdinal?: number) => {
+      const request = ++openNoteRequest.current;
+
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
       if (dirty) await save();
 
       const loaded = await window.emqnote.library.openNote(path);
       if (loaded === null) return;
+      // A newer call already landed while this one was in flight — applying this one
+      // now would clobber it, exactly the "most recently clicked" bug this guards.
+      if (request !== openNoteRequest.current) return;
 
       pendingTaskOrdinal.current = taskOrdinal ?? null;
       setOpen(loaded);
