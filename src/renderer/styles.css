@@ -473,6 +473,38 @@ body {
   cursor: pointer;
 }
 
+/* B30's first-page thumbnail. `.wiki-link-preview` only ever appears alongside a real
+   `<img>` (see `wikiLinkNodeView`), so a plain link or a non-previewable attachment
+   never pays for this rule at all. The chip becomes a small inline-flex row rather than
+   a block: `inline-flex` keeps a text position reachable on either side of the node,
+   which is what lets an arrow key step across it (`moveOverAtom`, `editor/commands.ts`)
+   instead of landing on an invisible `NodeSelection`. */
+.editor-content .wiki-link-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: middle;
+  padding: 2px 6px 2px 2px;
+}
+
+/* Requested from the OS at 256×320 (`thumbnail-cache.ts`'s `THUMBNAIL_SIZE`) and scaled
+   down here, so it stays sharp on a Retina/HiDPI display rather than upscaled blur.
+   Hidden until `onload` fires — `wikiLinkNodeView` then sets `data-thumb="ok"` on the
+   outer span, which is what reveals it; `onerror` removes the `<img>` outright rather
+   than leaving a broken-image icon, so nothing here needs to hide *that* case too. */
+.editor-content .wiki-link-thumb {
+  display: none;
+  width: 96px;
+  height: 124px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--background);
+}
+
+.editor-content .wiki-link-preview[data-thumb="ok"] .wiki-link-thumb {
+  display: block;
+}
+
 /* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
    target is a browser-renderable image. Capped rather than left at native size: a
    full-resolution screenshot pasted mid-paragraph should not be able to push the rest
