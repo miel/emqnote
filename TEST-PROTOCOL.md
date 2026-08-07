@@ -7,7 +7,7 @@ a working checklist, not part of the design.
 
 ## What this is for
 
-The suite covers 564 cases and CI runs it on Linux, Windows and macOS. What it cannot do is
+The suite covers 799 cases and CI runs it on Linux, Windows and macOS. What it cannot do is
 press a key, drag a file from Explorer, watch OneDrive sync a folder between two machines,
 or look at a screen and see that an image is actually there. Everything below is in that
 gap. Nothing here duplicates a test that already exists — if `npm test` covers it, it is
