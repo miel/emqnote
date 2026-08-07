@@ -8,6 +8,7 @@ import { LinkPrompt } from "./LinkPrompt.js";
 import { TitleBar } from "./TitleBar.js";
 import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
+import type { VaultFileEvent } from "../shared/vault-types.js";
 import { isoWithOffset } from "../shared/time.js";
 import { useBootstrap } from "./useBootstrap.js";
 
@@ -40,6 +41,28 @@ export function Capture(): React.ReactElement {
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /**
+   * A one-line, no-buttons notice for a disk-level change to the note currently held
+   * here — see the module comment near `onVaultFileChanged` below for the shapes.
+   */
+  const [diskNotice, setDiskNotice] = useState<string | null>(null);
+
+  /**
+   * Whether the renderer believes it has typed something not yet reflected in what
+   * main last loaded or reset this window to.
+   *
+   * Main's own view of the session (`CaptureWriter`'s `lastContent`) only reflects what
+   * has already been *sent* over IPC, and this renderer deliberately holds keystrokes
+   * locally for its own 300ms debounce before sending — so main genuinely cannot
+   * honestly answer "does the capture window currently have unsaved edits" on its own.
+   * This ref is the renderer's own answer instead, kept where the truth actually lives.
+   *
+   * It over-reports in some edge cases — it does not know whether main has already
+   * durably written the exact bytes it is holding — and that is an intentional bias:
+   * showing a needless notice costs nothing, silently discarding something the user
+   * typed is the one failure mode worth designing against here.
+   */
+  const dirtyRef = useRef(false);
 
   // The one path the toolbar button, the keyboard shortcut and (via `Editor`) a drop
   // or a paste all eventually reach — but only this one, the picker, is triggered from
@@ -72,6 +95,7 @@ export function Capture(): React.ReactElement {
 
   const onDocChange = useCallback(
     (doc: PMNode) => {
+      dirtyRef.current = true;
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = setTimeout(() => send(doc), CHANGE_DEBOUNCE_MS);
     },
@@ -82,6 +106,7 @@ export function Capture(): React.ReactElement {
   // keystroke in the body would never be saved.
   const onHeaderChange = useCallback(
     (values: HeaderValues) => {
+      dirtyRef.current = true;
       setHeader(values);
       headerRef.current = values;
       const doc = editor.current?.getDoc();
@@ -113,6 +138,8 @@ export function Capture(): React.ReactElement {
       setExisting(false);
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
+      dirtyRef.current = false;
+      setDiskNotice(null);
     });
 
     const stopStatus = window.emqnote.onStatus(setStatus);
@@ -136,6 +163,38 @@ export function Capture(): React.ReactElement {
       setExisting(true);
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: note.path }));
+      dirtyRef.current = false;
+      setDiskNotice(null);
+    });
+
+    /**
+     * The note held here changed or disappeared on disk from outside this app. Main
+     * only ever sends this for the one note `writer.activePath()` says this window has
+     * claimed (see `notifyFileEvent` in `index.ts`), so there is no path to check here —
+     * every event that arrives is about the note already on screen.
+     *
+     *  - "changed" while `!dirtyRef.current`: nothing of the user's own to lose, so
+     *    reread it — `reloadNote()` reuses the exact hand-over path a fresh
+     *    `openInCapture` uses, ending in the same `onLoad` above (which clears
+     *    `dirtyRef` and this notice for the freshly loaded note).
+     *  - "changed" while dirty, and "removed" regardless of `dirtyRef.current`: a
+     *    one-line notice with no buttons. A window where the user may be actively
+     *    mid-sentence must never offer a button that could discard what they are
+     *    currently typing — and for "removed" specifically, the capture session keeps
+     *    writing to the same path it already has open, so the next debounced write
+     *    simply recreates the file, which in this window — unlike the library reader —
+     *    is the behaviour the person actively composing a note here actually wants.
+     */
+    const stopVaultFileChanged = window.emqnote.onVaultFileChanged((event) => {
+      if (event.kind === "changed" && !dirtyRef.current) {
+        setDiskNotice(null);
+        void window.emqnote.reloadNote();
+        return;
+      }
+
+      setDiskNotice(
+        event.kind === "changed" ? "diskChange.captureChanged" : "diskChange.captureRemoved",
+      );
     });
 
     return () => {
@@ -143,6 +202,7 @@ export function Capture(): React.ReactElement {
       stopReset();
       stopStatus();
       stopLoad();
+      stopVaultFileChanged();
     };
   }, []);
 
@@ -243,6 +303,10 @@ export function Capture(): React.ReactElement {
             ? app.t("capture.nothingSaved")
             : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
         </span>
+        {/* No buttons here, deliberately — see the comment on `onVaultFileChanged`
+            above. A window where the user may be mid-sentence must never offer a
+            choice that could discard what is currently being typed. */}
+        {diskNotice !== null && <span className="disk-notice">{app.t(diskNotice)}</span>}
         {/* Moved out of the header when the tag field took its place. A learn-once
             hint belongs in the ambient chrome anyway, not in a row of fields. */}
         <span className="dismiss-hint">

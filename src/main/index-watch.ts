@@ -1,9 +1,9 @@
 import { watch } from "chokidar";
-import { readFileSync, statSync } from "node:fs";
-import { relative, sep } from "node:path";
-import { TRASH_FOLDER } from "../shared/vault-types.js";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
+import { TRASH_FOLDER, type VaultFileEvent } from "../shared/vault-types.js";
 import { buildRecord } from "./index-scan.js";
-import { deleteNote, upsertNote, type IndexDb } from "./index-db.js";
+import { deleteNote, deleteNotesUnder, upsertNote, type IndexDb } from "./index-db.js";
 import { isHidden } from "./vault-io.js";
 
 /**
@@ -33,8 +33,21 @@ export interface WatchOptions {
    * seconds.
    */
   stabilityThreshold?: number;
-  /** Called after every reindex or removal, so the caller can refresh whatever is on screen. */
-  onChange?: () => void;
+  /**
+   * Called after every reindex or removal (single note or whole subtree), so the caller
+   * can refresh whatever is on screen and, separately, decide whether to tell an open
+   * window about it. `own` says whether this app's own write produced the change (see
+   * `own-writes.ts`) — deciding what to *do* with that is not this module's job: it
+   * stays free of both the policy (`index.ts`'s `notifyFileEvent`) and a hard dependency
+   * on the hash module, via `isOwnWrite` below.
+   */
+  onChange?: (event: VaultFileEvent & { own: boolean }) => void;
+  /**
+   * Tells this app's own write apart from a real external one. Injected rather than
+   * imported directly, so this module needs no real file-write side effects to be
+   * tested and carries no policy of its own about what an own write should mean.
+   */
+  isOwnWrite?(path: string, contents: string): boolean;
 }
 
 export interface VaultWatcher {
@@ -70,19 +83,64 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
 
     try {
       const stats = statSync(path);
-      upsertNote(db, buildRecord(vault, path, readFileSync(path, "utf8"), stats));
+      const contents = readFileSync(path, "utf8");
+      const own = options.isOwnWrite?.(path, contents) ?? false;
+      upsertNote(db, buildRecord(vault, path, contents, stats));
+      options.onChange?.({ path: toPosix(relative(vault, path)), kind: "changed", own });
     } catch {
       // Gone, or unreadable, by the time this ran — a rename mid-flight, most likely.
       // The `unlink` event chokidar sends for a real deletion is what reconciles that;
-      // nothing needs doing here beyond not indexing bytes that were never settled.
+      // nothing needs doing here beyond not indexing bytes that were never settled, and
+      // there is no meaningful event to report either — the eventual `unlink`/`add`
+      // pair for whatever this really was reports on its own.
     }
-    options.onChange?.();
   };
 
   const forget = (path: string): void => {
     if (!path.endsWith(".md")) return;
-    deleteNote(db, toPosix(relative(vault, path)));
-    options.onChange?.();
+
+    // Not a defence against this app's own writes — a rename-over-an-existing-path
+    // reports as a `change` event on all three platforms, never a delete. This is
+    // specifically for OneDrive's own delete-then-recreate dance during sync, and for
+    // ordinary rename transients: if the file exists again by the time this runs, it
+    // was never really gone, so reindex it instead of reporting a removal that did not
+    // happen.
+    if (existsSync(path)) {
+      reindex(path);
+      return;
+    }
+
+    const relativePath = toPosix(relative(vault, path));
+    deleteNote(db, relativePath);
+    options.onChange?.({ path: relativePath, kind: "removed", own: false });
+  };
+
+  /**
+   * A whole folder deleted outside the app: chokidar does not guarantee a per-file
+   * `unlink` for everything that was inside it — that varies by platform and can
+   * legitimately collapse into a single directory-level event — so without this a
+   * folder deleted in Explorer/Finder would leave every note under it still fully
+   * indexed.
+   */
+  const forgetDir = (path: string): void => {
+    const resolvedVault = resolve(vault);
+    const resolvedPath = resolve(path);
+    // Defensive, even though chokidar should never hand this a path outside the vault
+    // or the vault root itself — the same reasoning `trashFolder`/`renameFolder` apply
+    // to a typed folder path, just against a filesystem event instead of user input.
+    if (resolvedPath === resolvedVault) return;
+    if (!resolvedPath.startsWith(resolvedVault + sep)) return;
+    if (path.includes("..")) return;
+
+    // Same rename-transient reasoning as `forget`: if the folder exists again by the
+    // time this runs, nothing was really deleted.
+    if (existsSync(path)) return;
+
+    const prefix = toPosix(relative(vault, path));
+    const removed = deleteNotesUnder(db, prefix);
+    for (const removedPath of removed) {
+      options.onChange?.({ path: removedPath, kind: "removed", own: false });
+    }
   };
 
   const watcher = watch(vault, {
@@ -94,8 +152,9 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
   watcher.on("add", reindex);
   watcher.on("change", reindex);
   watcher.on("unlink", forget);
+  watcher.on("unlinkDir", forgetDir);
 
-  const ready = new Promise<void>((resolve) => watcher.once("ready", resolve));
+  const ready = new Promise<void>((resolveReady) => watcher.once("ready", resolveReady));
 
   return {
     close: () => watcher.close(),

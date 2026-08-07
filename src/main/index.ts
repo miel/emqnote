@@ -80,6 +80,7 @@ import {
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
+import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
@@ -92,6 +93,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  VaultFileEvent,
 } from "../shared/vault-types.js";
 import type { Locale } from "../shared/i18n.js";
 
@@ -174,6 +176,35 @@ function notifyLibrary(): void {
   const library = getLibraryWindow();
   if (library !== null && !library.isDestroyed()) {
     library.webContents.send(IPC.libraryRefresh);
+  }
+}
+
+/**
+ * Pushes a note's disk-level change to whichever window has it open.
+ *
+ * The library gets every event unconditionally: main has no reliable way to know what
+ * the reader currently has open — building one would mean a second source of truth for
+ * something the library renderer already holds authoritatively (`open` in
+ * `Library.tsx`) — so it filters against its own state instead. The capture window is
+ * the opposite: its one open path genuinely *is* main's own state
+ * (`writer.activePath()`), so it is filtered here rather than by sending the renderer a
+ * value to compare against — the renderer's own `status.savedAs` is absolute for a
+ * brand-new unsaved note and vault-relative for a loaded one, so comparing that against
+ * a vault-relative event path would silently never match for a new note.
+ *
+ * Never called for this app's own write — see `index.ts`'s `watchVault` call site,
+ * which only reaches this when the watcher's `own` flag is false. `notifyLibrary`
+ * above stays unconditional regardless; this is strictly in addition to it.
+ */
+function notifyFileEvent(event: VaultFileEvent): void {
+  const library = getLibraryWindow();
+  if (library !== null && !library.isDestroyed()) {
+    library.webContents.send(IPC.vaultFileChanged, event);
+  }
+
+  const capture = getCaptureWindow();
+  if (capture !== null && !capture.isDestroyed() && writer.activePath() === event.path) {
+    capture.webContents.send(IPC.vaultFileChanged, event);
   }
 }
 
@@ -310,7 +341,19 @@ async function main(): Promise<void> {
   // hotkey→caret numbers in `CLAUDE.md` cannot afford to quietly pick up.
   const watchedVault = loadSettings().vaultPath;
   if (selfTestRounds === 0 && watchedVault !== null && indexDb !== null) {
-    vaultWatcher = watchVault(watchedVault, indexDb, { onChange: notifyLibrary });
+    vaultWatcher = watchVault(watchedVault, indexDb, {
+      isOwnWrite: wasOwnWrite,
+      // `notifyLibrary` fires unconditionally, exactly as it always has — the library's
+      // own lists, facets and conflict banner need to refresh on the app's own writes
+      // too. `notifyFileEvent` is strictly additional and only for a real external
+      // change: suppressing it for an own write is what keeps the "changed on disk"
+      // notice from appearing ~800ms after every keystroke pause, since the app's own
+      // debounced autosave is itself a filesystem write this same watcher observes.
+      onChange: (event) => {
+        notifyLibrary();
+        if (!event.own) notifyFileEvent({ path: event.path, kind: event.kind });
+      },
+    });
     beginStartupScan(watchedVault, indexDb);
   }
 
@@ -614,6 +657,26 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.captureClose, () => {
     hideCaptureWindow();
+  });
+
+  // Reuses the exact hand-over path a fresh `captureLoad` uses: `openNote` reads the
+  // current bytes, `writer.load` resets the session's `lastContent` baseline against
+  // them (without that, the very next debounced write would compare against the *old*
+  // baseline and rewrite what was just reread), and `captureLoadNote` puts it in front
+  // of the renderer. Only ever sent by the renderer when it believes it has nothing of
+  // its own to lose — see `Capture.tsx`'s `dirtyRef`.
+  ipcMain.handle(IPC.captureReload, async () => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return false;
+    const path = writer.activePath();
+    if (path === null) return false;
+
+    const note = openNote(vault, path);
+    if (note === null) return false;
+
+    await writer.load(note);
+    getCaptureWindow()?.webContents.send(IPC.captureLoadNote, note);
+    return true;
   });
 
   ipcMain.on(IPC.windowMinimise, () => getCaptureWindow()?.minimize());

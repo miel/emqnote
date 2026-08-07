@@ -12,6 +12,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  VaultFileEvent,
 } from "../shared/vault-types.js";
 
 /**
@@ -56,6 +57,10 @@ contextBridge.exposeInMainWorld("emqnote", {
   pickAttachment: () => ipcRenderer.invoke(IPC.pickAttachment),
   openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
+
+  onVaultFileChanged: (handler: (event: VaultFileEvent) => void) =>
+    subscribe<VaultFileEvent>(IPC.vaultFileChanged, handler),
+  reloadNote: () => ipcRenderer.invoke(IPC.captureReload),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),

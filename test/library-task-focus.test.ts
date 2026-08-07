@@ -167,6 +167,8 @@ function buildFake(): CaptureApi {
     switchVault: async () => {},
     saveAttachment: async () => null,
     fetchRemoteImage: async () => null,
+    onVaultFileChanged: () => () => {},
+    reloadNote: async () => {},
     pickAttachment: async () => null,
     openAttachment: async () => {},
     library,

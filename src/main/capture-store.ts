@@ -5,6 +5,7 @@ import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markd
 import type { CapturePayload } from "../shared/ipc.js";
 import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
+import { rememberOwnWrite } from "./own-writes.js";
 import { saveNote } from "./vault-io.js";
 import { INBOX } from "./vault.js";
 
@@ -180,6 +181,9 @@ async function writeAtomic(path: string, contents: string): Promise<void> {
   const temporary = `${path}.tmp`;
   await writeFile(temporary, contents, "utf8");
   await rename(temporary, path);
+  // Same reasoning as `vault-io.ts`'s own `writeAtomic`: the watcher's reindex of this
+  // write needs to recognise it as this app's own rather than an external change.
+  rememberOwnWrite(path, contents);
 }
 
 export interface WriteResult {
