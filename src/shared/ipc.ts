@@ -114,6 +114,11 @@ export const IPC = {
   pickAttachment: "app:pick-attachment",
   /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
   openAttachment: "app:open-attachment",
+  /**
+   * Downloads a picture that arrived with a pasted web page into `_attachments/`. Sits
+   * beside `saveAttachment` for the same reason: a paste happens in both windows.
+   */
+  fetchRemoteImage: "app:fetch-remote-image",
 } as const;
 
 export interface Bootstrap {
@@ -304,6 +309,14 @@ export interface CaptureApi {
   pickAttachment: () => Promise<string | null>;
   /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
   openAttachment: (name: string) => Promise<void>;
+  /**
+   * Downloads a picture that came in with a pasted web page and answers the name it
+   * landed under in `_attachments/`, or `null` for every refusal — a scheme that is not
+   * allowed, a redirect that leaves the allowlist, something that is not an image, a
+   * file over the cap, a timeout. Every rule is enforced in main (`remote-image.ts`);
+   * the caller's only job is to leave the remote `image` node alone on `null`.
+   */
+  fetchRemoteImage: (url: string) => Promise<string | null>;
 
   library: LibraryApi;
 }

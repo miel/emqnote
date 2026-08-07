@@ -498,6 +498,39 @@ body {
   border-radius: 4px;
 }
 
+/* A remote `![alt](https://…)`, drawn as a label rather than as a picture — the CSP
+   allows no remote image source, and a broken-image glyph reads as a bug. Same chip
+   shape as `.wiki-embed`, in the muted colour, because it names something that is not
+   in the vault. See `attachment-view.ts`'s `externalImageView`. */
+.editor-content .external-image {
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 0.9em;
+}
+
+/* While `paste-images.ts` has a download in the air for this picture. The class is an
+   inline decoration, so it lands on whatever the node is currently drawn as and
+   disappears on its own when the image is deleted or undone. */
+.editor-content .image-pending {
+  opacity: 0.55;
+  animation: image-pending-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes image-pending-pulse {
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-content .image-pending {
+    animation: none;
+  }
+}
+
 /* ---- link prompt ---- */
 
 .link-prompt {

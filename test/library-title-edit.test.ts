@@ -141,6 +141,7 @@ function buildFake(initial: OpenedNote): Fake {
     saveAttachment: async () => null,
     pickAttachment: async () => null,
     openAttachment: async () => {},
+    fetchRemoteImage: async () => null,
     library,
   };
 

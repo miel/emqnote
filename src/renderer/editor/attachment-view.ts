@@ -63,6 +63,41 @@ export function attachmentNodeView(
 }
 
 /**
+ * `image`'s real face: a label, never an `<img>`.
+ *
+ * An `image` node in this app only ever holds a *remote* address — an attachment is a
+ * `wikiEmbed` instead (`insert-attachment.ts`) — and the CSP allows no remote image
+ * source in either window, so the browser drew a broken-image glyph for every one of
+ * them. That looks like a bug both where it is the honest fallback for a paste whose
+ * download was refused (`paste-images.ts`) and in a note written in Obsidian that
+ * already carried `![alt](https://…)` before this app ever opened it.
+ *
+ * Deliberately no `<img>` at all rather than an `img-src` widened to `https:`: the
+ * address came off a pasted page, and a note that quietly fetches from it every time it
+ * is opened is a tracking pixel with extra steps.
+ */
+function externalImageLabel(node: PMNode): string {
+  const alt = (node.attrs.alt as string | null) ?? "";
+  if (alt.trim() !== "") return alt;
+
+  const src = (node.attrs.src as string | null) ?? "";
+  try {
+    return new URL(src).hostname || "image";
+  } catch {
+    return "image";
+  }
+}
+
+export function externalImageView(node: PMNode): NodeView {
+  const span = document.createElement("span");
+  span.className = "external-image";
+  span.textContent = externalImageLabel(node);
+  span.title = (node.attrs.src as string | null) ?? "";
+
+  return { dom: span };
+}
+
+/**
  * `wikiLink`'s real face: the same chip `toDOM` already draws, plus a click that opens
  * a stored attachment (a PDF, in practice — an image is `wikiEmbed` instead) in the
  * system viewer. `toDOM` stays untouched for the same reason as above.
