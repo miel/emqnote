@@ -3,9 +3,9 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 6 August 2026, at `v0.4.1` — eight fixes from daily use on top of
-`v0.4.0`, which finally carried PR #2 after it had sat on `main` untagged
-since 5 August.
+Last updated 7 August 2026, at `v0.5.0` — four packages built in parallel on
+top of `v0.4.1`: pasting a picture from a web page, PDF/Office thumbnails,
+disk-change detection, and context menus with full keyboard navigation.
 
 ## Where the project stands
 
@@ -15,7 +15,7 @@ since 5 August.
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
 | 3 — the library window | **Done, now including dragging in the tree** — the one work item that was still outstanding, built 4 August 2026. Shipped before phase 4; the two were swapped in practice. |
-| 4 — **pasting and images** | **Split, and half of it is done.** *Images* landed 5 August 2026: an image or PDF can be pasted, dropped or picked, lands in `_attachments/`, and renders inline (B28). *Pasting from Outlook* — the `mso-list` reconstruction — is still **deferred, deliberately**: real samples reshaped what's actually unknown here (see below), and confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Note that `handlePaste` deliberately claims image files only and passes everything else through, precisely so that work is neither preempted nor complicated. |
+| 4 — **pasting and images** | **Split, and more of it is done.** *Images* landed 5 August 2026: an image or PDF can be pasted, dropped or picked, lands in `_attachments/`, and renders inline (B28). *A remote picture arriving with a pasted web page* landed 7 August 2026: it is downloaded into `_attachments/` too, through an SSRF-guarded fetch pipeline, instead of being left as a dead `https://` link the CSP blocks (see Settled below). *Pasting from Outlook* — the `mso-list` reconstruction — is still **deferred, deliberately**: real samples reshaped what's actually unknown here (see below), and confirming the one remaining open question needs classic desktop Outlook, unavailable for about two weeks from 2 August 2026. Note that `handlePaste` deliberately claims image files only and passes everything else through, precisely so that work is neither preempted nor complicated; the new remote-image pipeline runs through `transformPasted` instead, upstream of `handlePaste`, for the same reason. |
 | 5 — index and search | **Done.** Search bar, conflict banner (diff + keep/keep/merge) and the orphaned-attachments cleanup screen are all wired end to end — IPC, preload, real UI — and confirmed actually working via `Xvfb`: a real conflict pair resolved on disk, a real orphaned attachment trashed on disk, not just rendered. See "Settled" below. |
 | 6 — email import | Not started. Power Automate availability is still an open point. |
 
@@ -53,6 +53,20 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   `Xvfb` — the same gap the item above already describes for the library
   window, just never closed for the other window either. `TEST-PROTOCOL.md` §9
   walks through both.
+- **Two things from `v0.5.0` are unverified live, and both are the same
+  capture-window gap by another name.** A pasted remote image was confirmed
+  downloading and rendering inline — but only in the library reader; no image
+  has ever landed in the *capture* window under `Xvfb` (see bug 4 above and
+  the PR #2 item further up — this is now the fourth feature to trip on that
+  same absence). The capture window's own disk-change notice (B31) is
+  unverified for a different reason: there is no capture-renderer test
+  harness to drive it at all, so it was never reachable by automation in the
+  first place. The PDF/Office thumbnail's *happy path* is a third kind of gap
+  again — not unverified but **unverifiable here**: this sandbox and CI have
+  no OS thumbnail provider, so only the fallback (plain chip, confirmed
+  clean) can ever be exercised outside real macOS/Windows hardware. All three
+  are `TEST-PROTOCOL.md` items — §4.5, §10, and the paste-in-capture case
+  folded into §4.2.
 - **`v0.4.1` is the first test of the release-notes fix.** Every
   release up to and including `v0.4.0` published its *commit* message as its
   notes, not its tag annotation: `gh release create --notes-from-tag` reads the
@@ -187,6 +201,67 @@ pass — 438 tests, the full suite.
       (`tags-and-people` has no local branch left to delete, only the remote.)
 
 ## Settled
+
+**Four packages, 7 August 2026, released as `v0.5.0`.** Built as four work
+packages on separate branches by parallel agents and merged in two waves —
+package D waited on package C because both rewrite large parts of
+`Library.tsx`.
+
+- **Package A — a picture pasted from a web page is downloaded into
+  `_attachments/`**, never left pointing at the web. ProseMirror's stock HTML
+  paste produces an `image` node holding the remote address, which
+  serializes to `![alt](https://…)` — dead offline, dead on the other
+  machine, blocked by the CSP even online. `remote-image.ts` (Electron-free,
+  tested directly) holds every rule — a scheme allowlist (`https:`, `http:`,
+  `data:`; `file:` conspicuously absent), a content-type allowlist, a
+  magic-byte sniff that must agree with the declared type, SVG refused on
+  this path though the file picker still allows one — and `fetch-attachment.ts`
+  does the I/O, re-checking the allowlist on every redirect `Location` header,
+  which is the one check standing between a pasted URL and
+  `file:///etc/passwd` or an internal metadata endpoint. In-flight downloads
+  are tracked as a `DecorationSet`, not a position, so typing ahead of an
+  image or undoing the paste while it is still downloading both do the right
+  thing for free.
+- **Package B — a PDF/Office attachment gets a first-page thumbnail** (B30),
+  drawn by the OS (`nativeImage.createThumbnailFromPath`) and served over a
+  new `emqnote-thumb://` protocol, never a `data:` URL, for the same reason
+  B28 already rejected one for attachment previews generally. The `<img>`
+  element is the whole state machine — `onerror` removes it and leaves
+  today's plain chip, so the fallback is byte-for-byte what shipped before
+  this landed.
+- **Package C — the library and the capture window now learn about a note
+  that changed or disappeared outside the app** (B31), instead of the reader
+  silently going stale and the next autosave recreating a file that was just
+  deleted. A content hash (`own-writes.ts`), not a timer, tells the app's own
+  debounced write apart from a real external one — a TTL would have turned a
+  correctness property into a timing property, and OneDrive's own
+  re-materialisation schedule is not a clock this app can trust. `unlinkDir`
+  is handled too: a folder deleted outside the app no longer leaves its notes
+  still indexed.
+- **Package D — every panel has a right-click menu, and the library is fully
+  keyboard-drivable.** Folder tree, note list and note panel (both windows)
+  each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the
+  same reason `Ask.tsx` is a component and not `window.prompt`. A roving
+  `tabIndex` keeps exactly one row per pane a Tab stop; Shift+F10 opens the
+  menu at the focused row, so the keyboard route and the mouse route land on
+  the same component. `onRenameFolder`/`onDeleteFolder` now take the path
+  that was actually right-clicked instead of always acting on whatever the
+  toolbar last selected.
+
+Confirmed in the real app under `Xvfb`, driven over CDP: a real remote image
+downloading and rendering inline in the library reader; a PDF wikiLink's
+thumbnail request falling back cleanly to the plain chip on this Linux
+sandbox; the library's entire disk-change path — silent reload when clean,
+the Reload/Keep-mine bar with in-progress text preserved when dirty, the
+Close/Keep-mine bar with no auto-close on a deletion, and a full minute of
+continuous typing producing zero false positives from the app's own
+autosave; the three context menus, including a right-click correctly
+selecting a note-list row first; and keyboard-only navigation — roving
+arrow-key movement, Tab cycling tree → notes → editor, Escape back out of
+the editor, Shift+F10 opening a menu at the focused row. Not confirmed: a
+pasted image drawing inside the *capture* window specifically, and the
+capture window's own disk-change notice (no capture-renderer test harness
+exists) — see the open items above.
 
 **Eight fixes from daily use, 6 August 2026, released as `v0.4.1`.** Built
 across three disjoint areas of the tree in parallel (library chrome, the

@@ -39,13 +39,30 @@ Elke vervanger die daarop verliest, wordt niet gebruikt. Daarom:
 | 1 Residente schil | Tray, hotkey, voorgeladen venster, opslaan naar de Inbox |
 | 2 Editor | ProseMirror, Outlook-sneltoetsen, outlines, kopblok |
 | 3 Hoofdvenster | **Klaar.** Mappenboom, notitielijst, lezen en bewerken, verplaatsen, prullenbak, en sinds 4 augustus 2026 ook slepen in de boom — het laatste werk-item van deze fase |
-| 4 Plakken en afbeeldingen | Nog niet begonnen — de volgende fase, en het grootste onbekende stuk werk |
+| 4 Plakken en afbeeldingen | **Gesplitst, en meer ervan is klaar.** Afbeeldingen plakken, slepen of kiezen landde op 5 augustus. Een afbeelding die meekomt met een geplakte webpagina wordt sinds 7 augustus ook gedownload naar `_attachments/`, via een tegen SSRF beveiligde pijplijn. Plakken vanuit Outlook (`mso-list`) blijft bewust uitgesteld — het grootste onbekende stuk werk resteert daar |
 | 5 Zoeken en synchronisatie | **Klaar.** SQLite/FTS5-index, volledige scan, `chokidar`-watcher, zoekbalk, conflictbanner met verschil en drie keuzes, opruimscherm voor verweesde bijlagen — alles bevestigd werkend via `Xvfb`, echte bestandsoperaties op schijf, niet alleen gerenderd |
 | 6 E-mail | Nog niet begonnen |
 
 Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-installer met
-auto-updater (05-besluitenlog.md). Actuele versie: `v0.4.1` — acht correcties uit het
-dagelijks gebruik van `v0.4.0`.
+auto-updater (05-besluitenlog.md). Actuele versie: `v0.5.0` — vier pakketten werk, gebouwd
+in twee golven door parallelle agents, op basis van `v0.4.1`.
+
+Op 7 augustus 2026 landden vier pakketten: plakken van een webafbeelding (pakket A),
+miniaturen voor PDF- en Office-bijlagen (pakket B, **B30**), een melding wanneer een open
+notitie buiten de app verandert of verdwijnt (pakket C, **B31**) en rechtsklikmenu's met
+volledige toetsenbordnavigatie in de bibliotheek (pakket D). Pakket A downloadt een
+afbeelding die meekomt met een geplakte webpagina naar `_attachments/` in plaats van hem
+als een dode `https://`-koppeling te laten staan, via een pijplijn die op elke stap
+opnieuw controleert wat een omleiding mag aanwijzen — de enige weg tussen een geplakte URL
+en `file:///etc/passwd`. Pakket C onderscheidt de eigen schrijfactie van de app van een
+echte externe wijziging met een inhoudshash in plaats van een tijdvenster, precies omdat
+OneDrive's eigen herschrijfmoment geen klok is die deze app kan vertrouwen. Bevestigd in de
+echte app onder `Xvfb`: een geplakte afbeelding die daadwerkelijk download en inline
+tekent in de bibliotheek-lezer; het hele pad van de wijzigingsmelding in de bibliotheek
+(stille herlaad, de Reload/Behoud-de-mijne-balk, de Sluiten/Behoud-de-mijne-balk, en geen
+enkele valse melding na een minuut doorlopend typen); de drie rechtsklikmenu's; en volledige
+toetsenbordnavigatie. Niet bevestigd: hetzelfde plakken in het opnamevenster zelf, en de
+knopvrije melding die dat venster zou moeten tonen — `TEST-PROTOCOL.md` beschrijft beide.
 
 Op 6 augustus 2026 landden, na `v0.4.0`, nog eens acht correcties uit het dagelijks
 gebruik, als `v0.4.1`: het opnamevenster hernoemt zijn bestand nu pas bij het afronden
