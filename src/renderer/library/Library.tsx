@@ -704,6 +704,29 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Duplicates the open note beside itself, `-copy` appended to the title. Reached from
+   * the note-list context menu — which selects the row first (`NoteList.tsx`'s
+   * `onContextMenu`), so it is always the note currently open by the time this runs —
+   * and from the reader toolbar, which always means the open note too.
+   *
+   * Flushes a pending save first, the same reason `rename` does: the source has to
+   * reflect what is on screen, not what is still sitting in the 800 ms debounce, or the
+   * copy would silently be a stale version of it.
+   */
+  const duplicate = async (): Promise<void> => {
+    const current = openRef.current;
+    if (current === null) return;
+
+    await save();
+    const result = await window.emqnote.library.duplicateNote(current.path);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.duplicateLocked") });
+      return;
+    }
+    await openNote(result.path);
+  };
+
+  /**
    * Renames a folder and moves everything that pointed into it.
    *
    * The order of the first two steps is the whole trick. `save()` posts the note's path
@@ -1038,6 +1061,9 @@ export function Library(): React.ReactElement {
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           deleteFolderLabel={app.t("library.deleteFolder")}
+          newLabel={app.t("library.new")}
+          renameLabel={app.t("library.rename")}
+          deleteLabel={app.t("library.delete")}
           newNoteLabel={app.t("library.newNote")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
@@ -1184,6 +1210,9 @@ export function Library(): React.ReactElement {
                   <button type="button" onClick={() => setMoving(true)}>
                     {app.t("library.move")}
                   </button>
+                  <button type="button" onClick={() => void duplicate()}>
+                    {app.t("library.duplicate")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => window.emqnote.library.revealNote(open.path)}
@@ -1285,6 +1314,7 @@ export function Library(): React.ReactElement {
               label: app.t("library.rename"),
               onSelect: () => setEditingTitle(noteMenu.note.title),
             },
+            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
             {
               label: app.t("library.reveal"),
               onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),

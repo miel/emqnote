@@ -60,6 +60,8 @@ export const IPC = {
   librarySaveNote: "library:save-note",
   libraryMoveNote: "library:move-note",
   libraryRenameNote: "library:rename-note",
+  /** Copies a note beside itself, `-copy` appended to the title — never the file bytes (B6). */
+  libraryDuplicateNote: "library:duplicate-note",
   libraryTrashNote: "library:trash-note",
   /** Permanently empties `_trash` — the one delete this app performs with no way back. */
   libraryEmptyTrash: "library:empty-trash",
@@ -225,6 +227,12 @@ export interface LibraryApi {
    * session.
    */
   renameNote: (path: string, title: string) => Promise<{ path: string; locked?: boolean }>;
+  /**
+   * Copies a note beside itself with `-copy` appended to the title. `locked` when the
+   * capture window has the *source* claimed — its edits may not have crossed the 800 ms
+   * debounce yet, so the copy would silently be a stale version of what is on screen.
+   */
+  duplicateNote: (path: string) => Promise<{ path: string; locked?: boolean }>;
   trashNote: (path: string) => Promise<boolean>;
   /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
   emptyTrash: () => Promise<number>;

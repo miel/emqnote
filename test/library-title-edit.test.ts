@@ -90,6 +90,7 @@ function buildFake(initial: OpenedNote): Fake {
     saveNote: async (request) => ({ written: false, path: request.path }),
     moveNote: async (path) => ({ path }),
     renameNote,
+    duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
     emptyTrash: async () => 0,
     createFolder: async (parent) => parent,

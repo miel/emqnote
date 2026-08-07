@@ -87,14 +87,14 @@ Destructive by design. Scratch vault only.
 
 | # | Step | Expected |
 |---|---|---|
-| 3.1 | Select an **empty** folder, click *Delete folder* | Confirmation appears, without a count |
+| 3.1 | Select an **empty** folder, click *Delete* | Confirmation appears, without a count |
 | 3.2 | Confirm | Folder gone from the tree; selection moves to its parent |
-| 3.3 | Select a folder holding notes **and** a subfolder, click *Delete folder* | Confirmation **names both counts** — e.g. "2 notes, 1 folder" |
+| 3.3 | Select a folder holding notes **and** a subfolder, click *Delete* | Confirmation **names both counts** — e.g. "2 notes, 1 folder" |
 | 3.4 | Cancel | Nothing happens. Check on disk: the folder is still there, untouched |
 | 3.5 | Repeat 3.3 and confirm | Folder gone from the tree. Open Trash — the whole folder is inside it, with its notes and its subfolder intact |
 | 3.6 | Open a note from inside the trashed folder | It still opens and reads correctly |
 | 3.7 | Select Trash, click *Clear trash*, confirm | Now it is really gone. Check on disk |
-| 3.8 | Select the vault root, and separately the Trash folder | *Delete folder* is disabled for both |
+| 3.8 | Select the vault root, and separately the Trash folder | *Delete* is disabled for both |
 | 3.9 | Open a note in the **capture window** (from the library, *Open for editing*), then try to delete the folder that note is in | Refused, with a message. Not silently done, and not done anyway |
 
 **Both platforms**, and 3.5 matters more on Windows: a folder rename across a OneDrive

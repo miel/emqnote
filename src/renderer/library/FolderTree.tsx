@@ -54,6 +54,15 @@ interface Props {
   newFolderLabel: string;
   renameFolderLabel: string;
   deleteFolderLabel: string;
+  /**
+   * The toolbar's short forms — "+ New", "Rename", "Delete" — reusing `library.new`,
+   * `library.rename` and `library.delete` rather than `newFolderLabel` etc. The panel is
+   * already the folder tree, so the long form the context menu needs (nothing else on
+   * screen says "folder" there) would be redundant on a button beside it.
+   */
+  newLabel: string;
+  renameLabel: string;
+  deleteLabel: string;
   newNoteLabel: string;
   helpLabel: string;
   settingsLabel: string;
@@ -313,6 +322,9 @@ export function FolderTree({
   newFolderLabel,
   renameFolderLabel,
   deleteFolderLabel,
+  newLabel,
+  renameLabel,
+  deleteLabel,
   newNoteLabel,
   helpLabel,
   settingsLabel,
@@ -381,7 +393,7 @@ export function FolderTree({
           existed only as a hidden gesture. */}
       <div className="tree-toolbar">
         <button type="button" onClick={onNewFolder} disabled={!canCreateFolder}>
-          + {newFolderLabel}
+          + {newLabel}
         </button>
         {/* Beside it rather than hidden behind a gesture, for the reason above — and
             renaming had no gesture at all, hidden or otherwise. */}
@@ -390,7 +402,7 @@ export function FolderTree({
           onClick={() => onRenameFolder(lastFolder)}
           disabled={!canRenameFolder}
         >
-          {renameFolderLabel}
+          {renameLabel}
         </button>
         {/* A folder never had a way out of the app's own trash discipline before this —
             only Explorer/Finder, outside the app entirely. */}
@@ -400,7 +412,7 @@ export function FolderTree({
           onClick={() => onDeleteFolder(lastFolder)}
           disabled={!canDeleteFolder}
         >
-          {deleteFolderLabel}
+          {deleteLabel}
         </button>
       </div>
 

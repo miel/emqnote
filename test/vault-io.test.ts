@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createFolder,
   diffConflict,
+  duplicateNote,
   emptyTrash,
   flattenFolders,
   folderContents,
@@ -409,6 +410,36 @@ describe("moving and renaming", () => {
     expect(readFileSync(join(vault, renamed), "utf8")).toContain(
       "title: Kickoff Alpha herzien",
     );
+  });
+
+  it("duplicates a note beside itself, -copy appended to the title", () => {
+    const duplicated = duplicateNote(vault, path);
+
+    expect(duplicated).toBe(
+      "00 Inbox/2026-07-25 1432 Kickoff project Alpha-copy.md",
+    );
+    // The source is untouched.
+    expect(readFileSync(join(vault, path), "utf8")).toContain(
+      "title: Kickoff project Alpha\n",
+    );
+    expect(readFileSync(join(vault, duplicated), "utf8")).toContain(
+      "title: Kickoff project Alpha-copy",
+    );
+    expect(readNotesIn(vault, "00 Inbox")).toHaveLength(2);
+  });
+
+  it("never overwrites an existing copy — a second duplicate lands on uniquePath's ' (2)' form", () => {
+    const first = duplicateNote(vault, path);
+    const second = duplicateNote(vault, path);
+
+    expect(first).toBe("00 Inbox/2026-07-25 1432 Kickoff project Alpha-copy.md");
+    expect(second).toBe(
+      "00 Inbox/2026-07-25 1432 Kickoff project Alpha-copy (2).md",
+    );
+    expect(readFileSync(join(vault, second), "utf8")).toContain(
+      "title: Kickoff project Alpha-copy",
+    );
+    expect(readNotesIn(vault, "00 Inbox")).toHaveLength(3);
   });
 
   it("makes a folder", () => {
