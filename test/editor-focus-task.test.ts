@@ -29,6 +29,10 @@ describe("Editor focusTask, mounted for real", () => {
   let scrolledOn: Element | null;
 
   beforeEach(() => {
+    // `Editor.tsx` reads `window.emqnote.platform` synchronously on mount, to track
+    // Mod+click's own modifier key (B33) — every other test that mounts a real `Editor`
+    // already stubs this; this one predates that and needs the same stub now.
+    (window as unknown as { emqnote: unknown }).emqnote = { platform: "darwin" };
     container = document.createElement("div");
     document.body.appendChild(container);
     scrolledOn = null;

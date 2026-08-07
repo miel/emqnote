@@ -39,7 +39,8 @@ function mount(markdown: string): EditorView {
   return new EditorView(host, {
     state: createEditorState(doc, {
       openLinkPrompt: () => undefined,
-      requestAttachment: () => undefined,
+      requestImage: () => undefined,
+      requestFile: () => undefined,
     }),
   });
 }
