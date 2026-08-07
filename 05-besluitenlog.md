@@ -801,6 +801,61 @@ te bemonsteren, hier toegepast op het ene bestand dat gevraagd wordt. `darwin`-o
 net als `index-scan.ts`'s `isDataless`: dat is het enige platform waarop `blocks` dit
 betrouwbaar betekent.
 
+## B31 — Een wijziging buiten de app wordt getoond, nooit stilzwijgend overgenomen of overschreven
+
+**Genomen** op 7 augustus 2026. De index merkte een bestand dat buiten de app verdween of
+veranderde altijd al op (`deleteNote` op een `unlink`), maar het venster dat de notitie
+open had staan, wist er niets van: de lezer bleef de oude inhoud tonen en de eerstvolgende
+gedebouncede autosave **herschiep een verwijderd bestand**. Dat is nu opgelost door het
+open venster zelf te laten kiezen, in plaats van iets automatisch te doen dat niet terug
+te draaien is.
+
+**Een inhoudshash, geen tijdvenster, om de eigen schrijfactie van de app te herkennen.**
+Zonder dat zou de balk 800 ms na elke stopgezette toetsaanslag verschijnen — de eigen
+gedebouncede autosave is zelf een schrijfactie die de watcher ziet. Een tijdvenster ("negeer
+schrijfacties gedurende N ms na onze eigen save") is bewust afgewezen: dat maakt van een
+correctheidseigenschap een timingeigenschap, en de ene klok die deze app niet kan
+vertrouwen is die van OneDrive — het herschrijft een bestand na het uploaden op zijn eigen
+schema, niet op een schema dat deze app regelt. `own-writes.ts` onthoudt in plaats daarvan
+`sha256(inhoud)` per pad, begrensd tot 64 items; een externe wijziging die toevallig exact
+dezelfde bytes herstelt telt ook niet als nieuws, en dat is geen speciaal geval maar de hash
+die precies doet wat hij moet doen.
+
+**De bibliotheek en het opnamevenster kiezen allebei anders, met opzet.** De bibliotheek
+krijgt elke gebeurtenis en filtert zelf tegen wat de lezer op dat moment open heeft staan —
+main heeft daar geen betrouwbaar zicht op, en dat erbij bouwen zou een tweede bron van
+waarheid worden voor iets de renderer al bezit. Het opnamevenster wordt wél in main
+gefilterd, tegen `writer.activePath()`, want dat pad ís main's eigen staat. Bij een
+schone notitie (`!dirty`) laadt de bibliotheek stilzwijgend opnieuw — er is niets te
+verliezen; bij een notitie met eigen, nog niet opgeslagen tekst verschijnt een balk met
+**Reload** en **Behoud de mijne**. Bij een verwijdering verschijnt altijd een balk
+(**Sluiten** / **Behoud de mijne**), zelfs als de notitie schoon is — een verwijdering
+sluit nooit vanzelf, want dat rukt een venster weg dat iemand op dat moment aan het lezen
+kan zijn, en een voorbijgaande OneDrive-hik (verwijderen-en-herstellen tijdens
+conflictoplossing) mag dat niet stilzwijgend kunnen doen. Het opnamevenster kent geen
+`dirty`-status van main — het venster houdt zelf een `dirtyRef` bij, met opzet
+te-voorzichtig ingesteld (het weet niet zeker of main de laatste bytes al duurzaam
+wegschreef), en toont bij twijfel liever een overbodige melding dan dat het ooit iets
+wegvaagt dat iemand aan het typen is.
+
+**`unlinkDir` kreeg alsnog een handler.** Chokidar garandeert geen `unlink` per bestand
+bij het verwijderen van een hele map — zonder deze wijziging bleef een buiten de app
+verwijderde map met al zijn notities gewoon in de index staan: nog steeds zichtbaar, nog
+steeds doorzoekbaar, nog steeds meegeteld in Taken. `deleteNotesUnder` matcht op
+`substr(pad, 1, lengte) = voorvoegsel + "/"`, bewust niet met `LIKE` (`_` is daar een
+jokerteken dat een echte onderstrepingsmap zou laten meematchen) of `GLOB` (`[` is een
+metateken dat een mapnaam legitiem kan bevatten).
+
+**Bevestigd in de echte app onder `Xvfb`, over CDP aangestuurd — het hele pad in de
+bibliotheek.** Een bestand extern bewerken terwijl de notitie schoon is: stille herlaad,
+geen balk. Extern bewerken terwijl er eigen tekst nog niet is opgeslagen: de balk
+verschijnt met **Reload** en **Behoud de mijne**, en de zojuist getypte tekst blijft
+onaangeroerd staan tot er gekozen wordt. Extern verwijderen: de balk met **Sluiten** /
+**Behoud de mijne** verschijnt en de notitie sluit niet vanzelf. Een minuut lang doorlopend
+typen in de bibliotheek leverde geen enkele valse balk op — de eigen-schrijfactie-
+onderdrukking hield precies stand. De eigen, knopvrije melding van het opnamevenster is
+nog niet op deze manier gezien; zie `TEST-PROTOCOL.md`.
+
 ---
 
 ## Open punten
@@ -813,5 +868,6 @@ betrouwbaar betekent.
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
 | Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
-| Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op? | Nu — code en terugval zijn bewezen op Linux/CI, het gelukkige pad zelf nog nooit; zie `TEST-PROTOCOL.md`, B30 |
+| Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op? | Nu — de terugval (geen provider) is op 7 augustus 2026 onder `Xvfb` bevestigd: nette labelchip, geen kapotte afbeelding; het gelukkige pad zelf blijft ongezien tot er echte macOS/Windows-hardware is; zie `TEST-PROTOCOL.md`, B30 |
+| Verschijnt de eigen, knopvrije melding van het opnamevenster echt bij een externe wijziging? | Nu — het pad in de bibliotheek is op 7 augustus 2026 uitputtend bevestigd onder `Xvfb` (schoon/vuil/verwijderd, en geen valse balk bij eigen schrijfacties); het opnamevenster zelf nog niet, zie `TEST-PROTOCOL.md`, B31 |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |
