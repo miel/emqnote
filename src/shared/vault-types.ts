@@ -137,6 +137,25 @@ export function folderOf(notePath: string): string {
 }
 
 /**
+ * The three "can this folder be acted on" rules, pulled out of `Library.tsx` so a
+ * per-row context menu (`FolderTree.tsx`) and the toolbar (still keyed on `lastFolder`)
+ * can ask the same question about two different paths without the answer drifting
+ * apart. The vault root and anything inside `_trash` refuse a rename or a delete; the
+ * trash itself additionally refuses a new folder or note filed into it.
+ */
+export function canRenameFolder(path: string): boolean {
+  return path !== "" && !path.startsWith(TRASH_FOLDER);
+}
+
+export function canDeleteFolder(path: string): boolean {
+  return path !== "" && !path.startsWith(TRASH_FOLDER);
+}
+
+export function canCreateFolderIn(path: string): boolean {
+  return !path.startsWith(TRASH_FOLDER);
+}
+
+/**
  * How far the index scan has got. Lives here rather than in `index-scan.ts` because it
  * crosses the IPC boundary now that the library draws a progress bar from it — the same
  * reason `ConflictPair` moved out of `src/main/`.

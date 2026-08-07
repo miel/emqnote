@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LOCALES, type Locale } from "../../shared/i18n.js";
 import type { VaultLocation } from "../../shared/vault-types.js";
+import { trapTab } from "./focus-trap.js";
 
 interface Props {
   locale: Locale;
@@ -76,6 +77,7 @@ export function Settings({
   const [rejected, setRejected] = useState(false);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void window.emqnote.listVaults().then(setVaults);
@@ -88,7 +90,23 @@ export function Settings({
 
   return (
     <div className="overlay" onMouseDown={onClose}>
-      <div className="settings" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className="settings"
+        ref={panel}
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          // The hotkey-recording button owns every key while it is armed — including
+          // Tab and Escape, which it needs to be able to record as part of a
+          // combination — so the trap and the Escape-to-close below both stand aside
+          // for it.
+          if (recording) return;
+          trapTab(event, panel.current);
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      >
         <h2>{t("settings.title")}</h2>
 
         <label className="settings-row">

@@ -8,6 +8,7 @@ import {
   type ShortcutGroup,
   type ShortcutWhere,
 } from "../shared/shortcuts.js";
+import { trapTab } from "./library/focus-trap.js";
 
 interface Props {
   /** Which window is asking, so its own keys are listed and the other's are not. */
@@ -54,6 +55,7 @@ export function Help({ window: which, isMac, hotkey, t, onClose }: Props): React
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
+          trapTab(event, panel.current);
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();

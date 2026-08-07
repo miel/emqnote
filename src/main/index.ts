@@ -757,7 +757,7 @@ function registerAppIpc(): void {
   // The picker reads the chosen file itself rather than round-tripping its bytes
   // through the renderer first — unlike a paste or a drop, which start out as bytes
   // already in the browser's hands and have no file on disk to read from directly.
-  ipcMain.handle(IPC.pickAttachment, async (event) => {
+  ipcMain.handle(IPC.pickAttachment, async (event, filter?: "image" | "any") => {
     const vault = loadSettings().vaultPath;
     if (vault === null) return null;
 
@@ -765,12 +765,20 @@ function registerAppIpc(): void {
     // behind the library window with the renderer sitting in `await pickAttachment()`
     // looking exactly like a hang — there is simply nothing on screen saying otherwise.
     const parent = BrowserWindow.fromWebContents(event.sender);
+    // "image" is the note panel's right-click "Insert image" — everything else,
+    // including no argument at all, keeps the toolbar button's combined filter.
     const dialogOptions: OpenDialogOptions = {
       title: "Insert an attachment",
       properties: ["openFile"],
-      filters: [
-        { name: "Images and PDFs", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"] },
-      ],
+      filters:
+        filter === "image"
+          ? [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"] }]
+          : [
+              {
+                name: "Images and PDFs",
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+              },
+            ],
     };
     const choice =
       parent === null

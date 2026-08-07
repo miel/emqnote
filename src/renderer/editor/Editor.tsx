@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
+import type { Command, EditorState } from "prosemirror-state";
 import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
 import {
@@ -45,6 +46,12 @@ export interface EditorHandle {
   insertAttachment: (name: string) => void;
   /** Moves the caret to the ordinal-th task item and scrolls it into view. */
   focusTask: (ordinal: number) => void;
+  /**
+   * Runs a plain ProseMirror command against the live view and refocuses it — what the
+   * note panel's right-click menu needs to carry out the item the caller picked, built
+   * from the same `EditorState` by `editor-menu.ts`'s pure `buildEditorMenu`.
+   */
+  runCommand: (command: Command) => void;
 }
 
 interface Props {
@@ -52,6 +59,13 @@ interface Props {
   onLinkRequested: () => void;
   /** The toolbar button and the keyboard shortcut both funnel through this. */
   onAttachmentRequested: () => void;
+  /**
+   * A right-click (or the `ContextMenu` key/Shift+F10) inside the note panel, in either
+   * window — `Capture.tsx` and the library reader both pass this through to build the
+   * same formatting menu from `editor-menu.ts`. Absent means no custom menu at all, and
+   * the browser's own falls through undisturbed.
+   */
+  onContextMenu?: (payload: { x: number; y: number; state: EditorState }) => void;
   /** Shown while the document is empty, via CSS. */
   placeholder?: string;
 }
@@ -65,7 +79,7 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onLinkRequested, onAttachmentRequested, placeholder },
+  { onChange, onLinkRequested, onAttachmentRequested, onContextMenu, placeholder },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -85,8 +99,8 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
-  const handlers = useRef({ onChange, onLinkRequested, onAttachmentRequested });
-  handlers.current = { onChange, onLinkRequested, onAttachmentRequested };
+  const handlers = useRef({ onChange, onLinkRequested, onAttachmentRequested, onContextMenu });
+  handlers.current = { onChange, onLinkRequested, onAttachmentRequested, onContextMenu };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
   // there is nothing here `state.ts`'s `createEditorState` needs to hold onto.
@@ -196,7 +210,25 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         if (view.current !== null) clearTaskHighlight(view.current);
       }, TASK_HIGHLIGHT_MS);
     },
+    runCommand: (command: Command) => {
+      const current = view.current;
+      if (current === null) return;
+      command(current.state, current.dispatch);
+      current.focus();
+    },
   }));
 
-  return <div className="editor" ref={host} />;
+  return (
+    <div
+      className="editor"
+      ref={host}
+      onContextMenu={(event) => {
+        if (handlers.current.onContextMenu === undefined) return;
+        const current = view.current;
+        if (current === null) return;
+        event.preventDefault();
+        handlers.current.onContextMenu({ x: event.clientX, y: event.clientY, state: current.state });
+      }}
+    />
+  );
 });

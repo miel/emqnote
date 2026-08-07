@@ -137,6 +137,28 @@ export const SHORTCUTS: ShortcutEntry[] = [
 
   // ---- both windows ----
   { id: "help", keys: ["F1", "Mod-/"], where: "global", group: "window" },
+
+  // ---- the library window's keyboard navigation (package D) ----
+  {
+    id: "contextMenu",
+    keys: ["Shift-F10", "ContextMenu"],
+    where: "library",
+    group: "window",
+    why:
+      "The keyboard route into a right-click menu, on whichever row is focused. " +
+      "'ContextMenu' is its own key on a Windows keyboard; Shift+F10 is the one every " +
+      "keyboard has, including a Mac's.",
+  },
+  {
+    id: "cyclePanes",
+    keys: ["F6"],
+    where: "library",
+    group: "window",
+    why:
+      "Tab already cycles tree → notes → editor, but it cannot leave the editor: " +
+      "keymap.ts binds Tab there to list indent, and that binding always returns true. " +
+      "F6 is not claimed by the editor, so it is the one key that reaches every pane.",
+  },
 ];
 
 /** The order groups appear in the help sheet. */
