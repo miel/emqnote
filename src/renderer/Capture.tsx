@@ -74,16 +74,10 @@ export function Capture(): React.ReactElement {
     state: EditorState;
   } | null>(null);
 
-  // The one path the toolbar button, the keyboard shortcut and (via `Editor`) a drop
-  // or a paste all eventually reach — but only this one, the picker, is triggered from
-  // outside the editor, so it is the only one that needs a handler up here.
-  const pickAndInsertAttachment = useCallback(async () => {
-    const name = await window.emqnote.pickAttachment();
-    if (name !== null) editor.current?.insertAttachment(name);
-  }, []);
-
-  /** The right-click menu's two attachment items — same flow, differing only in the
-   * picker's filter (`ipc.ts`'s `pickAttachment`). */
+  // The one path the two toolbar buttons, the two keyboard shortcuts and the right-click
+  // menu's two items all eventually reach — but only this one, the picker, is triggered
+  // from outside the editor, so it is the only one that needs a handler up here. Same
+  // flow, differing only in the picker's filter (`ipc.ts`'s `pickAttachment`).
   const pickAndInsertImage = useCallback(async () => {
     const name = await window.emqnote.pickAttachment("image");
     if (name !== null) editor.current?.insertAttachment(name);
@@ -295,7 +289,8 @@ export function Capture(): React.ReactElement {
         placeholder={app.t("capture.placeholder")}
         onChange={onDocChange}
         onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
-        onAttachmentRequested={() => void pickAndInsertAttachment()}
+        onImageRequested={() => void pickAndInsertImage()}
+        onFileRequested={() => void pickAndInsertFile()}
         onContextMenu={(payload) => setEditorMenu(payload)}
       />
 
@@ -351,8 +346,16 @@ export function Capture(): React.ReactElement {
         <button
           type="button"
           className="help-button"
-          title={app.t("shortcut.attachment")}
-          onClick={() => void pickAndInsertAttachment()}
+          title={app.t("shortcut.insertImage")}
+          onClick={() => void pickAndInsertImage()}
+        >
+          🖼
+        </button>
+        <button
+          type="button"
+          className="help-button"
+          title={app.t("shortcut.insertFile")}
+          onClick={() => void pickAndInsertFile()}
         >
           📎
         </button>

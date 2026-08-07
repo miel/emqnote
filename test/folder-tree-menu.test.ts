@@ -59,6 +59,7 @@ function mount(overrides: { onCreateFolder?: () => void } = {}): void {
         onOpenHelp: () => {},
         onOpenTasks: () => {},
         tasksSelected: false,
+        isMac: false,
         newFolderLabel: "New folder",
         renameFolderLabel: "Rename folder",
         deleteFolderLabel: "Delete folder",

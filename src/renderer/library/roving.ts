@@ -1,3 +1,5 @@
+import { matches, shortcut, type KeyEvent } from "../../shared/shortcuts.js";
+
 /**
  * The keyboard half of a roving `tabIndex`, shared by the folder tree, the note list and
  * the task list: exactly one row per pane is a Tab stop, and Up/Down/Home/End move which
@@ -27,7 +29,14 @@ export function roveArrowKey(
   return null;
 }
 
-/** Shift+F10 or the dedicated `ContextMenu` key — the keyboard route into a context menu. */
-export function isContextMenuKey(event: { key: string; shiftKey: boolean }): boolean {
-  return event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
+/**
+ * Mod-Shift-M or the dedicated `ContextMenu` key — the keyboard route into a context menu.
+ *
+ * Delegates to the registry's own `matches` rather than testing `event.key`/modifiers by
+ * hand — a second definition of the `contextMenu` entry is exactly what `shortcuts.ts`'s
+ * own module comment warns against, and it is how this used to still say Shift+F10 after
+ * the registry moved on to Mod-Shift-M (B32).
+ */
+export function isContextMenuKey(event: KeyEvent, isMac: boolean): boolean {
+  return matches(shortcut("contextMenu"), event, isMac);
 }

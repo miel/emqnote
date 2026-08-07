@@ -29,6 +29,8 @@ const SHORTCUT_ITEMS: Record<string, string> = {
   "menu.bulletList": "bulletList",
   "menu.orderedList": "orderedList",
   "menu.insertTask": "task",
+  "menu.insertImage": "insertImage",
+  "menu.insertFile": "insertFile",
 };
 
 function plainState(): EditorState {
@@ -63,12 +65,12 @@ describe("buildEditorMenu", () => {
     expect(separators).toHaveLength(2);
   });
 
-  it("wires Insert image and Insert file to their own actions, with no shortcut", () => {
+  it("wires Insert image and Insert file to their own actions, each with its own shortcut", () => {
     const items = buildEditorMenu(plainState(), false, t, actions);
     const image = items.find((item) => item.label === "menu.insertImage");
     const file = items.find((item) => item.label === "menu.insertFile");
-    expect(image?.shortcut).toBeUndefined();
-    expect(file?.shortcut).toBeUndefined();
+    expect(image?.shortcut).toBe(formatFirstKey("insertImage", false));
+    expect(file?.shortcut).toBe(formatFirstKey("insertFile", false));
     expect(image?.onSelect).toBe(actions.insertImage);
     expect(file?.onSelect).toBe(actions.insertFile);
   });

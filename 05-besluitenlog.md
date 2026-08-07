@@ -856,6 +856,28 @@ typen in de bibliotheek leverde geen enkele valse balk op — de eigen-schrijfac
 onderdrukking hield precies stand. De eigen, knopvrije melding van het opnamevenster is
 nog niet op deze manier gezien; zie `TEST-PROTOCOL.md`.
 
+## B32 — Geen functietoetsen in sneltoetsen
+
+**Genomen** op 7 augustus 2026. `F1` (help), `F6` (`cyclePanes`) en `Shift-F10`
+(`contextMenu`) zijn vervangen, alle drie om dezelfde reden: op een MacBook-toetsenbord
+zitten functietoetsen achter `fn` — een dagelijkse sneltoets die daarachter verstopt zit,
+is geen sneltoets meer maar een hindernis. `Mod-/` bestond al als alias voor help en werd
+de enige vorm; `cyclePanes` kreeg `Ctrl-Tab`/`Ctrl-Shift-Tab`, de vorm die de browser zelf
+al gebruikt om tussen tabbladen te wisselen en waar `keymap.ts` geen binding voor heeft,
+dus hij bereikt nog steeds elk paneel inclusief het opnamevenster; `contextMenu` kreeg
+`Mod-Shift-M`, en `outdent` — de enige andere plek die dat akkoord claimde, als alias
+naast `Shift-Tab` — gaf die claim op zodat één sneltoetstabel niet twee dingen tegelijk
+kon beweren.
+
+**Afgewezen: Shift-F10 laten staan omdat het de Windows-toegankelijkheidsstandaard is.**
+Dat is waar — Shift-F10 is op Windows de systeembrede conventie voor "contextmenu openen"
+— maar deze app draait op twee platformen met precies dezelfde toetsenbordindeling voor
+elke andere sneltoets in `shortcuts.ts`, en een uitzondering die alleen op Windows werkt
+zou de ene plek zijn waar `Mod`'s belofte (één binding, beide platformen) niet opgaat.
+`ContextMenu` — de eigen toets die alleen op een Windows-toetsenbord bestaat en geen `fn`
+nodig heeft — blijft wel staan, precies om die Windows-conventie te bedienen zonder de
+fn-eis van een functietoets.
+
 ---
 
 ## Open punten

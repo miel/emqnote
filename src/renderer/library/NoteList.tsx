@@ -37,12 +37,14 @@ interface Props {
    */
   onDragNote: (path: string | null) => void;
   /**
-   * A right-click (or the `ContextMenu` key/Shift+F10) on a row — Open, Move, Rename,
+   * A right-click (or the `ContextMenu` key/Mod-Shift-M) on a row — Open, Move, Rename,
    * Reveal, Delete. The row is handed over whole rather than just its path, so the
    * caller can pre-fill Rename's initial text from `note.title` without waiting on
    * `openNote` to resolve first.
    */
   onContextMenu: (note: NoteSummary, x: number, y: number) => void;
+  /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
+  isMac: boolean;
   locale: Locale;
   t: (key: string) => string;
 }
@@ -64,6 +66,7 @@ export function NoteList({
   onClearTrash,
   onDragNote,
   onContextMenu,
+  isMac,
   locale,
   t,
 }: Props): React.ReactElement {
@@ -158,7 +161,7 @@ export function NoteList({
                 onSelect(note.path);
                 return;
               }
-              if (isContextMenuKey(event)) {
+              if (isContextMenuKey(event, isMac)) {
                 event.preventDefault();
                 onSelect(note.path);
                 const rect = event.currentTarget.getBoundingClientRect();

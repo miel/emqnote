@@ -138,10 +138,14 @@ async function flush(rounds = 12): Promise<void> {
   }
 }
 
-function keydown(target: Element, key: string, shiftKey = false): void {
+function keydown(
+  target: Element,
+  key: string,
+  modifiers: { shiftKey?: boolean; ctrlKey?: boolean } = {},
+): void {
   act(() => {
     target.dispatchEvent(
-      new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }),
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers }),
     );
   });
 }
@@ -245,7 +249,7 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement?.className).toContain("editor-content");
   });
 
-  it("F6 completes the cycle back to the tree from inside the editor", async () => {
+  it("Ctrl-Tab completes the cycle back to the tree from inside the editor", async () => {
     await mount();
     const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
     await act(async () => {
@@ -257,7 +261,9 @@ describe("keyboard navigation across the library's panes", () => {
     editorContent.focus();
     expect(document.activeElement).toBe(editorContent);
 
-    keydown(editorContent, "F6");
+    // Ctrl-Tab, not Cmd-Tab: `cyclePanes`'s binding is spelled literally, not with `Mod`,
+    // even though this fake reports the `darwin` platform.
+    keydown(editorContent, "Tab", { ctrlKey: true });
 
     const activeTreeRow = treeRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeTreeRow);

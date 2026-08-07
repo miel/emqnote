@@ -77,7 +77,15 @@ export function buildEditorMenu(
       shortcut: formatFirstKey("task", isMac),
       onSelect: () => actions.run(toggleTask),
     },
-    { label: t("menu.insertImage"), onSelect: actions.insertImage },
-    { label: t("menu.insertFile"), onSelect: actions.insertFile },
+    {
+      label: t("menu.insertImage"),
+      shortcut: formatFirstKey("insertImage", isMac),
+      onSelect: actions.insertImage,
+    },
+    {
+      label: t("menu.insertFile"),
+      shortcut: formatFirstKey("insertFile", isMac),
+      onSelect: actions.insertFile,
+    },
   ];
 }

@@ -110,7 +110,7 @@ boundary behaves differently there than on macOS.
 |---|---|---|
 | 4.1a | In the library reader, paste a screenshot (Cmd/Ctrl+V after a screen capture) | Image appears in the note at the caret |
 | 4.1b | Drag a `.png` from Finder/Explorer onto the editor | Same |
-| 4.1c | Use the attachment button in the toolbar, pick a `.png` | Same |
+| 4.1c | Use the image toolbar button (🖼, `Mod-Shift-I`), pick a `.png` | Same |
 | 4.1d | After each, look in `<vault>/_attachments/` | One new file per insert, named `YYYY-MM-DD-HHmm-<something>.png` |
 | 4.1e | Open the note's `.md` in a text editor | The line reads `![[2026-…-….png]]`. The frontmatter has **no** `attachments:` array — that is deliberate (B28) |
 | 4.1f | Paste **plain text** into the editor | Pastes as text, as it always did. Nothing about the image path interferes |
@@ -170,7 +170,7 @@ longer has to fight `failedThisSession` to get a fresh answer.
 
 | # | Step | Expected |
 |---|---|---|
-| 4.5a | Insert a `.pdf` (drag, paste, or the attachment button) into a note in the library reader | A small thumbnail of the PDF's first page appears beside the filename chip, not just the label |
+| 4.5a | Insert a `.pdf` (drag, paste, or the file toolbar button — 📎, `Mod-Shift-A`) into a note in the library reader | A small thumbnail of the PDF's first page appears beside the filename chip, not just the label |
 | 4.5b | Insert a `.docx`, `.xlsx` or `.pptx` the same way | Same — a thumbnail of the document, from the same code path |
 | 4.5c | Insert a `.txt` or any other non-previewable file | Plain filename chip only, exactly as before B30 — no broken-image icon, no empty gap where a thumbnail would go |
 | 4.5d | Reopen the note (close and open it again, or switch away and back) | The thumbnail is still there, without a visible reload flicker — it is being served from the on-disk cache (`<userData>/thumbnails`), not regenerated |
@@ -379,7 +379,7 @@ all anyone knows about whether it actually works on screen.
 
 | # | Step | Expected |
 |---|---|---|
-| 9.2a | In the capture window, get an image inline (paste a screenshot, or insert one with the attachment button) — this is §4.2's own check, and it has to pass first | The image itself appears inline, not a filename and not a broken-image icon |
+| 9.2a | In the capture window, get an image inline (paste a screenshot, or insert one with the image toolbar button) — this is §4.2's own check, and it has to pass first | The image itself appears inline, not a filename and not a broken-image icon |
 | 9.2b | Put the caret in the text immediately before the image, press the arrow key that would step onto it | The blinking text caret lands on the far side of the image. **Not** a silent, invisible selection — nothing should look like the arrow key did nothing |
 | 9.2c | Click directly on the image | It shows a visible outline (the `.ProseMirror-selectednode` styling this fix added). Before this fix a click here selected the node with nothing on screen saying so |
 | 9.2d | With the image selected that way (from 9.2c), press an arrow key | The text caret appears beside the image, on the side the arrow pointed — the same destination as 9.2b, reached from a node selection instead of a text one |
