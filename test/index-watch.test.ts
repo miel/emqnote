@@ -6,11 +6,25 @@ import { closeIndex, getNote, openIndex, type IndexDb } from "../src/main/index-
 import { watchVault, type VaultWatcher } from "../src/main/index-watch.js";
 
 // Real chokidar against a real temp directory: a tiny stability threshold instead of
-// the 300 ms production default keeps this within the suite's ~2 second budget, and a
-// generous poll margin on top of it absorbs real filesystem event latency without
-// making the wait itself the flaky part.
+// the 300 ms production default keeps this within the suite's ~2 second budget.
+//
+// There are two kinds of wait here and they are not interchangeable:
+//
+// - `waitFor` polls until the thing that should happen *has* happened, and returns the
+//   moment it does. Use it for every assertion that something appears, changes or is
+//   removed. It costs the real event latency and no more, so the happy path stays as
+//   fast as the old fixed wait while the ceiling is high enough for a loaded CI runner.
+// - `settle()` is a fixed wait, and is only correct for asserting that something did
+//   *not* happen — you cannot poll for the absence of an event, you can only give it a
+//   fair chance to arrive and then look.
+//
+// A fixed wait used for the first kind is a coin flip with a very good bias, which is
+// exactly how it behaves: `SETTLE_MS` was enough on Linux for months and then failed a
+// release on macOS, whose fsevents backend reports later and less evenly under load.
 const STABILITY_MS = 20;
 const SETTLE_MS = 150;
+const WAIT_TIMEOUT_MS = 4000;
+const POLL_MS = 10;
 
 let vault: string;
 let db: IndexDb;
@@ -33,6 +47,29 @@ function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Polls `check` until it stops throwing, then returns. Rethrows the last failure once
+ * the timeout is up, so a genuine breakage still reports the real assertion message
+ * rather than a bare "timed out".
+ */
+async function waitFor(check: () => void): Promise<void> {
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+
+  for (;;) {
+    try {
+      check();
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+      await sleep(POLL_MS);
+    }
+  }
+}
+
 beforeEach(() => {
   vault = mkdtempSync(join(tmpdir(), "emqnote-watch-"));
   mkdirSync(join(vault, "00 Inbox"), { recursive: true });
@@ -52,9 +89,9 @@ describe("the vault watcher", () => {
     await watcher.ready();
     writeFileSync(join(vault, "00 Inbox", "Nieuw.md"), noteContents("Nieuw"));
 
-    await settle();
-
-    expect(getNote(db, "00 Inbox/Nieuw.md")?.title).toBe("Nieuw");
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Nieuw.md")?.title).toBe("Nieuw");
+    });
   });
 
   it("does not index what already existed before watching started", async () => {
@@ -76,12 +113,17 @@ describe("the vault watcher", () => {
     const path = join(vault, "00 Inbox", "Notitie.md");
     writeFileSync(path, noteContents("Notitie", "oud"));
     watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await settle();
+    // `ready()`, not a wait for the note to appear: this file was written *before*
+    // watching started, so `ignoreInitial` means it is deliberately never indexed —
+    // that is the point of the test above. All there is to wait for here is the
+    // watcher being up, which `ready()` answers exactly rather than approximately.
+    await watcher.ready();
 
     writeFileSync(path, noteContents("Notitie", "nieuw"));
-    await settle();
 
-    expect(getNote(db, "00 Inbox/Notitie.md")?.tags).toEqual(["nieuw"]);
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Notitie.md")?.tags).toEqual(["nieuw"]);
+    });
   });
 
   it("removes a note from the index once its file is deleted", async () => {
@@ -90,13 +132,15 @@ describe("the vault watcher", () => {
     await watcher.ready();
 
     writeFileSync(path, noteContents("Weg"));
-    await settle();
-    expect(getNote(db, "00 Inbox/Weg.md")).not.toBeNull();
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Weg.md")).not.toBeNull();
+    });
 
     rmSync(path);
-    await settle();
 
-    expect(getNote(db, "00 Inbox/Weg.md")).toBeNull();
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Weg.md")).toBeNull();
+    });
   });
 
   it("ignores a note written inside the trash folder", async () => {
@@ -131,9 +175,10 @@ describe("the vault watcher", () => {
     await watcher.ready();
 
     writeFileSync(join(vault, "00 Inbox", "Signaal.md"), noteContents("Signaal"));
-    await settle();
 
-    expect(calls).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(calls).toBeGreaterThan(0);
+    });
   });
 
   it("stops reacting once closed", async () => {
@@ -154,15 +199,17 @@ describe("the vault watcher", () => {
     mkdirSync(join(vault, "00 Inbox", "Sub"), { recursive: true });
     writeFileSync(join(vault, "00 Inbox", "Top.md"), noteContents("Top"));
     writeFileSync(join(vault, "00 Inbox", "Sub", "Nested.md"), noteContents("Nested"));
-    await settle();
-    expect(getNote(db, "00 Inbox/Top.md")).not.toBeNull();
-    expect(getNote(db, "00 Inbox/Sub/Nested.md")).not.toBeNull();
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Top.md")).not.toBeNull();
+      expect(getNote(db, "00 Inbox/Sub/Nested.md")).not.toBeNull();
+    });
 
     rmSync(join(vault, "00 Inbox"), { recursive: true, force: true });
-    await settle();
 
-    expect(getNote(db, "00 Inbox/Top.md")).toBeNull();
-    expect(getNote(db, "00 Inbox/Sub/Nested.md")).toBeNull();
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Top.md")).toBeNull();
+      expect(getNote(db, "00 Inbox/Sub/Nested.md")).toBeNull();
+    });
   });
 
   it("marks an own write as such, while still indexing it correctly regardless", async () => {
@@ -178,15 +225,17 @@ describe("the vault watcher", () => {
       join(vault, "00 Inbox", "EigenSchrijf.md"),
       noteContents("EigenSchrijf", "van-de-app-zelf"),
     );
-    await settle();
-
     // The invariant this exists to prove: suppression is about the *notification*
     // only. An own write still has to update the index — tags, search, tasks, all of
     // it — never just the flag on the event.
-    expect(getNote(db, "00 Inbox/EigenSchrijf.md")?.tags).toEqual(["van-de-app-zelf"]);
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/EigenSchrijf.md")?.tags).toEqual(["van-de-app-zelf"]);
+    });
 
-    const own = events.find((event) => event.path === "00 Inbox/EigenSchrijf.md");
-    expect(own).toEqual({ path: "00 Inbox/EigenSchrijf.md", kind: "changed", own: true });
+    await waitFor(() => {
+      const own = events.find((event) => event.path === "00 Inbox/EigenSchrijf.md");
+      expect(own).toEqual({ path: "00 Inbox/EigenSchrijf.md", kind: "changed", own: true });
+    });
   });
 
   it("reports a plain unlink as a 'removed' event with a vault-relative path", async () => {
@@ -199,15 +248,18 @@ describe("the vault watcher", () => {
     await watcher.ready();
 
     writeFileSync(path, noteContents("WordtVerwijderd"));
-    await settle();
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/WordtVerwijderd.md")).not.toBeNull();
+    });
 
     rmSync(path);
-    await settle();
 
-    expect(events).toContainEqual({
-      path: "00 Inbox/WordtVerwijderd.md",
-      kind: "removed",
-      own: false,
+    await waitFor(() => {
+      expect(events).toContainEqual({
+        path: "00 Inbox/WordtVerwijderd.md",
+        kind: "removed",
+        own: false,
+      });
     });
   });
 });
