@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
   pickAttachment: () => ipcRenderer.invoke(IPC.pickAttachment),
   openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
+  fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
 
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),

@@ -3,8 +3,13 @@ import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
-import { attachmentNodeView, wikiLinkNodeView } from "./attachment-view.js";
+import {
+  attachmentNodeView,
+  externalImageView,
+  wikiLinkNodeView,
+} from "./attachment-view.js";
 import { clipboardText } from "./clipboard-text.js";
+import { transformPastedImages } from "./paste-images.js";
 import { focusTaskAt } from "./focus-task.js";
 import { clearTaskHighlight } from "./task-highlight.js";
 import {
@@ -113,7 +118,15 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       nodeViews: {
         wikiEmbed: attachmentNodeView,
         wikiLink: wikiLinkNodeView,
+        // A remote `![alt](https://…)`, which the CSP will never draw: shown as a
+        // label rather than as a broken-image glyph. See `attachment-view.ts`.
+        image: externalImageView,
       },
+      // Pictures inside a pasted web page. The half that needs no network runs here,
+      // synchronously, before the slice lands; the download half is the `remoteImages`
+      // plugin in `state.ts`. Every other node in the slice is left exactly as
+      // ProseMirror parsed it — the Outlook `mso-list` work (§6.3) owns those.
+      transformPasted: transformPastedImages,
       // A screenshot pasted from the clipboard or a file dropped from Explorer/Finder —
       // see `insert-attachment.ts` for why a paste is image-only while a drop also
       // takes a PDF, and why both decline (return false) on anything else so the

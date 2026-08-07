@@ -85,6 +85,7 @@ import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachmen
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, thumbnailCacheDir } from "./thumbnails.js";
+import { fetchRemoteImage } from "./fetch-attachment.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -674,6 +675,21 @@ function registerAppIpc(): void {
       return saveAttachment(vault, new Uint8Array(bytes), originalName);
     },
   );
+
+  // A picture that came in with a pasted web page. The renderer hands over a URL it
+  // read off the pasted HTML — attacker input, in the ordinary case — so nothing about
+  // it is trusted here: `fetch-attachment.ts` and `remote-image.ts` decide what may be
+  // requested, what a redirect may point at and what may be written.
+  //
+  // A measurement run makes no network calls, for the same reason it starts no watcher
+  // and checks for no updates: unaccounted-for background work is exactly what the
+  // hotkey→caret figures cannot afford to pick up.
+  ipcMain.handle(IPC.fetchRemoteImage, async (_event, url: string) => {
+    if (launch.selfTestRounds > 0) return null;
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return null;
+    return fetchRemoteImage(vault, url);
+  });
 
   // The picker reads the chosen file itself rather than round-tripping its bytes
   // through the renderer first — unlike a paste or a drop, which start out as bytes

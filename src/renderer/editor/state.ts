@@ -10,6 +10,7 @@ import { outlookKeymap } from "./keymap.js";
 import { tagHighlight } from "./tag-decoration.js";
 import { taskCheckboxes } from "./checkbox.js";
 import { taskHighlight } from "./task-highlight.js";
+import { remoteImages } from "./paste-images.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -125,6 +126,9 @@ export function createEditorState(
       tagHighlight(),
       taskCheckboxes(),
       taskHighlight(),
+      // Pictures that came in with a pasted web page: downloaded into `_attachments/`
+      // and turned into embeds — see `paste-images.ts`.
+      remoteImages(),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],
