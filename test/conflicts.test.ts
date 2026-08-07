@@ -88,18 +88,31 @@ describe("recognising a OneDrive conflict copy", () => {
     ]);
   });
 
-  it("handles a machine name that is itself hyphenated, like a Mac hostname", () => {
+  it("handles a machine name that is itself hyphenated and has an uppercase segment", () => {
     const found = findConflictCopies([
       "00 Inbox/Kickoff project Alpha.md",
-      "00 Inbox/Kickoff project Alpha-Emiels-MacBook-Pro.md",
+      "00 Inbox/Kickoff project Alpha-LAPTOP-4KJ8Q1.md",
     ]);
 
     expect(found).toEqual([
       {
         original: "00 Inbox/Kickoff project Alpha.md",
-        conflict: "00 Inbox/Kickoff project Alpha-Emiels-MacBook-Pro.md",
+        conflict: "00 Inbox/Kickoff project Alpha-LAPTOP-4KJ8Q1.md",
       },
     ]);
+  });
+
+  it("misses a mixed-case, no-digit Mac hostname — the accepted cost of the tightened rule", () => {
+    // Documented in the module comment: a macOS default hostname like
+    // "Emiels-MacBook-Pro" has no all-uppercase-or-digit segment, so this genuinely real
+    // conflict copy is not recognised. The safer direction to be wrong in — a missed
+    // banner leaves both files visible, a false one offers to trash a note the user wrote.
+    const found = findConflictCopies([
+      "00 Inbox/Kickoff project Alpha.md",
+      "00 Inbox/Kickoff project Alpha-Emiels-MacBook-Pro.md",
+    ]);
+
+    expect(found).toEqual([]);
   });
 
   it("finds every conflict pair when several exist at once", () => {
@@ -122,13 +135,46 @@ describe("recognising a OneDrive conflict copy", () => {
     ).toEqual([]);
   });
 
-  it("is a known false positive for a genuinely hyphenated title with an unhyphenated sibling", () => {
-    // Documented limitation, not a bug: a filename-only heuristic cannot tell this
-    // apart from a real conflict. See the module's own comment.
+  it("no longer treats a genuinely hyphenated title with an unhyphenated sibling as a conflict", () => {
+    // This used to be a documented false positive — "Draft" is not machine-shaped, so
+    // the tightened rule now correctly leaves it alone.
     const found = findConflictCopies(["00 Inbox/Weekly Report.md", "00 Inbox/Weekly Report-Draft.md"]);
 
+    expect(found).toEqual([]);
+  });
+
+  it("does not treat 'herzien', 'Draft2' or 'review' suffixes as machine names", () => {
+    const found = findConflictCopies([
+      "00 Inbox/Voorstel.md",
+      "00 Inbox/Voorstel-herzien.md",
+      "00 Inbox/Ontwerp.md",
+      "00 Inbox/Ontwerp-Draft2.md",
+      "00 Inbox/Plan.md",
+      "00 Inbox/Plan-review.md",
+    ]);
+
+    expect(found).toEqual([]);
+  });
+
+  it("does not treat a purely numeric suffix as a machine name", () => {
+    // A version-ish year suffix has no letter in it at all, so it cannot be mistaken
+    // for a computer name even though it is short and uppercase-or-digit shaped.
+    const found = findConflictCopies([
+      "00 Inbox/Quarterly Report.md",
+      "00 Inbox/Quarterly Report-2026.md",
+    ]);
+
+    expect(found).toEqual([]);
+  });
+
+  it("recognises a Windows machine suffix with digits", () => {
+    const found = findConflictCopies([
+      "00 Inbox/X.md",
+      "00 Inbox/X-LAPTOP-4KJ8Q1.md",
+    ]);
+
     expect(found).toEqual([
-      { original: "00 Inbox/Weekly Report.md", conflict: "00 Inbox/Weekly Report-Draft.md" },
+      { original: "00 Inbox/X.md", conflict: "00 Inbox/X-LAPTOP-4KJ8Q1.md" },
     ]);
   });
 
