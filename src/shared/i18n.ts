@@ -188,14 +188,20 @@ const DUTCH: Record<string, string> = {
     "bewaard is, wordt eerst weggeschreven.",
   "settings.vaultRestartConfirm": "Opnieuw opstarten",
 
-  // Conflict banner
-  "conflict.banner": "notitie is op twee machines gewijzigd — klik om op te lossen",
+  // Conflict banner — "conflict.banner" is a tail appended after the note's own
+  // filename ("2026-08-07 Kickoff.md is op twee machines gewijzigd — …"), not a
+  // complete sentence on its own; "conflict.bannerPlural" is still prefixed with a count.
+  "conflict.banner": "is op twee machines gewijzigd — klik om op te lossen",
   "conflict.bannerPlural": "notities zijn op twee machines gewijzigd — klik om op te lossen",
   "conflict.title": "Deze notitie is op twee machines gewijzigd",
+  "conflict.thisOne": "Deze:",
+  "conflict.thatOne": "Die:",
   "conflict.loading": "Verschil laden…",
+  "conflict.diffError": "Kon het verschil niet laden. Probeer dit venster opnieuw te openen.",
   "conflict.keepThis": "Deze houden",
   "conflict.keepThat": "Die houden",
   "conflict.merge": "Samenvoegen in de editor",
+  "conflict.close": "Sluiten",
 
   // Orphaned attachments
   "orphans.title": "Verweesde bijlagen",
@@ -395,14 +401,20 @@ const ENGLISH: Record<string, string> = {
     "first.",
   "settings.vaultRestartConfirm": "Restart",
 
-  // Conflict banner
-  "conflict.banner": "note was changed on two machines — click to resolve",
+  // Conflict banner — "conflict.banner" is a tail appended after the note's own
+  // filename ("2026-08-07 Kickoff.md was changed on two machines — …"), not a complete
+  // sentence on its own; "conflict.bannerPlural" is still prefixed with a count.
+  "conflict.banner": "was changed on two machines — click to resolve",
   "conflict.bannerPlural": "notes were changed on two machines — click to resolve",
   "conflict.title": "This note was changed on two machines",
+  "conflict.thisOne": "This one:",
+  "conflict.thatOne": "That one:",
   "conflict.loading": "Loading diff…",
+  "conflict.diffError": "Could not load the diff. Try opening this dialog again.",
   "conflict.keepThis": "Keep this one",
   "conflict.keepThat": "Keep that one",
   "conflict.merge": "Merge in the editor",
+  "conflict.close": "Close",
 
   // Orphaned attachments
   "orphans.title": "Orphaned attachments",
