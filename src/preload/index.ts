@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
   pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
   openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
+  openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
 
   onVaultFileChanged: (handler: (event: VaultFileEvent) => void) =>
