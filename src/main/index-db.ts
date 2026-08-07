@@ -230,6 +230,37 @@ export function deleteNote(db: IndexDb, path: string): void {
   })();
 }
 
+/**
+ * Drops every note under a folder, and answers which paths went — a folder deleted
+ * outside the app arrives as one `unlinkDir` event, not as an `unlink` per file, so
+ * nothing else in this codebase would ever otherwise remove them from the index.
+ *
+ * Matched with `substr(path, 1, N) = prefix` rather than `LIKE`/`GLOB`: `LIKE`'s `_`
+ * matches any single character, so a real folder literally named `_incoming` would also
+ * match something like `Xincoming/…`; `GLOB`'s `[` is a metacharacter that real folder
+ * names in this vault can legitimately contain. A plain prefix compare has no
+ * metacharacters to escape and matches exactly the folder asked for.
+ *
+ * `""` matches nothing rather than every note — an empty prefix is not "the whole
+ * vault" here, unlike the `scope` convention `tasksIn`/`searchNotes` use elsewhere,
+ * because there is no code path that ever wants to drop the entire index this way.
+ */
+export function deleteNotesUnder(db: IndexDb, folderPrefix: string): string[] {
+  if (folderPrefix === "") return [];
+
+  const prefix = `${folderPrefix}/`;
+  const rows = db
+    .prepare(`SELECT path FROM notes WHERE path = ? OR substr(path, 1, ?) = ?`)
+    .all(folderPrefix, prefix.length, prefix) as { path: string }[];
+  const paths = rows.map((row) => row.path);
+
+  db.transaction(() => {
+    for (const path of paths) deleteNote(db, path);
+  })();
+
+  return paths;
+}
+
 interface StoredRow {
   path: string;
   fileName: string;

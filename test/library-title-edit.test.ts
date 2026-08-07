@@ -141,6 +141,8 @@ function buildFake(initial: OpenedNote): Fake {
     saveAttachment: async () => null,
     pickAttachment: async () => null,
     openAttachment: async () => {},
+    onVaultFileChanged: () => () => {},
+    reloadNote: async () => {},
     library,
   };
 

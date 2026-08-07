@@ -11,6 +11,7 @@ import type {
   ScanProgress,
   Selection,
   TaskItem,
+  VaultFileEvent,
   VaultLocation,
 } from "./vault-types.js";
 
@@ -37,6 +38,13 @@ export const IPC = {
   captureLoadNote: "capture:load-note",
   /** library renderer → main: show the capture window for a brand new note. */
   captureNew: "capture:new",
+  /**
+   * capture renderer → main: the note changed on disk from outside, and the renderer
+   * has nothing of its own to lose — reread it and hand it back over `captureLoadNote`,
+   * the same path a fresh `captureLoad` uses. Never sent while the renderer believes it
+   * has unsaved edits; see `Capture.tsx`'s `dirtyRef`.
+   */
+  captureReload: "capture:reload",
   /** renderer → main: names and tags seen before, for autocomplete. */
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
@@ -114,6 +122,15 @@ export const IPC = {
   pickAttachment: "app:pick-attachment",
   /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
   openAttachment: "app:open-attachment",
+
+  /**
+   * main → renderer: a note changed or disappeared on disk for a reason this app did
+   * not cause itself. Sent to the library unconditionally (it filters against whatever
+   * it currently has open, in the renderer, since main has no reliable view of that);
+   * sent to the capture window only for the one note `writer.activePath()` says it has
+   * claimed — see `notifyFileEvent` in `index.ts`.
+   */
+  vaultFileChanged: "vault:file-changed",
 } as const;
 
 export interface Bootstrap {
@@ -304,6 +321,19 @@ export interface CaptureApi {
   pickAttachment: () => Promise<string | null>;
   /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
   openAttachment: (name: string) => Promise<void>;
+
+  /**
+   * A note changed or disappeared on disk from outside this app. Sits at the top level
+   * rather than under `library` because both windows need it — the same placement as
+   * `saveAttachment`, and for the same reason.
+   */
+  onVaultFileChanged: (handler: (event: VaultFileEvent) => void) => () => void;
+  /**
+   * Rereads the note the capture window currently has claimed and hands it back over
+   * `onLoad`, the same path a fresh `openInCapture` uses. Only ever sent when the
+   * renderer believes it has no unsaved edits of its own to lose.
+   */
+  reloadNote: () => Promise<void>;
 
   library: LibraryApi;
 }

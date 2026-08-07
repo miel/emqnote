@@ -946,6 +946,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A note changed or disappeared on disk from outside the app, while it was open here —
+   see `DiskChangeBar.tsx`. Sits below the conflict banner: a conflict is vault-wide and
+   needs deciding regardless of what is on screen, this is about the one note actually
+   open right now, so it reads as the more local of the two. */
+.disk-change-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  font-size: 12px;
+  padding: 7px 14px;
+  color: #7a4a00;
+  background: #ffe6b3;
+  border-bottom: 1px solid var(--border);
+}
+
+.disk-change-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
 .conflict-banner {
   display: block;
   width: 100%;

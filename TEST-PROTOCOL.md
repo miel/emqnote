@@ -13,12 +13,13 @@ or look at a screen and see that an image is actually there. Everything below is
 gap. Nothing here duplicates a test that already exists — if `npm test` covers it, it is
 not in this document.
 
-Three items in particular have **never been seen working** and are the reason this file
+Four items in particular have **never been seen working** and are the reason this file
 exists: §4.2 (does the capture window really draw an attachment), §6.3 (does clicking a
-checkbox in the Tasks view actually reach the file), and §9.2 (does the caret actually step
+checkbox in the Tasks view actually reach the file), §9.2 (does the caret actually step
 across an inline image in the capture window, rather than landing in an invisible node
-selection). All three have proven code underneath and an unproven interaction on top. Start
-there if you only have ten minutes.
+selection), and §10 (does the capture window's disk-change notice actually appear when the
+open note changes outside the app). All four have proven code underneath and an unproven
+interaction on top. Start there if you only have ten minutes.
 
 ## Before you start
 
@@ -357,6 +358,25 @@ blocks the rest of this section the same way it blocks §4.2's own remaining ste
 
 ---
 
+## 10. Disk-change notice in the capture window — NEVER VERIFIED
+
+The library window's own disk-change bar (a note that changed or disappeared on disk from
+outside the app) is covered end to end by `test/library-disk-change.test.ts`, a real
+`Library` mounted in jsdom. The capture window's equivalent has no such harness — this
+suite has never had one for the capture renderer — so `Capture.tsx`'s `onVaultFileChanged`
+subscription, its `dirtyRef` and the reload round trip through `IPC.captureReload` are
+proven only against the wiring, never against a real chokidar event landing on a real open
+capture window.
+
+| # | Step | Expected |
+|---|---|---|
+| 10a | Open a note in the capture window (*Open for editing* from the library), leave it untouched, then edit that same file directly in a text editor and save | The capture window quietly reloads the new content — no dialog, no notice. Nothing here was at risk, so nothing needs asking |
+| 10b | Repeat 10a, but first type something into the capture window and leave it un-flushed (well inside the 800ms debounce) | A one-line notice appears in the status bar, **with no buttons** — and what you just typed is not discarded or overwritten |
+| 10c | With a note open in the capture window, delete that exact file — directly on disk, or in the library reader on the *other* machine | A one-line "deleted outside emqnote" notice appears, again with no buttons. The window does **not** close itself |
+| 10d | After 10c, keep typing, then Ctrl/Cmd+Enter to commit | The file reappears at the same path with what you typed. The capture window keeps writing to the path it already had open — the deliberate choice for this window, unlike the library reader, which asks before recreating a deleted note |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -365,5 +385,5 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3 or §9.2 fails, that is expected-ish rather than alarming: those
-three are why this document exists.
+If something in §4.2, §6.3, §9.2 or §10 fails, that is expected-ish rather than alarming:
+those four are why this document exists.

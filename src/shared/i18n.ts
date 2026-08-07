@@ -184,6 +184,16 @@ const DUTCH: Record<string, string> = {
   "tasks.one": "taak",
   "tasks.many": "taken",
   "tasks.empty": "(leeg)",
+
+  // Disk-change bar: the open note changed outside the app.
+  "diskChange.changed": "Deze notitie is buiten emqnote gewijzigd.",
+  "diskChange.removed": "Deze notitie is buiten emqnote verwijderd.",
+  "diskChange.reload": "Herladen",
+  "diskChange.close": "Sluiten",
+  "diskChange.keepMine": "Mijn versie houden",
+  // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "diskChange.captureChanged": "Deze notitie is intussen buiten emqnote gewijzigd.",
+  "diskChange.captureRemoved": "Deze notitie is intussen buiten emqnote verwijderd.",
 };
 
 export function translate(locale: Locale, key: string): string {
@@ -358,6 +368,16 @@ const ENGLISH: Record<string, string> = {
   "tasks.one": "task",
   "tasks.many": "tasks",
   "tasks.empty": "(empty)",
+
+  // Disk-change bar: the open note changed outside the app.
+  "diskChange.changed": "This note changed outside emqnote.",
+  "diskChange.removed": "This note was deleted outside emqnote.",
+  "diskChange.reload": "Reload",
+  "diskChange.close": "Close",
+  "diskChange.keepMine": "Keep mine",
+  // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "diskChange.captureChanged": "This note changed outside emqnote in the meantime.",
+  "diskChange.captureRemoved": "This note was deleted outside emqnote in the meantime.",
 };
 
 /**

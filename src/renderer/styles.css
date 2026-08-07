@@ -672,6 +672,15 @@ body {
   color: var(--text);
 }
 
+/* The capture window's disk-change notice — no buttons, on purpose. See
+   `Capture.tsx`'s `onVaultFileChanged` for why nothing here is clickable. */
+.disk-notice {
+  color: var(--warning);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .latency {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

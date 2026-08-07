@@ -146,4 +146,68 @@ describe("the vault watcher", () => {
 
     expect(getNote(db, "00 Inbox/TeLaat.md")).toBeNull();
   });
+
+  it("prunes an entire subtree when a folder is deleted outside the app", async () => {
+    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
+    await watcher.ready();
+
+    mkdirSync(join(vault, "00 Inbox", "Sub"), { recursive: true });
+    writeFileSync(join(vault, "00 Inbox", "Top.md"), noteContents("Top"));
+    writeFileSync(join(vault, "00 Inbox", "Sub", "Nested.md"), noteContents("Nested"));
+    await settle();
+    expect(getNote(db, "00 Inbox/Top.md")).not.toBeNull();
+    expect(getNote(db, "00 Inbox/Sub/Nested.md")).not.toBeNull();
+
+    rmSync(join(vault, "00 Inbox"), { recursive: true, force: true });
+    await settle();
+
+    expect(getNote(db, "00 Inbox/Top.md")).toBeNull();
+    expect(getNote(db, "00 Inbox/Sub/Nested.md")).toBeNull();
+  });
+
+  it("marks an own write as such, while still indexing it correctly regardless", async () => {
+    const events: { path: string; kind: string; own: boolean }[] = [];
+    watcher = watchVault(vault, db, {
+      stabilityThreshold: STABILITY_MS,
+      isOwnWrite: (_path, contents) => contents.includes("van-de-app-zelf"),
+      onChange: (event) => events.push(event),
+    });
+    await watcher.ready();
+
+    writeFileSync(
+      join(vault, "00 Inbox", "EigenSchrijf.md"),
+      noteContents("EigenSchrijf", "van-de-app-zelf"),
+    );
+    await settle();
+
+    // The invariant this exists to prove: suppression is about the *notification*
+    // only. An own write still has to update the index — tags, search, tasks, all of
+    // it — never just the flag on the event.
+    expect(getNote(db, "00 Inbox/EigenSchrijf.md")?.tags).toEqual(["van-de-app-zelf"]);
+
+    const own = events.find((event) => event.path === "00 Inbox/EigenSchrijf.md");
+    expect(own).toEqual({ path: "00 Inbox/EigenSchrijf.md", kind: "changed", own: true });
+  });
+
+  it("reports a plain unlink as a 'removed' event with a vault-relative path", async () => {
+    const path = join(vault, "00 Inbox", "WordtVerwijderd.md");
+    const events: { path: string; kind: string; own: boolean }[] = [];
+    watcher = watchVault(vault, db, {
+      stabilityThreshold: STABILITY_MS,
+      onChange: (event) => events.push(event),
+    });
+    await watcher.ready();
+
+    writeFileSync(path, noteContents("WordtVerwijderd"));
+    await settle();
+
+    rmSync(path);
+    await settle();
+
+    expect(events).toContainEqual({
+      path: "00 Inbox/WordtVerwijderd.md",
+      kind: "removed",
+      own: false,
+    });
+  });
 });

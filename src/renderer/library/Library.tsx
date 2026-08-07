@@ -14,6 +14,7 @@ import {
   type ScanProgress,
   type Selection,
   type SortKey,
+  type VaultFileEvent,
 } from "../../shared/vault-types.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
@@ -23,6 +24,7 @@ import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
 import { ConflictBanner } from "./ConflictBanner.js";
+import { DiskChangeBar } from "./DiskChangeBar.js";
 import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
@@ -95,6 +97,12 @@ export function Library(): React.ReactElement {
   const [sort, setSort] = useState<SortKey>("modified");
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
+  /**
+   * A note changed or disappeared on disk while it was open here, for a reason this app
+   * did not cause itself — see `own-writes.ts` for how the app's own debounced autosave
+   * is told apart from that. Null the rest of the time, which is the normal state.
+   */
+  const [diskEvent, setDiskEvent] = useState<VaultFileEvent | null>(null);
   const [moving, setMoving] = useState(false);
   // The note being dragged over the tree. Held here rather than in either component,
   // because the row that knows which note it is and the branch that has to decide
@@ -362,7 +370,15 @@ export function Library(): React.ReactElement {
 
   const openNote = useCallback(
     async (path: string, taskOrdinal?: number) => {
-      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+      // Whatever the disk-change bar was showing belongs to the note being left, not
+      // the one about to be loaded — cleared here rather than left to the effect keyed
+      // on `open` transitioning to `null`, since a switch between two open notes never
+      // passes through `null` at all.
+      setDiskEvent(null);
+      if (saveTimer.current !== null) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
       if (dirty) await save();
 
       const loaded = await window.emqnote.library.openNote(path);
@@ -408,6 +424,51 @@ export function Library(): React.ReactElement {
   );
 
   /**
+   * A note changed or disappeared on disk. Filtered against `open` here, in the
+   * renderer, rather than in main: main has no reliable way to know what the reader
+   * currently has open, and building one would mean a second source of truth for
+   * something this side already holds authoritatively.
+   *
+   * `dirty` decides "changed": reload only when there is nothing of the user's own to
+   * lose. One race is left deliberately unresolved here — a save that is in flight (the
+   * IPC call sent, not yet resolved) when this event arrives still reads `dirty` as
+   * `true` at that instant, so the note would not auto-reload even though the write
+   * that will make `dirty` false again is already on its way. The content-hash approach
+   * in `own-writes.ts` is what actually closes that gap in practice: the in-flight
+   * save's own bytes land on disk a moment later, the watcher recognises them as this
+   * app's own write, and no further event ever arrives to race against — so the exact
+   * timing of this check does not have to be perfect for the outcome to be correct.
+   *
+   * "removed" never auto-closes, even when `!dirty`: reloading a *changed* note loses
+   * nothing by definition, but closing yanks away a window the user may be actively
+   * reading, and a transient OneDrive hiccup (a conflict-copy dance that briefly removes
+   * then restores a file) must never be able to do that without the user choosing it.
+   */
+  const onFileChanged = useCallback(
+    (event: VaultFileEvent) => {
+      const current = openRef.current;
+      if (current === null || current.path !== event.path) return;
+
+      if (event.kind === "changed" && !dirty) {
+        void openNote(current.path);
+        return;
+      }
+
+      setDiskEvent(event);
+    },
+    [dirty, openNote],
+  );
+
+  useEffect(() => window.emqnote.onVaultFileChanged(onFileChanged), [onFileChanged]);
+
+  // Whatever the bar was showing no longer applies once the reader is empty — cleared
+  // here rather than only inside `openNote`, since `open` can also become `null` from
+  // `trash()`, `clearTrash()` and `deleteFolderAt()`, none of which call `openNote`.
+  useEffect(() => {
+    if (open === null) setDiskEvent(null);
+  }, [open]);
+
+  /**
    * The picker path, for the reader's own toolbar button and its keyboard shortcut.
    *
    * Nothing guards `open === null` or `!open.editable` here beyond the button being
@@ -428,7 +489,10 @@ export function Library(): React.ReactElement {
     if (openRef.current === null || !openRef.current.editable) return;
     setDirty(true);
     if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      void save();
+    }, SAVE_DEBOUNCE_MS);
   }, [save]);
 
   /**
@@ -445,7 +509,10 @@ export function Library(): React.ReactElement {
       headerRef.current = values;
       setDirty(true);
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        void save();
+      }, SAVE_DEBOUNCE_MS);
     },
     [save],
   );
@@ -524,7 +591,10 @@ export function Library(): React.ReactElement {
    * against the path this side has not rebased yet.
    */
   const renameFolderAt = async (path: string, name: string): Promise<void> => {
-    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     if (dirty) await save();
 
     let next: string;
@@ -583,7 +653,10 @@ export function Library(): React.ReactElement {
    * believes was just deleted.
    */
   const deleteFolderAt = async (path: string): Promise<void> => {
-    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     if (dirty) await save();
 
     let result: { trashed: boolean; locked?: boolean };
@@ -690,7 +763,10 @@ export function Library(): React.ReactElement {
    * to move, and a keystroke landing in the gap is exactly the race B10 exists to avoid.
    */
   const openInCapture = async (path: string): Promise<void> => {
-    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
 
     const current = openRef.current;
     if (current !== null && current.path === path) {
@@ -759,6 +835,22 @@ export function Library(): React.ReactElement {
         pairs={conflicts}
         t={app.t}
         onMerge={(path) => void openNote(path)}
+      />
+
+      <DiskChangeBar
+        event={diskEvent}
+        t={app.t}
+        onReload={() => {
+          const current = openRef.current;
+          setDiskEvent(null);
+          if (current !== null) void openNote(current.path);
+        }}
+        onClose={() => {
+          setDiskEvent(null);
+          setOpen(null);
+          openRef.current = null;
+        }}
+        onDismiss={() => setDiskEvent(null)}
       />
 
       <div
@@ -1102,7 +1194,10 @@ export function Library(): React.ReactElement {
           // Switching vault restarts the app, so anything still on the debounce has to
           // reach disk first — and into the vault it was typed in, not the new one.
           onBeforeSwitch={async () => {
-            if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+            if (saveTimer.current !== null) {
+              clearTimeout(saveTimer.current);
+              saveTimer.current = null;
+            }
             if (dirty) await save();
           }}
           onClose={() => setSettingsOpen(false)}

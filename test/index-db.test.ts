@@ -7,6 +7,7 @@ import {
   allNotes,
   closeIndex,
   deleteNote,
+  deleteNotesUnder,
   getNote,
   needsRefresh,
   openIndex,
@@ -301,6 +302,62 @@ describe("the SQLite index", () => {
       );
 
       expect(tasksIn(db, "", false)).toHaveLength(1);
+    });
+  });
+
+  describe("deleteNotesUnder", () => {
+    it("removes every note under a folder and everything nested beneath it", () => {
+      upsertNote(db, record({ path: "10 Projects/a.md", title: "A" }));
+      upsertNote(db, record({ path: "10 Projects/sub/b.md", title: "B" }));
+
+      const removed = deleteNotesUnder(db, "10 Projects");
+
+      expect(removed.sort()).toEqual(["10 Projects/a.md", "10 Projects/sub/b.md"]);
+      expect(getNote(db, "10 Projects/a.md")).toBeNull();
+      expect(getNote(db, "10 Projects/sub/b.md")).toBeNull();
+    });
+
+    // The exact case a `LIKE`/`GLOB` match would get wrong: "10 Projects Archive" and
+    // "00 Inbox" both start with characters `LIKE`'s `_`/`GLOB`'s `[` could be talked
+    // into matching, or that merely share a text prefix with "10 Projects" without
+    // being inside it — neither should be touched by deleting "10 Projects".
+    it("does not touch a folder that merely shares a name prefix, or an unrelated one", () => {
+      upsertNote(db, record({ path: "10 Projects/a.md", title: "A" }));
+      upsertNote(db, record({ path: "10 Projects Archive/c.md", title: "C" }));
+      upsertNote(db, record({ path: "00 Inbox/d.md", title: "D" }));
+
+      const removed = deleteNotesUnder(db, "10 Projects");
+
+      expect(removed).toEqual(["10 Projects/a.md"]);
+      expect(getNote(db, "10 Projects Archive/c.md")).not.toBeNull();
+      expect(getNote(db, "00 Inbox/d.md")).not.toBeNull();
+    });
+
+    it("drops the FTS and note_tasks rows along with each note, not just the metadata", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          title: "Kickoff project Alpha",
+          body: "Kickoff met de klant over project Alpha.",
+          tasks: [{ ordinal: 0, checked: false, text: "Offerte versturen" }],
+        }),
+      );
+
+      deleteNotesUnder(db, "10 Projects");
+
+      expect(search(db, "kickoff")).toEqual([]);
+      expect(tasksIn(db, "", false)).toEqual([]);
+    });
+
+    it("removes nothing for an empty prefix — that is not 'the whole vault' here", () => {
+      upsertNote(db, record({ path: "00 Inbox/a.md" }));
+      upsertNote(db, record({ path: "10 Projects/b.md" }));
+
+      const removed = deleteNotesUnder(db, "");
+
+      expect(removed).toEqual([]);
+      expect(allNotes(db)).toHaveLength(2);
     });
   });
 

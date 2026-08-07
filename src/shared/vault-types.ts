@@ -190,3 +190,16 @@ export type DiffLine =
   | { kind: "same"; text: string }
   | { kind: "removed"; text: string }
   | { kind: "added"; text: string };
+
+/**
+ * A note changed or disappeared on disk for a reason this app did not cause itself —
+ * the other machine, OneDrive's own sync dance, a file manager. `index-watch.ts` is
+ * where this gets decided (see `own-writes.ts` for how an echo of this app's own write
+ * is told apart from a real one); `index.ts`'s `notifyFileEvent` is what turns it into
+ * an IPC push to whichever window has the note open.
+ */
+export interface VaultFileEvent {
+  /** Vault-relative, POSIX-separated — the same shape NoteSummary.path / OpenedNote.path already use. */
+  path: string;
+  kind: "changed" | "removed";
+}

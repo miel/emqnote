@@ -37,6 +37,7 @@ import {
 } from "../shared/vault-types.js";
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
+import { rememberOwnWrite } from "./own-writes.js";
 
 /**
  * Reading and writing the vault for the main window.
@@ -233,6 +234,9 @@ function writeAtomic(file: string, contents: string): void {
   const temporary = `${file}.tmp`;
   writeFileSync(temporary, contents, "utf8");
   renameSync(temporary, file);
+  // So the watcher's reindex of this exact write — which the rename above will trigger —
+  // can tell its own echo apart from a real external change. See `own-writes.ts`.
+  rememberOwnWrite(file, contents);
 }
 
 export interface SaveResult {
