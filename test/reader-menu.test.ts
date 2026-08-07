@@ -6,15 +6,18 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-types.js";
 
 /**
- * The note list's right-click menu — Open, Move, Rename, Duplicate, Reveal, Delete — mounted
- * through a real `Library` the same way `test/library-title-edit.test.ts` does, because
- * every one of the five items reuses a handler that already lives on `Library.tsx` and
- * the point of this test is that the menu reaches the *real* one, not a stand-in.
+ * The reader toolbar's "⋯" overflow menu — Rename/Move/Duplicate/Reveal/Delete, collapsed
+ * out of five always-on buttons that used to squeeze the title. Mounted through a real
+ * `Library`, the same way `test/note-list-menu.test.ts` drives the note list's own
+ * right-click menu: every item here reuses a handler that already lives on `Library.tsx`,
+ * so the point is reaching the *real* one through the new button, not a stand-in.
  *
- * "Right-clicking a row selects it first" is checked by watching `openNote` — the only
- * definition "selected" has in this codebase today (see `Library.tsx`'s `open` state,
- * tied to `open?.path`); `library-title-edit.test.ts`'s own mount/flush plumbing is
- * reused for the same reason it exists there.
+ * Unlike the note-list menu, this one opens from a plain button click, not a right-click —
+ * see CLAUDE.md's context-menu constraint for why that has to stay true for
+ * `--click-button="⋯>Rename"` to keep working, which is a packaged-build concern this
+ * suite cannot exercise directly. What it can check is that the button opens the same
+ * `ContextMenu` component with `.context-menu-label` spans, which is what that selector
+ * depends on.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,7 +56,6 @@ function openedNote(path: string, title: string): OpenedNote {
 
 interface Fake {
   emqnote: CaptureApi;
-  openNoteMock: ReturnType<typeof vi.fn>;
   revealNote: ReturnType<typeof vi.fn>;
   trashNote: ReturnType<typeof vi.fn>;
   duplicateNote: ReturnType<typeof vi.fn>;
@@ -69,11 +71,6 @@ function buildFake(): Fake {
 
   const note = openedNote(NOTE_PATH, "Test note");
   const duplicatedNote = openedNote(DUPLICATE_PATH, "Test note-copy");
-  const openNoteMock = vi.fn(async (path: string): Promise<OpenedNote | null> => {
-    if (path === NOTE_PATH) return note;
-    if (path === DUPLICATE_PATH) return duplicatedNote;
-    return null;
-  });
   const revealNote = vi.fn();
   const trashNote = vi.fn(async () => true);
   const duplicateNote = vi.fn(async () => ({ path: DUPLICATE_PATH }));
@@ -83,7 +80,11 @@ function buildFake(): Fake {
     notes: async () => [noteSummary(NOTE_PATH, "Test note")],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
-    openNote: openNoteMock,
+    openNote: async (path) => {
+      if (path === NOTE_PATH) return note;
+      if (path === DUPLICATE_PATH) return duplicatedNote;
+      return null;
+    },
     saveNote: async (request) => ({ written: false, path: request.path }),
     moveNote: async (path) => ({ path }),
     renameNote: async (path) => ({ path }),
@@ -148,7 +149,7 @@ function buildFake(): Fake {
     library,
   };
 
-  return { emqnote, openNoteMock, revealNote, trashNote, duplicateNote };
+  return { emqnote, revealNote, trashNote, duplicateNote };
 }
 
 async function flush(rounds = 12): Promise<void> {
@@ -160,7 +161,7 @@ async function flush(rounds = 12): Promise<void> {
   }
 }
 
-describe("the note list's right-click menu", () => {
+describe("the reader toolbar's overflow menu", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
@@ -182,92 +183,59 @@ describe("the note list's right-click menu", () => {
     container.remove();
   });
 
-  async function mount(fake: Fake): Promise<void> {
+  async function mountWithNoteOpen(fake: Fake): Promise<void> {
     (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
     root = createRoot(container);
     await act(async () => {
       root.render(createElement(LibraryComponent));
     });
     await flush();
-  }
 
-  function row(): Element {
-    const found = container.querySelector(".notes-list .note");
-    expect(found).not.toBeNull();
-    return found!;
-  }
-
-  async function rightClickRow(): Promise<void> {
+    const row = container.querySelector(".notes-list .note");
+    expect(row).not.toBeNull();
     await act(async () => {
-      row().dispatchEvent(
-        new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
-      );
+      row!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
   }
 
-  function menuItem(label: string): HTMLButtonElement {
-    const button = Array.from(container.querySelectorAll<HTMLButtonElement>(".context-menu-item")).find(
-      (node) => node.querySelector(".context-menu-label")?.textContent === label,
-    );
+  function openOverflowMenu(): void {
+    const button = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+    ).find((node) => node.textContent === "⋯");
     expect(button).not.toBeUndefined();
-    return button!;
+    act(() => {
+      button!.click();
+    });
   }
 
-  it("selects the row (opens it) before the menu offers anything to act on", async () => {
+  function menuItem(label: string): HTMLButtonElement {
+    const found = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".context-menu-item"),
+    ).find((node) => node.querySelector(".context-menu-label")?.textContent === label);
+    expect(found).not.toBeUndefined();
+    return found!;
+  }
+
+  it("opens with Rename, Move, Duplicate, Reveal, Delete, in that order", async () => {
     const fake = buildFake();
-    await mount(fake);
-    expect(fake.openNoteMock).not.toHaveBeenCalled();
+    await mountWithNoteOpen(fake);
 
-    await rightClickRow();
-
-    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-    expect(container.querySelector(".context-menu")).not.toBeNull();
-  });
-
-  it("shows Open, Move, Rename, Duplicate, Reveal, Delete, in that order", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
+    openOverflowMenu();
+    await flush();
 
     const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
       (node) => node.querySelector(".context-menu-label")!.textContent,
     );
-    expect(labels).toEqual(["Open", "Move", "Rename", "Duplicate", "Reveal", "Delete"]);
+    expect(labels).toEqual(["Rename", "Move", "Duplicate", "Reveal", "Delete"]);
   });
 
-  it("Open re-opens the note through the same openNote path", async () => {
+  it("Rename opens the click-to-edit title field, pre-filled with the open note's title", async () => {
     const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-    fake.openNoteMock.mockClear();
+    await mountWithNoteOpen(fake);
 
-    await act(async () => {
-      menuItem("Open").click();
-    });
+    openOverflowMenu();
     await flush();
-
-    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-  });
-
-  it("Move opens the existing Move dialog", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Move").click();
-    });
-    await flush();
-
-    expect(container.querySelector(".palette")).not.toBeNull();
-  });
-
-  it("Rename opens the existing click-to-edit title field, pre-filled with the note's title", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
     await act(async () => {
       menuItem("Rename").click();
     });
@@ -278,25 +246,42 @@ describe("the note list's right-click menu", () => {
     expect(input!.value).toBe("Test note");
   });
 
-  it("Duplicate calls duplicateNote and opens the copy", async () => {
+  it("Move opens the existing Move dialog", async () => {
     const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
+    await mountWithNoteOpen(fake);
 
+    openOverflowMenu();
+    await flush();
+    await act(async () => {
+      menuItem("Move").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".palette")).not.toBeNull();
+  });
+
+  it("Duplicate calls duplicateNote on the open note and opens the copy", async () => {
+    const fake = buildFake();
+    await mountWithNoteOpen(fake);
+
+    openOverflowMenu();
+    await flush();
     await act(async () => {
       menuItem("Duplicate").click();
     });
     await flush();
 
     expect(fake.duplicateNote).toHaveBeenCalledWith(NOTE_PATH);
-    expect(fake.openNoteMock).toHaveBeenCalledWith(DUPLICATE_PATH);
+    const title = container.querySelector(".reader-header h1");
+    expect(title?.textContent).toBe("Test note-copy");
   });
 
-  it("Reveal calls the existing revealNote IPC call", async () => {
+  it("Reveal calls revealNote with the open note's path", async () => {
     const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
+    await mountWithNoteOpen(fake);
 
+    openOverflowMenu();
+    await flush();
     await act(async () => {
       menuItem("Reveal").click();
     });
@@ -305,11 +290,12 @@ describe("the note list's right-click menu", () => {
     expect(fake.revealNote).toHaveBeenCalledWith(NOTE_PATH);
   });
 
-  it("Delete opens the existing delete confirmation, naming the note", async () => {
+  it("Delete opens the existing delete confirmation, naming the open note", async () => {
     const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
+    await mountWithNoteOpen(fake);
 
+    openOverflowMenu();
+    await flush();
     await act(async () => {
       menuItem("Delete").click();
     });

@@ -113,10 +113,12 @@ function buildFake(): CaptureApi {
       hotkey: "CommandOrControl+Shift+Space",
       vaultPath: "/vault",
       libraryPaneWidths: null,
+      librarySort: "modified",
     }),
     setLocale: async () => {},
     setHotkey: async () => true,
     setPaneWidths: () => {},
+    setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,
     switchVault: async () => {},
@@ -269,6 +271,76 @@ describe("keyboard navigation across the library's panes", () => {
 
     const activeTreeRow = treeRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeTreeRow);
+  });
+
+  it("Ctrl-Tab enters the tree from a cold click that lands on no pane at all", async () => {
+    await mount();
+    // The ordinary state after clicking anywhere that isn't a row — `paneOf` recognises
+    // only a tree row, a note row, a task row or `.editor-content`, so focus sitting on
+    // `document.body` (nothing having been focused at all, here) used to make the
+    // unconditional `preventDefault()` swallow the chord with nowhere to send it.
+    expect(document.activeElement === document.body || document.activeElement === null).toBe(
+      true,
+    );
+
+    keydown(document.body, "Tab", { ctrlKey: true });
+
+    const activeTreeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    expect(document.activeElement).toBe(activeTreeRow);
+  });
+
+  it("Ctrl-Shift-Tab enters the editor from a cold click, the reverse direction", async () => {
+    await mount();
+    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
+    await act(async () => {
+      noteRow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    // The note-list search box: a real control inside the notes pane that `paneOf` does
+    // not recognise as belonging to it (only `.note[role="option"]` counts), so this is
+    // another "cold" spot exactly like the one above, but with a note already open — the
+    // reverse chord has an editor to land in this time.
+    const searchInput = container.querySelector<HTMLInputElement>(".notes-search input")!;
+    searchInput.focus();
+    expect(document.activeElement).toBe(searchInput);
+
+    keydown(searchInput, "Tab", { ctrlKey: true, shiftKey: true });
+    await flush();
+
+    expect(document.activeElement?.className).toContain("editor-content");
+  });
+
+  it("Mod-Shift-M inside the editor opens the note panel's context menu at the caret", async () => {
+    await mount();
+    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
+    await act(async () => {
+      noteRow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    const editorContent = container.querySelector<HTMLElement>(".editor-content")!;
+    editorContent.focus();
+    expect(container.querySelector(".context-menu")).toBeNull();
+
+    // The tree and note-list rows already answer `isContextMenuKey` in their own
+    // `onKeyDown`; the note panel only wired the mouse-driven `contextmenu` event before
+    // this, so Mod-Shift-M — `Mod` is `metaKey` on the `darwin` platform this fake
+    // reports — went nowhere from inside it.
+    act(() => {
+      editorContent.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "m",
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await flush();
+
+    expect(container.querySelector(".context-menu")).not.toBeNull();
   });
 
   it("Escape while focus is in the editor returns focus to the note list", async () => {

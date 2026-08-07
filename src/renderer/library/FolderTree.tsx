@@ -133,6 +133,7 @@ function Branch({
   dragging,
   onDropNote,
   glyph,
+  trashed,
   activePath,
   onActivate,
   onOpenMenu,
@@ -161,6 +162,12 @@ function Branch({
    * element's text, so a glyph within it would break "Trash".
    */
   glyph?: React.ReactNode;
+  /**
+   * Set on the trash branch and, unlike `glyph`, propagated to every row underneath it —
+   * a folder inside `_trash` is still inside `_trash`, which used to render identically
+   * to a live one. Undefined everywhere else in the tree.
+   */
+  trashed?: boolean;
   /** The path currently holding this pane's one roving `tabIndex={0}`. */
   activePath: string;
   /** Fired on focus (a Tab landing here, or an arrow key moving here) — keeps `activePath` honest. */
@@ -184,7 +191,8 @@ function Branch({
       <div
         className={
           `branch${selectionKey(selected) === `folder:${node.path}` ? " branch-on" : ""}` +
-          `${over && accepts ? " branch-drop" : ""}`
+          `${over && accepts ? " branch-drop" : ""}` +
+          `${trashed === true ? " branch-trashed" : ""}`
         }
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
         role="treeitem"
@@ -285,6 +293,7 @@ function Branch({
               onCreateFolder={onCreateFolder}
               dragging={dragging}
               onDropNote={onDropNote}
+              trashed={trashed}
               activePath={activePath}
               onActivate={onActivate}
               onOpenMenu={onOpenMenu}
@@ -508,6 +517,7 @@ export function FolderTree({
               selected={selected}
               onSelect={onSelect}
               glyph={trashGlyph}
+              trashed
               // No new folders inside the trash: it is a destination for deleted notes,
               // not a place to organise.
               onCreateFolder={() => {}}
