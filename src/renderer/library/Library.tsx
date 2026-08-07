@@ -337,8 +337,8 @@ export function Library(): React.ReactElement {
     void loadNotes(selectionRef.current);
   }, [key, loadNotes]);
 
-  // F1 and Ctrl+/ open the sheet here too, tested against the same registry the editor
-  // is built from. Escape is handled inside the sheet, where it cannot reach a note.
+  // Mod-/ opens the sheet here too, tested against the same registry the editor is
+  // built from. Escape is handled inside the sheet, where it cannot reach a note.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!matches(shortcut("help"), event, app.isMac)) return;
@@ -358,8 +358,8 @@ export function Library(): React.ReactElement {
    * returning `true`, so it never reaches here at all (nothing to special-case: the
    * event simply never bubbles up to `window`). That leaves Tab genuinely only able to
    * move tree → notes and notes → editor, never back out of the editor — which is why
-   * F6 exists as well, registered in `shortcuts.ts` as `cyclePanes`: it is not claimed by
-   * anything inside the editor, so it is the one key that can always complete the loop.
+   * `cyclePanes` (Ctrl-Tab/Ctrl-Shift-Tab, `shortcuts.ts`) exists as well: `keymap.ts`
+   * has no binding for it, so it is the one key that can always complete the loop.
    *
    * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
    * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
@@ -401,11 +401,20 @@ export function Library(): React.ReactElement {
         return;
       }
 
-      if (event.key !== "Tab" && !matches(shortcut("cyclePanes"), event, app.isMac)) return;
+      // Both bindings share `key === "Tab"` with the plain Tab case below (Ctrl-Tab and
+      // Ctrl-Shift-Tab are still "Tab" plus modifiers), so `cycling` has to be checked
+      // with `matches`, not by comparing `event.key` alone.
+      const cycling = matches(shortcut("cyclePanes"), event, app.isMac);
+      if (!cycling && event.key !== "Tab") return;
+      // Ctrl-Tab/Ctrl-Shift-Tab is also the browser's own "next/previous tab" gesture;
+      // claim it unconditionally so that never fires instead of the pane switch, even
+      // when there is no pane to move to below.
+      if (cycling) event.preventDefault();
       if (current === null) return;
-      // ProseMirror's own keymap always consumes Tab/Shift-Tab inside the editor (see the
-      // comment above) — this line only ever actually runs for F6 from that pane.
-      if (current === "editor" && event.key === "Tab") return;
+      // ProseMirror's own keymap consumes a *plain* Tab/Shift-Tab inside the editor (see
+      // the comment above), so only `cycling` — never a bare Tab — ever reaches here from
+      // that pane, which is what lets it complete the loop back to the tree.
+      if (current === "editor" && event.key === "Tab" && !cycling) return;
 
       const forward = !event.shiftKey;
       const next: "tree" | "notes" | "editor" | null =
@@ -579,21 +588,16 @@ export function Library(): React.ReactElement {
   }, [open]);
 
   /**
-   * The picker path, for the reader's own toolbar button and its keyboard shortcut.
+   * The picker path, for the reader's two toolbar buttons and their keyboard shortcuts.
    *
-   * Nothing guards `open === null` or `!open.editable` here beyond the button being
+   * Nothing guards `open === null` or `!open.editable` here beyond the buttons being
    * disabled for those states: `editor.current?.insertAttachment` dispatches a
    * transaction that reaches `onDocChange` like any other edit, and that is where the
    * `editable` refusal already lives — the same belt-and-braces reasoning `onDocChange`
-   * itself documents for a keystroke that slips through while the overlay is up.
+   * itself documents for a keystroke that slips through while the overlay is up. Same
+   * flow for both, differing only in the picker's filter (`ipc.ts`'s `pickAttachment`) —
+   * the note panel's right-click menu's two attachment items reach the same two.
    */
-  const pickAndInsertAttachment = useCallback(async () => {
-    const name = await window.emqnote.pickAttachment();
-    if (name !== null) editor.current?.insertAttachment(name);
-  }, []);
-
-  /** The note panel's right-click menu's two attachment items — same flow as the toolbar
-   * button above, differing only in the picker's filter (`ipc.ts`'s `pickAttachment`). */
   const pickAndInsertImage = useCallback(async () => {
     const name = await window.emqnote.pickAttachment("image");
     if (name !== null) editor.current?.insertAttachment(name);
@@ -1030,6 +1034,7 @@ export function Library(): React.ReactElement {
           onOpenHelp={() => setHelpOpen(true)}
           onOpenTasks={openTasks}
           tasksSelected={selection.kind === "tasks"}
+          isMac={app.isMac}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           deleteFolderLabel={app.t("library.deleteFolder")}
@@ -1085,6 +1090,7 @@ export function Library(): React.ReactElement {
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
+            isMac={app.isMac}
             locale={app.locale}
             t={app.t}
           />
@@ -1159,8 +1165,16 @@ export function Library(): React.ReactElement {
                   <button
                     type="button"
                     disabled={!open.editable}
-                    title={app.t("shortcut.attachment")}
-                    onClick={() => void pickAndInsertAttachment()}
+                    title={app.t("shortcut.insertImage")}
+                    onClick={() => void pickAndInsertImage()}
+                  >
+                    🖼
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!open.editable}
+                    title={app.t("shortcut.insertFile")}
+                    onClick={() => void pickAndInsertFile()}
                   >
                     📎
                   </button>
@@ -1210,7 +1224,8 @@ export function Library(): React.ReactElement {
                   ref={editor}
                   onChange={onDocChange}
                   onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
-                  onAttachmentRequested={() => void pickAndInsertAttachment()}
+                  onImageRequested={() => void pickAndInsertImage()}
+                  onFileRequested={() => void pickAndInsertFile()}
                   onContextMenu={(payload) => setEditorMenu(payload)}
                 />
               </div>

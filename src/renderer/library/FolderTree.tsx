@@ -49,6 +49,8 @@ interface Props {
   onOpenTasks: () => void;
   /** Whether the Tasks view is what is currently showing, for the same highlight the Trash branch gets. */
   tasksSelected: boolean;
+  /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
+  isMac: boolean;
   newFolderLabel: string;
   renameFolderLabel: string;
   deleteFolderLabel: string;
@@ -125,6 +127,7 @@ function Branch({
   activePath,
   onActivate,
   onOpenMenu,
+  isMac,
 }: {
   node: FolderNode;
   depth: number;
@@ -155,6 +158,8 @@ function Branch({
   onActivate: (path: string) => void;
   /** Opens the right-click menu for this row, at the given viewport point. */
   onOpenMenu: (path: string, x: number, y: number) => void;
+  /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
+  isMac: boolean;
 }): React.ReactElement {
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
@@ -207,7 +212,7 @@ function Branch({
             onSelect({ kind: "folder", path: node.path });
             return;
           }
-          if (isContextMenuKey(event)) {
+          if (isContextMenuKey(event, isMac)) {
             event.preventDefault();
             const rect = event.currentTarget.getBoundingClientRect();
             onOpenMenu(node.path, rect.left, rect.bottom);
@@ -274,6 +279,7 @@ function Branch({
               activePath={activePath}
               onActivate={onActivate}
               onOpenMenu={onOpenMenu}
+              isMac={isMac}
             />
           ))}
         </ul>
@@ -303,6 +309,7 @@ export function FolderTree({
   onOpenHelp,
   onOpenTasks,
   tasksSelected,
+  isMac,
   newFolderLabel,
   renameFolderLabel,
   deleteFolderLabel,
@@ -335,7 +342,7 @@ export function FolderTree({
   // that in the first place.
   const [activePath, setActivePath] = useState("");
 
-  // The right-click (or `Shift+F10`/`ContextMenu`) menu for one row — folder tree rows
+  // The right-click (or `Mod-Shift-M`/`ContextMenu`) menu for one row — folder tree rows
   // that used to instantly create a new folder inside whatever was right-clicked now open
   // this instead. `library.pickHint` and this component's own toolbar comment describe
   // the new gesture; see `05-besluitenlog.md`/`CLAUDE.md` for why every one of these
@@ -409,6 +416,7 @@ export function FolderTree({
           activePath={activePath}
           onActivate={setActivePath}
           onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
+          isMac={isMac}
         />
       </ul>
 
@@ -498,6 +506,7 @@ export function FolderTree({
               activePath={activePath}
               onActivate={setActivePath}
               onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
+              isMac={isMac}
             />
           </ul>
         )}

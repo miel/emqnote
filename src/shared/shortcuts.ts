@@ -42,11 +42,22 @@ export const SHORTCUTS: ShortcutEntry[] = [
   { id: "code", keys: ["Mod-Shift-c"], where: "editor", group: "text" },
   { id: "link", keys: ["Mod-k"], where: "editor", group: "text" },
   {
-    id: "attachment",
+    id: "insertImage",
     keys: ["Mod-Shift-i"],
     where: "editor",
     group: "text",
-    why: "Same family as Mod-K for a link: the letter of what gets inserted, shifted.",
+    why:
+      "Was one 'attachment' binding covering both the image and file pickers; split so " +
+      "each has its own chord (B32). Image keeps the original Mod-Shift-I — same family " +
+      "as Mod-K for a link, the letter of what gets inserted, shifted — since it is the " +
+      "more common case.",
+  },
+  {
+    id: "insertFile",
+    keys: ["Mod-Shift-a"],
+    where: "editor",
+    group: "text",
+    why: "The other half of the attachment split above: 'a' for attachment, the general case.",
   },
 
   // ---- lists ----
@@ -82,7 +93,16 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "this saves and dismisses the note instead of ticking the box.",
   },
   { id: "indent", keys: ["Tab", "Mod-m"], where: "editor", group: "lists" },
-  { id: "outdent", keys: ["Shift-Tab", "Mod-Shift-m"], where: "editor", group: "lists" },
+  {
+    id: "outdent",
+    keys: ["Shift-Tab"],
+    where: "editor",
+    group: "lists",
+    why:
+      "Mod-Shift-m used to alias this too, but that chord now belongs to contextMenu " +
+      "(B32) — one binding, one owner. Shift-Tab alone remains, still paired with " +
+      "indent's own Tab.",
+  },
 
   // ---- structure ----
   {
@@ -136,28 +156,39 @@ export const SHORTCUTS: ShortcutEntry[] = [
   },
 
   // ---- both windows ----
-  { id: "help", keys: ["F1", "Mod-/"], where: "global", group: "window" },
+  {
+    id: "help",
+    keys: ["Mod-/"],
+    where: "global",
+    group: "window",
+    why:
+      "F1 dropped: function keys need `fn` on a Mac laptop keyboard, which an everyday " +
+      "chord must not require (B32). Mod-/ already worked, so it is now the only form.",
+  },
 
   // ---- the library window's keyboard navigation (package D) ----
   {
     id: "contextMenu",
-    keys: ["Shift-F10", "ContextMenu"],
+    keys: ["Mod-Shift-m", "ContextMenu"],
     where: "library",
     group: "window",
     why:
       "The keyboard route into a right-click menu, on whichever row is focused. " +
-      "'ContextMenu' is its own key on a Windows keyboard; Shift+F10 is the one every " +
-      "keyboard has, including a Mac's.",
+      "Shift-F10 dropped for the fn-key reason (B32); Mod-Shift-m takes its place, and " +
+      "'outdent' gave up its own claim on that chord to make room. 'ContextMenu' is " +
+      "its own key on a Windows keyboard and needs no function key, so it stays.",
   },
   {
     id: "cyclePanes",
-    keys: ["F6"],
+    keys: ["Ctrl-Tab", "Ctrl-Shift-Tab"],
     where: "library",
     group: "window",
     why:
       "Tab already cycles tree → notes → editor, but it cannot leave the editor: " +
       "keymap.ts binds Tab there to list indent, and that binding always returns true. " +
-      "F6 is not claimed by the editor, so it is the one key that reaches every pane.",
+      "F6 used to be the one key that reached every pane; dropped for the fn-key " +
+      "reason (B32) and replaced with the browser's own 'switch tab' chord, which " +
+      "keymap.ts has no binding for and so still reaches out of the editor.",
   },
 ];
 

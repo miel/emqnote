@@ -57,7 +57,8 @@ function mount(): EditorView {
   return new EditorView(host, {
     state: createEditorState(doc, {
       openLinkPrompt: () => undefined,
-      requestAttachment: () => undefined,
+      requestImage: () => undefined,
+      requestFile: () => undefined,
     }),
     // As `Editor.tsx` registers it — the label a remote image is drawn as, and what the
     // `image-pending` decoration has to reach.

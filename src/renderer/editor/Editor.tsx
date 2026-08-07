@@ -57,10 +57,12 @@ export interface EditorHandle {
 interface Props {
   onChange: (doc: PMNode) => void;
   onLinkRequested: () => void;
-  /** The toolbar button and the keyboard shortcut both funnel through this. */
-  onAttachmentRequested: () => void;
+  /** The image toolbar button and the insertImage shortcut both funnel through this. */
+  onImageRequested: () => void;
+  /** The file toolbar button and the insertFile shortcut both funnel through this. */
+  onFileRequested: () => void;
   /**
-   * A right-click (or the `ContextMenu` key/Shift+F10) inside the note panel, in either
+   * A right-click (or the `ContextMenu` key/Mod-Shift-M) inside the note panel, in either
    * window — `Capture.tsx` and the library reader both pass this through to build the
    * same formatting menu from `editor-menu.ts`. Absent means no custom menu at all, and
    * the browser's own falls through undisturbed.
@@ -79,7 +81,7 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onLinkRequested, onAttachmentRequested, onContextMenu, placeholder },
+  { onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu, placeholder },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -99,14 +101,15 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
-  const handlers = useRef({ onChange, onLinkRequested, onAttachmentRequested, onContextMenu });
-  handlers.current = { onChange, onLinkRequested, onAttachmentRequested, onContextMenu };
+  const handlers = useRef({ onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu });
+  handlers.current = { onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
   // there is nothing here `state.ts`'s `createEditorState` needs to hold onto.
   const commandContext = (): CommandContext => ({
     openLinkPrompt: () => handlers.current.onLinkRequested(),
-    requestAttachment: () => handlers.current.onAttachmentRequested(),
+    requestImage: () => handlers.current.onImageRequested(),
+    requestFile: () => handlers.current.onFileRequested(),
   });
 
   useEffect(() => {

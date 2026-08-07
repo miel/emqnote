@@ -15,7 +15,8 @@ import type { CommandContext } from "../src/renderer/editor/commands.js";
 
 const context: CommandContext = {
   openLinkPrompt: () => {},
-  requestAttachment: () => {},
+  requestImage: () => {},
+  requestFile: () => {},
 };
 
 function mount(markdown: string): EditorView {

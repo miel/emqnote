@@ -49,6 +49,7 @@ function renderFooter(tasksSelected = false): string {
       onOpenHelp: () => {},
       onOpenTasks: () => {},
       tasksSelected,
+      isMac: false,
       newFolderLabel: "New folder",
       renameFolderLabel: "Rename folder",
       deleteFolderLabel: "Delete folder",

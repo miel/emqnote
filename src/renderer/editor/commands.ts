@@ -633,8 +633,10 @@ export function applyLink(href: string): Command {
 /** What a command needs from the window around it. Most need nothing. */
 export interface CommandContext {
   openLinkPrompt: () => void;
-  /** Opens the file picker and inserts whatever attachment comes back. */
-  requestAttachment: () => void;
+  /** Opens the image-filtered picker and inserts whatever comes back. */
+  requestImage: () => void;
+  /** Opens the unfiltered picker and inserts whatever comes back. */
+  requestFile: () => void;
 }
 
 /**
@@ -656,8 +658,12 @@ export const COMMANDS: Record<string, (context: CommandContext) => Command> = {
     context.openLinkPrompt();
     return true;
   },
-  attachment: (context) => () => {
-    context.requestAttachment();
+  insertImage: (context) => () => {
+    context.requestImage();
+    return true;
+  },
+  insertFile: (context) => () => {
+    context.requestFile();
     return true;
   },
 

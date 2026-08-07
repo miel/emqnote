@@ -97,8 +97,9 @@ describe("matches", () => {
   });
 
   it("does not fire a bare key on its modified twin", () => {
-    expect(matches(shortcut("help"), press("F1"), false)).toBe(true);
-    expect(matches(shortcut("help"), press("F1", { ctrlKey: true }), false)).toBe(false);
+    const indent = shortcut("indent");
+    expect(matches(indent, press("Tab"), false)).toBe(true);
+    expect(matches(indent, press("Tab", { ctrlKey: true }), false)).toBe(false);
   });
 });
 
@@ -117,7 +118,7 @@ describe("formatting, on both platforms", () => {
   it("spells named keys out rather than as one letter", () => {
     expect(formatBinding("Mod-Shift-Enter", false)).toBe("Ctrl+Shift+Enter");
     expect(formatBinding("Shift-Tab", true)).toBe("⇧Tab");
-    expect(formatBinding("F1", false)).toBe("F1");
+    expect(formatBinding("ContextMenu", false)).toBe("ContextMenu");
   });
 
   it("collapses an entry's aliases into one row", () => {
