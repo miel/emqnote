@@ -142,6 +142,7 @@ function buildFake(initial: OpenedNote): Fake {
     saveAttachment: async () => null,
     pickAttachment: async () => null,
     openAttachment: async () => {},
+    openExternal: async () => {},
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},

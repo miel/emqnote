@@ -435,6 +435,14 @@ body {
   color: var(--accent);
 }
 
+/* Mod+click opens a link (B33); a plain click just places the caret. The pointer
+   cursor only shows up while the modifier is held (`.link-mod-hover`, toggled from
+   `Editor.tsx`'s keydown/keyup tracking) — otherwise a link would look clickable at
+   all times, which is not true for a plain click. */
+.editor-content.link-mod-hover a {
+  cursor: pointer;
+}
+
 /* A tag is coloured and nothing more: no pill, no background, no border radius. It has
    to stay ordinary editable text with an ordinary caret in it — anything that looks like
    a chip invites a click, and there is nothing here to click. */

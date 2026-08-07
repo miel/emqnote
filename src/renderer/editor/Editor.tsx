@@ -18,6 +18,8 @@ import {
   handleAttachmentPaste,
   insertAttachment,
 } from "./insert-attachment.js";
+import { handleListItemPaste } from "./paste-list-item.js";
+import { handleLinkClick } from "./link-click.js";
 
 /** How long a task clicked in the Tasks view stays highlighted before fading on its own. */
 const TASK_HIGHLIGHT_MS = 10_000;
@@ -147,9 +149,17 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       // A screenshot pasted from the clipboard or a file dropped from Explorer/Finder —
       // see `insert-attachment.ts` for why a paste is image-only while a drop also
       // takes a PDF, and why both decline (return false) on anything else so the
-      // ordinary text/HTML paste path is untouched.
-      handlePaste: handleAttachmentPaste,
+      // ordinary text/HTML paste path is untouched. `handleListItemPaste` is the one
+      // other claimant: pasting one or more whole task items into a list whose
+      // neighbouring box disagrees, the one shape `replaceSelection` mishandles — see
+      // `paste-list-item.ts` (B34). Anything else falls through both and reaches the
+      // default paste path unchanged.
+      handlePaste: (view, event, slice) =>
+        handleAttachmentPaste(view, event) || handleListItemPaste(view, event, slice),
       handleDrop: handleAttachmentDrop,
+      // Mod+click opens a link in the system browser; a plain click still just places
+      // the caret, so the link's own text stays editable — see `link-click.ts` (B33).
+      handleClick: handleLinkClick,
       // The `text/plain` flavour of a copy. The default flattens a list to its text and
       // drops every bullet, number and box on the way out — see `clipboard-text.ts`.
       clipboardTextSerializer: clipboardText,
@@ -162,6 +172,34 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       clearHighlightTimer();
       created.destroy();
       view.current = null;
+    };
+  }, []);
+
+  // Discoverability for Mod+click (B33): while the modifier is held, `.editor-content`
+  // gets a class so `styles.css` can show a pointer cursor over a link — otherwise
+  // there is nothing on screen distinguishing "this click places the caret" from
+  // "this click opens the link". Tracked on every keydown/keyup rather than just the
+  // modifier key itself, since either event's `metaKey`/`ctrlKey` already reports
+  // whether it is currently down; `blur` clears it so switching windows while holding
+  // the key does not leave the cursor stuck as a pointer.
+  useEffect(() => {
+    const isMac = window.emqnote.platform === "darwin";
+    const modHeld = (event: KeyboardEvent): boolean => (isMac ? event.metaKey : event.ctrlKey);
+    const setHover = (on: boolean): void => {
+      view.current?.dom.classList.toggle("link-mod-hover", on);
+    };
+
+    const onKeyChange = (event: KeyboardEvent): void => setHover(modHeld(event));
+    const onBlur = (): void => setHover(false);
+
+    window.addEventListener("keydown", onKeyChange);
+    window.addEventListener("keyup", onKeyChange);
+    window.addEventListener("blur", onBlur);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyChange);
+      window.removeEventListener("keyup", onKeyChange);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
 

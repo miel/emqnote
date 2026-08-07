@@ -142,6 +142,7 @@ function buildFake(): Fake {
     reloadNote: async () => {},
     pickAttachment: async () => null,
     openAttachment: async () => {},
+    openExternal: async () => {},
     library,
   };
 

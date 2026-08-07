@@ -131,6 +131,11 @@ export const IPC = {
   /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
   openAttachment: "app:open-attachment",
   /**
+   * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
+   * main — the renderer reports where the click landed, not what may be opened.
+   */
+  openExternal: "app:open-external",
+  /**
    * Downloads a picture that arrived with a pasted web page into `_attachments/`. Sits
    * beside `saveAttachment` for the same reason: a paste happens in both windows.
    */
@@ -344,6 +349,12 @@ export interface CaptureApi {
   pickAttachment: (filter?: "image" | "any") => Promise<string | null>;
   /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
   openAttachment: (name: string) => Promise<void>;
+  /**
+   * Mod+click on a weblink (B33), mirroring `openAttachment`'s shape. A refusal (a
+   * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —
+   * there is nothing for this side to do differently either way.
+   */
+  openExternal: (href: string) => Promise<void>;
   /**
    * Downloads a picture that came in with a pasted web page and answers the name it
    * landed under in `_attachments/`, or `null` for every refusal — a scheme that is not

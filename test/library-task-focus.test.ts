@@ -172,6 +172,7 @@ function buildFake(): CaptureApi {
     reloadNote: async () => {},
     pickAttachment: async () => null,
     openAttachment: async () => {},
+    openExternal: async () => {},
     library,
   };
 }

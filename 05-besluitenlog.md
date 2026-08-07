@@ -878,6 +878,63 @@ zou de ene plek zijn waar `Mod`'s belofte (één binding, beide platformen) niet
 nodig heeft — blijft wel staan, precies om die Windows-conventie te bedienen zonder de
 fn-eis van een functietoets.
 
+## B33 — Een weblink open je met Mod+klik, alleen http(s), en main beslist
+
+**Genomen** op 7 augustus 2026. Een link in een notitie kon wel getypt en geplakt worden,
+maar nergens geopend — de mark bestond al (`schema.ts:233-254`), rondde correct door de
+markdown-rondtrip en stond zelfs in de corpus-specificatie, maar er was geen enkel gebaar
+dat hem opende. Een gewone klik moet de cursor blijven plaatsen — de linktekst is gewone,
+bewerkbare tekst, en een klik die in plaats daarvan probeerde te navigeren zou een typefout
+erin onherstelbaar maken. Daarom is gekozen voor Mod+klik: Cmd op macOS, Ctrl op Windows,
+hetzelfde gebaar dat elke browser al gebruikt voor "open in een nieuw tabblad".
+
+De schemabeslissing wordt opnieuw gemaakt in main (`isOpenableUrl`, `src/main/remote-image.ts`)
+en nooit vertrouwd vanuit de renderer — dezelfde redenering die de toelaatlijst van de
+plakpijplijn al documenteert voor zijn eigen schema's: de renderer meldt alleen waar
+geklikt is en welke href de mark draagt, main beslist wat daarmee mag gebeuren. Alleen
+`http:` en `https:` zijn toegestaan, dezelfde lijst als `isFollowableUrl` voor een
+omleiding — `data:` heeft niets te "openen", en `file:` zou een link in een notitie iets
+op de lokale schijf kunnen laten openen. Een afwijzing wordt gelogd en verder niets: er is
+geen bestand dat half geschreven kan zijn, dus niets om terug te draaien.
+
+**`toDOM` van de linkmark bleef onaangeroerd.** De verleiding was groot om de href als
+`title`-attribuut te schrijven zodat zweven de bestemming al toont, maar diezelfde
+`toDOM` is ook wat `_serializeForClipboard` gebruikt om de HTML op het klembord te
+zetten — een link zonder eigen titel kopiëren en terugplakken, zelfs binnen dezelfde
+notitie, zou dan een titel krijgen die er nooit was: een echte, opgeslagen wijziging bij
+de eerstvolgende save, niet alleen een weergaveverschil. `link-title.ts` toont de href in
+plaats daarvan als een decoratie — dezelfde soort die `tag-decoration.ts` al gebruikt voor
+`#tag`-kleuring — die nooit meegaat in wat gekopieerd of geserialiseerd wordt.
+
+## B34 — Een taak plakken in een lijst van taken is een handmatige invoeging, nooit `replaceSelection`
+
+**Genomen** op 7 augustus 2026. Gemeld als: het vinkje van de taak náást de zojuist
+geplakte taak klapt om — aangevinkt wordt leeg, of andersom. `listItem` is
+`defining: true` (`schema.ts:130`) — dat is wat een alinea of een geneste lijst onder een
+bullet laat hangen zonder dat ProseMirror probeert onverwante structuur eroverheen samen
+te voegen. `prosemirror-transform`'s `replaceRange`, wat `EditorState#tr.replaceSelection`
+gebruikt zodra een geplakte slice niet triviaal past, leest precies die vlag om te
+beslissen wanneer terug te deinzen en de omringende grens opnieuw op te bouwen. `checked`
+is maar een attribuut, maar die terugdeins-logica vergelijkt de hele node-markup
+(`sameMarkup`), dus een geplakt item met een ander vinkje dan het item waar het in landt,
+raakt hetzelfde pad als een werkelijk ander bloktype. De herbouw hergebruikt daarbij één
+node-identiteit voor zowel de onaangeroerde helft van het doelitem als het vers geplakte
+item — waardoor geen van beide vinkjes meer klopt.
+
+Bevestigd met een op de geserialiseerde markdown afgedwongen assertie
+(`test/paste-task-list.test.ts`), niet aangenomen: dat is ook precies wat het
+documentniveau-scenario onderscheidt van het render-niveau-scenario dat er eerst evengoed
+verdacht uitzag (`checkbox.ts`'s widget-sleutel, gedeeld door elk item in dezelfde staat) —
+er komt bij het echte scenario geen enkele view aan te pas. `paste-list-item.ts` claimt in
+`handlePaste` precies deze ene, nauw omschreven vorm — een losse cursor binnen een
+lijstitem, een slice die zuiver uit hele lijstitems bestaat, met minstens één vinkje dat
+afwijkt van het item waar geplakt wordt — en voert de invoeging met de hand uit: splits
+het doelitem op de cursor (dat behoudt, anders dan het generieke pad, dezelfde
+node-identiteit — en dus hetzelfde vinkje — op beide helften, precies zoals Enter dat zou
+doen) en voeg de geplakte items, onaangeroerd, in op de naad die dat net geopend heeft.
+Elke andere plakvorm, inclusief een echte tekstselectie die door geplakte inhoud vervangen
+wordt, blijft het bestaande pad volgen — dat handelt dat geval al goed af.
+
 ---
 
 ## Open punten

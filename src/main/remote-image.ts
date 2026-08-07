@@ -75,6 +75,19 @@ export function isFollowableUrl(url: string): boolean {
 }
 
 /**
+ * Whether Mod+click (B33) may hand this address to `shell.openExternal` — the OS's own
+ * browser, not this app. The same schemes as `isFollowableUrl`, for the same reason:
+ * `file:` would let a link written inside a note open something on the local disk
+ * instead of on the web, and `isFetchableUrl`'s `data:` has no business being "opened"
+ * at all. The renderer reports where the click landed; the scheme decision is made
+ * again here and never trusted from that report.
+ */
+export function isOpenableUrl(url: string): boolean {
+  const scheme = schemeOf(url);
+  return scheme !== null && FOLLOWABLE_SCHEMES.has(scheme);
+}
+
+/**
  * The image types accepted off this path.
  *
  * SVG is refused here even though the file picker (`pickAttachment`) still lets the

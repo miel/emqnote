@@ -564,6 +564,41 @@ export interface LinkTarget {
 }
 
 /**
+ * The link mark at document position `pos`, if there is one — the shared logic behind
+ * `linkAt` (the caret) and `link-click.ts`'s `linkHrefAt` (a click, which has not yet
+ * moved the selection when `handleClick` runs, so it cannot resolve through
+ * `state.selection`).
+ */
+function linkRangeAt(doc: PMNode, pos: number): LinkTarget | null {
+  const linkType = schema.marks.link!;
+  const $pos = doc.resolve(pos);
+
+  const marks = $pos.marks();
+  const mark =
+    marks.find((candidate) => candidate.type === linkType) ??
+    $pos.nodeAfter?.marks.find((candidate) => candidate.type === linkType) ??
+    null;
+
+  if (mark === null) return null;
+
+  // Walk out to both ends of the run carrying this exact link.
+  const parentStart = $pos.start();
+  let from = pos;
+  let to = pos;
+
+  const carries = (at: number): boolean => {
+    const node = doc.resolve(at).nodeAfter;
+    return node !== null && node !== undefined && mark.isInSet(node.marks) !== undefined;
+  };
+
+  while (from > parentStart && carries(from - 1)) from -= 1;
+  const parentEnd = $pos.end();
+  while (to < parentEnd && carries(to)) to += 1;
+
+  return { href: mark.attrs.href as string, from, to };
+}
+
+/**
  * The link at the caret, if there is one.
  *
  * Ctrl+K used to require a selection, which meant clicking inside an existing link and
@@ -572,32 +607,12 @@ export interface LinkTarget {
  * looking for the mark under the caret.
  */
 export function linkAt(state: EditorState): LinkTarget | null {
-  const linkType = schema.marks.link!;
-  const { $from } = state.selection;
+  return linkRangeAt(state.doc, state.selection.$from.pos);
+}
 
-  const marks = $from.marks();
-  const mark =
-    marks.find((candidate) => candidate.type === linkType) ??
-    $from.nodeAfter?.marks.find((candidate) => candidate.type === linkType) ??
-    null;
-
-  if (mark === null) return null;
-
-  // Walk out to both ends of the run carrying this exact link.
-  const parentStart = $from.start();
-  let from = $from.pos;
-  let to = $from.pos;
-
-  const carries = (pos: number): boolean => {
-    const node = state.doc.resolve(pos).nodeAfter;
-    return node !== null && node !== undefined && mark.isInSet(node.marks) !== undefined;
-  };
-
-  while (from > parentStart && carries(from - 1)) from -= 1;
-  const parentEnd = $from.end();
-  while (to < parentEnd && carries(to)) to += 1;
-
-  return { href: mark.attrs.href as string, from, to };
+/** The href of the link at document position `pos`, if there is one. Mod+click's own lookup — see `link-click.ts`. */
+export function linkHrefAt(state: EditorState, pos: number): string | null {
+  return linkRangeAt(state.doc, pos)?.href ?? null;
 }
 
 /** Selects the whole link under the caret, so the dialog acts on all of it. */

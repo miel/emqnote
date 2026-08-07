@@ -3,6 +3,7 @@ import {
   extensionForContentType,
   isFetchableUrl,
   isFollowableUrl,
+  isOpenableUrl,
   normaliseContentType,
   originalNameForUrl,
   parseDataUrl,
@@ -66,6 +67,28 @@ describe("isFollowableUrl", () => {
     // https URL answering with either of these must not be followed.
     expect(isFollowableUrl("file:///etc/passwd")).toBe(false);
     expect(isFollowableUrl("gopher://169.254.169.254/")).toBe(false);
+  });
+});
+
+describe("isOpenableUrl", () => {
+  it("allows https and http — Mod+click (B33) opens the OS's own browser", () => {
+    expect(isOpenableUrl("https://example.com/")).toBe(true);
+    expect(isOpenableUrl("http://intranet.local/")).toBe(true);
+  });
+
+  it("refuses data:, unlike isFetchableUrl — there is nothing to \"open\" about one", () => {
+    expect(isOpenableUrl("data:image/png;base64,iVBORw0KGgo=")).toBe(false);
+  });
+
+  it("refuses file:, whatever its case — a link must not open something on disk", () => {
+    expect(isOpenableUrl("file:///etc/passwd")).toBe(false);
+    expect(isOpenableUrl("FILE:///etc/passwd")).toBe(false);
+  });
+
+  it("refuses javascript: and a relative or empty address", () => {
+    expect(isOpenableUrl("javascript:alert(1)")).toBe(false);
+    expect(isOpenableUrl("/notes/inbox")).toBe(false);
+    expect(isOpenableUrl("")).toBe(false);
   });
 });
 

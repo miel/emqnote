@@ -88,6 +88,7 @@ import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
+import { isOpenableUrl } from "./remote-image.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -821,6 +822,20 @@ function registerAppIpc(): void {
     const resolved = resolveAttachment(vault, name);
     if (resolved === null) return;
     void shell.openPath(resolved);
+  });
+
+  // Mod+click on a weblink in the editor (B33). The renderer only reports where the
+  // click landed and what href the mark carries — attacker-writable, in the ordinary
+  // case, since the note could have been written or pasted from anywhere — so the
+  // scheme decision is made again here, exactly as `remote-image.ts` documents for its
+  // own allowlist, and never trusted from the report. A refusal logs and does nothing:
+  // there is no file to have half-written, so there is nothing to undo.
+  ipcMain.handle(IPC.openExternal, (_event, href: string) => {
+    if (!isOpenableUrl(href)) {
+      console.warn(`Refusing to open external link with a disallowed scheme: ${href}`);
+      return;
+    }
+    void shell.openExternal(href);
   });
 
   // Fire-and-forget: the drag itself is already reflected on screen, this only has to
