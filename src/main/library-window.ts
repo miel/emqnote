@@ -126,7 +126,18 @@ export async function captureWindowTo(
         // label and the shortcut, so "⋯>Rename" would never match with only that — see
         // CLAUDE.md's context-menu constraint for why a plain button opening a menu is a
         // route this has to be able to follow.
-        const targets = [...document.querySelectorAll('button, .branch')];
+        //
+        // An open menu is searched *instead of* the page, not alongside it, and that is
+        // the load-bearing half: the folder toolbar's own buttons read "Rename" and
+        // "Delete" too (Library.tsx passes library.rename/library.delete to both it and
+        // the reader menu), and they come first in document order. Searching the whole
+        // page would make "⋯>Delete" click *Delete folder* — the destructive neighbour
+        // of the item that was asked for. A step after the one that opened a menu can
+        // only have meant something in that menu.
+        //
+        // (No backticks in this comment: it lives inside the template literal below.)
+        const menu = document.querySelector('.context-menu');
+        const targets = [...(menu ?? document).querySelectorAll('button, .branch')];
         const name = (node) =>
           (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
             .textContent.trim();
