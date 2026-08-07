@@ -27,7 +27,7 @@ npx vitest run test/roundtrip.test.ts
 npx vitest run -t "stays byte-identical"
 ```
 
-Three diagnostic helpers:
+Four diagnostic helpers:
 
 ```bash
 npm run canonical -- test/corpus/24-vergadernotitie.md
@@ -46,6 +46,12 @@ emqnote.exe --selftest=50 --vault=%TEMP%\emqnote-proef
 ```
 
 Runs on the *packaged* app. Measures hotkey → painted caret 50 times, then really types a note and checks a correct file lands in the Inbox. Exits with a status code, so it works in CI. Results go to `%LOCALAPPDATA%\emqnote\` / `~/Library/Application Support/emqnote/` as `selftest-result.json` plus `latency.log`. Flags are preferred over env vars because `set EMQNOTE_SELFTEST=50` only works in `cmd` — PowerShell silently ignores it. Other flags: `--library`, `--screenshot=<path>`, `--open-note=<title fragment>`, `--click-button=<label>`. `--screenshot` on its own photographs the *capture* window; with `--library` it photographs the library. `--click-button` takes a `>`-separated sequence, so `--click-button="Tags>#klantx"` unfolds the tag list and then picks one, and it matches folder and filter rows as well as buttons.
+
+```bash
+emqnote --thumbnail-probe="2026-08-04-1030-offerte.pdf" --vault=/path/to/vault
+```
+
+Diagnoses B30's "PDF preview is not showing" the way `--dump-clipboard` diagnoses a paste: instead of guessing, it prints exactly which of four things went wrong for one named `_attachments/` file and exits with a status code — not previewable (wrong extension), `resolveAttachment` returned null (missing, or a name that does not resolve inside `_attachments/`), `nativeImage` returned an empty image (no OS thumbnail provider could draw it — compare against Quick Look/Explorer on the same file), or a success that names the PNG's path. It deliberately bypasses `failedThisSession` (`thumbnails.ts`), the in-memory negative cache that would otherwise make a retried probe report the same stale failure for the rest of the session. Runs alongside the resident instance for the same reason `--dump-clipboard` does — no need to quit the everyday app first — and `--vault=` behaves exactly as it does for `--selftest`.
 
 ## Architecture
 
@@ -237,6 +243,8 @@ Bugs 3 and 4 stay unconfirmed live, for the same reason earlier batches left thi
 **Four more features landed on 7 August 2026**, built as four work packages on separate branches by parallel agents and merged in two waves — the same shape as the eight-fixes batch above. **Package A** — pasting a picture from a web page now downloads it into `_attachments/` instead of leaving a dead `https://` link, with the SSRF-guarded fetch pipeline described above. **Package B** — PDF and Office attachments get an OS-drawn first-page thumbnail (B30). **Package C** — the library and the capture window now learn about a note that changed or disappeared outside the app (B31). **Package D** — right-click menus on all three panels and full keyboard-only navigation of the library.
 
 Confirmed in the real app under `Xvfb`, driven over CDP: pasting a real remote image into a note in the library reader, which downloaded, converted to a `wikiEmbed` and rendered inline; a `.pdf` wikiLink's thumbnail request falling back cleanly to the plain chip on this Linux sandbox (no OS provider here — the happy path itself needs real macOS/Windows hardware, B30's own open item); the library's whole disk-change path — silent reload when clean, the Reload/Keep-mine bar with the in-progress edit preserved when dirty, the Close/Keep-mine bar and no auto-close on a deletion, and a full minute of continuous typing producing zero false positives from the app's own autosave; the folder-tree, note-list and note-panel context menus, including a right-click correctly selecting a note-list row first; and keyboard-only navigation — arrow keys moving the roving `tabIndex`, Tab cycling tree → notes → editor, Escape returning from the editor to the note list, and Shift+F10 opening a menu at the focused row. **Not yet confirmed live**, for the same reasons the earlier batches left things open: a pasted image drawing inside the *capture* window specifically (paste was only driven in the library reader), and the capture window's own disk-change notice (no capture-renderer test harness exists to drive it, same limitation `dirtyRef`'s own comment names). Both are `TEST-PROTOCOL.md` items now.
+
+**A report of "PDF preview is not showing" on a packaged macOS build (against a business OneDrive) was investigated on 7 August 2026, without being reproducible here** — Linux has no OS thumbnail provider at all, so this sandbox only ever exercises the fallback chip, which stayed correct throughout. `thumbnails.ts`'s `ensureThumbnail` had a `darwin`-only pre-check, `isPlaceholder`, borrowed from `vault.ts`'s `checkFilesOnDemand`: a file reporting a real size but zero disk blocks was treated as a not-yet-hydrated OneDrive placeholder and skipped before `nativeImage` was ever asked, then remembered as failed for the rest of the session. That check made sense for `checkFilesOnDemand`, which samples 40 files and takes a majority vote to answer one low-stakes question for the whole vault ("never blocks anything," its own comment says) — but gating one specific file, permanently, is a different risk profile, and a business OneDrive's File Provider has been observed reporting `blocks === 0` for files that are fully hydrated and readable. That mismatch matches the reported symptom exactly, so the check was removed rather than narrowed: a genuinely dataless file now costs one wasted read that `nativeImage.createThumbnailFromPath` already tolerates failing on, which is a strictly better trade-off than a heuristic that can silently and permanently disable the feature. `--thumbnail-probe=<name>` (see the diagnostic helpers above) was added alongside the fix so the remaining question — does `nativeImage` actually draw a first page on real macOS/Windows hardware — can be answered directly instead of guessed at; it is unverified on real hardware, same as the rest of B30's happy path, and is a `TEST-PROTOCOL.md` item (§4.5).
 
 ## The documents
 

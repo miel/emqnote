@@ -85,7 +85,7 @@ import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import { isPreviewable } from "./thumbnail-cache.js";
-import { ensureThumbnail, thumbnailCacheDir } from "./thumbnails.js";
+import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import type {
   ConflictChoice,
@@ -133,8 +133,11 @@ const launch = readLaunchOptions();
 // nothing at all — which is exactly what happened the first time it was tried on
 // Windows. It runs on its own vault and exits when done. `--dump-clipboard` needs the
 // same exception for the same reason: its whole point is running it alongside the
-// resident instance, right after copying something from Outlook.
-const bypassesSingleInstance = launch.selfTestRounds > 0 || launch.dumpClipboard !== null;
+// resident instance, right after copying something from Outlook. `--thumbnail-probe`
+// needs it for the same reason again: it exists to be run against the everyday vault,
+// on demand, without first quitting the resident app.
+const bypassesSingleInstance =
+  launch.selfTestRounds > 0 || launch.dumpClipboard !== null || launch.thumbnailProbe !== null;
 if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -281,6 +284,18 @@ async function main(): Promise<void> {
   if (launch.dumpClipboard !== null) {
     dumpClipboard(launch.dumpClipboard);
     app.exit(0);
+    return;
+  }
+
+  if (launch.thumbnailProbe !== null) {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) {
+      console.log("no vault configured — pass --vault=<path> alongside --thumbnail-probe");
+      app.exit(1);
+      return;
+    }
+    const code = await runThumbnailProbe(vault, thumbnailCacheDir(), launch.thumbnailProbe);
+    app.exit(code);
     return;
   }
 

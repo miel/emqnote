@@ -155,6 +155,19 @@ Windows), and neither this Linux sandbox nor CI has one — both only ever exerc
 fallback path (the plain chip, unchanged), which is what the automated tests actually
 cover. Whether a real first page is drawn on either shipping platform is unproven.
 
+A report of "PDF preview is not showing" on a packaged macOS build against a business
+OneDrive led to one fix on 7 August 2026: `ensureThumbnail` (`thumbnails.ts`) had a
+`darwin`-only guard that treated a file reporting `blocks === 0` as a not-yet-hydrated
+OneDrive placeholder and skipped it, permanently for the session, before `nativeImage`
+was ever asked. A business OneDrive's File Provider has been observed reporting
+`blocks === 0` for files that are fully hydrated and readable, which matches the report
+exactly, so the guard was removed rather than narrowed — **this is a fix for the
+likeliest cause, not a confirmation that thumbnails now work**; nobody has watched a
+real first page get drawn on macOS or Windows either before or after it. Use step 4.5h
+below, on the actual hardware and the actual vault the report came from, to settle it —
+it isolates the OS/`nativeImage` question from everything else in the UI, and it no
+longer has to fight `failedThisSession` to get a fresh answer.
+
 | # | Step | Expected |
 |---|---|---|
 | 4.5a | Insert a `.pdf` (drag, paste, or the attachment button) into a note in the library reader | A small thumbnail of the PDF's first page appears beside the filename chip, not just the label |
@@ -164,6 +177,7 @@ cover. Whether a real first page is drawn on either shipping platform is unprove
 | 4.5e | Click directly on the thumbnail image, not just the filename text | Same as clicking the chip always did: the file opens in the system viewer |
 | 4.5f | If no thumbnail ever appears: open devtools for that window and check the Network tab (or console) for the `emqnote-thumb://` request | A 404 there on a platform that should have a provider is the bug to report, with the OS version. On Windows specifically, check whether Explorer itself shows a thumbnail for that same PDF — if Explorer also cannot, no provider is registered on that machine and this is expected, not a bug |
 | 4.5g | Do 4.5a in the **capture window** | Same as §4.2 — this depends on §4.2's own inline-attachment rendering working first |
+| 4.5h | Quit the packaged app (or leave it running — the probe bypasses the single-instance lock), then run `emqnote --thumbnail-probe="<exact _attachments/ filename>"` (add `--vault=<path>` if it is not the configured one) against the actual PDF from the original report | Prints which of the four outcomes fired (not previewable / not resolved / `nativeImage` returned an empty image / written to `<path>`) and exits with a status code. A `0` naming a path means `nativeImage` really did produce a PNG on this machine — open that path to look at it. A "returned an empty image" result on macOS is the one worth comparing against Quick Look on the same file (Space in Finder): if Quick Look also cannot preview it, this is an OS/file limitation, not an emqnote bug |
 
 ---
 

@@ -18,6 +18,8 @@ export interface LaunchOptions {
   screenshot: string | null;
   /** Dump the system clipboard to `<prefix>.html`/`.txt`/`.png` and exit. */
   dumpClipboard: string | null;
+  /** Diagnose why `<name>` (an `_attachments/` file) does or does not get a B30 thumbnail, then exit. */
+  thumbnailProbe: string | null;
 }
 
 function flagValue(argv: string[], name: string): string | null {
@@ -46,5 +48,6 @@ export function readLaunchOptions(argv: string[] = process.argv): LaunchOptions 
     openLibrary: argv.includes("--library"),
     screenshot: flagValue(argv, "screenshot"),
     dumpClipboard: flagValue(argv, "dump-clipboard"),
+    thumbnailProbe: flagValue(argv, "thumbnail-probe"),
   };
 }
