@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -16,9 +23,15 @@ let vault: string;
 let cacheDir: string;
 
 beforeEach(() => {
-  vault = mkdtempSync(join(tmpdir(), "emqnote-thumb-probe-"));
+  // `realpathSync`, not the path `mkdtemp` returned: on macOS `/var` is a symlink to
+  // `/private/var`, and `resolveAttachment` — which `decideThumbnailProbe` answers with —
+  // follows the symlinks deliberately, because following them *is* the traversal guard.
+  // Comparing against the unresolved path passes on Linux and Windows and fails only on
+  // macOS, which is the whole reason the suite runs on all three in CI. The `emptyTrash`
+  // tests carry the same note for the same reason.
+  vault = realpathSync(mkdtempSync(join(tmpdir(), "emqnote-thumb-probe-")));
   mkdirSync(join(vault, "_attachments"), { recursive: true });
-  cacheDir = mkdtempSync(join(tmpdir(), "emqnote-thumb-probe-cache-"));
+  cacheDir = realpathSync(mkdtempSync(join(tmpdir(), "emqnote-thumb-probe-cache-")));
 });
 
 afterEach(() => {
