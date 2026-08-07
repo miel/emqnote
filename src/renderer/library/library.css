@@ -56,10 +56,14 @@
 
 .tree-toolbar {
   display: flex;
+  justify-content: center;
   gap: 4px;
   padding: 0 8px 8px;
 }
 
+/* Natural width, centred — matching the note list's and the reader's own buttons rather
+   than stretching to fill the row: `flex: 1` plus left-aligned text used to make "+ New"
+   read like a label the row started with rather than a button. */
 .tree-toolbar button {
   font: inherit;
   font-size: 12px;
@@ -69,11 +73,6 @@
   border-radius: 5px;
   padding: 3px 8px;
   cursor: default;
-}
-
-.tree-toolbar button {
-  flex: 1;
-  text-align: left;
 }
 
 .tree-toolbar button:hover:not(:disabled) {
@@ -201,6 +200,22 @@
 .branch-on .branch-name {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* A folder living inside `_trash` is still a folder, but it used to render identically
+   to a live one — dimmed and italic so it reads as "already deleted" at a glance.
+   `trashed` is propagated from the trash branch down to every row underneath it (see
+   `Branch`'s own comment on why, unlike `glyph`, this one is), so a subfolder several
+   levels into the trash looks the same as the top-level one. */
+.branch-trashed .branch-name {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* Selecting a trashed folder still has to read as selected — `.branch-on`'s accent
+   colour and weight would otherwise lose their contrast under the dimming above. */
+.branch-trashed.branch-on .branch-name {
+  opacity: 1;
 }
 
 /* The folder a dragged note would land in. An outline rather than a fill, so it reads as

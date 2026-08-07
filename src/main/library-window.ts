@@ -121,9 +121,15 @@ export async function captureWindowTo(
         // Folder rows too, not only buttons: the tree is where most of what is worth
         // photographing lives, and Trash is a row rather than a button. A row is matched
         // on its name element — its own textContent carries the note count as well, so
-        // "Trash" would never equal "Trash2".
+        // "Trash" would never equal "Trash2". A menu item (".context-menu-label") is the
+        // same idea one level down: its own textContent concatenates the checkmark, the
+        // label and the shortcut, so "⋯>Rename" would never match with only that — see
+        // CLAUDE.md's context-menu constraint for why a plain button opening a menu is a
+        // route this has to be able to follow.
         const targets = [...document.querySelectorAll('button, .branch')];
-        const name = (node) => (node.querySelector('.branch-name') ?? node).textContent.trim();
+        const name = (node) =>
+          (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
+            .textContent.trim();
         const match = targets.find((node) => name(node) === ${JSON.stringify(label.trim())});
         match?.click();
         return match !== undefined;

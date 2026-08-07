@@ -12,6 +12,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortKey,
   VaultFileEvent,
 } from "../shared/vault-types.js";
 
@@ -49,6 +50,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),
+  setSort: (sort: SortKey) => ipcRenderer.send(IPC.setSort, sort),
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),

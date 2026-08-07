@@ -118,6 +118,8 @@ const DUTCH: Record<string, string> = {
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
+  /** The reader toolbar's "⋯" button, opening Rename/Move/Duplicate/Reveal/Delete. */
+  "library.moreActions": "Meer acties",
   "library.newNote": "Nieuwe notitie",
   "library.clearTrash": "Prullenbak legen",
   /** The folder toolbar's short form of `newFolder` — the panel itself already says
@@ -333,6 +335,8 @@ const ENGLISH: Record<string, string> = {
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   "library.delete": "Delete",
+  /** The reader toolbar's "⋯" button, opening Rename/Move/Duplicate/Reveal/Delete. */
+  "library.moreActions": "More actions",
   "library.newNote": "New note",
   "library.clearTrash": "Clear trash",
   "library.new": "New",

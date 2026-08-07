@@ -10,6 +10,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortKey,
   TaskItem,
   VaultFileEvent,
   VaultLocation,
@@ -113,6 +114,8 @@ export const IPC = {
   setHotkey: "app:set-hotkey",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
+  /** renderer → main, fire-and-forget: the note list's sort order changed. */
+  setSort: "app:set-sort",
 
   /**
    * Both windows write into `_attachments/` through this one channel — a screenshot is
@@ -159,6 +162,8 @@ export interface Bootstrap {
   vaultPath: string | null;
   /** The library's tree/notes pane widths, or null if the splitters were never dragged. */
   libraryPaneWidths: { tree: number; notes: number } | null;
+  /** The note list's last sort order — see `setPaneWidths`'s comment for the precedent this follows. */
+  librarySort: SortKey;
 }
 
 /**
@@ -325,6 +330,8 @@ export interface CaptureApi {
   setHotkey: (hotkey: string) => Promise<boolean>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
+  /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */
+  setSort: (sort: SortKey) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */
   listVaults: () => Promise<VaultLocation[]>;
   /** Opens the folder picker and answers with the chosen path, or null. */
