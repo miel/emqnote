@@ -6,7 +6,7 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-types.js";
 
 /**
- * The note list's right-click menu — Open, Move, Rename, Reveal, Delete — mounted
+ * The note list's right-click menu — Open, Move, Rename, Duplicate, Reveal, Delete — mounted
  * through a real `Library` the same way `test/library-title-edit.test.ts` does, because
  * every one of the five items reuses a handler that already lives on `Library.tsx` and
  * the point of this test is that the menu reaches the *real* one, not a stand-in.
@@ -20,6 +20,7 @@ import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-ty
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
+const DUPLICATE_PATH = "00 Inbox/2026-08-06 1200 Test note-copy.md";
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
 function noteSummary(path: string, title: string): NoteSummary {
@@ -55,6 +56,7 @@ interface Fake {
   openNoteMock: ReturnType<typeof vi.fn>;
   revealNote: ReturnType<typeof vi.fn>;
   trashNote: ReturnType<typeof vi.fn>;
+  duplicateNote: ReturnType<typeof vi.fn>;
 }
 
 function buildFake(): Fake {
@@ -66,11 +68,15 @@ function buildFake(): Fake {
   };
 
   const note = openedNote(NOTE_PATH, "Test note");
-  const openNoteMock = vi.fn(async (path: string): Promise<OpenedNote | null> =>
-    path === NOTE_PATH ? note : null,
-  );
+  const duplicatedNote = openedNote(DUPLICATE_PATH, "Test note-copy");
+  const openNoteMock = vi.fn(async (path: string): Promise<OpenedNote | null> => {
+    if (path === NOTE_PATH) return note;
+    if (path === DUPLICATE_PATH) return duplicatedNote;
+    return null;
+  });
   const revealNote = vi.fn();
   const trashNote = vi.fn(async () => true);
+  const duplicateNote = vi.fn(async () => ({ path: DUPLICATE_PATH }));
 
   const library: LibraryApi = {
     tree: async () => tree,
@@ -81,6 +87,7 @@ function buildFake(): Fake {
     saveNote: async (request) => ({ written: false, path: request.path }),
     moveNote: async (path) => ({ path }),
     renameNote: async (path) => ({ path }),
+    duplicateNote,
     trashNote,
     emptyTrash: async () => 0,
     createFolder: async (parent) => parent,
@@ -138,7 +145,7 @@ function buildFake(): Fake {
     library,
   };
 
-  return { emqnote, openNoteMock, revealNote, trashNote };
+  return { emqnote, openNoteMock, revealNote, trashNote, duplicateNote };
 }
 
 async function flush(rounds = 12): Promise<void> {
@@ -215,7 +222,7 @@ describe("the note list's right-click menu", () => {
     expect(container.querySelector(".context-menu")).not.toBeNull();
   });
 
-  it("shows Open, Move, Rename, Reveal, Delete, in that order", async () => {
+  it("shows Open, Move, Rename, Duplicate, Reveal, Delete, in that order", async () => {
     const fake = buildFake();
     await mount(fake);
     await rightClickRow();
@@ -223,7 +230,7 @@ describe("the note list's right-click menu", () => {
     const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
       (node) => node.querySelector(".context-menu-label")!.textContent,
     );
-    expect(labels).toEqual(["Open", "Move", "Rename", "Reveal", "Delete"]);
+    expect(labels).toEqual(["Open", "Move", "Rename", "Duplicate", "Reveal", "Delete"]);
   });
 
   it("Open re-opens the note through the same openNote path", async () => {
@@ -266,6 +273,20 @@ describe("the note list's right-click menu", () => {
     const input = container.querySelector<HTMLInputElement>(".reader-title-input");
     expect(input).not.toBeNull();
     expect(input!.value).toBe("Test note");
+  });
+
+  it("Duplicate calls duplicateNote and opens the copy", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Duplicate").click();
+    });
+    await flush();
+
+    expect(fake.duplicateNote).toHaveBeenCalledWith(NOTE_PATH);
+    expect(fake.openNoteMock).toHaveBeenCalledWith(DUPLICATE_PATH);
   });
 
   it("Reveal calls the existing revealNote IPC call", async () => {

@@ -41,6 +41,27 @@ describe("recognising a OneDrive conflict copy", () => {
     expect(found).toEqual([]);
   });
 
+  it("does not treat duplicateNote's own -copy suffix as a conflict", () => {
+    // `duplicateNote` appends "-copy" to the title, which — unguarded — reads exactly
+    // like a machine-name suffix: stripping it recovers the original's own file name.
+    const found = findConflictCopies([
+      "00 Inbox/Kickoff project Alpha.md",
+      "00 Inbox/Kickoff project Alpha-copy.md",
+    ]);
+
+    expect(found).toEqual([]);
+  });
+
+  it("does not treat a second duplicate's -copy (2) suffix as a conflict either", () => {
+    const found = findConflictCopies([
+      "00 Inbox/Kickoff project Alpha.md",
+      "00 Inbox/Kickoff project Alpha-copy.md",
+      "00 Inbox/Kickoff project Alpha-copy (2).md",
+    ]);
+
+    expect(found).toEqual([]);
+  });
+
   it("only pairs within the same folder", () => {
     const found = findConflictCopies([
       "00 Inbox/Kickoff project Alpha.md",

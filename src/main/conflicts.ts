@@ -16,9 +16,10 @@ export type { ConflictPair };
  * ordinary reason — two notes independently created with the same title in the same
  * minute — and that is not a conflict, it is two different notes. Treating a bare
  * `(N)` suffix as conflict evidence would raise a false "edited on two machines" banner
- * over ordinary use of the app's own disambiguation. The machine-name suffix carries no
- * such ambiguity: nothing in this app ever appends one, so seeing one is real evidence
- * something else — OneDrive — wrote that file.
+ * over ordinary use of the app's own disambiguation. `duplicateNote`'s `-copy` suffix
+ * (`vault-io.ts`) gets the same carve-out below, for the same reason. The machine-name
+ * suffix carries no such ambiguity: nothing else in this app ever appends one, so seeing
+ * one is real evidence something else — OneDrive — wrote that file.
  *
  * The heuristic is still a heuristic, not a certainty, and says so rather than
  * pretending otherwise: a genuinely hyphenated title (`Weekly Report-Draft.md`) sitting
@@ -55,6 +56,18 @@ function splitPath(path: string): { dir: string; stem: string } {
 }
 
 /**
+ * `duplicateNote` (`vault-io.ts`) appends `-copy` to a duplicated note's title, and a
+ * second duplicate of the same note lands on `uniquePath`'s ` (2)` on top of that — both
+ * entirely this app's own doing, never OneDrive's. Left unguarded, a duplicate would
+ * read as its own conflict copy the instant it was created: stripping the trailing
+ * `-copy` segment recovers exactly the original's file name, which is precisely the
+ * shape this module otherwise treats as real evidence of a machine-name suffix. Same
+ * reasoning as the bare `(N)` exclusion above, extended to the one other suffix this
+ * app itself is now known to append.
+ */
+const OWN_DUPLICATE_SUFFIX = /-copy(?: \(\d+\))?$/;
+
+/**
  * Pairs each conflict-shaped path in `paths` with the original it names a machine
  * variant of. `paths` should be vault-relative note paths, same shape as
  * `NoteSummary.path` — a pair only ever forms within the same folder, since that is the
@@ -69,6 +82,7 @@ export function findConflictCopies(paths: string[]): ConflictPair[] {
 
     const { dir, stem } = splitPath(path);
     if (!stem.includes("-")) continue;
+    if (OWN_DUPLICATE_SUFFIX.test(stem)) continue;
 
     for (const candidateStem of candidateOriginalStems(stem)) {
       const candidatePath = dir === "" ? `${candidateStem}.md` : `${dir}/${candidateStem}.md`;

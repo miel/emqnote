@@ -111,12 +111,19 @@ const DUTCH: Record<string, string> = {
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kunnen de taken hier aangevinkt worden.",
   "library.renameLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij hernoemd worden.",
+  "library.duplicate": "Dupliceren",
+  "library.duplicateLocked":
+    "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij gedupliceerd worden.",
   "library.tasks": "Taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
   "library.newNote": "Nieuwe notitie",
   "library.clearTrash": "Prullenbak legen",
+  /** The folder toolbar's short form of `newFolder` — the panel itself already says
+   *  "folders", so "+ Nieuwe map" shrank to "+ Nieuw". The context menu keeps the long
+   *  form, where nothing else on screen says what "Nieuw" would otherwise mean. */
+  "library.new": "Nieuw",
   "library.newFolder": "Nieuwe map",
   "library.renameFolder": "Map hernoemen",
   "library.deleteFolder": "Map verwijderen",
@@ -319,12 +326,16 @@ const ENGLISH: Record<string, string> = {
     "This note is open in the note window. Close it there first, then its tasks can be ticked here.",
   "library.renameLocked":
     "This note is open in the note window. Close it there first, then it can be renamed.",
+  "library.duplicate": "Duplicate",
+  "library.duplicateLocked":
+    "This note is open in the note window. Close it there first, then it can be duplicated.",
   "library.tasks": "Tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   "library.delete": "Delete",
   "library.newNote": "New note",
   "library.clearTrash": "Clear trash",
+  "library.new": "New",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
   "library.deleteFolder": "Delete folder",

@@ -51,6 +51,7 @@ import {
 import {
   createFolder,
   diffConflict,
+  duplicateNote,
   emptyTrash,
   folderContents,
   renameFolder,
@@ -1034,6 +1035,19 @@ function registerLibraryIpc(): void {
     const renamed = renameNote(vault, path, title);
     notifyLibrary();
     return { path: renamed };
+  });
+
+  // The source file is only read, never written, but a note the capture window has
+  // claimed may hold edits that have not yet crossed the 800 ms debounce — copying it
+  // now would silently duplicate a stale version of what the user is looking at on
+  // screen, so this refuses the same way its siblings do.
+  ipcMain.handle(IPC.libraryDuplicateNote, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return { path };
+    if (writer.activePath() === path) return { path, locked: true };
+    const duplicated = duplicateNote(vault, path);
+    notifyLibrary();
+    return { path: duplicated };
   });
 
   ipcMain.handle(IPC.libraryTrashNote, (_event, path: string) => {

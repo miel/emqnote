@@ -403,6 +403,37 @@ export function renameNote(vault: string, notePath: string, title: string): stri
   return toPosix(relative(vault, to));
 }
 
+/**
+ * Duplicates a note beside itself, with `-copy` appended to the title.
+ *
+ * Modelled on `renameNote`, but the source file is never touched: only the copy is
+ * written. `copyFileSync` is deliberately not used here — B6 puts markdown in exactly
+ * one place, and the copy needs a new title in its frontmatter anyway, which means
+ * going through `parseNote`/`serializeNote` like every other write.
+ */
+export function duplicateNote(vault: string, notePath: string): string {
+  const from = join(vault, notePath);
+  const raw = readFileSync(from, "utf8");
+  const note = parseNote(raw);
+
+  const title = `${note.frontmatter.title}-copy`;
+  note.frontmatter.title = title;
+  note.frontmatter.modified = isoWithOffset(new Date());
+
+  const existingPrefix = /^(\d{4}-\d{2}-\d{2} \d{4}) /.exec(basename(notePath));
+  const when = new Date(note.frontmatter.created);
+  const fileName =
+    existingPrefix === null
+      ? noteFileName(title, Number.isNaN(when.getTime()) ? new Date() : when)
+      : `${existingPrefix[1]} ${noteFileName(title, new Date()).replace(/^\S+ \d{4} /, "")}`;
+
+  const to = uniquePath(dirname(from), fileName);
+
+  writeAtomic(to, serializeNote(note));
+
+  return toPosix(relative(vault, to));
+}
+
 export const TRASH = TRASH_FOLDER;
 
 /**
