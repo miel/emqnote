@@ -145,11 +145,14 @@ export function externalImageView(node: PMNode): NodeView {
  * B30 adds a first-page thumbnail, purely additively: for a target `isPreviewableTarget`
  * accepts, a hidden `<img src="emqnote-thumb://…">` is appended and the outer span keeps
  * `class="wiki-link"` plus `data-target` exactly as before, so every existing CSS
- * selector, the `.ProseMirror-selectednode` outline and this same click handler keep
- * working untouched. For anything else — a note link, a `.txt` attachment — nothing is
- * added at all: the markup is byte-for-byte what it was before this package, which is
- * also what the `<img>` itself falls back to (`onerror` removes it and reverts the span
- * to plain text) on Linux, or a Windows box with no thumbnail provider registered.
+ * selector and this same click handler keep working untouched — including the
+ * `.ProseMirror-selectednode` outline in `styles.css`, which used to cover only
+ * `.wiki-embed`/`.wiki-embed-image` and left a `.wiki-link` (a PDF/file chip) selected
+ * invisibly until that gap was closed. For anything else — a note link, a `.txt`
+ * attachment — nothing is added at all: the markup is byte-for-byte what it was before
+ * this package, which is also what the `<img>` itself falls back to (`onerror` removes
+ * it and reverts the span to plain text) on Linux, or a Windows box with no thumbnail
+ * provider registered.
  */
 export function wikiLinkNodeView(node: PMNode): NodeView {
   const target = node.attrs.target as string;

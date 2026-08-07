@@ -204,7 +204,28 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const current = view.current;
       if (current === null) return;
       clearHighlightTimer();
-      focusTaskAt(current, ordinal);
+      // `Library.tsx` calls `setDoc` and `focusTask` in the same tick, so the document
+      // `focusTaskAt` is about to select into has not been laid out yet — the browser
+      // has not run layout for it, so `tr.scrollIntoView()` computes against geometry
+      // that either doesn't exist yet or still belongs to the previous note. Waiting a
+      // frame lets layout catch up first; the explicit `scrollIntoView` call below,
+      // against the DOM node the new selection actually resolves to, is what then
+      // does the scrolling — the transaction's own `scrollIntoView()` stays (it costs
+      // nothing and helps when the document was already laid out) but is not trusted
+      // alone.
+      requestAnimationFrame(() => {
+        const deferred = view.current;
+        if (deferred === null) return;
+        focusTaskAt(deferred, ordinal);
+        const pos = deferred.state.selection.from;
+        const node = deferred.domAtPos(pos).node;
+        const element = node instanceof Element ? node : node.parentElement;
+        // `?.` on the call, not only the reference: jsdom (the test environment) has
+        // no layout engine and does not implement `scrollIntoView` at all, and a real
+        // Chromium window always does — so this stays a no-op under test rather than a
+        // thrown `TypeError`, without needing a mock in every test that reaches here.
+        element?.scrollIntoView?.({ block: "center" });
+      });
       highlightTimer.current = setTimeout(() => {
         highlightTimer.current = null;
         if (view.current !== null) clearTaskHighlight(view.current);

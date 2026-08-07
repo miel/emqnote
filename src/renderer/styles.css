@@ -7,6 +7,7 @@
   --accent: #6ea8fe;
   --warning: #e8a33d;
   --highlight: #6b5a1e;
+  --task-highlight: #e8c547;
 }
 
 @media (prefers-color-scheme: light) {
@@ -19,6 +20,7 @@
     --accent: #1a63d8;
     --warning: #9a6200;
     --highlight: #fff2a8;
+    --task-highlight: #f5c518;
   }
 }
 
@@ -460,6 +462,7 @@ body {
 .editor-content .wiki-link {
   color: var(--accent);
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.9em;
@@ -497,6 +500,7 @@ body {
   width: 96px;
   height: 124px;
   object-fit: cover;
+  border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--background);
 }
@@ -515,16 +519,20 @@ body {
   max-width: 100%;
   max-height: 480px;
   vertical-align: text-bottom;
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 
 /* ProseMirror puts this class on the DOM of a `NodeSelection` — reachable by clicking
    an atom node directly, even though `moveOverAtom` (`editor/commands.ts`) steers the
    arrow keys around it into an ordinary text caret instead. Nothing styled it before,
-   which meant clicking a `wiki-embed`/`wiki-embed-image` chip selected it invisibly —
-   indistinguishable from the caret simply vanishing. */
+   which meant clicking a `wiki-embed`/`wiki-embed-image`/`wiki-link` chip selected it
+   invisibly — indistinguishable from the caret simply vanishing. `wiki-link` covers a
+   PDF/file chip, not only an image, which is why it needs the same rule as the other
+   two rather than being left out. */
 .editor-content .wiki-embed.ProseMirror-selectednode,
-.editor-content .wiki-embed-image.ProseMirror-selectednode {
+.editor-content .wiki-embed-image.ProseMirror-selectednode,
+.editor-content .wiki-link.ProseMirror-selectednode {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-radius: 4px;
@@ -533,9 +541,11 @@ body {
 /* A `task-highlight.ts` decoration: where a Tasks-view click just moved the caret to.
    Never a mark, so it is gone the moment its plugin state says so — see that file's own
    comment. `transition` only smooths the appearance; the disappearance after 10 seconds
-   is a plain removal, not an animated fade. */
+   is a plain removal, not an animated fade. Its own variable, `--task-highlight`, on
+   purpose: reusing `--highlight` (the `==mark==` colour) would make a transient click
+   flash look identical to a real highlight mark in a note that has both. */
 .editor-content .task-highlight {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--task-highlight) 50%, transparent);
   border-radius: 2px;
   transition: background-color 200ms ease;
 }
