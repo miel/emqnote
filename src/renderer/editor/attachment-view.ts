@@ -33,6 +33,39 @@ export function isImageAttachment(name: string): boolean {
   return IMAGE_EXTENSIONS.has(name.slice(dot).toLowerCase());
 }
 
+/**
+ * Mirrors `thumbnail-cache.ts`'s `PREVIEWABLE_EXTENSIONS`/`isPreviewable` (B30) rather
+ * than importing across the main/renderer boundary — the same choice already made for
+ * `IMAGE_EXTENSIONS` above. A `wikiLink` is used for *every* wiki link, a plain
+ * `[[Some Note]]` note-to-note one included, and that has no file behind it at all, so
+ * this is what keeps a bare note title from ever turning into an `emqnote-thumb://`
+ * request over the wire.
+ */
+const PREVIEWABLE_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".pptx"]);
+
+function isPreviewableTarget(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  if (dot === -1) return false;
+  return PREVIEWABLE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
+/**
+ * A target whose thumbnail request has already failed once this session (no OS
+ * provider, a 404, a broken file) is not retried on every re-render of the same note —
+ * `setDoc` rebuilds every NodeView on each note-open. Bounded so a long resident session
+ * browsing many failed PDFs cannot grow this without limit.
+ */
+const MAX_FAILED_THUMBNAILS = 500;
+const failedThumbnails = new Map<string, true>();
+
+function rememberFailedThumbnail(target: string): void {
+  if (failedThumbnails.size >= MAX_FAILED_THUMBNAILS) {
+    const oldest = failedThumbnails.keys().next().value;
+    if (oldest !== undefined) failedThumbnails.delete(oldest);
+  }
+  failedThumbnails.set(target, true);
+}
+
 function imageView(target: string): NodeView {
   const img = document.createElement("img");
   img.className = "wiki-embed-image";
@@ -73,15 +106,53 @@ export function attachmentNodeView(
  * refuses silently on a name it cannot resolve (`resolveAttachment` returning `null`),
  * which is exactly what a note-to-note link needs to do until note navigation exists:
  * nothing, not an error.
+ *
+ * B30 adds a first-page thumbnail, purely additively: for a target `isPreviewableTarget`
+ * accepts, a hidden `<img src="emqnote-thumb://…">` is appended and the outer span keeps
+ * `class="wiki-link"` plus `data-target` exactly as before, so every existing CSS
+ * selector, the `.ProseMirror-selectednode` outline and this same click handler keep
+ * working untouched. For anything else — a note link, a `.txt` attachment — nothing is
+ * added at all: the markup is byte-for-byte what it was before this package, which is
+ * also what the `<img>` itself falls back to (`onerror` removes it and reverts the span
+ * to plain text) on Linux, or a Windows box with no thumbnail provider registered.
  */
 export function wikiLinkNodeView(node: PMNode): NodeView {
   const target = node.attrs.target as string;
   const alias = node.attrs.alias as string | null;
+  const label = alias ?? target;
 
   const span = document.createElement("span");
   span.className = "wiki-link";
   span.dataset.target = target;
-  span.textContent = alias ?? target;
+  span.textContent = label;
+
+  if (isPreviewableTarget(target) && !failedThumbnails.has(target)) {
+    span.classList.add("wiki-link-preview");
+    span.textContent = "";
+
+    const img = document.createElement("img");
+    img.className = "wiki-link-thumb";
+    img.src = `emqnote-thumb://${encodeURIComponent(target)}`;
+    img.alt = "";
+    img.onload = () => {
+      span.dataset.thumb = "ok";
+    };
+    img.onerror = () => {
+      rememberFailedThumbnail(target);
+      img.remove();
+      // Falls back to exactly the pre-B30 chip — no leftover class, no leftover
+      // wrapper — rather than a broken-image icon or an empty span.
+      span.classList.remove("wiki-link-preview");
+      delete span.dataset.thumb;
+      span.textContent = label;
+    };
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "wiki-link-label";
+    labelSpan.textContent = label;
+
+    span.append(img, labelSpan);
+  }
 
   // Held down, not clicked: a click on an atom node would otherwise also try to place
   // the caret inside it, and `mousedown` is what ProseMirror uses to decide that.

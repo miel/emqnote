@@ -740,6 +740,69 @@ ze staat alleen niet meer in de lijst links, en dat ís wat verplaatsen betekent
 
 ---
 
+## B30 — De PDF-miniatuur komt van het besturingssysteem, niet uit een gebundelde bibliotheek
+
+**Genomen** op 7 augustus 2026. Een bijlage van het formaat `.pdf`, `.docx`, `.xlsx` of
+`.pptx` krijgt een miniatuur van zijn eerste pagina naast de bestaande labelchip, via
+`nativeImage.createThumbnailFromPath` — dezelfde aanroep die op macOS Quick Look en op
+Windows de geregistreerde `IThumbnailProvider` aanspreekt, precies de twee platformen die
+dit project uitlevert. Geen nieuwe dependency, geen offscreen venster, geen worker.
+
+**Waarom niet `pdfjs-dist`.** Een gebundelde PDF-bibliotheek is ~1,5 MB plus een eigen
+worker, in een venster (`02-technisch-ontwerp.md`) waarvan de bundelgrootte al bewust
+klein wordt gehouden omdat het venster meteen moet verschijnen. Dat gewicht dragen voor
+een miniatuur van 96×124 is de verkeerde ruil.
+
+**Waarom niet een verborgen `BrowserWindow` met `capturePage`.** Dat stapelt drie dingen
+die geen van alle gegarandeerd zijn — plugin-engagement op een eigen protocol, echte
+pixels van een venster dat nooit getoond wordt, het bijsnijden van chrome die er niet
+hoort te zijn — bovenop een proces waarvan de hele opzet één residente, verborgen
+opnamevenster is (zie "Resident architecture" in `CLAUDE.md`). Een tweede, onzichtbaar
+venster erbij zou precies dat uitgangspunt ondermijnen voor een miniatuur.
+
+**Eigen protocol, geen `data:`-URL — dezelfde reden als B28.** `wikiLinkNodeView` wordt
+bij elke `setDoc` opnieuw opgebouwd, dus bij elk openen van een notitie; een IPC-rondje
+dat een base64-PNG teruggeeft zou dat bij elke opening opnieuw betalen, en zou `data:`
+terug moeten toevoegen aan de `img-src` van het opnamevenster's CSP — precies het gat dat B28
+dichtte. In plaats daarvan is het `<img>`-element zelf de state machine:
+`emqnote-thumb://<naam>` als `src`, `onload` zet `data-thumb="ok"` op de omringende span,
+`onerror` verwijdert het element en laat de oorspronkelijke labelchip staan — geen IPC-
+rondje, geen "vraag main, wacht, zet dan pas src".
+
+**De cache staat buiten de vault (B9).** `<userData>/thumbnails`, naast `index.sqlite`.
+Sleutel is `sha256(echt-pad + "\0" + mtimeMs + "\0" + grootte)`, afgekapt tot 32 hex-
+tekens — het echte, opgeloste pad, niet de kale bestandsnaam, want twee verschillende
+vaults kunnen allebei een bijlage met dezelfde naam hebben. `mtime`+`grootte` is dezelfde
+staleness-toets die `index-db.ts`'s `needsRefresh` al gebruikt, dus een gewijzigd bestand
+levert vanzelf een andere sleutel op — er is geen aparte invalidatie nodig. Ruiming is
+lui en gebeurt alleen tijdens het genereren van een nieuwe miniatuur, nooit bij het
+opstarten: bij meer dan 200 bestanden verdwijnt het oudste (naar `mtime`) eerst.
+
+**Negatief cachen blijft in het geheugen.** Een mislukte generatie — geen provider
+geregistreerd, een kapot bestand — hoeft niet bij elke render van dezelfde notitie
+opnieuw geprobeerd te worden, maar hoort ook niet permanent op schijf te blijven staan:
+de volgende sessie, op een andere machine of na een OS-update, kan de provider wél
+werken. Zowel main (`thumbnails.ts`, per sleutel) als de renderer
+(`attachment-view.ts`, per doelnaam, want NodeViews weten niets van `mtime`/`grootte`)
+houden hiervoor een eigen, begrensde `Map` bij, alleen voor de duur van het proces.
+
+**Op Linux — deze sandbox, en CI — bestaat er geen thumbnail-provider.** Electrons
+eigen documentatie beperkt `createThumbnailFromPath` tot `darwin`/`win32`; op Linux komt
+er geen fout maar een lege `NativeImage` terug (op Windows zonder provider evenzeer), en
+`.isEmpty()` is wat dat van een echte hit onderscheidt. Dat betekent dat de terugval-weg
+— de gewone labelchip, ongewijzigd — de enige weg is die hier ooit getest wordt; de
+echte miniatuur is nooit gezien werken en staat daarom als een nieuw item in
+`TEST-PROTOCOL.md`, niet als een geverifieerde bewering hier.
+
+**Een OneDrive-placeholder wordt niet gehydrateerd voor een miniatuur.** Files On-Demand
+laat een niet-gedownload bestand achter met een reële grootte maar nul blokken op
+schijf — dezelfde toets die `vault.ts`'s `checkFilesOnDemand` gebruikt om de hele vault
+te bemonsteren, hier toegepast op het ene bestand dat gevraagd wordt. `darwin`-only,
+net als `index-scan.ts`'s `isDataless`: dat is het enige platform waarop `blocks` dit
+betrouwbaar betekent.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -750,4 +813,5 @@ ze staat alleen niet meer in de lijst links, en dat ís wat verplaatsen betekent
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
 | Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
+| Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op? | Nu — code en terugval zijn bewezen op Linux/CI, het gelukkige pad zelf nog nooit; zie `TEST-PROTOCOL.md`, B30 |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |

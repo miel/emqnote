@@ -13,12 +13,13 @@ or look at a screen and see that an image is actually there. Everything below is
 gap. Nothing here duplicates a test that already exists — if `npm test` covers it, it is
 not in this document.
 
-Three items in particular have **never been seen working** and are the reason this file
-exists: §4.2 (does the capture window really draw an attachment), §6.3 (does clicking a
-checkbox in the Tasks view actually reach the file), and §9.2 (does the caret actually step
-across an inline image in the capture window, rather than landing in an invisible node
-selection). All three have proven code underneath and an unproven interaction on top. Start
-there if you only have ten minutes.
+Four items in particular have **never been seen working** and are the reason this file
+exists: §4.2 (does the capture window really draw an attachment), §4.5 (does a PDF/Office
+attachment really get an OS-drawn thumbnail), §6.3 (does clicking a checkbox in the Tasks
+view actually reach the file), and §9.2 (does the caret actually step across an inline
+image in the capture window, rather than landing in an invisible node selection). All four
+have proven code underneath and an unproven interaction on top. Start there if you only
+have ten minutes.
 
 ## Before you start
 
@@ -144,6 +145,24 @@ all anyone knows.
 |---|---|---|
 | 4.4a | Delete the `![[…]]` line from a note, save, then open *Orphaned attachments* in the tree footer | That attachment is listed, with a thumbnail |
 | 4.4b | Trash it from that screen | Gone from `_attachments/`, present in `_trash/` |
+
+### 4.5 PDF/Office first-page thumbnail (B30) — NEVER VERIFIED
+
+This is new with B30 and has never been seen working: `nativeImage.createThumbnailFromPath`
+asks the OS's own thumbnail provider (Quick Look on macOS, `IThumbnailProvider` on
+Windows), and neither this Linux sandbox nor CI has one — both only ever exercise the
+fallback path (the plain chip, unchanged), which is what the automated tests actually
+cover. Whether a real first page is drawn on either shipping platform is unproven.
+
+| # | Step | Expected |
+|---|---|---|
+| 4.5a | Insert a `.pdf` (drag, paste, or the attachment button) into a note in the library reader | A small thumbnail of the PDF's first page appears beside the filename chip, not just the label |
+| 4.5b | Insert a `.docx`, `.xlsx` or `.pptx` the same way | Same — a thumbnail of the document, from the same code path |
+| 4.5c | Insert a `.txt` or any other non-previewable file | Plain filename chip only, exactly as before B30 — no broken-image icon, no empty gap where a thumbnail would go |
+| 4.5d | Reopen the note (close and open it again, or switch away and back) | The thumbnail is still there, without a visible reload flicker — it is being served from the on-disk cache (`<userData>/thumbnails`), not regenerated |
+| 4.5e | Click directly on the thumbnail image, not just the filename text | Same as clicking the chip always did: the file opens in the system viewer |
+| 4.5f | If no thumbnail ever appears: open devtools for that window and check the Network tab (or console) for the `emqnote-thumb://` request | A 404 there on a platform that should have a provider is the bug to report, with the OS version. On Windows specifically, check whether Explorer itself shows a thumbnail for that same PDF — if Explorer also cannot, no provider is registered on that machine and this is expected, not a bug |
+| 4.5g | Do 4.5a in the **capture window** | Same as §4.2 — this depends on §4.2's own inline-attachment rendering working first |
 
 ---
 
@@ -365,5 +384,5 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3 or §9.2 fails, that is expected-ish rather than alarming: those
-three are why this document exists.
+If something in §4.2, §4.5, §6.3 or §9.2 fails, that is expected-ish rather than alarming:
+those four are why this document exists.
