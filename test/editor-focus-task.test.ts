@@ -58,7 +58,8 @@ describe("Editor focusTask, mounted for real", () => {
           ref,
           onChange: () => {},
           onLinkRequested: () => {},
-          onAttachmentRequested: () => {},
+          onImageRequested: () => {},
+          onFileRequested: () => {},
         }),
       );
     });
