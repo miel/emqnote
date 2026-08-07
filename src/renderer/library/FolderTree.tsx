@@ -1,13 +1,18 @@
 import { useState } from "react";
 import {
+  canCreateFolderIn,
+  canDeleteFolder as canDeleteFolderAt,
+  canRenameFolder as canRenameFolderAt,
   selectionKey,
   TRASH_FOLDER,
   type Facets,
   type FolderNode,
   type Selection,
 } from "../../shared/vault-types.js";
+import { ContextMenu, type MenuItem } from "./ContextMenu.js";
 import { FilterSection } from "./FilterSection.js";
 import { canDropNote, NOTE_DRAG_TYPE } from "./drag.js";
+import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
 interface Props {
   root: FolderNode;
@@ -20,14 +25,18 @@ interface Props {
   onDropNote: (notePath: string, folder: string) => void;
   /** Fired when a filter list is unfolded, so the vault is only scanned on demand. */
   onExpandFilters: () => void;
-  /** Right-clicking a folder: the new folder goes inside that one. */
+  /** The context menu's "New folder": the new folder goes inside the given path. */
   onCreateFolder: (parent: string) => void;
   /** The toolbar button, which has no folder under the cursor to go by. */
   onNewFolder: () => void;
-  /** Renames the last folder that was selected, the same one "+ New folder" fills in. */
-  onRenameFolder: () => void;
-  /** Deletes the last folder that was selected — same target as Rename. */
-  onDeleteFolder: () => void;
+  /** Renames the given folder — the toolbar passes `lastFolder`, the context menu the row it was opened on. */
+  onRenameFolder: (path: string) => void;
+  /** Deletes the given folder — same split as `onRenameFolder`. */
+  onDeleteFolder: (path: string) => void;
+  /** Files a new note into the given folder — the context menu's "New note". */
+  onNewNoteIn: (folder: string) => void;
+  /** The last folder that was selected — what the toolbar buttons act on. */
+  lastFolder: string;
   /** False for the vault root and the trash, neither of which can be renamed. */
   canRenameFolder: boolean;
   /** False for the vault root and the trash, neither of which can be deleted either. */
@@ -43,6 +52,7 @@ interface Props {
   newFolderLabel: string;
   renameFolderLabel: string;
   deleteFolderLabel: string;
+  newNoteLabel: string;
   helpLabel: string;
   settingsLabel: string;
   tasksLabel: string;
@@ -112,6 +122,9 @@ function Branch({
   dragging,
   onDropNote,
   glyph,
+  activePath,
+  onActivate,
+  onOpenMenu,
 }: {
   node: FolderNode;
   depth: number;
@@ -136,6 +149,12 @@ function Branch({
    * element's text, so a glyph within it would break "Trash".
    */
   glyph?: React.ReactNode;
+  /** The path currently holding this pane's one roving `tabIndex={0}`. */
+  activePath: string;
+  /** Fired on focus (a Tab landing here, or an arrow key moving here) — keeps `activePath` honest. */
+  onActivate: (path: string) => void;
+  /** Opens the right-click menu for this row, at the given viewport point. */
+  onOpenMenu: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
@@ -154,10 +173,45 @@ function Branch({
           `${over && accepts ? " branch-drop" : ""}`
         }
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
+        role="treeitem"
+        aria-expanded={hasChildren ? open : undefined}
+        aria-selected={selectionKey(selected) === `folder:${node.path}`}
+        tabIndex={activePath === node.path ? 0 : -1}
+        onFocus={() => onActivate(node.path)}
         onClick={() => onSelect({ kind: "folder", path: node.path })}
         onContextMenu={(event) => {
           event.preventDefault();
-          onCreateFolder(node.path);
+          onOpenMenu(node.path, event.clientX, event.clientY);
+        }}
+        onKeyDown={(event) => {
+          const container = (event.currentTarget as HTMLElement).closest(".tree");
+          const next = roveArrowKey(event, container, '[role="treeitem"]', event.currentTarget);
+          if (next !== null) {
+            event.preventDefault();
+            next.focus();
+            return;
+          }
+
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            if (hasChildren && !open) setOpen(true);
+            return;
+          }
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            if (hasChildren && open) setOpen(false);
+            return;
+          }
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect({ kind: "folder", path: node.path });
+            return;
+          }
+          if (isContextMenuKey(event)) {
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            onOpenMenu(node.path, rect.left, rect.bottom);
+          }
         }}
         // `preventDefault` on dragover is what marks an element as a drop target at all;
         // without it the browser's default "no drop here" wins and the drop never fires.
@@ -189,6 +243,7 @@ function Branch({
       >
         <button
           type="button"
+          tabIndex={-1}
           className={`twisty${hasChildren ? "" : " twisty-empty"}`}
           aria-label={open ? "Collapse" : "Expand"}
           onClick={(event) => {
@@ -205,7 +260,7 @@ function Branch({
       </div>
 
       {open && hasChildren && (
-        <ul>
+        <ul role="group">
           {node.children.map((child) => (
             <Branch
               key={child.path}
@@ -216,6 +271,9 @@ function Branch({
               onCreateFolder={onCreateFolder}
               dragging={dragging}
               onDropNote={onDropNote}
+              activePath={activePath}
+              onActivate={onActivate}
+              onOpenMenu={onOpenMenu}
             />
           ))}
         </ul>
@@ -236,6 +294,8 @@ export function FolderTree({
   onNewFolder,
   onRenameFolder,
   onDeleteFolder,
+  onNewNoteIn,
+  lastFolder,
   canRenameFolder,
   canDeleteFolder,
   canCreateFolder,
@@ -246,6 +306,7 @@ export function FolderTree({
   newFolderLabel,
   renameFolderLabel,
   deleteFolderLabel,
+  newNoteLabel,
   helpLabel,
   settingsLabel,
   tasksLabel,
@@ -265,6 +326,47 @@ export function FolderTree({
     children: root.children.filter((child) => child.path !== TRASH_FOLDER),
   };
 
+  // The one row in this pane that currently holds `tabIndex={0}` — see `roving.ts`'s own
+  // comment for why this reads the DOM for *movement* but still needs one piece of state
+  // to remember *where* it is between renders. Starts on the root, which — unlike a
+  // folder several levels down — is always on screen, so the invariant "this path is
+  // currently a rendered row" holds without having to walk the tree to check it: it can
+  // only ever change via a row's own `onFocus`, and a row that isn't rendered cannot fire
+  // that in the first place.
+  const [activePath, setActivePath] = useState("");
+
+  // The right-click (or `Shift+F10`/`ContextMenu`) menu for one row — folder tree rows
+  // that used to instantly create a new folder inside whatever was right-clicked now open
+  // this instead. `library.pickHint` and this component's own toolbar comment describe
+  // the new gesture; see `05-besluitenlog.md`/`CLAUDE.md` for why every one of these
+  // actions also has to stay reachable without it (the `--click-button` selftest harness
+  // cannot open a menu).
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+
+  const menuItems = (path: string): MenuItem[] => [
+    {
+      label: newFolderLabel,
+      disabled: !canCreateFolderIn(path),
+      onSelect: () => onCreateFolder(path),
+    },
+    {
+      label: renameFolderLabel,
+      disabled: !canRenameFolderAt(path),
+      onSelect: () => onRenameFolder(path),
+    },
+    {
+      label: deleteFolderLabel,
+      danger: true,
+      disabled: !canDeleteFolderAt(path),
+      onSelect: () => onDeleteFolder(path),
+    },
+    {
+      label: newNoteLabel,
+      disabled: !canCreateFolderIn(path),
+      onSelect: () => onNewNoteIn(path),
+    },
+  ];
+
   return (
     <nav className="tree">
       {/* Right-clicking a folder works too, but a button is the discoverable way —
@@ -276,7 +378,11 @@ export function FolderTree({
         </button>
         {/* Beside it rather than hidden behind a gesture, for the reason above — and
             renaming had no gesture at all, hidden or otherwise. */}
-        <button type="button" onClick={onRenameFolder} disabled={!canRenameFolder}>
+        <button
+          type="button"
+          onClick={() => onRenameFolder(lastFolder)}
+          disabled={!canRenameFolder}
+        >
           {renameFolderLabel}
         </button>
         {/* A folder never had a way out of the app's own trash discipline before this —
@@ -284,14 +390,14 @@ export function FolderTree({
         <button
           type="button"
           className="danger"
-          onClick={onDeleteFolder}
+          onClick={() => onDeleteFolder(lastFolder)}
           disabled={!canDeleteFolder}
         >
           {deleteFolderLabel}
         </button>
       </div>
 
-      <ul className="tree-branches">
+      <ul className="tree-branches" role="tree">
         <Branch
           node={filed}
           depth={0}
@@ -300,6 +406,9 @@ export function FolderTree({
           onCreateFolder={onCreateFolder}
           dragging={dragging}
           onDropNote={onDropNote}
+          activePath={activePath}
+          onActivate={setActivePath}
+          onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
         />
       </ul>
 
@@ -372,7 +481,7 @@ export function FolderTree({
         </div>
 
         {trash !== null && (
-          <ul>
+          <ul role="tree">
             <Branch
               node={{ ...trash, name: trashLabel }}
               depth={0}
@@ -386,10 +495,22 @@ export function FolderTree({
               // first. `onDropNote` left off entirely rather than passed as a no-op, so
               // the branch never even offers to accept one.
               dragging={dragging}
+              activePath={activePath}
+              onActivate={setActivePath}
+              onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
             />
           </ul>
         )}
       </div>
+
+      {menu !== null && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems(menu.path)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </nav>
   );
 }

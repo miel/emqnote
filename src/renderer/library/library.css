@@ -182,6 +182,18 @@
   background: rgba(127, 127, 127, 0.12);
 }
 
+/* The roving-tabIndex row currently reachable by the keyboard — package D's arrow-key
+   navigation, shared by the folder tree, the note list and the task list. `:focus-visible`
+   rather than `:focus`, so a row focused only as a side effect of a mouse click (every
+   click already calls `onFocus`, to keep `activePath` honest) does not draw an outline a
+   pointer never asked for. */
+.branch:focus-visible,
+.note:focus-visible,
+.task-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .branch-on {
   background: rgba(127, 127, 127, 0.2);
 }

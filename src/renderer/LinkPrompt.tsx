@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { trapTab } from "./library/focus-trap.js";
 
 interface Props {
   /** The address already on this link, empty when creating a new one. */
@@ -25,6 +26,7 @@ export function LinkPrompt({
   t,
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [href, setHref] = useState(initialHref);
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export function LinkPrompt({
   }, []);
 
   return (
-    <div className="link-prompt">
+    <div className="link-prompt" ref={panel}>
       <label htmlFor="link-href">{t(initialHref === "" ? "link.new" : "link.edit")}</label>
       <input
         id="link-href"
@@ -42,7 +44,10 @@ export function LinkPrompt({
         placeholder={t("link.placeholder")}
         onChange={(event) => setHref(event.target.value)}
         // Clicking anywhere else puts the prompt away. It used to sit there until a
-        // key was pressed, which left the window looking stuck.
+        // key was pressed, which left the window looking stuck. Tab no longer does
+        // this — `trapTab` below keeps focus in the one field this bar has, the same
+        // way every other dialog in the app now behaves, so Escape is the only key
+        // that dismisses it.
         onBlur={() => onCancel()}
         onKeyDown={(event) => {
           // Ctrl+Enter keeps its meaning everywhere, including here: apply the link,
@@ -52,6 +57,8 @@ export function LinkPrompt({
             onApplyAndClose(href.trim());
             return;
           }
+
+          trapTab(event, panel.current);
 
           // Otherwise the prompt owns the keyboard; nothing here reaches the note.
           event.stopPropagation();

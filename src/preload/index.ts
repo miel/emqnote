@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),
   saveAttachment: (bytes: ArrayBuffer, originalName: string) =>
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
-  pickAttachment: () => ipcRenderer.invoke(IPC.pickAttachment),
+  pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
   openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
 
   library: {

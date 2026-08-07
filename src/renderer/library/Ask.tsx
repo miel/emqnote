@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { trapTab } from "./focus-trap.js";
 
 interface Props {
   title: string;
@@ -31,6 +32,7 @@ export function Ask({
   onCancel,
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(initial ?? "");
 
   useEffect(() => {
@@ -43,9 +45,25 @@ export function Ask({
     onConfirm(value.trim());
   };
 
+  // Tab is trapped from every focusable element in the dialog, not only the input: with
+  // no text field (`dismissOnly`, or a plain confirm) the buttons are all there is, and
+  // Shift+Tab from the first one still has to loop rather than escape to the page behind.
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    trapTab(event, panel.current);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+    }
+  };
+
   return (
     <div className="overlay" onMouseDown={onCancel}>
-      <div className="ask" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className="ask"
+        ref={panel}
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <p className="ask-title">{title}</p>
 
         {initial !== undefined && (
@@ -54,15 +72,13 @@ export function Ask({
             value={value}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
-              event.stopPropagation();
               if (event.key === "Enter") {
                 event.preventDefault();
+                event.stopPropagation();
                 confirm();
               }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                onCancel();
-              }
+              // Escape and Tab are left to bubble to the wrapping `onKeyDown` above,
+              // which already handles both.
             }}
           />
         )}

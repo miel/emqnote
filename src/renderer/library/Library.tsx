@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
 import {
+  canCreateFolderIn,
+  canDeleteFolder as canDeleteFolderAt,
+  canRenameFolder as canRenameFolderAt,
   folderErrorOf,
   folderOf,
   selectionKey,
@@ -15,6 +19,7 @@ import {
   type Selection,
   type SortKey,
 } from "../../shared/vault-types.js";
+import { buildEditorMenu } from "../editor/editor-menu.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
 import { Help } from "../Help.js";
@@ -23,6 +28,7 @@ import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
 import { ConflictBanner } from "./ConflictBanner.js";
+import { ContextMenu } from "./ContextMenu.js";
 import { FolderTree } from "./FolderTree.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
@@ -118,6 +124,16 @@ export function Library(): React.ReactElement {
   const [helpOpen, setHelpOpen] = useState(false);
   const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
+  /** The note-list row context menu — Open/Move/Rename/Reveal/Delete on whatever row was right-clicked. */
+  const [noteMenu, setNoteMenu] = useState<{ note: NoteSummary; x: number; y: number } | null>(
+    null,
+  );
+  /** The note panel's right-click formatting menu, in the reader — `Capture.tsx` has its own copy. */
+  const [editorMenu, setEditorMenu] = useState<{
+    x: number;
+    y: number;
+    state: EditorState;
+  } | null>(null);
   /**
    * OneDrive conflict pairs, loaded eagerly on mount and on every `library:refresh` —
    * unlike `facets`, which stays behind the collapsed Tags/People sections specifically
@@ -318,6 +334,86 @@ export function Library(): React.ReactElement {
   }, [app.isMac]);
 
   /**
+   * The macro keyboard cycle between the three panes: tree → notes → editor → tree.
+   *
+   * Tab already moves focus *within* a pane fine on its own — a dialog's own trap
+   * handles a modal, and inside the editor `keymap.ts` binds Tab to list indent, always
+   * returning `true`, so it never reaches here at all (nothing to special-case: the
+   * event simply never bubbles up to `window`). That leaves Tab genuinely only able to
+   * move tree → notes and notes → editor, never back out of the editor — which is why
+   * F6 exists as well, registered in `shortcuts.ts` as `cyclePanes`: it is not claimed by
+   * anything inside the editor, so it is the one key that can always complete the loop.
+   *
+   * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
+   * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
+   * `keydown` listener sees it here.
+   */
+  useEffect(() => {
+    // Deliberately narrower than "anywhere inside the pane": a roving row is where a
+    // jump into the pane lands (`focusPane` below), and the only place Tab should treat
+    // as "leaving" it. The tree/notes panes hold ordinary controls too — the search box,
+    // the sort buttons, a folder's twisty — and those already have a sensible Tab order
+    // of their own that this must not steamroll.
+    const paneOf = (element: Element | null): "tree" | "notes" | "editor" | null => {
+      if (element === null) return null;
+      if (element.closest('[role="treeitem"]') !== null) return "tree";
+      if (element.closest('.note[role="option"]') !== null) return "notes";
+      if (element.closest('.task-row[role="option"]') !== null) return "notes";
+      if (element.closest(".editor-content") !== null) return "editor";
+      return null;
+    };
+
+    const focusPane = (pane: "tree" | "notes" | "editor"): void => {
+      const root = libraryRef.current;
+      if (pane === "editor") {
+        editor.current?.focus();
+        return;
+      }
+      if (root === null) return;
+      const selector =
+        pane === "tree" ? '.tree [tabindex="0"]' : '.notes [tabindex="0"], .task-list [tabindex="0"]';
+      root.querySelector<HTMLElement>(selector)?.focus();
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const current = paneOf(document.activeElement);
+
+      if (event.key === "Escape" && current === "editor") {
+        event.preventDefault();
+        focusPane("notes");
+        return;
+      }
+
+      if (event.key !== "Tab" && !matches(shortcut("cyclePanes"), event, app.isMac)) return;
+      if (current === null) return;
+      // ProseMirror's own keymap always consumes Tab/Shift-Tab inside the editor (see the
+      // comment above) — this line only ever actually runs for F6 from that pane.
+      if (current === "editor" && event.key === "Tab") return;
+
+      const forward = !event.shiftKey;
+      const next: "tree" | "notes" | "editor" | null =
+        current === "tree"
+          ? forward
+            ? "notes"
+            : null
+          : current === "notes"
+            ? forward
+              ? "editor"
+              : "tree"
+            : forward
+              ? "tree"
+              : "notes";
+
+      if (next === null) return;
+      event.preventDefault();
+      focusPane(next);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [app.isMac]);
+
+  /**
    * Writes the note being edited.
    *
    * The main process compares against what is on disk and writes nothing when they
@@ -418,6 +514,18 @@ export function Library(): React.ReactElement {
    */
   const pickAndInsertAttachment = useCallback(async () => {
     const name = await window.emqnote.pickAttachment();
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
+  /** The note panel's right-click menu's two attachment items — same flow as the toolbar
+   * button above, differing only in the picker's filter (`ipc.ts`'s `pickAttachment`). */
+  const pickAndInsertImage = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment("image");
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
+  const pickAndInsertFile = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment("any");
     if (name !== null) editor.current?.insertAttachment(name);
   }, []);
 
@@ -795,22 +903,23 @@ export function Library(): React.ReactElement {
           onExpandFilters={() => void loadFacets()}
           onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
           onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
-          onRenameFolder={() =>
+          onRenameFolder={(path) =>
             setDialog({
               kind: "renameFolder",
-              path: lastFolder,
-              initial: lastFolder.split("/").pop() ?? "",
+              path,
+              initial: path.split("/").pop() ?? "",
             })
           }
-          onDeleteFolder={() => {
-            const path = lastFolder;
+          onDeleteFolder={(path) => {
             void window.emqnote.library.folderContents(path).then((contents) => {
               setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
             });
           }}
-          canRenameFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
-          canDeleteFolder={lastFolder !== "" && !lastFolder.startsWith(TRASH_FOLDER)}
-          canCreateFolder={!lastFolder.startsWith(TRASH_FOLDER)}
+          onNewNoteIn={(folder) => window.emqnote.library.newNote(folder)}
+          lastFolder={lastFolder}
+          canRenameFolder={canRenameFolderAt(lastFolder)}
+          canDeleteFolder={canDeleteFolderAt(lastFolder)}
+          canCreateFolder={canCreateFolderIn(lastFolder)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenTasks={openTasks}
@@ -818,6 +927,7 @@ export function Library(): React.ReactElement {
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           deleteFolderLabel={app.t("library.deleteFolder")}
+          newNoteLabel={app.t("library.newNote")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           tasksLabel={app.t("library.tasks")}
@@ -868,6 +978,7 @@ export function Library(): React.ReactElement {
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
+            onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
             locale={app.locale}
             t={app.t}
           />
@@ -994,6 +1105,7 @@ export function Library(): React.ReactElement {
                   onChange={onDocChange}
                   onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
                   onAttachmentRequested={() => void pickAndInsertAttachment()}
+                  onContextMenu={(payload) => setEditorMenu(payload)}
                 />
               </div>
   
@@ -1034,6 +1146,47 @@ export function Library(): React.ReactElement {
             setMoving(false);
             void moveNoteTo(open.path, target);
           }}
+        />
+      )}
+
+      {noteMenu !== null && (
+        <ContextMenu
+          x={noteMenu.x}
+          y={noteMenu.y}
+          onClose={() => setNoteMenu(null)}
+          items={[
+            {
+              label: app.t("library.open"),
+              onSelect: () => void openNote(noteMenu.note.path),
+            },
+            { label: app.t("library.move"), onSelect: () => setMoving(true) },
+            {
+              label: app.t("library.rename"),
+              onSelect: () => setEditingTitle(noteMenu.note.title),
+            },
+            {
+              label: app.t("library.reveal"),
+              onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),
+            },
+            {
+              label: app.t("library.delete"),
+              danger: true,
+              onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
+            },
+          ]}
+        />
+      )}
+
+      {editorMenu !== null && (
+        <ContextMenu
+          x={editorMenu.x}
+          y={editorMenu.y}
+          onClose={() => setEditorMenu(null)}
+          items={buildEditorMenu(editorMenu.state, app.isMac, app.t, {
+            run: (command) => editor.current?.runCommand(command),
+            insertImage: () => void pickAndInsertImage(),
+            insertFile: () => void pickAndInsertFile(),
+          })}
         />
       )}
 

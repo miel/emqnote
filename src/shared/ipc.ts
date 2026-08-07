@@ -110,7 +110,13 @@ export const IPC = {
    * `bootstrap` rather than under `library`.
    */
   saveAttachment: "app:save-attachment",
-  /** The file picker for an image or PDF, filtered in main; reads and stores the file itself. */
+  /**
+   * The file picker for an attachment, filtered in main; reads and stores the file
+   * itself. Takes an optional `"image" | "any"` argument — the note panel's right-click
+   * menu offers "Insert image" and "Insert file" as two separate items that differ only
+   * in this filter, while the toolbar button and its shortcut keep today's combined
+   * "Images and PDFs" filter by passing nothing at all.
+   */
   pickAttachment: "app:pick-attachment",
   /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
   openAttachment: "app:open-attachment",
@@ -300,8 +306,12 @@ export interface CaptureApi {
    * under, or `null` if the vault is not known yet.
    */
   saveAttachment: (bytes: ArrayBuffer, originalName: string) => Promise<string | null>;
-  /** The native file picker, filtered to images and PDFs; reads and stores the choice itself. */
-  pickAttachment: () => Promise<string | null>;
+  /**
+   * The native file picker; reads and stores the choice itself. `"image"` narrows the
+   * filter to images only — the note panel's "Insert image" menu item — anything else
+   * (including no argument at all) keeps today's combined "Images and PDFs" filter.
+   */
+  pickAttachment: (filter?: "image" | "any") => Promise<string | null>;
   /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
   openAttachment: (name: string) => Promise<void>;
 

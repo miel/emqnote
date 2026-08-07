@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TaskItem } from "../../shared/vault-types.js";
 import { drawBox } from "../editor/checkbox.js";
+import { roveArrowKey } from "./roving.js";
 
 interface Props {
   scope: string;
@@ -52,6 +53,10 @@ function TaskCheckbox({
       className="task-row-check"
       role="checkbox"
       aria-checked={checked}
+      // Not a Tab stop of its own — the row itself carries this pane's roving
+      // `tabIndex`, the same as a branch or a note row, so Tab moves between tasks
+      // rather than in and out of each one's two sub-controls.
+      tabIndex={-1}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();
@@ -82,6 +87,14 @@ export function TaskList({
   t,
 }: Props): React.ReactElement {
   const [items, setItems] = useState<TaskItem[]>([]);
+  // Same roving-tabIndex fallback `NoteList` uses: recomputed against the current items
+  // rather than trusted, since a scope change or a toggle-driven reload can leave it
+  // pointing at a row that just scrolled out of the list entirely.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const active =
+    activeKey !== null && items.some((item) => rowKey(item) === activeKey)
+      ? activeKey
+      : (items[0] !== undefined ? rowKey(items[0]) : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,13 +169,39 @@ export function TaskList({
         </span>
       </div>
 
-      <ul className="task-rows">
+      <ul className="task-rows" role="listbox">
         {items.map((item) => (
-          <li key={rowKey(item)} className="task-row">
+          <li
+            key={rowKey(item)}
+            className="task-row"
+            role="option"
+            aria-selected={active === rowKey(item)}
+            tabIndex={active === rowKey(item) ? 0 : -1}
+            onFocus={() => setActiveKey(rowKey(item))}
+            onKeyDown={(event) => {
+              const container = (event.currentTarget as HTMLElement).closest(".task-rows");
+              const next = roveArrowKey(event, container, ".task-row", event.currentTarget);
+              if (next !== null) {
+                event.preventDefault();
+                next.focus();
+                return;
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onOpenNote(item.path, item.ordinal);
+                return;
+              }
+              if (event.key === " ") {
+                event.preventDefault();
+                void toggle(item);
+              }
+            }}
+          >
             <TaskCheckbox checked={item.checked} onToggle={() => void toggle(item)} />
             <button
               type="button"
               className="task-row-text"
+              tabIndex={-1}
               onClick={() => onOpenNote(item.path, item.ordinal)}
             >
               <span className="task-row-title">

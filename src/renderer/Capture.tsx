@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../markdown/schema.js";
+import { buildEditorMenu } from "./editor/editor-menu.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
@@ -10,6 +12,7 @@ import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import { isoWithOffset } from "../shared/time.js";
 import { useBootstrap } from "./useBootstrap.js";
+import { ContextMenu } from "./library/ContextMenu.js";
 
 const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
@@ -40,12 +43,30 @@ export function Capture(): React.ReactElement {
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** The note panel's right-click formatting menu — `Library.tsx`'s reader has its own copy. */
+  const [editorMenu, setEditorMenu] = useState<{
+    x: number;
+    y: number;
+    state: EditorState;
+  } | null>(null);
 
   // The one path the toolbar button, the keyboard shortcut and (via `Editor`) a drop
   // or a paste all eventually reach — but only this one, the picker, is triggered from
   // outside the editor, so it is the only one that needs a handler up here.
   const pickAndInsertAttachment = useCallback(async () => {
     const name = await window.emqnote.pickAttachment();
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
+  /** The right-click menu's two attachment items — same flow, differing only in the
+   * picker's filter (`ipc.ts`'s `pickAttachment`). */
+  const pickAndInsertImage = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment("image");
+    if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
+  const pickAndInsertFile = useCallback(async () => {
+    const name = await window.emqnote.pickAttachment("any");
     if (name !== null) editor.current?.insertAttachment(name);
   }, []);
 
@@ -214,7 +235,21 @@ export function Capture(): React.ReactElement {
         onChange={onDocChange}
         onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
         onAttachmentRequested={() => void pickAndInsertAttachment()}
+        onContextMenu={(payload) => setEditorMenu(payload)}
       />
+
+      {editorMenu !== null && (
+        <ContextMenu
+          x={editorMenu.x}
+          y={editorMenu.y}
+          onClose={() => setEditorMenu(null)}
+          items={buildEditorMenu(editorMenu.state, app.isMac, app.t, {
+            run: (command) => editor.current?.runCommand(command),
+            insertImage: () => void pickAndInsertImage(),
+            insertFile: () => void pickAndInsertFile(),
+          })}
+        />
+      )}
 
       {link !== null && (
         <LinkPrompt

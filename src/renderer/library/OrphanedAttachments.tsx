@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { trapTab } from "./focus-trap.js";
 
 interface Entry {
   path: string;
@@ -27,6 +28,7 @@ function fileName(path: string): string {
  */
 export function OrphanedAttachments({ t, onClose }: Props): React.ReactElement {
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +58,18 @@ export function OrphanedAttachments({ t, onClose }: Props): React.ReactElement {
 
   return (
     <div className="overlay" onMouseDown={onClose}>
-      <div className="orphans" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className="orphans"
+        ref={panel}
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          trapTab(event, panel.current);
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      >
         <h2>{t("orphans.title")}</h2>
 
         {entries === null && <p className="orphans-note">{t("orphans.loading")}</p>}

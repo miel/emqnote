@@ -1,0 +1,308 @@
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
+import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-types.js";
+
+/**
+ * The note list's right-click menu — Open, Move, Rename, Reveal, Delete — mounted
+ * through a real `Library` the same way `test/library-title-edit.test.ts` does, because
+ * every one of the five items reuses a handler that already lives on `Library.tsx` and
+ * the point of this test is that the menu reaches the *real* one, not a stand-in.
+ *
+ * "Right-clicking a row selects it first" is checked by watching `openNote` — the only
+ * definition "selected" has in this codebase today (see `Library.tsx`'s `open` state,
+ * tied to `open?.path`); `library-title-edit.test.ts`'s own mount/flush plumbing is
+ * reused for the same reason it exists there.
+ */
+
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
+const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
+
+function noteSummary(path: string, title: string): NoteSummary {
+  return {
+    path,
+    fileName: path.split("/").pop() ?? path,
+    title,
+    kind: "quick",
+    created: "2026-08-06T12:00:00+02:00",
+    modified: "2026-08-06T12:00:00+02:00",
+    attendees: [],
+    tags: [],
+    excerpt: "",
+  };
+}
+
+function openedNote(path: string, title: string): OpenedNote {
+  return {
+    path,
+    title,
+    kind: "quick",
+    created: "2026-08-06T12:00:00+02:00",
+    location: "",
+    attendees: [],
+    tags: [],
+    doc: EMPTY_DOC,
+    editable: true,
+  };
+}
+
+interface Fake {
+  emqnote: CaptureApi;
+  openNoteMock: ReturnType<typeof vi.fn>;
+  revealNote: ReturnType<typeof vi.fn>;
+  trashNote: ReturnType<typeof vi.fn>;
+}
+
+function buildFake(): Fake {
+  const tree: FolderNode = {
+    path: "",
+    name: "Vault",
+    noteCount: 0,
+    children: [{ path: "00 Inbox", name: "00 Inbox", noteCount: 1, children: [] }],
+  };
+
+  const note = openedNote(NOTE_PATH, "Test note");
+  const openNoteMock = vi.fn(async (path: string): Promise<OpenedNote | null> =>
+    path === NOTE_PATH ? note : null,
+  );
+  const revealNote = vi.fn();
+  const trashNote = vi.fn(async () => true);
+
+  const library: LibraryApi = {
+    tree: async () => tree,
+    notes: async () => [noteSummary(NOTE_PATH, "Test note")],
+    search: async () => [],
+    facets: async () => ({ tags: [], people: [], available: true }),
+    openNote: openNoteMock,
+    saveNote: async (request) => ({ written: false, path: request.path }),
+    moveNote: async (path) => ({ path }),
+    renameNote: async (path) => ({ path }),
+    trashNote,
+    emptyTrash: async () => 0,
+    createFolder: async (parent) => parent,
+    renameFolder: async (path) => path,
+    folderContents: async () => ({ notes: 0, folders: 0 }),
+    trashFolder: async () => ({ trashed: true }),
+    revealNote,
+    noteEditable: async () => true,
+    openInCapture: async () => true,
+    newNote: () => {},
+    onRefresh: () => () => {},
+    scanState: async () => null,
+    onScanProgress: () => () => {},
+    conflicts: async () => [],
+    conflictDiff: async () => [],
+    resolveConflict: async () => {},
+    orphanedAttachments: async () => [],
+    attachmentPreview: async () => null,
+    trashAttachment: async () => "",
+    tasks: async () => [],
+    toggleTask: async () => ({ toggled: true }),
+  };
+
+  const emqnote: CaptureApi = {
+    platform: "darwin",
+    onShow: () => () => {},
+    onReset: () => () => {},
+    onStatus: () => () => {},
+    onLoad: () => () => {},
+    painted: () => {},
+    change: () => {},
+    close: () => {},
+    minimise: () => {},
+    toggleMaximise: () => {},
+    openLibrary: () => {},
+    bootstrap: async () => ({
+      locale: "en-US",
+      platform: "darwin",
+      hotkey: "CommandOrControl+Shift+Space",
+      vaultPath: "/vault",
+      libraryPaneWidths: null,
+    }),
+    setLocale: async () => {},
+    setHotkey: async () => true,
+    setPaneWidths: () => {},
+    listVaults: async () => [],
+    chooseVault: async () => null,
+    switchVault: async () => {},
+    saveAttachment: async () => null,
+    pickAttachment: async () => null,
+    openAttachment: async () => {},
+    library,
+  };
+
+  return { emqnote, openNoteMock, revealNote, trashNote };
+}
+
+async function flush(rounds = 12): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
+describe("the note list's right-click menu", () => {
+  let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeAll(async () => {
+    (window as unknown as { emqnote: unknown }).emqnote = buildFake().emqnote;
+    ({ Library: LibraryComponent } = await import("../src/renderer/library/Library.js"));
+  });
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  async function mount(fake: Fake): Promise<void> {
+    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LibraryComponent));
+    });
+    await flush();
+  }
+
+  function row(): Element {
+    const found = container.querySelector(".notes-list .note");
+    expect(found).not.toBeNull();
+    return found!;
+  }
+
+  async function rightClickRow(): Promise<void> {
+    await act(async () => {
+      row().dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+      );
+    });
+    await flush();
+  }
+
+  function menuItem(label: string): HTMLButtonElement {
+    const button = Array.from(container.querySelectorAll<HTMLButtonElement>(".context-menu-item")).find(
+      (node) => node.querySelector(".context-menu-label")?.textContent === label,
+    );
+    expect(button).not.toBeUndefined();
+    return button!;
+  }
+
+  it("selects the row (opens it) before the menu offers anything to act on", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    expect(fake.openNoteMock).not.toHaveBeenCalled();
+
+    await rightClickRow();
+
+    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
+    expect(container.querySelector(".context-menu")).not.toBeNull();
+  });
+
+  it("shows Open, Move, Rename, Reveal, Delete, in that order", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
+      (node) => node.querySelector(".context-menu-label")!.textContent,
+    );
+    expect(labels).toEqual(["Open", "Move", "Rename", "Reveal", "Delete"]);
+  });
+
+  it("Open re-opens the note through the same openNote path", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+    fake.openNoteMock.mockClear();
+
+    await act(async () => {
+      menuItem("Open").click();
+    });
+    await flush();
+
+    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
+  });
+
+  it("Move opens the existing Move dialog", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Move").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".palette")).not.toBeNull();
+  });
+
+  it("Rename opens the existing click-to-edit title field, pre-filled with the note's title", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Rename").click();
+    });
+    await flush();
+
+    const input = container.querySelector<HTMLInputElement>(".reader-title-input");
+    expect(input).not.toBeNull();
+    expect(input!.value).toBe("Test note");
+  });
+
+  it("Reveal calls the existing revealNote IPC call", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Reveal").click();
+    });
+    await flush();
+
+    expect(fake.revealNote).toHaveBeenCalledWith(NOTE_PATH);
+  });
+
+  it("Delete opens the existing delete confirmation, naming the note", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete").click();
+    });
+    await flush();
+
+    const dialog = container.querySelector(".ask");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("Test note");
+    expect(fake.trashNote).not.toHaveBeenCalled();
+
+    const confirm = Array.from(dialog!.querySelectorAll<HTMLButtonElement>("button")).find(
+      (node) => node.textContent === "Delete" && node.className.includes("danger"),
+    );
+    expect(confirm).not.toBeUndefined();
+
+    await act(async () => {
+      confirm!.click();
+    });
+    await flush();
+
+    expect(fake.trashNote).toHaveBeenCalledWith(NOTE_PATH);
+  });
+});

@@ -526,6 +526,92 @@ body {
   outline: none;
 }
 
+/* ---- context menu ----
+
+   Here rather than in library.css, for the same reason as the shortcut sheet just below:
+   the capture window does not load that file, and its note panel gets this menu too
+   (`editor-menu.ts`). `.overlay` itself is still defined in `library.css` for the folder
+   tree and note list menus, which only ever open in the library window — this only has
+   to cover the menu surface itself. */
+
+/* A full-window, invisible catcher for the outside click that dismisses the menu —
+   `ContextMenu.tsx` reuses the `.overlay` class name for the same `onMouseDown`-to-cancel
+   convention `Ask.tsx`/`MoveDialog.tsx` use, but `.overlay`'s own rule lives in
+   `library.css`, which the capture window does not load. This one is self-contained
+   rather than relying on that base rule being present, and — unlike a modal's overlay —
+   stays fully transparent: a right-click menu should not dim the page behind it. */
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  text-align: left;
+  cursor: default;
+}
+
+.context-menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.context-menu-active:not(:disabled) {
+  background: rgba(127, 127, 127, 0.2);
+}
+
+.context-menu-item.danger:not(:disabled) {
+  color: #c42b1c;
+}
+
+.context-menu-check {
+  width: 12px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.context-menu-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu-shortcut {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* ---- shortcut sheet ----
 
    Here rather than in library.css, because the capture window does not load that file

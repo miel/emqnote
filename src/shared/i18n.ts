@@ -68,6 +68,22 @@ const DUTCH: Record<string, string> = {
   "shortcut.openLibrary": "Bibliotheek openen",
   "shortcut.help": "Dit overzicht",
   "shortcut.newNote": "Nieuwe notitie (overal)",
+  "shortcut.contextMenu": "Menu bij de gefocuste rij",
+  "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
+
+  // Rechtermuisknop-menu's. De namen komen uit editor-menu.ts en de menu's op mappen/
+  // notities; wat een actie *is* staat bij de sneltoets (hierboven), wat het menu-item
+  // zegt staat hier — vaak dezelfde tekst, soms net iets anders omdat een menu-item een
+  // werkwoord is en een sneltoetsnaam een zelfstandig naamwoord.
+  "menu.bold": "Vet",
+  "menu.italic": "Cursief",
+  "menu.underline": "Onderstreept",
+  "menu.highlight": "Gemarkeerd",
+  "menu.bulletList": "Opsomming",
+  "menu.orderedList": "Nummering",
+  "menu.insertTask": "Taak invoegen",
+  "menu.insertImage": "Afbeelding invoegen",
+  "menu.insertFile": "Bestand invoegen",
 
   // Link prompt
   "link.new": "Link",
@@ -82,9 +98,10 @@ const DUTCH: Record<string, string> = {
   "library.sort.created": "Gemaakt",
   "library.sort.title": "Titel",
   "library.pick": "Kies links een notitie.",
-  "library.pickHint": "Klik met rechts op een map om er een nieuwe in te maken.",
+  "library.pickHint": "Klik met rechts op een map voor nieuwe map, hernoemen, verwijderen of een nieuwe notitie.",
   "library.saved": "Bewaard",
   "library.saving": "Bezig met bewaren…",
+  "library.open": "Openen",
   "library.rename": "Hernoemen",
   "library.move": "Verplaatsen",
   "library.moveLocked":
@@ -249,6 +266,22 @@ const ENGLISH: Record<string, string> = {
   "shortcut.openLibrary": "Open the library",
   "shortcut.help": "This sheet",
   "shortcut.newNote": "New note (from anywhere)",
+  "shortcut.contextMenu": "Menu for the focused row",
+  "shortcut.cyclePanes": "Switch between folders, list and note",
+
+  // Right-click menus. The command names come from `editor-menu.ts` and the folder/
+  // note-list menus; what an action *is* lives with the shortcut above, what the menu
+  // item says lives here — usually the same word, sometimes a verb where the shortcut
+  // sheet uses a noun.
+  "menu.bold": "Bold",
+  "menu.italic": "Italic",
+  "menu.underline": "Underline",
+  "menu.highlight": "Highlight",
+  "menu.bulletList": "Bullet list",
+  "menu.orderedList": "Numbered list",
+  "menu.insertTask": "Insert task",
+  "menu.insertImage": "Insert image",
+  "menu.insertFile": "Insert file",
 
   "link.new": "Link",
   "link.edit": "Edit link",
@@ -261,9 +294,11 @@ const ENGLISH: Record<string, string> = {
   "library.sort.created": "Created",
   "library.sort.title": "Title",
   "library.pick": "Pick a note on the left.",
-  "library.pickHint": "Right-click a folder to make a new one inside it.",
+  "library.pickHint":
+    "Right-click a folder for new folder, rename, delete or a new note.",
   "library.saved": "Saved",
   "library.saving": "Saving…",
+  "library.open": "Open",
   "library.rename": "Rename",
   "library.move": "Move",
   "library.moveLocked":

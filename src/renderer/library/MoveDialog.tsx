@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { trapTab } from "./focus-trap.js";
 import { score } from "./fuzzy.js";
 
 interface Props {
@@ -17,6 +18,7 @@ export function MoveDialog({
   t,
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
@@ -42,13 +44,18 @@ export function MoveDialog({
 
   return (
     <div className="overlay" onMouseDown={onCancel}>
-      <div className="palette" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className="palette"
+        ref={panel}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <input
           ref={input}
           value={query}
           placeholder={t("library.moveWhere")}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
+            trapTab(event, panel.current);
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setActive((index) => Math.min(index + 1, matches.length - 1));
