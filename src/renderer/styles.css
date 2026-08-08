@@ -517,6 +517,18 @@ body {
   display: block;
 }
 
+/* B36: a genuine render failure (422 — corrupt or password-protected PDF) must not look
+   like a plain chip with nothing to preview (404), which is what every failure looked
+   like before this. `wiki-link-preview` is deliberately removed by the time this applies
+   (`markThumbnailError`) — this is the compact chip, not the enlarged thumbnail box. */
+.editor-content .wiki-link[data-thumb="error"] {
+  color: var(--warning);
+}
+
+.editor-content .wiki-link-error-marker {
+  margin-right: 2px;
+}
+
 /* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
    target is a browser-renderable image. Capped rather than left at native size: a
    full-resolution screenshot pasted mid-paragraph should not be able to push the rest

@@ -1,17 +1,19 @@
-import { app, nativeImage, type NativeImage } from "electron";
+import { app } from "electron";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pruneThumbnails, thumbnailKey, THUMBNAIL_SIZE } from "./thumbnail-cache.js";
+import { pruneThumbnails, thumbnailKey } from "./thumbnail-cache.js";
 import { decideThumbnailProbe } from "./thumbnail-probe.js";
+import { renderPdfThumbnail } from "./pdf-thumb.js";
 
 /**
- * The I/O half of the thumbnail cache (B30) — split from `thumbnail-cache.ts` for the
- * same reason `vault.ts` sits apart from `vault-io.ts`: this file touches `nativeImage`,
- * so it cannot be Electron-free, and everything that *can* be tested without a build
- * lives in the sibling module instead. `runThumbnailProbe` below is `--thumbnail-probe`'s
- * own Electron-bound half for the same reason — its decision logic lives in
- * `thumbnail-probe.ts`, and only the `nativeImage` call and the printing live here.
+ * The I/O half of the thumbnail cache (B30/B36) — split from `thumbnail-cache.ts` for
+ * the same reason `vault.ts` sits apart from `vault-io.ts`: this file touches Electron
+ * (a hidden `BrowserWindow`, by way of `pdf-thumb.ts`), so it cannot be Electron-free,
+ * and everything that *can* be tested without a build lives in the sibling module
+ * instead. `runThumbnailProbe` below is `--thumbnail-probe`'s own Electron-bound half
+ * for the same reason — its decision logic lives in `thumbnail-probe.ts`, and only the
+ * render call and the printing live here.
  */
 
 /** Beyond this, the oldest cached PNGs are evicted as a new one is generated. */
@@ -20,20 +22,25 @@ const MAX_CACHED_THUMBNAILS = 200;
 /**
  * A generation that failed once this session is not retried on every render of the same
  * note — a note with three PDF links currently means three NodeViews, so without this a
- * missing Linux thumbnail provider would be asked three times per note-open, forever.
- * In-memory only and bounded: a negative result belongs to this process's lifetime, not
- * to disk, since the next launch may run on a machine (or an OS update) where the
- * provider works, and nothing here should grow without bound over a long resident run.
+ * corrupt or password-protected PDF would be re-rendered three times per note-open,
+ * forever. In-memory only and bounded: a negative result belongs to this process's
+ * lifetime, not to disk, since the file itself may change before the next launch, and
+ * nothing here should grow without bound over a long resident run.
+ *
+ * The value is the render failure's own message, not just `true` — B36's whole point is
+ * telling a genuine failure apart from "nothing to preview here" (see
+ * `registerThumbnailProtocol`'s 422 vs 404 in `index.ts`), so the reason has to survive
+ * past the render that discovered it.
  */
-const failedThisSession = new Map<string, true>();
+const failedThisSession = new Map<string, string>();
 const MAX_FAILED_ENTRIES = 500;
 
-function rememberFailure(key: string): void {
+function rememberFailure(key: string, message: string): void {
   if (failedThisSession.size >= MAX_FAILED_ENTRIES) {
     const oldest = failedThisSession.keys().next().value;
     if (oldest !== undefined) failedThisSession.delete(oldest);
   }
-  failedThisSession.set(key, true);
+  failedThisSession.set(key, message);
 }
 
 async function writeAtomic(file: string, bytes: Buffer): Promise<void> {
@@ -48,11 +55,21 @@ export function thumbnailCacheDir(): string {
 }
 
 /**
- * Returns the absolute path of a cached (or freshly generated) first-page thumbnail for
- * `realPath`, or `null` when none is available — a missing OS provider (Linux, always;
- * Windows without one registered), a genuinely broken file, or a genuinely not-yet-
- * hydrated OneDrive placeholder are all the same outcome from a caller's point of view:
- * fall back to the plain chip. Never throws.
+ * What `ensureThumbnail` found, in three shapes a caller can tell apart — the reason it
+ * is not just `string | null` any more: `registerThumbnailProtocol` (`index.ts`) answers
+ * 404 for `"unavailable"` ("nothing to preview here", same as always) but 422 for
+ * `"failed"` — a real error, not silence, because a corrupt or password-protected PDF
+ * must not look identical to a plain `.txt` attachment (B36).
+ */
+export type ThumbnailOutcome =
+  | { kind: "ready"; file: string }
+  | { kind: "unavailable" }
+  | { kind: "failed"; error: string };
+
+/**
+ * Returns a cached (or freshly rendered) first-page thumbnail for `realPath`. Never
+ * throws — every failure comes back as `ThumbnailOutcome`, not an exception, since a
+ * broken PDF is an expected outcome here, not a bug.
  *
  * There used to be a dataless/placeholder pre-check here — `stats.size > 0 &&
  * stats.blocks === 0`, `darwin`-only, borrowed verbatim from `vault.ts`'s
@@ -69,57 +86,61 @@ export function thumbnailCacheDir(): string {
  * File Provider has been observed reporting `blocks === 0` for files that are fully
  * hydrated and readable — block accounting on a File-Provider-backed volume is not the
  * same contract as a plain APFS placeholder, and `blocks` alone cannot tell the two
- * apart from outside. Getting it wrong here did not show a wrong banner; it skipped
- * `nativeImage` for every PDF in the vault before it was ever asked, which matches the
- * reported symptom exactly.
+ * apart from outside.
  *
- * Dropping the check is the right trade-off, not just the cautious one: attempting a
- * thumbnail for a genuinely dataless file costs one wasted read that
- * `nativeImage.createThumbnailFromPath` already tolerates failing on (see
- * `image.isEmpty()` below) — a cost paid once and then cached as a negative result by
- * `failedThisSession`. A false positive in the old check was a permanent, silent
- * feature outage instead, which is strictly worse. `--thumbnail-probe` (`index.ts`,
- * driven from `thumbnail-probe.ts`) exists to tell the two apart on real hardware
- * without guessing further.
+ * That old check was specifically about the OS thumbnail provider being asked on a
+ * placeholder it might mishandle; B36 replaced the provider itself with an in-house
+ * pdf.js render, which reads the file's actual bytes rather than asking a black box to
+ * open it, so the theory does not even apply any more — a genuinely dataless file just
+ * fails to read, same as any other broken file, and that failure is now visible instead
+ * of silently permanent (see `ThumbnailOutcome`, above). `--thumbnail-probe` (`index.ts`,
+ * driven from `thumbnail-probe.ts`) still exists to name exactly what went wrong for one
+ * file without guessing.
  */
-export async function ensureThumbnail(
-  cacheDir: string,
-  realPath: string,
-): Promise<string | null> {
+export async function ensureThumbnail(cacheDir: string, realPath: string): Promise<ThumbnailOutcome> {
+  let stats;
   try {
-    const stats = statSync(realPath);
-    const key = thumbnailKey(realPath, stats.mtimeMs, stats.size);
-    const cachedFile = join(cacheDir, `${key}.png`);
+    stats = statSync(realPath);
+  } catch {
+    return { kind: "unavailable" };
+  }
 
-    if (existsSync(cachedFile)) return cachedFile;
-    if (failedThisSession.has(key)) return null;
+  const key = thumbnailKey(realPath, stats.mtimeMs, stats.size);
+  const cachedFile = join(cacheDir, `${key}.png`);
 
-    // Not rejected on Linux — it resolves with an empty image, which `.isEmpty()` below
-    // is what actually catches. Treated the same as a thrown error either way.
-    const image = await nativeImage.createThumbnailFromPath(realPath, THUMBNAIL_SIZE);
-    if (image.isEmpty()) {
-      rememberFailure(key);
-      return null;
-    }
+  if (existsSync(cachedFile)) return { kind: "ready", file: cachedFile };
 
+  const remembered = failedThisSession.get(key);
+  if (remembered !== undefined) return { kind: "failed", error: remembered };
+
+  try {
+    const png = await renderPdfThumbnail(realPath);
     await mkdir(cacheDir, { recursive: true });
-    await writeAtomic(cachedFile, image.toPNG());
+    await writeAtomic(cachedFile, png);
     pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS);
 
-    return cachedFile;
-  } catch {
-    return null;
+    return { kind: "ready", file: cachedFile };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    rememberFailure(key, message);
+    return { kind: "failed", error: message };
   }
 }
 
 /**
  * `emqnote --thumbnail-probe=<attachment name>` — the diagnostic for "PDF preview is not
  * showing" in the tradition of `--dump-clipboard` and `--selftest` (see `CLAUDE.md`'s
- * "diagnostic helpers"). Where `ensureThumbnail` answers "give me a thumbnail or null",
- * this answers "which of the four things that could go wrong, went wrong" — printed, not
- * guessed at, and deliberately bypassing `failedThisSession`: a probe run exists
- * precisely to re-examine a file the negative cache would otherwise have already given
- * up on for the rest of this session.
+ * "diagnostic helpers"). Where `ensureThumbnail` answers with a `ThumbnailOutcome`, this
+ * answers "which of the things that could go wrong, went wrong" — printed, not guessed
+ * at, and deliberately bypassing `failedThisSession`: a probe run exists precisely to
+ * re-examine a file the negative cache would otherwise have already given up on for the
+ * rest of this session.
+ *
+ * Since B36, "no OS thumbnail provider produced a result" is no longer a possible
+ * outcome here — there is no OS provider in the loop any more — and its place is taken
+ * by a pdf.js render failure that names the actual error, which for a real PDF almost
+ * always means the file itself is corrupt or password-protected rather than anything
+ * about the machine this runs on.
  *
  * Returns a process exit code: `0` only for the success branch, `1` for everything else,
  * matching `--selftest`/`--screenshot`'s convention of a status code a script (or a human
@@ -135,8 +156,8 @@ export async function runThumbnailProbe(
   switch (decision.step) {
     case "not-previewable":
       console.log(
-        `not previewable: "${name}" has no extension in PREVIEWABLE_EXTENSIONS ` +
-          `(.pdf, .docx, .xlsx, .pptx) — nothing would ever ask for a thumbnail of it`,
+        `not previewable: "${name}" has no extension in PREVIEWABLE_EXTENSIONS — ` +
+          `nothing would ever ask for a thumbnail of it`,
       );
       return 1;
 
@@ -160,34 +181,25 @@ export async function runThumbnailProbe(
         console.log(`already cached at ${cachedFile} — this probe regenerates it anyway`);
       }
 
-      let image: NativeImage;
+      let png: Buffer;
       try {
-        image = await nativeImage.createThumbnailFromPath(resolved, THUMBNAIL_SIZE);
+        png = await renderPdfThumbnail(resolved);
       } catch (error) {
         console.log(
-          `nativeImage.createThumbnailFromPath threw: ` +
-            (error instanceof Error ? error.message : String(error)),
-        );
-        return 1;
-      }
-
-      if (image.isEmpty()) {
-        console.log(
-          "nativeImage returned an empty image — no OS thumbnail provider produced a " +
-            "result for this file. On macOS this usually means Quick Look itself cannot " +
-            "preview it (try Space in Finder on the same file); on Windows, compare " +
-            "against whether Explorer shows a thumbnail for it.",
+          `pdf.js could not render a first page: ` +
+            (error instanceof Error ? error.message : String(error)) +
+            ` — is the file corrupt, password-protected, or not actually a PDF?`,
         );
         return 1;
       }
 
       try {
         await mkdir(cacheDir, { recursive: true });
-        await writeAtomic(cachedFile, image.toPNG());
+        await writeAtomic(cachedFile, png);
         pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS);
       } catch (error) {
         console.log(
-          `nativeImage produced an image but writing it failed: ` +
+          `pdf.js produced an image but writing it failed: ` +
             (error instanceof Error ? error.message : String(error)),
         );
         return 1;

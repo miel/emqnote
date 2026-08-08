@@ -176,6 +176,9 @@ let failures = 0;
 for (const [path, scan] of [
   ...mainBundleFiles().map((path) => [path, externalsInEsm] as const),
   ["out/preload/index.cjs", externalsInCjs],
+  // The hidden PDF-render window's own preload (B36) — a second, much smaller bridge,
+  // checked the same way as the first.
+  ["out/preload/thumb.cjs", externalsInCjs],
 ] as const) {
   const source = read(path);
   if (source === null) {

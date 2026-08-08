@@ -14,10 +14,17 @@ import { join } from "node:path";
  * What `wikiLinkNodeView` will ask for a preview of. Not "isn't an image" — a `wikiLink`
  * is also used for a plain `[[Some Note]]` note-to-note link, which has no file behind
  * it at all, and a bare bullet-point name should never turn into an IPC-adjacent request
- * over a custom protocol. Anything the OS thumbnail provider can be expected to open:
- * PDFs and the three Office formats a business OneDrive is likely to actually hold.
+ * over a custom protocol.
+ *
+ * PDF only (B36). Office formats (`.docx`/`.xlsx`/`.pptx`) used to be here too, back when
+ * this asked the OS thumbnail provider for an image — `nativeImage.createThumbnailFromPath`
+ * can open all four. It was replaced with an in-house pdf.js render (`pdf-thumb.ts`)
+ * after that provider was never observed to produce anything on the hardware that
+ * reported "PDF preview is not showing" (see `thumbnails.ts`'s own history of that
+ * report), and pdf.js only reads PDFs — Office documents lose inline preview entirely
+ * and go back to being a plain chip, same as before B30 ever existed for them.
  */
-export const PREVIEWABLE_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".pptx"]);
+export const PREVIEWABLE_EXTENSIONS = new Set([".pdf"]);
 
 /** Case-insensitive, and `false` for a name with no extension at all (a note link). */
 export function isPreviewable(name: string): boolean {
