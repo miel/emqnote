@@ -2,9 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      `blob:` in img-src is B36's: the thumbnail is fetched rather than set as an <img>
+      src, because only a real response carries the status code that tells a PDF which
+      failed to render (422) apart from a file with no preview at all (404) — and the
+      bytes then have to reach the <img> as a blob URL this page made itself. It widens
+      nothing outward: a blob URL is same-origin and only this script can mint one.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: emqnote-attachment: emqnote-thumb:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob: emqnote-attachment: emqnote-thumb:; connect-src 'self' emqnote-thumb:"
     />
     <title>emqnote</title>
   </head>

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   attachmentName,
+  attachmentNameFromUrl,
   copyAttachment,
   resolveAttachment,
   saveAttachment,
@@ -195,5 +196,41 @@ describe("a saved attachment nothing references yet", () => {
   it("is found by findOrphanedAttachments", async () => {
     const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
     expect(findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
+  });
+});
+
+describe("attachmentNameFromUrl", () => {
+  /**
+   * The regression this exists for: both schemes are registered `standard: true`, so
+   * Chromium normalises `emqnote-thumb://offerte.pdf` to `emqnote-thumb://offerte.pdf/`
+   * before any handler sees it. `resolveAttachment` shrugged that off — `resolve()`
+   * drops a trailing slash — but `isPreviewable` read the extension as `.pdf/` and
+   * answered false, so the thumbnail handler 404'd for every PDF, on every platform,
+   * and the chip fell back exactly as if the file had no preview. B30's happy path was
+   * never reached once, on any machine, which is what "PDF preview does not work" was.
+   */
+  it("drops the trailing slash Chromium adds to a standard-scheme URL", () => {
+    expect(attachmentNameFromUrl("emqnote-thumb://offerte.pdf/", "emqnote-thumb")).toBe(
+      "offerte.pdf",
+    );
+    expect(
+      attachmentNameFromUrl("emqnote-attachment://2026-08-05-1030-foto.png/", "emqnote-attachment"),
+    ).toBe("2026-08-05-1030-foto.png");
+  });
+
+  it("leaves a name alone when there is no trailing slash", () => {
+    expect(attachmentNameFromUrl("emqnote-thumb://offerte.pdf", "emqnote-thumb")).toBe(
+      "offerte.pdf",
+    );
+  });
+
+  it("decodes percent-escapes, and does so after the slash is stripped", () => {
+    expect(attachmentNameFromUrl("emqnote-thumb://mijn%20offerte.pdf/", "emqnote-thumb")).toBe(
+      "mijn offerte.pdf",
+    );
+
+    // `%2F` is part of the name, not Chromium's punctuation: stripping after decoding
+    // would eat it and change which file was asked for.
+    expect(attachmentNameFromUrl("emqnote-thumb://a%2F", "emqnote-thumb")).toBe("a/");
   });
 });

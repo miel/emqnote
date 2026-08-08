@@ -9,11 +9,11 @@ import {
 } from "../src/main/thumbnail-cache.js";
 
 /**
- * The Electron-free half of B30's thumbnail cache — naming, gating, pruning. The
- * `nativeImage`-touching half (`thumbnails.ts`) is not tested directly here for the
- * same reason `vault.ts`'s platform-specific calls are not: it needs a real Electron
- * process (or a build) to exercise, and this repo's dev sandbox / CI has no OS
- * thumbnail provider to call anyway (see B30, and TEST-PROTOCOL.md).
+ * The Electron-free half of B30/B36's thumbnail cache — naming, gating, pruning. The
+ * Electron-touching half (`thumbnails.ts`, `pdf-thumb.ts`) is not tested directly here
+ * for the same reason `vault.ts`'s platform-specific calls are not: it needs a real
+ * Electron process (or a build) to exercise. `pdf-thumb-queue.test.ts` covers the one
+ * piece of that half that *can* run without one — the render queue's scheduling.
  */
 
 describe("isPreviewable", () => {
@@ -25,10 +25,10 @@ describe("isPreviewable", () => {
     expect(isPreviewable("OFFERTE.PDF")).toBe(true);
   });
 
-  it("accepts the three Office formats", () => {
-    expect(isPreviewable("verslag.docx")).toBe(true);
-    expect(isPreviewable("cijfers.xlsx")).toBe(true);
-    expect(isPreviewable("presentatie.pptx")).toBe(true);
+  it("rejects the three Office formats — B36 dropped inline preview for them", () => {
+    expect(isPreviewable("verslag.docx")).toBe(false);
+    expect(isPreviewable("cijfers.xlsx")).toBe(false);
+    expect(isPreviewable("presentatie.pptx")).toBe(false);
   });
 
   it("rejects an image", () => {

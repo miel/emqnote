@@ -43,7 +43,14 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: "src/preload/index.ts",
+        // Two entries: the capture/library bridge, and the hidden PDF-render window's
+        // own much smaller one (B36) — `src/preload/thumb.ts` exposes exactly the two
+        // channels that window needs, deliberately not the whole `emqnote` bridge, since
+        // a PDF is untrusted input passing through it.
+        input: {
+          index: "src/preload/index.ts",
+          thumb: "src/preload/thumb.ts",
+        },
         external: ["electron"],
         output: { format: "cjs", entryFileNames: "[name].cjs" },
       },
@@ -53,13 +60,16 @@ export default defineConfig({
     root: "src/renderer",
     build: {
       minify: "esbuild",
-      // Two windows, two entries. The capture window stays as small as it can be —
+      // Three windows, three entries. The capture window stays as small as it can be —
       // it is the one that has to appear instantly — so the library window's tree,
-      // list and dialogs are not loaded into it.
+      // list and dialogs are not loaded into it, and pdf.js (B36) sits in its own
+      // `thumb` entry rather than in either: neither window ever runs it directly, only
+      // the hidden render window does, and pdf.js is not a small library.
       rollupOptions: {
         input: {
           capture: "src/renderer/index.html",
           library: "src/renderer/library.html",
+          thumb: "src/renderer/thumb.html",
         },
       },
     },

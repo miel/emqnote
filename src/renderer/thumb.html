@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Nothing but 'self': this window never navigates anywhere, shows nothing, and talks
+      to no origin but its own bundled script and worker — a PDF is untrusted input, and
+      this page's whole job is to turn its bytes into a PNG and nothing more.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <title>emqnote-thumb</title>
+  </head>
+  <body>
+    <script type="module" src="./thumb.ts"></script>
+  </body>
+</html>

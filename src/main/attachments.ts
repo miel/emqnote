@@ -129,6 +129,31 @@ export async function copyAttachment(
 }
 
 /**
+ * The attachment name carried by an `emqnote-attachment://` or `emqnote-thumb://` URL.
+ *
+ * Both schemes are registered `standard: true` in `index.ts` — which is what makes them
+ * fetchable and addressable from a CSP at all, and also means Chromium parses them as
+ * `scheme://<host>/<path>` and *normalises* what it parses. A URL with no path gets one:
+ * `emqnote-thumb://offerte.pdf` arrives at the handler as
+ * `emqnote-thumb://offerte.pdf/`, trailing slash and all.
+ *
+ * `resolveAttachment` never noticed, because `resolve()` and `realpathSync` drop a
+ * trailing slash on the way to a real file — which is exactly why this went unseen for so
+ * long, the attachment scheme having always worked. `isPreviewable` did notice: the last
+ * extension of `offerte.pdf/` is `.pdf/`, which is in no allowlist, so the thumbnail
+ * handler answered 404 for every PDF it was ever asked about, on every platform, and the
+ * chip fell back exactly as if no thumbnail existed. That, not the OS provider, is what
+ * "PDF preview does not work" was — B30's happy path was never once reached.
+ *
+ * The slash is stripped before decoding, never after: `%2F` in a name decodes to a slash
+ * of its own, and that one is part of the name rather than Chromium's punctuation.
+ */
+export function attachmentNameFromUrl(url: string, scheme: string): string {
+  const rest = url.slice(`${scheme}://`.length);
+  return decodeURIComponent(rest.endsWith("/") ? rest.slice(0, -1) : rest);
+}
+
+/**
  * The absolute path for a name under `_attachments/`, or `null` when it does not
  * resolve to a real file inside that folder.
  *
