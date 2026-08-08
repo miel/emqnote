@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ConflictChoice, ConflictPair, DiffLine } from "../../shared/vault-types.js";
+import { trapTab } from "./focus-trap.js";
 
 interface Props {
   pairs: ConflictPair[];
@@ -13,6 +14,11 @@ interface Props {
   onMerge: (path: string) => void;
 }
 
+/** The last segment of a vault-relative path — same trick as `OrphanedAttachments.tsx`. */
+function basename(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
 /**
  * The banner and its dialog for `02-technisch-ontwerp.md` §5.2. One conflict is shown
  * at a time even when several exist — resolving it triggers the usual `library:refresh`
@@ -24,14 +30,25 @@ interface Props {
 export function ConflictBanner({ pairs, t, onMerge }: Props): React.ReactElement | null {
   const [active, setActive] = useState<ConflictPair | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
+  const [diffError, setDiffError] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (active === null) return;
     setDiff(null);
+    setDiffError(false);
     let cancelled = false;
-    void window.emqnote.library.conflictDiff(active).then((lines) => {
-      if (!cancelled) setDiff(lines);
-    });
+    void window.emqnote.library
+      .conflictDiff(active)
+      .then((lines) => {
+        if (!cancelled) setDiff(lines);
+      })
+      .catch(() => {
+        // A rejected `invoke` used to leave `diff` at `null` forever, which reads as
+        // "Loading diff…" — indistinguishable, at a glance, from the dialog simply
+        // never having opened. Naming the failure here is what makes that impossible.
+        if (!cancelled) setDiffError(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -46,22 +63,43 @@ export function ConflictBanner({ pairs, t, onMerge }: Props): React.ReactElement
     void window.emqnote.library.resolveConflict(pair, choice);
   };
 
+  const bannerText =
+    pairs.length === 1
+      ? `${basename(pairs[0]!.conflict)} ${t("conflict.banner")}`
+      : `${pairs.length} ${t("conflict.bannerPlural")}`;
+
   return (
     <>
       <button type="button" className="conflict-banner" onClick={() => setActive(pairs[0]!)}>
-        {pairs.length} {t(pairs.length === 1 ? "conflict.banner" : "conflict.bannerPlural")}
+        {bannerText}
       </button>
 
       {active !== null && (
         <div className="overlay" onMouseDown={() => setActive(null)}>
-          <div className="conflict-dialog" onMouseDown={(event) => event.stopPropagation()}>
+          <div
+            className="conflict-dialog"
+            ref={panel}
+            onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              trapTab(event, panel.current);
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setActive(null);
+              }
+            }}
+          >
             <h2>{t("conflict.title")}</h2>
             <p className="conflict-path" title={active.original}>
-              {active.original}
+              <strong>{t("conflict.thisOne")}</strong> {basename(active.original)}
+            </p>
+            <p className="conflict-path" title={active.conflict}>
+              <strong>{t("conflict.thatOne")}</strong> {basename(active.conflict)}
             </p>
 
             <div className="conflict-diff">
-              {diff === null ? (
+              {diffError ? (
+                <p className="conflict-loading conflict-error">{t("conflict.diffError")}</p>
+              ) : diff === null ? (
                 <p className="conflict-loading">{t("conflict.loading")}</p>
               ) : (
                 diff.map((line, index) => (
@@ -76,8 +114,11 @@ export function ConflictBanner({ pairs, t, onMerge }: Props): React.ReactElement
             </div>
 
             <div className="settings-buttons">
-              <button type="button" onClick={() => setActive(null)}>
+              <button type="button" autoFocus onClick={() => setActive(null)}>
                 {t("ask.cancel")}
+              </button>
+              <button type="button" onClick={() => setActive(null)}>
+                {t("conflict.close")}
               </button>
               <button
                 type="button"

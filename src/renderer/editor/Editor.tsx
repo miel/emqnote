@@ -20,6 +20,7 @@ import {
 } from "./insert-attachment.js";
 import { handleListItemPaste } from "./paste-list-item.js";
 import { handleLinkClick } from "./link-click.js";
+import { isContextMenuKey } from "../library/roving.js";
 
 /** How long a task clicked in the Tasks view stays highlighted before fading on its own. */
 const TASK_HIGHLIGHT_MS = 10_000;
@@ -290,6 +291,22 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         if (current === null) return;
         event.preventDefault();
         handlers.current.onContextMenu({ x: event.clientX, y: event.clientY, state: current.state });
+      }}
+      // Mod-Shift-M / the `ContextMenu` key, the same chord the tree and note-list rows
+      // already answer in their own `onKeyDown` (`FolderTree.tsx`, `NoteList.tsx`) — the
+      // note panel had no keyboard route into its own menu at all, only the mouse one
+      // above. There is no click point to go by here, so the caret stands in for one:
+      // `coordsAtPos` turns the selection's head into the same `{x, y}` shape a click
+      // would have reported, opening the menu just under the caret rather than wherever
+      // the pointer last happened to be.
+      onKeyDown={(event) => {
+        if (handlers.current.onContextMenu === undefined) return;
+        if (!isContextMenuKey(event, window.emqnote.platform === "darwin")) return;
+        const current = view.current;
+        if (current === null) return;
+        event.preventDefault();
+        const coords = current.coordsAtPos(current.state.selection.head);
+        handlers.current.onContextMenu({ x: coords.left, y: coords.bottom, state: current.state });
       }}
     />
   );

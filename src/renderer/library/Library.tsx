@@ -109,7 +109,15 @@ export function Library(): React.ReactElement {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
+  /**
+   * Persisted through `IPC.setSort`, following the pane-widths precedent exactly — starts
+   * on the same hardcoded default `defaults()` in `settings.ts` does, since `app.librarySort`
+   * is only real once the `bootstrap()` round trip resolves. `sortLoaded` below guards the
+   * effect that applies it, the same way `paneWidthsLoaded` stops a later `app.reload()`
+   * from clobbering a drag in progress — here, from clobbering a sort the user just picked.
+   */
   const [sort, setSort] = useState<SortKey>("modified");
+  const sortLoaded = useRef(false);
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
   /**
@@ -145,6 +153,12 @@ export function Library(): React.ReactElement {
   const [noteMenu, setNoteMenu] = useState<{ note: NoteSummary; x: number; y: number } | null>(
     null,
   );
+  /**
+   * The reader toolbar's "⋯" overflow menu — Rename/Move/Duplicate/Reveal/Delete on the
+   * open note, opened at the button's own rect rather than a click point. Always acts on
+   * `open`, so unlike `noteMenu` it carries no note of its own to act on.
+   */
+  const [readerMenu, setReaderMenu] = useState<{ x: number; y: number } | null>(null);
   /** The note panel's right-click formatting menu, in the reader — `Capture.tsx` has its own copy. */
   const [editorMenu, setEditorMenu] = useState<{
     x: number;
@@ -183,6 +197,21 @@ export function Library(): React.ReactElement {
     paneWidthsLoaded.current = true;
     setPaneWidths(app.libraryPaneWidths);
   }, [app.libraryPaneWidths]);
+
+  // `app.bootstrapped` rather than `app.librarySort === "modified"`, the pane-widths
+  // guard's trick: every `SortKey` is a real sort, so there is no spare value here to
+  // mean "not loaded yet" the way `null` does for pane widths.
+  useEffect(() => {
+    if (sortLoaded.current || !app.bootstrapped) return;
+    sortLoaded.current = true;
+    setSort(app.librarySort);
+  }, [app.bootstrapped, app.librarySort]);
+
+  /** Changes the sort order and persists it — the note list's `onSort` prop. */
+  const onSort = useCallback((next: SortKey) => {
+    setSort(next);
+    window.emqnote.setSort(next);
+  }, []);
 
   /**
    * Applies one splitter's pointer/keyboard movement, clamped so the reader can never be
@@ -410,7 +439,15 @@ export function Library(): React.ReactElement {
       // claim it unconditionally so that never fires instead of the pane switch, even
       // when there is no pane to move to below.
       if (cycling) event.preventDefault();
-      if (current === null) return;
+      if (current === null) {
+        // Focus sits on `document.body` (or some other control `paneOf` does not
+        // recognise) after an ordinary click that lands nowhere in particular — the
+        // usual state, not an edge case. A plain Tab has a sensible browser default
+        // there and is left alone; Ctrl-Tab/Ctrl-Shift-Tab has no pane to "complete the
+        // loop" from, so it enters the first one instead of doing nothing.
+        if (cycling) focusPane(event.shiftKey ? "editor" : "tree");
+        return;
+      }
       // ProseMirror's own keymap consumes a *plain* Tab/Shift-Tab inside the editor (see
       // the comment above), so only `cycling` — never a bare Tab — ever reaches here from
       // that pane, which is what lets it complete the loop back to the tree.
@@ -930,13 +967,17 @@ export function Library(): React.ReactElement {
   };
 
   /**
-   * Selects the Tasks view — vault-wide, open items only, the same defaults every other
-   * footer entry resets to when it is clicked fresh. Clears a pending search the same way
-   * the tree's own `onSelect` does below, so a half-typed query does not sit there
-   * disagreeing with what is now showing.
+   * Selects the Tasks view, scoped to wherever the tree was standing — `tasksIn`
+   * (`index-db.ts`) already matches the whole subtree with `startsWith`, so a folder
+   * scope is never narrower than "this folder and everything under it". Vault-wide was
+   * the wrong default for the common case: browsing a project folder and clicking Tasks
+   * to see what's left in it, not the whole vault's. Open items only stays the default
+   * every other footer entry resets to. Clears a pending search the same way the tree's
+   * own `onSelect` does below, so a half-typed query does not sit there disagreeing with
+   * what is now showing.
    */
   const openTasks = (): void => {
-    setSelection({ kind: "tasks", scope: "", openOnly: true });
+    setSelection({ kind: "tasks", scope: lastFolder, openOnly: true });
     if (searchQuery !== "") {
       if (searchTimer.current !== null) clearTimeout(searchTimer.current);
       setSearchQuery("");
@@ -1105,7 +1146,7 @@ export function Library(): React.ReactElement {
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             sort={sort}
-            onSort={setSort}
+            onSort={onSort}
             onSelect={(path) => void openNote(path)}
             onOpenInCapture={(path) => void openInCapture(path)}
             // Filed where you are standing, which includes the vault root — before this
@@ -1204,27 +1245,22 @@ export function Library(): React.ReactElement {
                   >
                     📎
                   </button>
-                  <button type="button" onClick={() => setEditingTitle(open.title)}>
-                    {app.t("library.rename")}
-                  </button>
-                  <button type="button" onClick={() => setMoving(true)}>
-                    {app.t("library.move")}
-                  </button>
-                  <button type="button" onClick={() => void duplicate()}>
-                    {app.t("library.duplicate")}
-                  </button>
+                  {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
+                      buttons here, squeezing the title in the `nowrap` header next to
+                      them — collapsed into one menu button, opened at its own rect the
+                      same way a right-click opens `noteMenu` below. This is a button
+                      opening a menu, not a right-click, so `--click-button="⋯>Rename"`
+                      has to be able to reach it — see the CLAUDE.md context-menu
+                      constraint's note on why that keeps `--click-button` working here. */}
                   <button
                     type="button"
-                    onClick={() => window.emqnote.library.revealNote(open.path)}
+                    title={app.t("library.moreActions")}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setReaderMenu({ x: rect.left, y: rect.bottom });
+                    }}
                   >
-                    {app.t("library.reveal")}
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => setDialog({ kind: "delete", title: open.title })}
-                  >
-                    {app.t("library.delete")}
+                    ⋯
                   </button>
                 </div>
               </header>
@@ -1323,6 +1359,31 @@ export function Library(): React.ReactElement {
               label: app.t("library.delete"),
               danger: true,
               onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
+            },
+          ]}
+        />
+      )}
+
+      {readerMenu !== null && open !== null && (
+        <ContextMenu
+          x={readerMenu.x}
+          y={readerMenu.y}
+          onClose={() => setReaderMenu(null)}
+          items={[
+            {
+              label: app.t("library.rename"),
+              onSelect: () => setEditingTitle(open.title),
+            },
+            { label: app.t("library.move"), onSelect: () => setMoving(true) },
+            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
+            {
+              label: app.t("library.reveal"),
+              onSelect: () => window.emqnote.library.revealNote(open.path),
+            },
+            {
+              label: app.t("library.delete"),
+              danger: true,
+              onSelect: () => setDialog({ kind: "delete", title: open.title }),
             },
           ]}
         />

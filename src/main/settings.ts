@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locale } from "../shared/i18n.js";
 import { DEFAULT_HOTKEY } from "../shared/ipc.js";
+import type { SortKey } from "../shared/vault-types.js";
 import { readLaunchOptions } from "./launch-options.js";
 import { defaultVaultPath } from "./vault.js";
 
@@ -26,6 +27,12 @@ export interface Settings {
    * applies, so there is no separate "unset" width to keep in sync with it.
    */
   libraryPaneWidths: { tree: number; notes: number } | null;
+  /**
+   * The note list's last sort order, following the pane-widths precedent above: nothing
+   * to keep in sync with a CSS fallback here, so this one just starts on the same default
+   * `Library.tsx`'s own `useState` used to hardcode.
+   */
+  librarySort: SortKey;
 }
 
 export { DEFAULT_HOTKEY };
@@ -39,6 +46,7 @@ function defaults(): Settings {
     filesOnDemandWarned: [],
     updateLastCheckedAt: null,
     libraryPaneWidths: null,
+    librarySort: "modified",
   };
 }
 

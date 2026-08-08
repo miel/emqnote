@@ -7,6 +7,13 @@ export interface Bootstrapped extends Bootstrap {
   t: (key: string) => string;
   isMac: boolean;
   reload: () => Promise<void>;
+  /**
+   * False until the `bootstrap()` round trip has resolved at least once. `libraryPaneWidths`
+   * has `null` to tell "not real yet" apart from "genuinely unset" — `librarySort` has no
+   * such spare value (every `SortKey` is a real sort), so a component seeding local state
+   * from it once (`Library.tsx`'s `sort`) needs an explicit signal instead of overloading one.
+   */
+  bootstrapped: boolean;
 }
 
 /**
@@ -22,6 +29,7 @@ const FALLBACK: Bootstrap = {
   hotkey: DEFAULT_HOTKEY,
   vaultPath: null,
   libraryPaneWidths: null,
+  librarySort: "modified",
 };
 
 /**
@@ -33,9 +41,11 @@ const FALLBACK: Bootstrap = {
  */
 export function useBootstrap(): Bootstrapped {
   const [state, setState] = useState<Bootstrap>(FALLBACK);
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   const reload = useCallback(async () => {
     setState(await window.emqnote.bootstrap());
+    setBootstrapped(true);
   }, []);
 
   useEffect(() => {
@@ -47,5 +57,6 @@ export function useBootstrap(): Bootstrapped {
     t: (key: string) => translate(state.locale as Locale, key),
     isMac: state.platform === "darwin",
     reload,
+    bootstrapped,
   };
 }
