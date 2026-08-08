@@ -5,6 +5,7 @@ import { TRASH_FOLDER, type VaultFileEvent } from "../shared/vault-types.js";
 import { buildRecord } from "./index-scan.js";
 import { deleteNote, deleteNotesUnder, upsertNote, type IndexDb } from "./index-db.js";
 import { isHidden } from "./vault-io.js";
+import { isNoteFile } from "./note-files.js";
 
 /**
  * Keeps the index in step with the vault after the initial full scan — `02-technisch-
@@ -79,7 +80,7 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
   const stabilityThreshold = options.stabilityThreshold ?? 300;
 
   const reindex = (path: string): void => {
-    if (!path.endsWith(".md")) return;
+    if (!isNoteFile(path)) return;
 
     try {
       const stats = statSync(path);
@@ -97,7 +98,7 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
   };
 
   const forget = (path: string): void => {
-    if (!path.endsWith(".md")) return;
+    if (!isNoteFile(path)) return;
 
     // Not a defence against this app's own writes — a rename-over-an-existing-path
     // reports as a `change` event on all three platforms, never a delete. This is

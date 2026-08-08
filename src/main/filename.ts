@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { noteExtension, noteStem } from "./note-files.js";
 
 export { isoWithOffset } from "../shared/time.js";
 
@@ -111,12 +112,18 @@ export function uniquePath(directory: string, fileName: string): string {
   const candidate = join(directory, fileName);
   if (!existsSync(candidate)) return candidate;
 
-  const base = fileName.replace(/\.md$/, "");
+  // The name's own extension, not `.md`: this is called for `.markdown` notes the app
+  // did not create as well, and `attachments.ts` has its own `uniqueAttachmentPath`
+  // precisely because this one used to hardcode one. A name with no note extension at
+  // all keeps its whole self as the base and gains none — better a `report (2)` than a
+  // `report (2).md` invented for a file that never had it.
+  const base = noteStem(fileName);
+  const extension = noteExtension(fileName);
   for (let counter = 2; counter < 1000; counter += 1) {
-    const next = join(directory, `${base} (${counter}).md`);
+    const next = join(directory, `${base} (${counter})${extension}`);
     if (!existsSync(next)) return next;
   }
 
-  return join(directory, `${base} (${Date.now()}).md`);
+  return join(directory, `${base} (${Date.now()})${extension}`);
 }
 

@@ -38,6 +38,7 @@ import {
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
 import { rememberOwnWrite } from "./own-writes.js";
+import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
 
 /**
  * Reading and writing the vault for the main window.
@@ -71,7 +72,7 @@ export function isHidden(name: string): boolean {
 function countNotes(directory: string): number {
   try {
     return readdirSync(directory, { withFileTypes: true }).filter(
-      (entry) => entry.isFile() && entry.name.endsWith(".md"),
+      (entry) => entry.isFile() && isNoteFile(entry.name),
     ).length;
   } catch {
     return 0;
@@ -137,6 +138,22 @@ function excerptOf(body: string): string {
 }
 
 /**
+ * A note's displayed title: what the frontmatter says, or the filename when it says
+ * nothing.
+ *
+ * The fallback is not cosmetic. A `.md` file copied into the vault from somewhere else
+ * has no `title:` — often no frontmatter at all — and every such note is still a note
+ * with a name, the one on disk. `summarise` has always done this, which is why the note
+ * list showed a title; `openNote` did not, which is why opening that same note showed an
+ * empty title field and, in the reader, an empty heading. One function now, used by
+ * both, so the list and the editor can never disagree about what a note is called again.
+ */
+export function titleOf(frontmatter: { title: string } | null, fileName: string): string {
+  if (frontmatter === null || frontmatter.title === "") return noteStem(fileName);
+  return frontmatter.title;
+}
+
+/**
  * Everything the note list and the filters need, without building a document.
  *
  * `parseNote` would construct a whole ProseMirror document per file and throw it away
@@ -165,10 +182,7 @@ export function summarise(vault: string, file: string, raw: string, mtime: Date)
   return {
     path: toPosix(relative(vault, file)),
     fileName,
-    title:
-      frontmatter === null || frontmatter.title === ""
-        ? fileName.replace(/\.md$/, "")
-        : frontmatter.title,
+    title: titleOf(frontmatter, fileName),
     kind: frontmatter?.type ?? "quick",
     created: frontmatter?.created ?? "",
     modified: frontmatter?.modified ?? isoWithOffset(mtime),
@@ -191,7 +205,7 @@ export function readNotesIn(vault: string, folder: string): NoteSummary[] {
   const notes: NoteSummary[] = [];
 
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    if (!entry.isFile() || !isNoteFile(entry.name)) continue;
 
     const file = join(absolute, entry.name);
     try {
@@ -218,9 +232,18 @@ export function openNote(vault: string, notePath: string): OpenedNote | null {
 
   return {
     path: notePath,
-    title: frontmatter.title,
+    // Both fields fall back the way `summarise` already did for the note list, and for
+    // the same reason: a file this app did not write has no `title:` and no `created:`,
+    // and showing an empty title and an empty date for it made an imported note look
+    // broken in the editor while the list beside it showed the name correctly. The
+    // filename is the title it has; the file's own mtime is the only date there is.
+    //
+    // Reading these costs the file nothing — B10 holds. Neither value is written back
+    // until the user actually edits the note, at which point the frontmatter this note
+    // never had gets built from what was on screen, which is the honest outcome.
+    title: titleOf(frontmatter, basename(notePath)),
     kind: frontmatter.type,
-    created: frontmatter.created,
+    created: frontmatter.created === "" ? isoWithOffset(statSync(file).mtime) : frontmatter.created,
     location: frontmatter.location ?? "",
     attendees: frontmatter.attendees ?? [],
     tags: frontmatter.tags ?? [],
@@ -380,6 +403,32 @@ export function moveNote(vault: string, notePath: string, targetFolder: string):
  * The timestamp prefix is kept, because it is what makes the Inbox sort chronologically
  * and it records when the note was taken rather than when it was last renamed.
  */
+/**
+ * The filename a note takes when its title changes — shared by `renameNote` and
+ * `duplicateNote`, which composed it identically and would otherwise have to be fixed
+ * twice for every rule that lands here.
+ *
+ * The timestamp prefix a note already has is kept rather than recomputed: it records
+ * when the note was written, and a rename is not a new note. Only when there is no such
+ * prefix — an imported file, named by whoever made it — does the note's own `created`
+ * supply one, falling back to now if that is unreadable too.
+ *
+ * The extension is the file's own, never `noteFileName`'s `.md`. Renaming
+ * `aantekening.markdown` must not quietly turn it into a different file on disk; the
+ * stem is the app's to compose, the extension belongs to the file.
+ */
+function renamedFileName(notePath: string, title: string, created: string): string {
+  const existingPrefix = /^(\d{4}-\d{2}-\d{2} \d{4}) /.exec(basename(notePath));
+  const when = new Date(created);
+  const built =
+    existingPrefix === null
+      ? noteFileName(title, Number.isNaN(when.getTime()) ? new Date() : when)
+      : `${existingPrefix[1]} ${noteFileName(title, new Date()).replace(/^\S+ \d{4} /, "")}`;
+
+  const extension = noteExtension(basename(notePath));
+  return extension === "" ? built : `${noteStem(built)}${extension}`;
+}
+
 export function renameNote(vault: string, notePath: string, title: string): string {
   const from = join(vault, notePath);
   const raw = readFileSync(from, "utf8");
@@ -388,12 +437,7 @@ export function renameNote(vault: string, notePath: string, title: string): stri
   note.frontmatter.title = title;
   note.frontmatter.modified = isoWithOffset(new Date());
 
-  const existingPrefix = /^(\d{4}-\d{2}-\d{2} \d{4}) /.exec(basename(notePath));
-  const when = new Date(note.frontmatter.created);
-  const fileName =
-    existingPrefix === null
-      ? noteFileName(title, Number.isNaN(when.getTime()) ? new Date() : when)
-      : `${existingPrefix[1]} ${noteFileName(title, new Date()).replace(/^\S+ \d{4} /, "")}`;
+  const fileName = renamedFileName(notePath, title, note.frontmatter.created);
 
   const to = uniquePath(dirname(from), fileName);
 
@@ -420,12 +464,7 @@ export function duplicateNote(vault: string, notePath: string): string {
   note.frontmatter.title = title;
   note.frontmatter.modified = isoWithOffset(new Date());
 
-  const existingPrefix = /^(\d{4}-\d{2}-\d{2} \d{4}) /.exec(basename(notePath));
-  const when = new Date(note.frontmatter.created);
-  const fileName =
-    existingPrefix === null
-      ? noteFileName(title, Number.isNaN(when.getTime()) ? new Date() : when)
-      : `${existingPrefix[1]} ${noteFileName(title, new Date()).replace(/^\S+ \d{4} /, "")}`;
+  const fileName = renamedFileName(notePath, title, note.frontmatter.created);
 
   const to = uniquePath(dirname(from), fileName);
 
@@ -647,7 +686,7 @@ export function folderContents(
         if (isHidden(entry.name)) continue;
         folders += 1;
         walk(join(directory, entry.name), depth + 1);
-      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      } else if (entry.isFile() && isNoteFile(entry.name)) {
         notes += 1;
       }
     }

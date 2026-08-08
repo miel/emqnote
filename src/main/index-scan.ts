@@ -15,6 +15,7 @@ import {
 } from "./index-db.js";
 import { isHidden, summarise } from "./vault-io.js";
 import { checkFilesOnDemand } from "./vault.js";
+import { isNoteFile } from "./note-files.js";
 
 /**
  * Building the SQLite index from what is actually on disk — `02-technisch-ontwerp.md`
@@ -62,7 +63,7 @@ function collectFiles(vault: string): string[] {
         // Deleted notes must not resurface under their tags.
         if (isHidden(entry.name) || entry.name === TRASH_FOLDER) continue;
         walk(path, depth + 1);
-      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      } else if (entry.isFile() && isNoteFile(entry.name)) {
         files.push(path);
       }
     }

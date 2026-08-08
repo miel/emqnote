@@ -30,6 +30,7 @@ const DUTCH: Record<string, string> = {
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
+  "capture.noTime": "Datum instellen…",
 
   // Sneltoetsenoverzicht. De namen komen uit src/shared/shortcuts.ts; wat een toets
   // *is* staat daar, wat hij heet staat hier.
@@ -254,6 +255,7 @@ const ENGLISH: Record<string, string> = {
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
   "capture.changeTime": "Click to change the date and time",
+  "capture.noTime": "Set a date…",
 
   // The shortcut sheet. What a key *is* lives in src/shared/shortcuts.ts; what it is
   // called lives here.

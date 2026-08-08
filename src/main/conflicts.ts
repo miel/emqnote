@@ -1,4 +1,5 @@
 import type { ConflictPair } from "../shared/vault-types.js";
+import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
 
 export type { ConflictPair };
 
@@ -52,11 +53,11 @@ function looksLikeMachineSuffix(segments: string[]): boolean {
   return segments.some((segment) => /^[A-Z0-9]{2,}$/.test(segment) && /[A-Z]/.test(segment));
 }
 
-function splitPath(path: string): { dir: string; stem: string } {
+function splitPath(path: string): { dir: string; stem: string; extension: string } {
   const slash = path.lastIndexOf("/");
   const dir = slash === -1 ? "" : path.slice(0, slash);
   const fileName = slash === -1 ? path : path.slice(slash + 1);
-  return { dir, stem: fileName.replace(/\.md$/, "") };
+  return { dir, stem: noteStem(fileName), extension: noteExtension(fileName) };
 }
 
 /**
@@ -82,9 +83,9 @@ export function findConflictCopies(paths: string[]): ConflictPair[] {
   const pairs: ConflictPair[] = [];
 
   for (const path of paths) {
-    if (!path.endsWith(".md")) continue;
+    if (!isNoteFile(path)) continue;
 
-    const { dir, stem } = splitPath(path);
+    const { dir, stem, extension } = splitPath(path);
     if (!stem.includes("-")) continue;
     if (OWN_DUPLICATE_SUFFIX.test(stem)) continue;
 
@@ -97,7 +98,12 @@ export function findConflictCopies(paths: string[]): ConflictPair[] {
     const segments = stem.split("-");
     for (let keep = segments.length - 1; keep >= 1; keep -= 1) {
       const candidateStem = segments.slice(0, keep).join("-");
-      const candidatePath = dir === "" ? `${candidateStem}.md` : `${dir}/${candidateStem}.md`;
+      // The conflict copy's own extension, not a hardcoded `.md`: OneDrive renames the
+      // losing copy of `aantekening.markdown` to `aantekening-LAPTOP-X.markdown`, so the
+      // original it belongs to is the one sharing that extension. Pairing across two
+      // different extensions would mean claiming two separate files are one note.
+      const candidateName = `${candidateStem}${extension}`;
+      const candidatePath = dir === "" ? candidateName : `${dir}/${candidateName}`;
       if (candidatePath === path) continue;
 
       if (known.has(candidatePath)) {

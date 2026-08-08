@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, type Dirent } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 import { collectWikiTargets, parseNote } from "../markdown/index.js";
 import { ATTACHMENTS } from "./vault.js";
+import { isNoteFile } from "./note-files.js";
 
 /**
  * Finding attachments nothing points at any more — `02-technisch-ontwerp.md` §6.5's
@@ -48,7 +49,7 @@ function collectAllFiles(root: string): string[] {
 
 function collectNoteFiles(vault: string): string[] {
   return collectAllFiles(vault).filter(
-    (file) => file.endsWith(".md") && !relative(vault, file).split(sep).includes(ATTACHMENTS),
+    (file) => isNoteFile(file) && !relative(vault, file).split(sep).includes(ATTACHMENTS),
   );
 }
 

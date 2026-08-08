@@ -190,7 +190,13 @@ export function HeaderBlock({
               title={t("capture.changeTime")}
               onClick={() => setEditingTime(true)}
             >
-              {formatDateTime(locale, values.created)}
+              {/* A note this app did not write has no `created:`, and `formatDateTime`
+                  hands an unparseable date straight back — so an empty string rendered an
+                  empty button, a cell with nothing in it, and a header that read as
+                  broken. `openNote` now falls back to the file's mtime, which covers the
+                  case that produced the report; this covers every other way the field can
+                  arrive empty, since a control with no label is never the right answer. */}
+              {formatDateTime(locale, values.created) || t("capture.noTime")}
             </button>
           )}
         </div>
