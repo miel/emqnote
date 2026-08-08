@@ -711,9 +711,21 @@
 
 /* ---- move dialog ---- */
 
+/* The `z-index` is what makes this an overlay rather than an underlay, and it is not
+   decoration. `position: fixed` with `z-index: auto` creates no stacking context, so a
+   positioned sibling later in document order paints straight over it — and `.library`,
+   the three-column grid, is exactly that (`position: relative`, `z-index: auto`). Every
+   dialog in this window is rendered *after* the grid and so was accidentally fine, with
+   one exception: `ConflictBanner` renders its overlay next to the banner, above the
+   grid, because the banner belongs there. Clicking that banner therefore dimmed the one
+   strip the grid does not cover and painted the dialog underneath everything else —
+   which is precisely the "clicking the error bar only dims it" report, reproduced here
+   and traced with `elementFromPoint` before this line was written. Anything that mounts
+   an overlay from somewhere other than the end of the tree depends on this. */
 .overlay {
   position: fixed;
   inset: 0;
+  z-index: 20;
   background: rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: flex-start;
