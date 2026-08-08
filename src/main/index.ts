@@ -84,7 +84,12 @@ import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
-import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
+import {
+  attachmentNameFromUrl,
+  copyAttachment,
+  resolveAttachment,
+  saveAttachment,
+} from "./attachments.js";
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { shutdownPdfThumb } from "./pdf-thumb.js";
@@ -486,7 +491,7 @@ function registerAttachmentProtocol(): void {
     const vault = cachedVaultPath;
     if (vault === null) return new Response(null, { status: 404 });
 
-    const name = decodeURIComponent(request.url.slice("emqnote-attachment://".length));
+    const name = attachmentNameFromUrl(request.url, "emqnote-attachment");
     const resolved = resolveAttachment(vault, name);
     if (resolved === null) return new Response(null, { status: 404 });
 
@@ -514,13 +519,11 @@ function registerThumbnailProtocol(): void {
     const vault = cachedVaultPath;
     if (vault === null) return new Response(null, { status: 404 });
 
-    const name = decodeURIComponent(request.url.slice("emqnote-thumb://".length));
+    const name = attachmentNameFromUrl(request.url, "emqnote-thumb");
     const resolved = resolveAttachment(vault, name);
-    console.error("[DEBUG thumb]", { vault, name, resolved, previewable: isPreviewable(name) });
     if (resolved === null || !isPreviewable(name)) return new Response(null, { status: 404 });
 
     const outcome = await ensureThumbnail(thumbnailCacheDir(), resolved);
-    console.error("[DEBUG thumb outcome]", outcome);
     if (outcome.kind === "unavailable") return new Response(null, { status: 404 });
     if (outcome.kind === "failed") return new Response(outcome.error, { status: 422 });
 
