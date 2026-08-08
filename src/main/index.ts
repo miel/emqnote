@@ -13,7 +13,7 @@ import {
 } from "electron";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { IPC, type CapturePayload } from "../shared/ipc.js";
+import { IPC, type CapturePayload, type WikiLinkOutcome } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
@@ -60,6 +60,7 @@ import {
   readFolderTree,
   renameNote,
   resolveConflict,
+  rewriteWikiLinks,
   saveNote,
   toggleTask,
   trashAttachment,
@@ -72,14 +73,17 @@ import {
 import {
   conflicts,
   facets,
+  linkingNotes,
   notesMatching,
+  resolveNoteLink,
   searchNotes,
   setScanRunner,
   startScan,
   tasks as tasksMatching,
 } from "./vault-scan.js";
+import { linkTargetFor } from "./link-resolve.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
-import { closeIndex, openIndex, type IndexDb } from "./index-db.js";
+import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
@@ -197,6 +201,18 @@ function notifyLibrary(): void {
   if (library !== null && !library.isDestroyed()) {
     library.webContents.send(IPC.libraryRefresh);
   }
+}
+
+/**
+ * The notes linking to one, as `rewriteWikiLinks` wants them — the two move/rename
+ * handlers ask the same question the same way, and the index may not be open yet.
+ */
+async function linkingNotesFor(
+  vault: string,
+  path: string,
+): Promise<{ path: string; targets: string[] }[]> {
+  if (indexDb === null) return [];
+  return linkingNotes(vault, indexDb, path);
 }
 
 /**
@@ -832,17 +848,56 @@ function registerAppIpc(): void {
     return copyAttachment(vault, path, basename(path));
   });
 
-  // The click that opens a `wikiLink` chip pointing at a real attachment (a PDF, in
-  // practice — an image goes through `wikiEmbed` and is shown inline instead). A
-  // `wikiLink` can just as easily name a note-to-note link, which `resolveAttachment`
-  // will simply never find inside `_attachments/`, so refusing silently on `null` is
-  // the right answer for both cases: nothing to open is not an error.
-  ipcMain.handle(IPC.openAttachment, (_event, name: string) => {
+  /**
+   * A click on a `[[…]]` chip, from either window (B35).
+   *
+   * The node cannot tell an attachment from a note — §6.4 spells both the same way — so
+   * the order here is the answer: a target that resolves inside `_attachments/` is a
+   * file, and only what is left over is asked about as a note. That order is deliberate
+   * rather than incidental. An attachment is named by exactly one thing, its filename, so
+   * a hit there is certain; a note is matched by three progressively looser rules, so
+   * asking first would let a note titled like a file steal a click on the file.
+   *
+   * A note always surfaces in the *library* window, whichever window the click came from:
+   * capture has no reader and no dialog for an ambiguous target, and the whole reason its
+   * bundle is separate is that it must not grow one.
+   */
+  ipcMain.handle(IPC.openWikiLink, async (_event, target: string): Promise<WikiLinkOutcome> => {
     const vault = loadSettings().vaultPath;
-    if (vault === null) return;
-    const resolved = resolveAttachment(vault, name);
-    if (resolved === null) return;
-    void shell.openPath(resolved);
+    if (vault === null) return "none";
+
+    const attachment = resolveAttachment(vault, target);
+    if (attachment !== null) {
+      void shell.openPath(attachment);
+      return "attachment";
+    }
+
+    if (indexDb === null) return "none";
+    const resolved = await resolveNoteLink(vault, indexDb, target);
+    if (resolved.kind === "none") return "none";
+
+    const paths = resolved.kind === "unique" ? [resolved.path] : resolved.paths;
+    showLibraryWindow();
+    const library = getLibraryWindow();
+    if (library !== null && !library.isDestroyed()) {
+      const summaries = paths.map((path) => {
+        const slash = path.lastIndexOf("/");
+        return {
+          path,
+          title: getNoteMeta(indexDb!, path)?.title ?? path,
+          folder: slash === -1 ? "" : path.slice(0, slash),
+        };
+      });
+      // A window that has only just been created by `showLibraryWindow` is still loading,
+      // so the event would arrive before anything is listening for it. Waiting for the
+      // renderer's own `did-finish-load` is what makes a link clicked from the capture
+      // window work on the first click rather than only once the library is already up.
+      const send = (): void => library.webContents.send(IPC.libraryOpenLink, { target, candidates: summaries });
+      if (library.webContents.isLoading()) library.webContents.once("did-finish-load", send);
+      else send();
+    }
+
+    return resolved.kind === "unique" ? "note" : "ambiguous";
   });
 
   // Mod+click on a weblink in the editor (B33). The renderer only reports where the
@@ -1056,27 +1111,66 @@ function registerLibraryIpc(): void {
   // believes it is still editing the first. The move dialog could only reach a note the
   // reader had open; dragging can reach any row in the list, which is what makes the
   // guard worth having rather than worth noting.
-  ipcMain.handle(IPC.libraryMoveNote, (_event, path: string, folder: string) => {
-    const vault = vaultPath();
-    if (vault === null) return { path };
-    if (writer.activePath() === path) return { path, locked: true };
-    const moved = moveNote(vault, path, folder);
-    notifyLibrary();
-    return { path: moved };
-  });
+  ipcMain.handle(
+    IPC.libraryMoveNote,
+    async (_event, path: string, folder: string, rewriteLinks?: boolean) => {
+      const vault = vaultPath();
+      if (vault === null) return { path };
+      if (writer.activePath() === path) return { path, locked: true };
+
+      // Resolved *before* the move, and here rather than in the renderer: a target
+      // resolves against where the note is now, so after `moveNote` there is nothing left
+      // to find. The renderer only says whether the user agreed, never which notes to
+      // touch — that list is main's to compute, twice if need be (B35).
+      const references = rewriteLinks === true ? await linkingNotesFor(vault, path) : [];
+      const moved = moveNote(vault, path, folder);
+      if (references.length > 0) {
+        rewriteWikiLinks(vault, references, linkTargetFor(moved), writer.activePath());
+      }
+
+      notifyLibrary();
+      return { path: moved };
+    },
+  );
 
   // Refuses a note the capture window has claimed, the same way `libraryMoveNote` does
   // and for the same reason: renaming writes straight to the file, bypassing the capture
   // window's own session, which holds the path it will write to next. Renaming out from
   // under it would not update that path, so its next debounced write would recreate the
   // note under its old name.
-  ipcMain.handle(IPC.libraryRenameNote, (_event, path: string, title: string) => {
+  ipcMain.handle(
+    IPC.libraryRenameNote,
+    async (_event, path: string, title: string, rewriteLinks?: boolean) => {
+      const vault = vaultPath();
+      if (vault === null) return { path };
+      if (writer.activePath() === path) return { path, locked: true };
+
+      // Same ordering, same reason as `libraryMoveNote` above: a rename changes the
+      // filename, so it moves the link target as surely as a move does.
+      const references = rewriteLinks === true ? await linkingNotesFor(vault, path) : [];
+      const renamed = renameNote(vault, path, title);
+      if (references.length > 0) {
+        rewriteWikiLinks(vault, references, linkTargetFor(renamed), writer.activePath());
+      }
+
+      notifyLibrary();
+      return { path: renamed };
+    },
+  );
+
+  /**
+   * How many notes link to one — the count the confirmation names before a move or a
+   * rename. Answers an empty list when the index is not available (an un-hydrated
+   * OneDrive vault), which reads as "nothing links here" and so asks nothing: offering to
+   * rewrite links this app cannot currently see would be worse than staying quiet.
+   */
+  ipcMain.handle(IPC.libraryLinkingNotes, async (_event, path: string) => {
     const vault = vaultPath();
-    if (vault === null) return { path };
-    if (writer.activePath() === path) return { path, locked: true };
-    const renamed = renameNote(vault, path, title);
-    notifyLibrary();
-    return { path: renamed };
+    if (vault === null || indexDb === null) return [];
+    return (await linkingNotes(vault, indexDb, path)).map((one) => ({
+      path: one.path,
+      title: one.title,
+    }));
   });
 
   // The source file is only read, never written, but a note the capture window has

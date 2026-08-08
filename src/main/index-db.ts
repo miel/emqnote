@@ -20,6 +20,12 @@ export interface TaskExtract {
   text: string;
 }
 
+/** One `[[…]]` link as `buildRecord` extracts it — see `collectWikiLinkTargets` in `src/markdown/wiki-targets.ts`. */
+export interface LinkExtract {
+  target: string;
+  alias: string | null;
+}
+
 export interface NoteRecord {
   path: string;
   fileName: string;
@@ -41,6 +47,8 @@ export interface NoteRecord {
   body: string;
   /** Every task item in the note, in document order — fills `note_tasks`, not the `notes` table itself. */
   tasks: TaskExtract[];
+  /** Every `[[…]]` link the note carries, in document order — fills `note_links`, same arrangement as `tasks`. */
+  links: LinkExtract[];
 }
 
 /**
@@ -49,20 +57,24 @@ export interface NoteRecord {
  * own query (`tasksIn`), not attached to every note row the way `title` or `tags` are,
  * since nothing that reads `NoteMeta` today needs it.
  */
-export type NoteMeta = Omit<NoteRecord, "body" | "tasks">;
+export type NoteMeta = Omit<NoteRecord, "body" | "tasks" | "links">;
 
 export type IndexDb = Database.Database;
 
 /**
  * Bumped whenever a change means an index built before it exists cannot simply gain the
- * new data on its own. `note_tasks` is the first such change: `needsRefresh` only forces
+ * new data on its own. `note_tasks` was the first such change: `needsRefresh` only forces
  * a re-read when a file's `mtime` or `size` moved, and neither does merely by this table
- * existing, so an index scanned before today would carry every note *except* its tasks,
+ * existing, so an index scanned before that day would carry every note *except* its tasks,
  * silently, forever. `migrate` drops and rebuilds below that version instead of trying to
  * migrate forward in place — the index is a derived cache in the app-data folder (B9),
  * never in the vault, so rebuilding it from scratch costs one scan and destroys nothing.
+ *
+ * Version 2 is `note_links` (B35), for exactly the same reason: an existing index would
+ * otherwise report that nothing in the vault links to anything, and a move would quietly
+ * leave every link to the moved note pointing at where it used to be.
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /**
  * One search-only virtual table rather than the `content=''` "contentless" table
@@ -96,6 +108,7 @@ function migrate(db: IndexDb): void {
     db.exec(`
       DROP TABLE IF EXISTS notes_fts;
       DROP TABLE IF EXISTS note_tasks;
+      DROP TABLE IF EXISTS note_links;
       DROP TABLE IF EXISTS notes;
     `);
     db.pragma(`user_version = ${SCHEMA_VERSION}`);
@@ -136,6 +149,19 @@ function migrate(db: IndexDb): void {
     );
 
     CREATE INDEX IF NOT EXISTS note_tasks_open ON note_tasks(checked, path);
+
+    -- No primary key on (path, ordinal) the way note_tasks has: a note can legitimately
+    -- carry the same link twice, and there is nothing to address an individual one by.
+    -- Every read of this table is either "all links from this note" or "every link in the
+    -- vault", so fromPath is the only index worth having. (No backticks in this comment:
+    -- it lives inside a template literal.)
+    CREATE TABLE IF NOT EXISTS note_links (
+      fromPath TEXT NOT NULL,
+      target TEXT NOT NULL,
+      alias TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS note_links_from ON note_links(fromPath);
   `);
 }
 
@@ -176,6 +202,11 @@ const upsertNoteStatements = (db: IndexDb) => ({
   insertTask: db.prepare(`
     INSERT INTO note_tasks (path, ordinal, checked, text)
     VALUES (@path, @ordinal, @checked, @text)
+  `),
+  deleteLinks: db.prepare(`DELETE FROM note_links WHERE fromPath = ?`),
+  insertLink: db.prepare(`
+    INSERT INTO note_links (fromPath, target, alias)
+    VALUES (@fromPath, @target, @alias)
   `),
 });
 
@@ -219,6 +250,16 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
         text: task.text,
       });
     }
+    // Same delete-then-insert, same reason as the two above: a link that was removed from
+    // the note has no counterpart row to update.
+    statements.deleteLinks.run(record.path);
+    for (const link of record.links) {
+      statements.insertLink.run({
+        fromPath: record.path,
+        target: link.target,
+        alias: link.alias,
+      });
+    }
   })();
 }
 
@@ -227,6 +268,7 @@ export function deleteNote(db: IndexDb, path: string): void {
     db.prepare(`DELETE FROM notes WHERE path = ?`).run(path);
     db.prepare(`DELETE FROM notes_fts WHERE path = ?`).run(path);
     db.prepare(`DELETE FROM note_tasks WHERE path = ?`).run(path);
+    db.prepare(`DELETE FROM note_links WHERE fromPath = ?`).run(path);
   })();
 }
 
@@ -349,6 +391,34 @@ export function search(db: IndexDb, query: string): string[] {
     .prepare(`SELECT path FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank`)
     .all(toMatchQuery(query)) as { path: string }[];
   return rows.map((row) => row.path);
+}
+
+/** One stored `[[…]]` link: which note it sits in, and exactly how it spells its target. */
+export interface LinkRow {
+  fromPath: string;
+  target: string;
+  alias: string | null;
+}
+
+/**
+ * Every link in the vault. Read whole rather than filtered in SQL, because the question
+ * that asks it — "which notes link to *this* one" — cannot be expressed as a `WHERE` on
+ * `target`: a target is a spelling, not a path, and three separate rules (path, title,
+ * filename stem, all in `link-resolve.ts`) decide which note it names. Resolving in JS
+ * against one prepared index is both correct and, at a personal vault's scale, cheaper
+ * than teaching SQLite the same three rules.
+ */
+export function allLinks(db: IndexDb): LinkRow[] {
+  return db
+    .prepare(`SELECT fromPath, target, alias FROM note_links ORDER BY fromPath`)
+    .all() as LinkRow[];
+}
+
+/** The links one note carries, for the rare case of asking about a single note. */
+export function linksFrom(db: IndexDb, path: string): LinkRow[] {
+  return db
+    .prepare(`SELECT fromPath, target, alias FROM note_links WHERE fromPath = ?`)
+    .all(path) as LinkRow[];
 }
 
 /** One task item for the aggregated Tasks view: `note_tasks`, joined with the note it lives in for the title the row shows beside it. */

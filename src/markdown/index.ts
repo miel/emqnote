@@ -6,7 +6,11 @@ export {
   type TaskItemAt,
 } from "./schema.js";
 export { plainText } from "./plain-text.js";
-export { collectWikiTargets } from "./wiki-targets.js";
+export {
+  collectWikiTargets,
+  collectWikiLinkTargets,
+  type WikiLinkRef,
+} from "./wiki-targets.js";
 export {
   parseNote,
   serializeNote,

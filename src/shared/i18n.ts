@@ -161,6 +161,17 @@ const DUTCH: Record<string, string> = {
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
+  // Interne notitieverwijzingen (B35). "link.notesLinkHere" telt notities die naar deze
+  // verwijzen; de vraag stelt zich alleen als dat er meer dan nul zijn.
+  "link.noteLinksHere": "notitie verwijst hiernaar",
+  "link.notesLinkHere": "notities verwijzen hiernaar",
+  "link.updateThem": "meeverhuizen?",
+  "link.update": "Bijwerken",
+  "link.leave": "Laten staan",
+  "link.whichNote": "Welke notitie bedoel je met",
+  "link.duplicateTitle": "Er staat al een notitie met deze titel in",
+  "link.renameAnyway": "toch hernoemen?",
+
   // Waarom een map niet hernoemd of verwijderd kon worden. De namen komen als code uit
   // het hoofdproces, zodat de melding hier in de juiste taal staat. Dezelfde codes
   // gelden voor allebei — alleen de generieke `folder.failed`/`folder.deleteFailed`
@@ -379,6 +390,17 @@ const ENGLISH: Record<string, string> = {
   "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
+
+  // Internal note links (B35). The count in front of these is the number of notes that
+  // link here, so both halves have to read as one sentence with a number in front.
+  "link.noteLinksHere": "note links to this one",
+  "link.notesLinkHere": "notes link to this one",
+  "link.updateThem": "update them to follow?",
+  "link.update": "Update",
+  "link.leave": "Leave them",
+  "link.whichNote": "Which note is meant by",
+  "link.duplicateTitle": "A note with this title already exists in",
+  "link.renameAnyway": "rename anyway?",
 
   // Why a folder could not be renamed or deleted. The same codes cover both — only the
   // generic `folder.failed`/`folder.deleteFailed` fallback differs per action.

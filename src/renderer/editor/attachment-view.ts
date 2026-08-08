@@ -146,10 +146,10 @@ export function externalImageView(node: PMNode): NodeView {
  *
  * This NodeView applies to *every* `wikiLink`, note-to-note links included, since the
  * node carries nothing that tells the two apart on its own — only whether the target
- * resolves inside `_attachments/` does, and only main can answer that. `IPC.openAttachment`
- * refuses silently on a name it cannot resolve (`resolveAttachment` returning `null`),
- * which is exactly what a note-to-note link needs to do until note navigation exists:
- * nothing, not an error.
+ * resolves inside `_attachments/` does, and only main can answer that. `IPC.openWikiLink`
+ * (B35) is therefore one channel for both: it tries the attachment first and asks the
+ * index about a note with what is left over, and answers which of the two it turned out
+ * to be. Before B35 the note half simply did nothing.
  *
  * B30 adds a first-page thumbnail, purely additively: for a target `isPreviewableTarget`
  * accepts, a hidden `<img>` is appended and the outer span keeps `class="wiki-link"` plus
@@ -269,7 +269,19 @@ export function wikiLinkNodeView(node: PMNode): NodeView {
   span.addEventListener("mousedown", (event) => event.preventDefault());
   span.addEventListener("click", (event) => {
     event.preventDefault();
-    void window.emqnote.openAttachment(target);
+    void window.emqnote.openWikiLink(target).then((outcome) => {
+      // A link that resolves to nothing used to do nothing at all, which is
+      // indistinguishable from a click that never registered — and with note links
+      // (B35) that stopped being a rare case, since a note can be renamed out from under
+      // a link written by hand. Marked on the chip rather than raised as a dialog: the
+      // fact belongs to the link, and it stays true for as long as the note is open.
+      if (outcome === "none") {
+        span.dataset.link = "missing";
+        span.title = `Nothing in this vault is called "${target}".`;
+      } else {
+        delete span.dataset.link;
+      }
+    });
   });
 
   return { dom: span };

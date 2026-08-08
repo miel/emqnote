@@ -777,6 +777,37 @@
   color: var(--muted);
 }
 
+/* The link picker (B35) has no filter box, so it needs a line saying what is being asked
+   — the palette's own input is what carries that job in `MoveDialog`. */
+.palette-title {
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.palette-title strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Two notes answering to one link target are told apart by the folder they live in, so
+   the folder is shown beside the title rather than under it — the row stays one line,
+   like every other row in this list. */
+.palette-list li:has(.palette-secondary) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.palette-secondary {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* ---- ask and settings dialogs ---- */
 
 .ask,

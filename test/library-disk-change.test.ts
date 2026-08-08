@@ -101,6 +101,8 @@ function buildFake(initial: OpenedNote): Fake {
     orphanedAttachments: async () => [],
     attachmentPreview: async () => null,
     trashAttachment: async () => "",
+    linkingNotes: async () => [],
+    onOpenLink: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -135,7 +137,7 @@ function buildFake(initial: OpenedNote): Fake {
     saveAttachment: async () => null,
     fetchRemoteImage: async () => null,
     pickAttachment: async () => null,
-    openAttachment: async () => {},
+    openWikiLink: async () => "none" as const,
     openExternal: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;

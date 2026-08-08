@@ -13,6 +13,7 @@ import {
   type ConflictPair,
   type Facets,
   type FolderNode,
+  type LinkCandidateSummary,
   type NoteSummary,
   type OpenedNote,
   type ScanProgress,
@@ -32,6 +33,7 @@ import { ConflictBanner } from "./ConflictBanner.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
 import { FolderTree } from "./FolderTree.js";
+import { LinkPicker } from "./LinkPicker.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
@@ -59,6 +61,17 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   return sorted;
 }
 
+/**
+ * A move or a rename waiting on the one question it raises: the notes that link to this
+ * one — should they follow it? (B35)
+ *
+ * Held as data rather than as a closure so the dialog stays the same shape as its
+ * siblings, and so the action is still legible from the state alone.
+ */
+type Relinkable =
+  | { kind: "move"; path: string; folder: string }
+  | { kind: "rename"; path: string; title: string };
+
 /** Which small dialog is open, if any. Only ever one at a time. */
 type Dialog =
   | { kind: "newFolder"; parent: string }
@@ -66,6 +79,14 @@ type Dialog =
   | { kind: "delete"; title: string }
   | { kind: "deleteFolder"; path: string; notes: number; folders: number }
   | { kind: "clearTrash"; count: number }
+  /**
+   * The one dialog whose *cancel* still carries the action out. Dismissing it — Escape,
+   * the overlay, "Leave them" — means "move it without touching the links", never "forget
+   * I asked to move it": the move is what was clicked, and a question about a side effect
+   * must not be able to silently undo the thing it is a side effect of.
+   */
+  | { kind: "relink"; count: number; action: Relinkable }
+  | { kind: "duplicateTitle"; title: string; path: string; folder: string }
   | { kind: "problem"; message: string };
 
 export function Library(): React.ReactElement {
@@ -132,6 +153,11 @@ export function Library(): React.ReactElement {
   // whether it will take it are on opposite sides of the window.
   const [dragging, setDragging] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  /** An ambiguous `[[…]]` link waiting for the user to say which note it meant (B35). */
+  const [linkPick, setLinkPick] = useState<{
+    target: string;
+    candidates: LinkCandidateSummary[];
+  } | null>(null);
   /**
    * The title being edited in place, or null when the `<h1>` is showing instead.
    *
@@ -617,6 +643,27 @@ export function Library(): React.ReactElement {
 
   useEffect(() => window.emqnote.onVaultFileChanged(onFileChanged), [onFileChanged]);
 
+  /**
+   * A `[[…]]` link was clicked, here or in the capture window, and names a note (B35).
+   *
+   * One candidate opens straight away; several raise the picker, because
+   * `link-resolve.ts` deliberately refuses to choose between two notes of the same name
+   * in different folders. Main sends the candidates rather than the renderer asking for
+   * them: main is where the target was resolved, and resolving it a second time on this
+   * side would be a second implementation of the same three rules.
+   */
+  useEffect(
+    () =>
+      window.emqnote.library.onOpenLink((event) => {
+        if (event.candidates.length === 1) {
+          void openNote(event.candidates[0]!.path);
+          return;
+        }
+        if (event.candidates.length > 1) setLinkPick(event);
+      }),
+    [openNote],
+  );
+
   // Whatever the bar was showing no longer applies once the reader is empty — cleared
   // here rather than only inside `openNote`, since `open` can also become `null` from
   // `trash()`, `clearTrash()` and `deleteFolderAt()`, none of which call `openNote`.
@@ -727,17 +774,110 @@ export function Library(): React.ReactElement {
   );
   const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
 
-  const rename = async (title: string): Promise<void> => {
-    const current = openRef.current;
-    if (current === null) return;
+  /**
+   * What each dialog says. Lifted out of the JSX when the chain of ternaries there grew
+   * past the point of being readable — every branch is one sentence, and a `switch` says
+   * so where a nine-deep conditional expression did not.
+   */
+  const dialogTitle = (open: Dialog): string => {
+    const plural = (count: number, one: string, many: string): string =>
+      `${count} ${app.t(count === 1 ? one : many)}`;
 
+    switch (open.kind) {
+      case "renameFolder":
+        return `${app.t("ask.renameFolderTitle")} "${open.path}"`;
+      case "newFolder":
+        return `${app.t("ask.newFolderIn")} "${open.parent === "" ? app.t("library.vaultRoot") : open.parent}"`;
+      case "problem":
+        return open.message;
+      case "clearTrash":
+        return `${plural(open.count, "library.note", "library.notes")} — ${app.t("ask.confirmClearTrash")}`;
+      case "deleteFolder": {
+        const contents =
+          open.notes === 0 && open.folders === 0
+            ? ""
+            : ` (${plural(open.notes, "library.note", "library.notes")}, ${plural(open.folders, "library.folder", "library.folders")})`;
+        return `"${open.path}"${contents} — ${app.t("ask.confirmDeleteFolder")}`;
+      }
+      case "relink":
+        return `${plural(open.count, "link.noteLinksHere", "link.notesLinkHere")} — ${app.t("link.updateThem")}`;
+      case "duplicateTitle":
+        return `${app.t("link.duplicateTitle")} "${open.folder === "" ? app.t("library.vaultRoot") : open.folder}" — ${app.t("link.renameAnyway")}`;
+      case "delete":
+        return `"${open.title}" — ${app.t("ask.confirmDelete")}`;
+    }
+  };
+
+  const performRename = async (
+    notePath: string,
+    title: string,
+    rewriteLinks: boolean,
+  ): Promise<void> => {
     await save();
-    const result = await window.emqnote.library.renameNote(current.path, title);
+    const result = await window.emqnote.library.renameNote(notePath, title, rewriteLinks);
     if (result.locked === true) {
       setDialog({ kind: "problem", message: app.t("library.renameLocked") });
       return;
     }
     await openNote(result.path);
+  };
+
+  /**
+   * Carries out a move or a rename, having settled the link question one way or the other.
+   */
+  const runRelinkable = (action: Relinkable, rewriteLinks: boolean): void => {
+    if (action.kind === "move") void performMove(action.path, action.folder, rewriteLinks);
+    else void performRename(action.path, action.title, rewriteLinks);
+  };
+
+  /**
+   * Asks about the links first, if there are any, and otherwise gets straight on with it.
+   *
+   * The question is asked *before* the move rather than after, because that is the only
+   * moment the answer can still be acted on: a link target resolves against where the note
+   * is now, so once the file has moved there is nothing left for main to find. See the
+   * `relink` case in `Dialog` for what dismissing it means.
+   */
+  const askRelinkThen = async (action: Relinkable): Promise<void> => {
+    const linking = await window.emqnote.library.linkingNotes(action.path);
+    if (linking.length === 0) {
+      runRelinkable(action, false);
+      return;
+    }
+    setDialog({ kind: "relink", count: linking.length, action });
+  };
+
+  /**
+   * Renaming the open note, from the click-to-edit title.
+   *
+   * Two notes in one folder *can* share a title — the filename carries a timestamp
+   * prefix, so nothing on disk collides — and that is exactly why it is worth a word: a
+   * bare `[[Title]]` link written afterwards would be ambiguous between them for good,
+   * and the ambiguity would only ever show up as a picker appearing where none is wanted.
+   * Deliberately a warning and not a refusal: the vault is the user's, and two notes
+   * genuinely called "Weekly" in one folder is their business.
+   *
+   * Deliberately not wired into the capture window's commit-time rename either: a modal
+   * appearing on Ctrl+Enter is what the resident architecture exists to avoid.
+   */
+  const rename = async (title: string): Promise<void> => {
+    const current = openRef.current;
+    if (current === null) return;
+
+    const folder = folderOf(current.path);
+    const siblings = await window.emqnote.library.notes({ kind: "folder", path: folder });
+    const clash = siblings.some(
+      (note) =>
+        note.path !== current.path &&
+        note.title.trim().toLowerCase() === title.trim().toLowerCase(),
+    );
+
+    if (clash) {
+      setDialog({ kind: "duplicateTitle", title, path: current.path, folder });
+      return;
+    }
+
+    await askRelinkThen({ kind: "rename", path: current.path, title });
   };
 
   /**
@@ -899,11 +1039,19 @@ export function Library(): React.ReactElement {
    * no longer in the list on the left, which is what moving it means.
    */
   const moveNoteTo = async (notePath: string, target: string): Promise<void> => {
+    await askRelinkThen({ kind: "move", path: notePath, folder: target });
+  };
+
+  const performMove = async (
+    notePath: string,
+    target: string,
+    rewriteLinks: boolean,
+  ): Promise<void> => {
     const current = openRef.current;
     const wasOpen = current !== null && current.path === notePath;
     if (wasOpen && dirty) await save();
 
-    const result = await window.emqnote.library.moveNote(notePath, target);
+    const result = await window.emqnote.library.moveNote(notePath, target, rewriteLinks);
     if (result.locked === true) {
       setDialog({ kind: "problem", message: app.t("library.moveLocked") });
       return;
@@ -1404,23 +1552,7 @@ export function Library(): React.ReactElement {
 
       {dialog !== null && (
         <Ask
-          title={
-            dialog.kind === "renameFolder"
-              ? `${app.t("ask.renameFolderTitle")} "${dialog.path}"`
-              : dialog.kind === "newFolder"
-                ? `${app.t("ask.newFolderIn")} "${dialog.parent === "" ? app.t("library.vaultRoot") : dialog.parent}"`
-                : dialog.kind === "problem"
-                  ? dialog.message
-                  : dialog.kind === "clearTrash"
-                    ? `${dialog.count} ${app.t(dialog.count === 1 ? "library.note" : "library.notes")} — ${app.t("ask.confirmClearTrash")}`
-                    : dialog.kind === "deleteFolder"
-                      ? `"${dialog.path}"${
-                          dialog.notes === 0 && dialog.folders === 0
-                            ? ""
-                            : ` (${dialog.notes} ${app.t(dialog.notes === 1 ? "library.note" : "library.notes")}, ${dialog.folders} ${app.t(dialog.folders === 1 ? "library.folder" : "library.folders")})`
-                        } — ${app.t("ask.confirmDeleteFolder")}`
-                      : `"${dialog.title}" — ${app.t("ask.confirmDelete")}`
-          }
+          title={dialogTitle(dialog)}
           initial={
             dialog.kind === "renameFolder"
               ? dialog.initial
@@ -1433,16 +1565,25 @@ export function Library(): React.ReactElement {
               ? app.t("library.delete")
               : dialog.kind === "clearTrash"
                 ? app.t("library.clearTrash")
-                : app.t("ask.ok")
+                : dialog.kind === "relink"
+                  ? app.t("link.update")
+                  : app.t("ask.ok")
           }
-          cancelLabel={app.t("ask.cancel")}
+          // "Leave them" rather than "Cancel" for the link question, because that button
+          // does not cancel anything — the move or the rename happens either way. See the
+          // `relink` case in `Dialog`.
+          cancelLabel={dialog.kind === "relink" ? app.t("link.leave") : app.t("ask.cancel")}
           danger={
             dialog.kind === "delete" ||
             dialog.kind === "clearTrash" ||
             dialog.kind === "deleteFolder"
           }
           dismissOnly={dialog.kind === "problem"}
-          onCancel={() => setDialog(null)}
+          onCancel={() => {
+            const current = dialog;
+            setDialog(null);
+            if (current.kind === "relink") runRelinkable(current.action, false);
+          }}
           onConfirm={(value) => {
             const current = dialog;
             setDialog(null);
@@ -1453,6 +1594,23 @@ export function Library(): React.ReactElement {
               void window.emqnote.library.createFolder(current.parent, value);
             }
             if (current.kind === "renameFolder") void renameFolderAt(current.path, value);
+            if (current.kind === "relink") runRelinkable(current.action, true);
+            if (current.kind === "duplicateTitle") {
+              void askRelinkThen({ kind: "rename", path: current.path, title: current.title });
+            }
+          }}
+        />
+      )}
+
+      {linkPick !== null && (
+        <LinkPicker
+          target={linkPick.target}
+          candidates={linkPick.candidates}
+          t={app.t}
+          onCancel={() => setLinkPick(null)}
+          onOpen={(path) => {
+            setLinkPick(null);
+            void openNote(path);
           }}
         />
       )}

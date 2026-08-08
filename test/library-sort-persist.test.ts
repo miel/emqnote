@@ -61,6 +61,8 @@ function buildFake(): Fake {
     orphanedAttachments: async () => [],
     attachmentPreview: async () => null,
     trashAttachment: async () => "",
+    linkingNotes: async () => [],
+    onOpenLink: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -99,7 +101,7 @@ function buildFake(): Fake {
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},
     pickAttachment: async () => null,
-    openAttachment: async () => {},
+    openWikiLink: async () => "none" as const,
     openExternal: async () => {},
     library,
   };

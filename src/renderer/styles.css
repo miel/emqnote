@@ -529,6 +529,18 @@ body {
   margin-right: 2px;
 }
 
+/* B35: a note link whose target no longer names anything. Set on the chip by the click
+   handler, not at render time — main is the only side that can answer whether a target
+   resolves, and asking it for every chip on every `setDoc` would put a vault-wide
+   resolution on the path that draws a note. So the chip looks ordinary until it is
+   clicked, and then says why nothing happened. Dashed rather than coloured red: a link
+   to a note that has not been written yet is a perfectly normal thing to have in a note,
+   not an error to be told off about. */
+.editor-content .wiki-link[data-link="missing"] {
+  border-style: dashed;
+  color: var(--muted);
+}
+
 /* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
    target is a browser-renderable image. Capped rather than left at native size: a
    full-resolution screenshot pasted mid-paragraph should not be able to push the rest

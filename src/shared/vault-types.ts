@@ -196,6 +196,25 @@ export interface TaskItem {
   text: string;
 }
 
+/**
+ * One note that links to another (B35) — what the confirmation before a move or a rename
+ * counts, and what the renderer names in it. The raw target spellings stay in main: the
+ * rewrite resolves them again for itself, so sending them across would only invite a
+ * caller to hand back a list main did not compute.
+ */
+export interface LinkingNoteSummary {
+  path: string;
+  title: string;
+}
+
+/** One note a `[[…]]` target might mean, for the picker that resolves an ambiguous link. */
+export interface LinkCandidateSummary {
+  path: string;
+  title: string;
+  /** The folder it lives in, so two notes of the same name are told apart by where they are. */
+  folder: string;
+}
+
 /** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */
 export interface ConflictPair {
   original: string;

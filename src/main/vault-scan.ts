@@ -8,7 +8,21 @@ import type {
   TaskItem,
 } from "../shared/vault-types.js";
 import { findConflictCopies, type ConflictPair } from "./conflicts.js";
-import { allNotes, getNote, search, tasksIn, type IndexDb, type NoteMeta } from "./index-db.js";
+import {
+  allLinks,
+  allNotes,
+  getNote,
+  search,
+  tasksIn,
+  type IndexDb,
+  type NoteMeta,
+} from "./index-db.js";
+import {
+  buildLinkIndex,
+  resolveInIndex,
+  resolveWikiLinkTarget,
+  type LinkResolution,
+} from "./link-resolve.js";
 import { fullScan, type ScanResult } from "./index-scan.js";
 import type { ParsedQuery } from "./search-query.js";
 import { readNotesIn } from "./vault-io.js";
@@ -150,6 +164,86 @@ export async function conflicts(vault: string, db: IndexDb): Promise<ConflictPai
   if (!available) return [];
 
   return findConflictCopies(allNotes(db).map((note) => note.path));
+}
+
+/**
+ * Which note a `[[…]]` target names — B35, the question `IPC.openWikiLink` asks after
+ * `resolveAttachment` has already said the target is not a stored file.
+ *
+ * Scanned first, like every other cross-vault question here: a link clicked in a note the
+ * user opened from a folder listing can point anywhere, and the folder listing itself
+ * never waits on a scan, so this is the first moment the index is guaranteed to be needed.
+ */
+export async function resolveNoteLink(
+  vault: string,
+  db: IndexDb,
+  target: string,
+): Promise<LinkResolution> {
+  await ensureScanned(vault, db);
+  if (!available) return { kind: "none" };
+
+  return resolveWikiLinkTarget(
+    target,
+    allNotes(db).map((note) => ({ path: note.path, title: note.title })),
+  );
+}
+
+/** One note that links to another, and every spelling it uses to do so. */
+export interface LinkingNote {
+  path: string;
+  title: string;
+  /** The raw targets in that note which resolve to the note in question — what a rewrite has to replace. */
+  targets: string[];
+}
+
+/**
+ * Every note that links to `notePath`, with the exact target spellings it uses.
+ *
+ * Both halves are needed by the two callers together: the count is what the confirmation
+ * before a move or a rename names ("3 notes link to this note"), and the spellings are
+ * what `rewriteWikiLinks` matches on — a note may link to the same target by path in one
+ * paragraph and by bare title in another, and only replacing the ones that actually
+ * resolve here keeps a rewrite from touching a link that happens to share a word.
+ *
+ * The whole link table is resolved against one prepared index rather than each link being
+ * resolved on its own: a move asks this question once per move, but it asks it about
+ * every link in the vault, and building the three lookup tables per link would be
+ * quadratic for no gain.
+ */
+export async function linkingNotes(
+  vault: string,
+  db: IndexDb,
+  notePath: string,
+): Promise<LinkingNote[]> {
+  await ensureScanned(vault, db);
+  if (!available) return [];
+
+  const notes = allNotes(db);
+  const index = buildLinkIndex(notes.map((note) => ({ path: note.path, title: note.title })));
+  const titles = new Map(notes.map((note) => [note.path, note.title]));
+
+  const found = new Map<string, Set<string>>();
+  for (const link of allLinks(db)) {
+    // A note linking to itself is not something a rename has to repair: the link is
+    // already inside the file being rewritten, and `rewriteWikiLinks` would be writing
+    // over a move it has itself just performed.
+    if (link.fromPath === notePath) continue;
+
+    const resolved = resolveInIndex(index, link.target);
+    if (resolved.kind !== "unique" || resolved.path !== notePath) continue;
+
+    const targets = found.get(link.fromPath);
+    if (targets === undefined) found.set(link.fromPath, new Set([link.target]));
+    else targets.add(link.target);
+  }
+
+  return [...found.entries()]
+    .map(([path, targets]) => ({
+      path,
+      title: titles.get(path) ?? path,
+      targets: [...targets],
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function facets(vault: string, db: IndexDb, excludePath?: string): Promise<Facets> {

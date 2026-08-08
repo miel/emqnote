@@ -137,6 +137,8 @@ function buildFake(): CaptureApi {
     orphanedAttachments: async () => [],
     attachmentPreview: async () => null,
     trashAttachment: async () => "",
+    linkingNotes: async () => [],
+    onOpenLink: () => () => {},
     tasks: async () => [taskItem(0, "Een"), taskItem(1, "Twee")],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -173,7 +175,7 @@ function buildFake(): CaptureApi {
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},
     pickAttachment: async () => null,
-    openAttachment: async () => {},
+    openWikiLink: async () => "none" as const,
     openExternal: async () => {},
     library,
   };

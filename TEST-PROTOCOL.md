@@ -147,37 +147,48 @@ all anyone knows.
 | 4.4a | Delete the `![[…]]` line from a note, save, then open *Orphaned attachments* in the tree footer | That attachment is listed, with a thumbnail |
 | 4.4b | Trash it from that screen | Gone from `_attachments/`, present in `_trash/` |
 
-### 4.5 PDF/Office first-page thumbnail (B30) — NEVER VERIFIED
+### 4.5 PDF first-page thumbnail (B36, replacing B30's mechanism)
 
-This is new with B30 and has never been seen working: `nativeImage.createThumbnailFromPath`
-asks the OS's own thumbnail provider (Quick Look on macOS, `IThumbnailProvider` on
-Windows), and neither this Linux sandbox nor CI has one — both only ever exercise the
-fallback path (the plain chip, unchanged), which is what the automated tests actually
-cover. Whether a real first page is drawn on either shipping platform is unproven.
+**Read this heading's history before running the steps.** Until 7 August 2026 the
+thumbnail came from the OS's own provider (Quick Look on macOS, `IThumbnailProvider` on
+Windows), which had never once been seen producing anything on the user's hardware. B36
+replaced that with pdf.js rendering in a hidden window — the same Chromium the packaged
+app already ships, so **this has now been watched working under `Xvfb` on Linux**, which
+was impossible before. What remains unproven on macOS and Windows is only whether that
+same rendering behaves identically there; it is no longer a question about the OS having a
+provider at all.
 
-A report of "PDF preview is not showing" on a packaged macOS build against a business
-OneDrive led to one fix on 7 August 2026: `ensureThumbnail` (`thumbnails.ts`) had a
-`darwin`-only guard that treated a file reporting `blocks === 0` as a not-yet-hydrated
-OneDrive placeholder and skipped it, permanently for the session, before `nativeImage`
-was ever asked. A business OneDrive's File Provider has been observed reporting
-`blocks === 0` for files that are fully hydrated and readable, which matches the report
-exactly, so the guard was removed rather than narrowed — **this is a fix for the
-likeliest cause, not a confirmation that thumbnails now work**; nobody has watched a
-real first page get drawn on macOS or Windows either before or after it. Use step 4.5h
-below, on the actual hardware and the actual vault the report came from, to settle it —
-it isolates the OS/`nativeImage` question from everything else in the UI, and it no
-longer has to fight `failedThisSession` to get a fresh answer.
+Two consequences to check for rather than report as bugs: **`.docx`, `.xlsx` and `.pptx` no
+longer get an inline preview** (they stay attachable and open normally — see 4.5b), and a
+PDF that genuinely cannot be rendered now shows a chip with a **⚠ marker and a reason in
+its tooltip**, where before it was indistinguishable from a file with nothing to preview.
+
+The report of "PDF preview is not showing" on a packaged macOS build against a business
+OneDrive was chased twice. The first attempt, on 7 August 2026, removed a `darwin`-only
+guard in `ensureThumbnail` that treated a file reporting `blocks === 0` as an
+un-hydrated OneDrive placeholder and skipped it, permanently for the session, before the
+provider was ever asked — a *suspected* cause, never actually observed, and it should stay
+labelled that way. The real one turned up with B36 and had nothing to do with either the
+provider or OneDrive: `emqnote-thumb` is a `standard:` scheme, so Chromium normalises its
+URLs and appends a trailing slash, and the handler was asking whether `offerte.pdf/` was
+previewable. Both fixes are in; the second is the one that made a thumbnail appear.
+
+Step 4.5h still isolates the rendering from everything else in the UI, and is still the
+right first move on real hardware — it now reports a pdf.js failure with its own error
+rather than an OS provider's silence, and it deliberately bypasses `failedThisSession`, so
+a retried probe gives a fresh answer instead of repeating this session's stale one.
 
 | # | Step | Expected |
 |---|---|---|
 | 4.5a | Insert a `.pdf` (drag, paste, or the file toolbar button — 📎, `Mod-Shift-A`) into a note in the library reader | A small thumbnail of the PDF's first page appears beside the filename chip, not just the label |
-| 4.5b | Insert a `.docx`, `.xlsx` or `.pptx` the same way | Same — a thumbnail of the document, from the same code path |
+| 4.5b | Insert a `.docx`, `.xlsx` or `.pptx` the same way | A plain filename chip, **no thumbnail** — that is B36's deliberate narrowing, not a regression. Clicking it must still open the file in the system viewer |
 | 4.5c | Insert a `.txt` or any other non-previewable file | Plain filename chip only, exactly as before B30 — no broken-image icon, no empty gap where a thumbnail would go |
+| 4.5c2 | Insert a deliberately corrupt or password-protected PDF (truncate one with a text editor, or use one you cannot open) | A chip with a **⚠** in front of it, and a tooltip naming the reason on hover. It must look different from 4.5c's plain chip — telling those two apart is the whole point of B36's 422 |
 | 4.5d | Reopen the note (close and open it again, or switch away and back) | The thumbnail is still there, without a visible reload flicker — it is being served from the on-disk cache (`<userData>/thumbnails`), not regenerated |
 | 4.5e | Click directly on the thumbnail image, not just the filename text | Same as clicking the chip always did: the file opens in the system viewer |
 | 4.5f | If no thumbnail ever appears: open devtools for that window and check the Network tab (or console) for the `emqnote-thumb://` request | A 404 there on a platform that should have a provider is the bug to report, with the OS version. On Windows specifically, check whether Explorer itself shows a thumbnail for that same PDF — if Explorer also cannot, no provider is registered on that machine and this is expected, not a bug |
 | 4.5g | Do 4.5a in the **capture window** | Same as §4.2 — this depends on §4.2's own inline-attachment rendering working first |
-| 4.5h | Quit the packaged app (or leave it running — the probe bypasses the single-instance lock), then run `emqnote --thumbnail-probe="<exact _attachments/ filename>"` (add `--vault=<path>` if it is not the configured one) against the actual PDF from the original report | Prints which of the four outcomes fired (not previewable / not resolved / `nativeImage` returned an empty image / written to `<path>`) and exits with a status code. A `0` naming a path means `nativeImage` really did produce a PNG on this machine — open that path to look at it. A "returned an empty image" result on macOS is the one worth comparing against Quick Look on the same file (Space in Finder): if Quick Look also cannot preview it, this is an OS/file limitation, not an emqnote bug |
+| 4.5h | Leave the app running (the probe bypasses the single-instance lock) and run `emqnote --thumbnail-probe="<exact _attachments/ filename>"` (add `--vault=<path>` if it is not the configured one) against the actual PDF from the original report | Prints which outcome fired — not previewable / not resolved / the render failed, with pdf.js's own error / written to `<path>` — and exits with a status code. A `0` naming a path means the first page really was drawn on this machine; open that PNG and look at it. A render failure now comes with a reason worth quoting in a report, which is the thing the OS-provider version could never give |
 
 ---
 
@@ -410,6 +421,33 @@ capture window.
 
 ---
 
+## 11. Internal note links (B35)
+
+Everything here was driven end to end under `Xvfb` on 8 August 2026 — the link opening its
+note, the picker for an ambiguous one, both confirmations, and the rewrites landing on
+disk — so this section is not a "never verified" one. What it covers is the part a person
+has to judge: whether the *questions* read the way they should at the moment they appear,
+and the one route no harness can reach (11f).
+
+Set up a small vault first: a note `Spelregels` in one folder, a second note also titled
+`Spelregels` in a different folder, and two notes elsewhere that link to the first one —
+one written `[[<folder>/<filename without extension>|de spelregels]]`, the other written
+as a bare `[[Spelregels]]`.
+
+| # | Step | Expected |
+|---|---|---|
+| 11a | Click the path-form link | The note it names opens in the reader. The folder tree does not jump, exactly as a search result opening does not |
+| 11b | Click the bare `[[Spelregels]]` | A picker appears listing **both** notes, each with the folder it lives in beside it. Arrow keys move, Enter opens, Escape closes without opening anything |
+| 11c | Type `[[Iets dat niet bestaat]]` into a note and click it | Nothing opens; the chip turns dashed and muted, and hovering says nothing in the vault is called that. This is deliberately not an error dialog — a link to a note you have not written yet is a normal thing to have |
+| 11d | Move the linked-to note to another folder (drag it, or ⋯ → Move) | Before anything moves, a question: "2 notes link to this one — update them to follow?" with **Update** and **Leave them**. Choose Update: open both referencing notes and check the target now names the new folder, while the words on screen are unchanged |
+| 11e | Repeat 11d and press Escape instead | **The note still moves** — only the links are left alone. This is the one dialog whose dismissal is not a cancel, and it is worth confirming it does not read as one |
+| 11f | Open a note in the **capture window** that carries a `[[…]]` note link, and click it — NEVER VERIFIED | The library window comes to the front with that note open. There is no capture-renderer harness in the suite, so this route has only ever been reasoned about, never watched |
+| 11g | Rename a note that others link to (click its title in the reader) | The same question as 11d, and the same two answers. Check a rewritten file's bytes: the alias must be untouched, and a link that had *no* alias must have gained one spelling out what it used to display |
+| 11h | Rename a note to a title another note in the **same folder** already has | A warning first — "A note with this title already exists in …" — then, if you confirm, the link question if any links exist. Cancelling the warning must leave the note's title alone |
+| 11i | Open an older vault whose index predates this feature | Everything above still works on the first run: the schema version bump forces a rebuild, and the only visible sign should be the scan progress bar at the top of the library |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -418,5 +456,7 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §4.5, §6.3, §9.2 or §10 fails, that is expected-ish rather than
-alarming: those five are why this document exists.
+If something in §4.2, §6.3, §9.2, §10 or §11f fails, that is expected-ish rather than
+alarming: those five have never been watched working, and they are why this document
+exists. §4.5 is no longer one of them — since B36 the rendering itself has been seen
+working, on the same Chromium the packaged app ships.

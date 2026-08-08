@@ -31,8 +31,8 @@ async function flushAsync(): Promise<void> {
 }
 
 beforeEach(() => {
-  (window as unknown as { emqnote: { openAttachment: ReturnType<typeof vi.fn> } }).emqnote = {
-    openAttachment: vi.fn(),
+  (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } }).emqnote = {
+    openWikiLink: vi.fn().mockResolvedValue("attachment"),
   };
   // A safe default so a test that does not care about the network path never makes a
   // real request in jsdom — overridden per test where the response actually matters.
@@ -192,8 +192,8 @@ describe("wikiLinkNodeView", () => {
     expect(span.textContent).toBe("Some Note");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      (window as unknown as { emqnote: { openAttachment: ReturnType<typeof vi.fn> } })
-        .emqnote.openAttachment,
+      (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
+        .emqnote.openWikiLink,
     ).not.toHaveBeenCalled();
   });
 
@@ -223,7 +223,7 @@ describe("wikiLinkNodeView", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("still calls openAttachment on click — the regression guard for the added child element", () => {
+  it("still calls openWikiLink on click — the regression guard for the added child element", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
 
     const { dom } = wikiLinkNodeView(fakeNode("2026-07-25-1055-contract.pdf"));
@@ -239,20 +239,20 @@ describe("wikiLinkNodeView", () => {
     img!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(
-      (window as unknown as { emqnote: { openAttachment: ReturnType<typeof vi.fn> } })
-        .emqnote.openAttachment,
+      (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
+        .emqnote.openWikiLink,
     ).toHaveBeenCalledWith("2026-07-25-1055-contract.pdf");
   });
 
-  it("still calls openAttachment on click for a plain non-previewable target too", () => {
+  it("still calls openWikiLink on click for a plain non-previewable target too", () => {
     const { dom } = wikiLinkNodeView(fakeNode("Some Note"));
     const span = dom as HTMLElement;
 
     span.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(
-      (window as unknown as { emqnote: { openAttachment: ReturnType<typeof vi.fn> } })
-        .emqnote.openAttachment,
+      (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
+        .emqnote.openWikiLink,
     ).toHaveBeenCalledWith("Some Note");
   });
 });

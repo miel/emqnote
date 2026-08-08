@@ -742,6 +742,10 @@ ze staat alleen niet meer in de lijst links, en dat ís wat verplaatsen betekent
 
 ## B30 — De PDF-miniatuur komt van het besturingssysteem, niet uit een gebundelde bibliotheek
 
+> **Herroepen door B36** op 7 augustus 2026: de app tekent de eerste pagina nu zelf met
+> pdf.js. Wat hieronder staat blijft gelden voor de vorm van de miniatuur, de cache en de
+> terugval op de labelchip — alleen de bron van de afbeelding is veranderd.
+
 **Genomen** op 7 augustus 2026. Een bijlage van het formaat `.pdf`, `.docx`, `.xlsx` of
 `.pptx` krijgt een miniatuur van zijn eerste pagina naast de bestaande labelchip, via
 `nativeImage.createThumbnailFromPath` — dezelfde aanroep die op macOS Quick Look en op
@@ -937,6 +941,112 @@ wordt, blijft het bestaande pad volgen — dat handelt dat geval al goed af.
 
 ---
 
+## B35 — Een notitieverwijzing bewaart het pad, toont de alias, en verhuist mee
+
+**Genomen** op 8 augustus 2026. `[[Notitie]]` stond al in het dialect en rondde al correct
+door de serializer, maar er gebeurde niets als je erop klikte: `wikiLinkNodeView` riep
+`openAttachment` aan, en een notitie ligt niet in `_attachments/`, dus het antwoord was
+stilzwijgend niets. Drie beslissingen samen maken er een werkende verwijzing van.
+
+**Het doel is een pad, de alias is wat je leest.** De app schrijft
+`[[01 Projecten/2026-08-05 1030 Spelregels|Spelregels]]`. Alleen een titel opslaan was het
+alternatief en is afgewezen om precies de reden die de gebruiker zelf noemde: een vault mág
+twee notities met dezelfde titel bevatten, zolang ze niet in dezelfde map staan — en dan is
+de titel geen adres meer. Het pad wél. Andersom is een pad niets om naar te kijken midden in
+een zin, dus staat de alias ernaast; hij is wat het scherm toont.
+
+**Een kale `[[Titel]]` blijft geldig.** Zo schrijft Obsidian het en zo typt een mens het, en
+B7 verbiedt een vault die alleen door deze app te lezen is. `link-resolve.ts` probeert
+daarom drie regels op volgorde: pad (hoofdlettergevoelig — machinaal geschreven), titel en
+tot slot bestandsnaam (allebei hoofdletterongevoelig — met de hand getypt). **Een regel die
+raak is, valt niet door naar de volgende, ook niet als hij meerdere notities raakt.** Dat
+onderscheid tussen "meerdig" en "niets gevonden" is het hele punt: bij twee notities die
+werkelijk `Spelregels` heten, zou doorvallen naar de bestandsnaamregel een *derde* notitie
+kiezen. Meerduidigheid is een vraag aan de gebruiker (`LinkPicker.tsx`), niet iets om
+harder proberend op te lossen.
+
+**Verhuist de notitie, dan verhuizen de verwijzingen mee — na een vraag.** `note_links` in
+de index (`SCHEMA_VERSION` 1 → 2, met het tabellen-droppen dat B26 beschrijft) weet welke
+notitie waarheen wijst; `linkingNotes` lost die hele tabel op tegen één opgebouwde index en
+houdt over wat werkelijk naar déze notitie wijst. Verplaatsen of hernoemen vraagt dan "2
+notities verwijzen hiernaar — meeverhuizen?" en `rewriteWikiLinks` doet het via
+`parseNote` → muteren → `serializeNote` → `writeAtomic`, nooit via een tekstvervanging
+(B6). Twee dingen daaraan zijn met opzet zo en zijn makkelijk per ongeluk "recht te
+zetten":
+
+- **De vraag wordt vóór de verhuizing gesteld, en wegklikken voert de verhuizing alsnog
+  uit.** Een doel lost op tegen waar de notitie nú staat, dus ná `moveNote` valt er niets
+  meer te vinden. En het verplaatsen is wat de gebruiker aanklikte: een vraag over een
+  neveneffect mag niet stilzwijgend ongedaan maken waar hij een neveneffect van is.
+- **Een verwijzing zonder alias krijgt er een, met zijn oude doel erin.** `[[Spelregels]]`
+  toont het woord "Spelregels"; herschreven naar een pad zonder alias zou een notitie waar
+  je niet eens naar kijkt ineens een pad op het scherm zetten. Het oude doel is precies wat
+  er stond, dus dat wordt de alias.
+
+Een verwijzing die nergens naar wijst is geen fout: een notitie die nog geschreven moet
+worden is een normaal ding om naar te verwijzen. De chip blijft gewoon staan en zegt bij een
+klik wat er aan de hand is (`data-link="missing"`, gestippeld), in plaats van een dialoog op
+te werpen.
+
+Dubbele titels *binnen* één map leveren een waarschuwing bij het hernoemen in de
+bibliotheek — geen weigering, want de vault is van de gebruiker — en met opzet niet bij het
+opslaan vanuit het opnamevenster: een modaal venster op Ctrl+Enter is precies waar de
+residente opzet voor bestaat.
+
+---
+
+## B36 — De PDF-miniatuur wordt door de app zelf getekend, niet door het besturingssysteem
+
+**Genomen** op 7 augustus 2026, en het herroept de kern van B30. Gemeld als "de
+PDF-preview werkt niet", op een verpakte macOS-build tegen een zakelijke OneDrive.
+`nativeImage.createThumbnailFromPath` — B30's hele mechanisme — is op de hardware van de
+gebruiker nooit iets zien opleveren, en elke mislukking op dat pad valt stil terug op de
+labelchip, dus er was geen verschil tussen "geen provider", "kapotte PDF" en "dit formaat
+heeft geen preview".
+
+pdf.js in een verborgen `BrowserWindow` vervangt het. Dat venster tekent in zijn *eigen*
+rendererproces, dus het budget van 80 ms op de hoofdthread blijft ongemoeid zonder dat er een
+workerthread aan te pas komt, en `pdfjs-dist` blijft een `devDependency` die electron-vite
+gewoon bundelt — een native canvas-binding (`@napi-rs/canvas`) zou een `dependencies`-regel,
+een `check:bundle`-uitzondering en verpakkingsrisico op twee platforms hebben gekost.
+`contextIsolation` en de sandbox blijven aan op die pagina: een PDF is niet-vertrouwde
+invoer, dezelfde klasse waar de plakketen al voorzichtig mee is.
+
+Twee gevolgen zijn met opzet zichtbaar. **Alleen `.pdf` krijgt nog een inline preview** —
+`.docx`, `.xlsx` en `.pptx` blijven bijlagen die je kunt invoegen en openen, maar krijgen
+een gewone chip; die formaten renderen zou een tweede, veel grotere afhankelijkheid
+betekenen voor iets wat niemand gevraagd heeft. En **een echte mislukking ziet er anders uit
+dan niets-om-te-tonen**: de protocolhandler antwoordt 422 waar hij eerst 404 gaf, en de chip
+krijgt een markering met de reden in zijn `title`. Een kapotte PDF zag er tot dan toe
+identiek uit als een `.txt`.
+
+Onderweg kwam de werkelijke oorzaak van "de preview werkt niet" boven, en die zat niet in de
+provider: `emqnote-thumb` is een `standard: true`-schema, dus Chromium normaliseert de URL
+en plakt er een schuine streep achter — `isPreviewable` zag `.pdf/` en gaf 404. Zichtbaar
+noch in een test, noch in de probe, tot beide de echte URL gingen gebruiken
+(`attachmentNameFromUrl`).
+
+---
+
+## B37 — Een notitiebestand mag `.md` of `.markdown` heten, en houdt de extensie die het had
+
+**Genomen** op 8 augustus 2026. De vault is een map op een OneDrive, en er komen bestanden
+in die deze app niet geschreven heeft. Een notitie die de app weigert te tonen is onzichtbaar
+in het enige venster op die map — dus `.markdown` wordt gelezen als `.md`.
+
+`note-files.ts` is de ene plek die zegt wat een notitiebestand is; elke scan, watcher,
+lijst, conflictcontrole en wezenloze-bijlagencontrole gaat er doorheen, in plaats van de
+twaalf losse `endsWith(".md")`-controles die er eerst stonden. Nieuwe notities schrijft de
+app nog steeds als `.md` — `noteFileName` is bewust niet aangeraakt.
+
+**Een bestand houdt de extensie waarmee het binnenkwam**, door hernoemen, dupliceren en het
+uniek maken van een naam heen. Iemands `.markdown` stilletjes in een `.md` veranderen is
+niet aan de app. `conflicts.ts` paart bovendien binnen één extensie: een `.md` en een
+`.markdown` met dezelfde naam zijn twee bestanden, en beweren dat het één notitie is die op
+twee machines veranderde, zou een knop opleveren waarmee je er één van weggooit.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -947,6 +1057,6 @@ wordt, blijft het bestaande pad volgen — dat handelt dat geval al goed af.
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
 | Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
-| Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op? | Nu — de terugval (geen provider) is op 7 augustus 2026 onder `Xvfb` bevestigd: nette labelchip, geen kapotte afbeelding; het gelukkige pad zelf blijft ongezien tot er echte macOS/Windows-hardware is; zie `TEST-PROTOCOL.md`, B30 |
+| ~~Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op?~~ | Vervallen — B36 stelt die vraag niet meer: pdf.js tekent de pagina, en dat is op 7 augustus 2026 onder `Xvfb` werkend gezien, op precies dezelfde Chromium die de verpakte app meelevert. Wat een mens nog moet nakijken staat in `TEST-PROTOCOL.md` §4.5 |
 | Verschijnt de eigen, knopvrije melding van het opnamevenster echt bij een externe wijziging? | Nu — het pad in de bibliotheek is op 7 augustus 2026 uitputtend bevestigd onder `Xvfb` (schoon/vuil/verwijderd, en geen valse balk bij eigen schrijfacties); het opnamevenster zelf nog niet, zie `TEST-PROTOCOL.md`, B31 |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |

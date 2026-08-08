@@ -93,7 +93,7 @@ export function isOpenableUrl(url: string): boolean {
  * SVG is refused here even though the file picker (`pickAttachment`) still lets the
  * user insert an `.svg` they chose themselves, and that asymmetry is deliberate: the
  * user picked that file, but nobody picked what a pasted page's server decides to
- * return. `openAttachment` hands a stored attachment to the OS default viewer — a
+ * return. `openWikiLink` hands a stored attachment to the OS default viewer — a
  * browser, for an SVG — where script inside the file runs. Do not "fix" this by
  * adding `image/svg+xml` to the list.
  */

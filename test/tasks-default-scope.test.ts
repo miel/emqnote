@@ -60,6 +60,8 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     attachmentPreview: async () => null,
     trashAttachment: async () => "",
     tasks,
+    linkingNotes: async () => [],
+    onOpenLink: () => () => {},
     toggleTask: async () => ({ toggled: true }),
   };
 
@@ -95,7 +97,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},
     pickAttachment: async () => null,
-    openAttachment: async () => {},
+    openWikiLink: async () => "none" as const,
     openExternal: async () => {},
     library,
   };

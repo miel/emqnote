@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { Fragment, Slice } from "prosemirror-model";
+import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
 import {
   cleanTagInput,
   extractTags,
@@ -383,6 +383,96 @@ export function toggleTask(
 
   if (!sameApartFromModified(existing, contents)) writeAtomic(file, contents);
   return true;
+}
+
+/** One note to rewrite, and the target spellings in it that name the note that moved. */
+export interface LinkRewrite {
+  path: string;
+  targets: string[];
+}
+
+/**
+ * Points every `[[…]]` link named by `references` at `newTarget` — B35's half of "a link
+ * survives the note it points at being moved or renamed".
+ *
+ * Through `parseNote` → mutate → `serializeNote` → `writeAtomic`, never a text
+ * substitution on the file. B6 is the reason, and it is not ceremonial here: a target can
+ * legitimately contain the characters a regex would have to be careful about, `[[` can
+ * appear inside a code fence where it is not a link at all, and the serializer is the one
+ * thing that knows how a link is spelled. `writeAtomic` already calls `rememberOwnWrite`,
+ * so the watcher recognises these as this app's own writes (B31) and the library does not
+ * flash a "changed on disk" bar for every note it just repaired.
+ *
+ * **A link with no alias gets one, spelled with its old target.** `[[Rules]]` displays the
+ * word "Rules"; rewritten to `[[01 Projecten/2026-08-05 1030 Rules]]` it would display a
+ * path — the note the user is not even looking at would silently change on screen. The old
+ * target is exactly what was being displayed, so promoting it to the alias is what keeps
+ * the sentence reading the way it was written.
+ *
+ * Replacements run from the last position backward so that each one leaves the positions
+ * of the ones still to come untouched — the same reason `toggleTask` can get away with a
+ * single `doc.replace` and this cannot.
+ *
+ * Returns how many files were actually written. A note in `skip` (in practice the one path
+ * the capture window has claimed) is counted as skipped, not rewritten: its session holds
+ * a document in memory that the next debounced save will write over anything landing here.
+ */
+export function rewriteWikiLinks(
+  vault: string,
+  references: LinkRewrite[],
+  newTarget: string,
+  skip?: string | null,
+): number {
+  let written = 0;
+
+  for (const reference of references) {
+    if (skip !== undefined && skip !== null && reference.path === skip) continue;
+
+    const file = join(vault, reference.path);
+    if (!existsSync(file)) continue;
+
+    const wanted = new Set(reference.targets);
+    const existing = readFileSync(file, "utf8");
+    const note = parseNote(existing);
+
+    const hits: { pos: number; node: PMNode }[] = [];
+    note.doc.descendants((node, pos) => {
+      if (node.type.name === "wikiLink" && wanted.has(node.attrs.target as string)) {
+        hits.push({ pos, node });
+      }
+      return true;
+    });
+    if (hits.length === 0) continue;
+
+    let doc = note.doc;
+    for (const hit of hits.reverse()) {
+      const replacement = hit.node.type.create(
+        {
+          target: newTarget,
+          alias: (hit.node.attrs.alias as string | null) ?? (hit.node.attrs.target as string),
+        },
+        hit.node.content,
+        hit.node.marks,
+      );
+      doc = doc.replace(
+        hit.pos,
+        hit.pos + hit.node.nodeSize,
+        new Slice(Fragment.from(replacement), 0, 0),
+      );
+    }
+
+    const contents = serializeNote({
+      frontmatter: { ...note.frontmatter, modified: isoWithOffset(new Date()) },
+      doc,
+    });
+
+    if (!sameApartFromModified(existing, contents)) {
+      writeAtomic(file, contents);
+      written += 1;
+    }
+  }
+
+  return written;
 }
 
 /** Moves a note to another folder, without ever overwriting what is already there. */

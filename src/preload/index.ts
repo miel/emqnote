@@ -8,6 +8,7 @@ import {
 import type {
   ConflictChoice,
   ConflictPair,
+  LinkCandidateSummary,
   OpenedNote,
   SaveNoteRequest,
   ScanProgress,
@@ -57,7 +58,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   saveAttachment: (bytes: ArrayBuffer, originalName: string) =>
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
   pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
-  openAttachment: (name: string) => ipcRenderer.invoke(IPC.openAttachment, name),
+  openWikiLink: (target: string) => ipcRenderer.invoke(IPC.openWikiLink, target),
   openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
 
@@ -72,10 +73,18 @@ contextBridge.exposeInMainWorld("emqnote", {
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
     saveNote: (request: SaveNoteRequest) => ipcRenderer.invoke(IPC.librarySaveNote, request),
-    moveNote: (path: string, folder: string) =>
-      ipcRenderer.invoke(IPC.libraryMoveNote, path, folder),
-    renameNote: (path: string, title: string) =>
-      ipcRenderer.invoke(IPC.libraryRenameNote, path, title),
+    moveNote: (path: string, folder: string, rewriteLinks?: boolean) =>
+      ipcRenderer.invoke(IPC.libraryMoveNote, path, folder, rewriteLinks),
+    renameNote: (path: string, title: string, rewriteLinks?: boolean) =>
+      ipcRenderer.invoke(IPC.libraryRenameNote, path, title, rewriteLinks),
+    linkingNotes: (path: string) => ipcRenderer.invoke(IPC.libraryLinkingNotes, path),
+    onOpenLink: (
+      handler: (event: { target: string; candidates: LinkCandidateSummary[] }) => void,
+    ) =>
+      subscribe<{ target: string; candidates: LinkCandidateSummary[] }>(
+        IPC.libraryOpenLink,
+        handler,
+      ),
     duplicateNote: (path: string) => ipcRenderer.invoke(IPC.libraryDuplicateNote, path),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
     emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),

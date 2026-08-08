@@ -130,6 +130,7 @@ describe("the full scan", () => {
       hash: "not-the-real-hash",
       body: "",
       tasks: [],
+      links: [],
     });
 
     await fullScan(vault, db);

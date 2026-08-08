@@ -139,7 +139,7 @@ describe("extensionForContentType", () => {
   });
 
   it("refuses SVG on this path, deliberately, though the picker still allows one", () => {
-    // `openAttachment` hands a stored file to the OS default viewer, where script
+    // `openWikiLink` hands a stored file to the OS default viewer, where script
     // inside an SVG runs. The user chose the picker's file; nobody chose what a pasted
     // page's server returns.
     expect(extensionForContentType("image/svg+xml")).toBeNull();

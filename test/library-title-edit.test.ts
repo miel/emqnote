@@ -110,6 +110,8 @@ function buildFake(initial: OpenedNote): Fake {
     orphanedAttachments: async () => [],
     attachmentPreview: async () => null,
     trashAttachment: async () => "",
+    linkingNotes: async () => [],
+    onOpenLink: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -143,7 +145,7 @@ function buildFake(initial: OpenedNote): Fake {
     switchVault: async () => {},
     saveAttachment: async () => null,
     pickAttachment: async () => null,
-    openAttachment: async () => {},
+    openWikiLink: async () => "none" as const,
     openExternal: async () => {},
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
@@ -284,7 +286,9 @@ describe("clicking the reader title edits it in place (bug 2)", () => {
     });
     await flush();
 
-    expect(fake.renameNote).toHaveBeenCalledWith(NOTE_PATH, "Renamed note");
+    // The third argument is B35's "should the links follow": false here, because
+    // nothing in this fake vault links to the note, so nothing was asked.
+    expect(fake.renameNote).toHaveBeenCalledWith(NOTE_PATH, "Renamed note", false);
     expect(fake.openNoteMock).toHaveBeenCalledWith(RENAMED_PATH);
     expect(container.querySelector(".reader-title-input")).toBeNull();
     expect(container.querySelector(".reader-header h1")?.textContent).toBe("Renamed note");
@@ -360,7 +364,9 @@ describe("clicking the reader title edits it in place (bug 2)", () => {
     });
     await flush();
 
-    expect(fake.renameNote).toHaveBeenCalledWith(NOTE_PATH, "Renamed note");
+    // The third argument is B35's "should the links follow": false here, because
+    // nothing in this fake vault links to the note, so nothing was asked.
+    expect(fake.renameNote).toHaveBeenCalledWith(NOTE_PATH, "Renamed note", false);
     expect(fake.openNoteMock).not.toHaveBeenCalledWith(RENAMED_PATH);
     expect(container.textContent).toContain(
       "This note is open in the note window. Close it there first, then it can be renamed.",

@@ -4,8 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  allLinks,
   allNotes,
   closeIndex,
+  linksFrom,
   deleteNote,
   deleteNotesUnder,
   getNote,
@@ -35,6 +37,7 @@ function record(overrides: Partial<NoteRecord> = {}): NoteRecord {
     hash: "abc123",
     body: "Kickoff met de klant over project Alpha.",
     tasks: [],
+    links: [],
     ...overrides,
   };
 }
@@ -305,6 +308,63 @@ describe("the SQLite index", () => {
     });
   });
 
+  describe("note_links", () => {
+    it("appears with an upsert and is readable back per note", () => {
+      upsertNote(
+        db,
+        record({
+          path: "00 Inbox/Kickoff.md",
+          links: [
+            { target: "01 Projecten/Rules", alias: "Rules" },
+            { target: "Losse aantekening", alias: null },
+          ],
+        }),
+      );
+
+      expect(linksFrom(db, "00 Inbox/Kickoff.md")).toEqual([
+        { fromPath: "00 Inbox/Kickoff.md", target: "01 Projecten/Rules", alias: "Rules" },
+        { fromPath: "00 Inbox/Kickoff.md", target: "Losse aantekening", alias: null },
+      ]);
+    });
+
+    it("keeps the same link twice, since a note may genuinely carry it twice", () => {
+      upsertNote(
+        db,
+        record({
+          path: "00 Inbox/Kickoff.md",
+          links: [
+            { target: "Rules", alias: null },
+            { target: "Rules", alias: "de regels" },
+          ],
+        }),
+      );
+
+      expect(linksFrom(db, "00 Inbox/Kickoff.md")).toHaveLength(2);
+    });
+
+    it("replaces the whole set on a re-upsert, so a removed link leaves no row behind", () => {
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null }] }));
+      upsertNote(db, record({ path: "a.md", links: [] }));
+
+      expect(linksFrom(db, "a.md")).toEqual([]);
+      expect(allLinks(db)).toEqual([]);
+    });
+
+    it("goes away with the note", () => {
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null }] }));
+      deleteNote(db, "a.md");
+
+      expect(allLinks(db)).toEqual([]);
+    });
+
+    it("reads the whole vault's links in one go, ordered by the note they sit in", () => {
+      upsertNote(db, record({ path: "b.md", links: [{ target: "Rules", alias: null }] }));
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Kickoff", alias: null }] }));
+
+      expect(allLinks(db).map((row) => row.fromPath)).toEqual(["a.md", "b.md"]);
+    });
+  });
+
   describe("deleteNotesUnder", () => {
     it("removes every note under a folder and everything nested beneath it", () => {
       upsertNote(db, record({ path: "10 Projects/a.md", title: "A" }));
@@ -333,7 +393,7 @@ describe("the SQLite index", () => {
       expect(getNote(db, "00 Inbox/d.md")).not.toBeNull();
     });
 
-    it("drops the FTS and note_tasks rows along with each note, not just the metadata", () => {
+    it("drops the FTS, note_tasks and note_links rows along with each note, not just the metadata", () => {
       upsertNote(
         db,
         record({
@@ -341,6 +401,7 @@ describe("the SQLite index", () => {
           title: "Kickoff project Alpha",
           body: "Kickoff met de klant over project Alpha.",
           tasks: [{ ordinal: 0, checked: false, text: "Offerte versturen" }],
+          links: [{ target: "Rules", alias: null }],
         }),
       );
 
@@ -348,6 +409,7 @@ describe("the SQLite index", () => {
 
       expect(search(db, "kickoff")).toEqual([]);
       expect(tasksIn(db, "", false)).toEqual([]);
+      expect(allLinks(db)).toEqual([]);
     });
 
     it("removes nothing for an empty prefix — that is not 'the whole vault' here", () => {
@@ -402,9 +464,47 @@ describe("the SQLite index", () => {
         expect(allNotes(reopened)).toEqual([]);
         expect(reopened.pragma("user_version", { simple: true })).toBeGreaterThan(0);
 
-        // The rebuilt schema actually has `note_tasks` this time.
-        upsertNote(reopened, record({ tasks: [{ ordinal: 0, checked: false, text: "Nieuw" }] }));
+        // The rebuilt schema actually has `note_tasks` and `note_links` this time.
+        upsertNote(
+          reopened,
+          record({
+            tasks: [{ ordinal: 0, checked: false, text: "Nieuw" }],
+            links: [{ target: "Rules", alias: null }],
+          }),
+        );
         expect(tasksIn(reopened, "", false)).toHaveLength(1);
+        expect(allLinks(reopened)).toHaveLength(1);
+      } finally {
+        closeIndex(reopened);
+        rmSync(path, { force: true });
+        rmSync(`${path}-wal`, { force: true });
+        rmSync(`${path}-shm`, { force: true });
+      }
+    });
+
+    /**
+     * The case B35 had to bump the version for. An index at version 1 has every note in
+     * it and a correct `note_tasks`, so `needsRefresh` will re-read *nothing* on the next
+     * scan — meaning it would carry no links at all, silently and permanently, and a move
+     * would leave every link to the moved note pointing at where it used to be.
+     */
+    it("rebuilds an index left at version 1, which has notes but can never gain links", () => {
+      const path = join(mkdtempSync(join(tmpdir(), "emqnote-index-db-")), "index.db");
+
+      const first = openIndex(path);
+      upsertNote(first, record({ links: [{ target: "Rules", alias: null }] }));
+      // Wind it back to what an index built before `note_links` existed looked like.
+      first.exec(`DROP TABLE note_links`);
+      first.pragma("user_version = 1");
+      closeIndex(first);
+
+      const reopened = openIndex(path);
+      try {
+        expect(allNotes(reopened)).toEqual([]);
+        expect(allLinks(reopened)).toEqual([]);
+
+        upsertNote(reopened, record({ links: [{ target: "Rules", alias: null }] }));
+        expect(allLinks(reopened)).toHaveLength(1);
       } finally {
         closeIndex(reopened);
         rmSync(path, { force: true });

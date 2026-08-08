@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, type Dirent, type Stats } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
-import { parseNote, plainText, taskItemsIn, taskItemText } from "../markdown/index.js";
+import {
+  collectWikiLinkTargets,
+  parseNote,
+  plainText,
+  taskItemsIn,
+  taskItemText,
+} from "../markdown/index.js";
 import { TRASH_FOLDER, type ScanProgress } from "../shared/vault-types.js";
 import {
   allNotes,
@@ -130,6 +136,11 @@ export function buildRecord(vault: string, file: string, raw: string, stats: Sta
     hash: hashOf(raw),
     body: plainText(doc),
     tasks: extractTasks(doc),
+    // Same arrangement as `tasks`, and shared with the watcher for the same reason: the
+    // one place a note becomes a row is also the one place its links become rows, so an
+    // incremental reindex can never leave `note_links` describing an older version of a
+    // note than `notes` does.
+    links: collectWikiLinkTargets(doc),
   };
 }
 

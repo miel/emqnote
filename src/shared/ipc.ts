@@ -5,6 +5,8 @@ import type {
   DiffLine,
   Facets,
   FolderNode,
+  LinkCandidateSummary,
+  LinkingNoteSummary,
   NoteSummary,
   OpenedNote,
   SaveNoteRequest,
@@ -17,6 +19,9 @@ import type {
 } from "./vault-types.js";
 
 /** The contract between main and renderer. Both sides import this file. */
+
+/** What a clicked `[[…]]` target turned out to name. `"none"` is a link pointing at nothing. */
+export type WikiLinkOutcome = "attachment" | "note" | "ambiguous" | "none";
 
 export type NoteKind = "quick" | "meeting";
 
@@ -103,6 +108,11 @@ export const IPC = {
   libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
+  /** Which notes link to one, so a move or a rename can offer to bring them along (B35). */
+  libraryLinkingNotes: "library:linking-notes",
+  /** main → library renderer: a `[[…]]` link was clicked and names a note. One candidate opens it; several raise the picker. */
+  libraryOpenLink: "library:open-link",
+
   /** The aggregated Tasks view: every task item under a folder scope. */
   libraryTasks: "library:tasks",
   /** Ticks or unticks one task item — goes through the serializer, never the raw text. */
@@ -131,8 +141,18 @@ export const IPC = {
    * "Images and PDFs" filter by passing nothing at all.
    */
   pickAttachment: "app:pick-attachment",
-  /** Opens a stored attachment in the system viewer. Refuses silently if the name does not resolve. */
-  openAttachment: "app:open-attachment",
+  /**
+   * A click on a `[[…]]` chip, from either window (B35).
+   *
+   * One channel for both things a `[[…]]` can name, because the node itself cannot tell
+   * them apart — only main can, by asking whether the target resolves inside
+   * `_attachments/` and then whether it names a note. An attachment opens in the system
+   * viewer exactly as it always did; a note is raised in the *library* window, which is
+   * the only one with a reader and the dialogs an ambiguous target needs. This replaced
+   * `app:open-attachment` rather than sitting beside it: two doors onto one click is how
+   * the two answers drift apart.
+   */
+  openWikiLink: "app:open-wiki-link",
   /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
@@ -229,14 +249,41 @@ export interface LibraryApi {
    * window has it claimed. Silently answering the old path would look like a move that
    * did nothing, which is the one outcome a drag must never be allowed to look like.
    */
-  moveNote: (path: string, folder: string) => Promise<{ path: string; locked?: boolean }>;
+  moveNote: (
+    path: string,
+    folder: string,
+    /**
+     * Whether the notes linking to this one follow it (B35). The references are resolved
+     * in main *before* the move — after it, every target would resolve to nothing — so
+     * this is a flag rather than a list of paths the renderer worked out for itself.
+     */
+    rewriteLinks?: boolean,
+  ) => Promise<{ path: string; locked?: boolean }>;
   /**
    * Answers the note's path after the rename — unchanged, with `locked`, when the
    * capture window has this exact note claimed. Mirrors `moveNote`'s shape for the same
    * reason: renaming writes straight to the file, bypassing the capture window's own
    * session.
    */
-  renameNote: (path: string, title: string) => Promise<{ path: string; locked?: boolean }>;
+  renameNote: (
+    path: string,
+    title: string,
+    /** Same as `moveNote`'s: a rename changes the filename, so it moves the link target too. */
+    rewriteLinks?: boolean,
+  ) => Promise<{ path: string; locked?: boolean }>;
+  /**
+   * The notes that link to this one, for the confirmation a move or a rename shows before
+   * it offers to bring them along. Empty when nothing links to it, which is the common
+   * case and the one where nothing is asked at all.
+   */
+  linkingNotes: (path: string) => Promise<LinkingNoteSummary[]>;
+  /**
+   * A `[[…]]` link was clicked somewhere and names a note. One candidate is a note to
+   * open; several mean the target is ambiguous and the picker decides.
+   */
+  onOpenLink: (
+    handler: (event: { target: string; candidates: LinkCandidateSummary[] }) => void,
+  ) => () => void;
   /**
    * Copies a note beside itself with `-copy` appended to the title. `locked` when the
    * capture window has the *source* claimed — its edits may not have crossed the 800 ms
@@ -354,10 +401,15 @@ export interface CaptureApi {
    * (including no argument at all) keeps today's combined "Images and PDFs" filter.
    */
   pickAttachment: (filter?: "image" | "any") => Promise<string | null>;
-  /** Opens a stored attachment (a PDF, in practice) in the system viewer. */
-  openAttachment: (name: string) => Promise<void>;
   /**
-   * Mod+click on a weblink (B33), mirroring `openAttachment`'s shape. A refusal (a
+   * Follows a `[[…]]` chip: a stored attachment opens in the system viewer, a note is
+   * raised in the library window (B35). Answers what the target turned out to be, so the
+   * chip can show that it points at nothing — which used to be silent, and looked exactly
+   * like a click that had not registered.
+   */
+  openWikiLink: (target: string) => Promise<WikiLinkOutcome>;
+  /**
+   * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —
    * there is nothing for this side to do differently either way.
    */
