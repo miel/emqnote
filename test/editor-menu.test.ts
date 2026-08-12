@@ -13,7 +13,13 @@ import { docFromMarkdown, stateAt } from "./helpers/editing.js";
  */
 
 const noop = (): void => {};
-const actions: EditorMenuActions = { run: noop, insertImage: noop, insertFile: noop };
+const actions: EditorMenuActions = {
+  run: noop,
+  insertImage: noop,
+  insertFile: noop,
+  insertNoteLink: noop,
+  insertTable: noop,
+};
 // The identity function stands in for `app.t`: every label comes back as its own key,
 // so a test can find "the Bold item" by looking for the literal key rather than an
 // English string that would drift the moment the translation changed.
@@ -31,6 +37,8 @@ const SHORTCUT_ITEMS: Record<string, string> = {
   "menu.insertTask": "task",
   "menu.insertImage": "insertImage",
   "menu.insertFile": "insertFile",
+  "menu.insertNoteLink": "insertNoteLink",
+  "menu.insertTable": "insertTable",
 };
 
 function plainState(): EditorState {

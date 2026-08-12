@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      No remote origin of any kind. `connect-src emqnote-attachment:` is the one addition
+      over `thumb.html`'s bare 'self', and it is what lets the viewer `fetch()` the PDF's
+      bytes out of the vault — the same scheme, the same `resolveAttachment` guard behind
+      it. (That scheme also needed `corsEnabled: true` adding to its privileges in
+      `index.ts`; a `fetch()` enforces CORS even for a scheme this app owns end to end,
+      which is the trap B36 already fell into once with `emqnote-thumb`.)
+
+      `blob:`/`data:` appear only on `worker-src`, `font-src` and `img-src`: pdf.js builds
+      embedded fonts and its fallback worker out of local blobs, and a page that fails to
+      draw its own text because of a CSP line is a bug that only ever shows up on a real
+      document, never in a test.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; font-src 'self' data: blob:; img-src 'self' data: blob:; connect-src 'self' emqnote-attachment:"
+    />
+    <title>emqnote</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./pdfview.ts"></script>
+  </body>
+</html>

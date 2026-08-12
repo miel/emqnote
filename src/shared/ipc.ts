@@ -167,6 +167,16 @@ export const IPC = {
    */
   checkAttachments: "app:check-attachments",
   /**
+   * Notes to offer when writing a `[[…]]` link (B41) — the note picker's list.
+   *
+   * On the top level rather than under `library`, because the capture window opens the
+   * picker too and that grouping is about which *window* an operation belongs to. It runs
+   * the same `searchNotes` the library's own search bar does, so a blank query lists
+   * everything and the filter syntax works here as well; what it adds is `target`, the
+   * canonical spelling of a link to each note, which only main can answer (B37).
+   */
+  linkCandidates: "app:link-candidates",
+  /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
    */
@@ -428,6 +438,13 @@ export interface CaptureApi {
    * accusation, and it should not be made on an unanswerable question.
    */
   checkAttachments: (targets: string[]) => Promise<string[]>;
+  /**
+   * The notes the picker offers when writing a `[[…]]` link (B41). A blank query lists
+   * everything (capped), so opening the picker with nothing typed is a normal call rather
+   * than a special case. Answers an empty list when no vault is open, which the picker
+   * shows as "no matches" — the same shape as a query nothing answers to.
+   */
+  linkCandidates: (query: string) => Promise<LinkCandidateSummary[]>;
   /**
    * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —

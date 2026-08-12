@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
   openWikiLink: (target: string) => ipcRenderer.invoke(IPC.openWikiLink, target),
   checkAttachments: (targets: string[]) => ipcRenderer.invoke(IPC.checkAttachments, targets),
+  linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),
   openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
 

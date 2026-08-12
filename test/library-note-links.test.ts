@@ -26,6 +26,11 @@ import type {
 const NOTE_PATH = "00 Inbox/2026-08-08 0900 Spelregels.md";
 const MOVED_PATH = "01 Projecten/2026-08-08 0900 Spelregels.md";
 
+// What `linkTargetFor` answers for each: the path with its note extension taken off,
+// which is the spelling `NotePicker` writes into a document (B41).
+const NOTE_TARGET = NOTE_PATH.replace(/\.md$/, "");
+const MOVED_TARGET = MOVED_PATH.replace(/\.md$/, "");
+
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
 function noteSummary(path: string, title: string): NoteSummary {
@@ -163,6 +168,7 @@ function buildFake(): Fake {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    linkCandidates: async () => [],
     openExternal: async () => {},
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
@@ -317,7 +323,9 @@ describe("internal note links in the library (B35)", () => {
     await act(async () => {
       fake.pushOpenLink({
         target: "Spelregels",
-        candidates: [{ path: MOVED_PATH, title: "Spelregels", folder: "01 Projecten" }],
+        candidates: [
+          { path: MOVED_PATH, title: "Spelregels", folder: "01 Projecten", target: MOVED_TARGET },
+        ],
       });
     });
     await flush();
@@ -331,8 +339,13 @@ describe("internal note links in the library (B35)", () => {
       fake.pushOpenLink({
         target: "Spelregels",
         candidates: [
-          { path: NOTE_PATH, title: "Spelregels", folder: "00 Inbox" },
-          { path: "02 Klanten/Spelregels.md", title: "Spelregels", folder: "02 Klanten" },
+          { path: NOTE_PATH, title: "Spelregels", folder: "00 Inbox", target: NOTE_TARGET },
+          {
+            path: "02 Klanten/Spelregels.md",
+            title: "Spelregels",
+            folder: "02 Klanten",
+            target: "02 Klanten/Spelregels",
+          },
         ],
       });
     });

@@ -12,6 +12,8 @@ import { linkTitleHint } from "./link-title.js";
 import { taskCheckboxes } from "./checkbox.js";
 import { taskHighlight } from "./task-highlight.js";
 import { remoteImages } from "./paste-images.js";
+import { trailingParagraph } from "./trailing-paragraph.js";
+import { tableDecorations } from "./table-align.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -92,6 +94,33 @@ export const TASK_RULES = [
   { match: /^(?:[-*+]\s)?\[( |x|X)?\]\s$/, handler: taskFromParagraph },
 ] as const;
 
+/** What `[[` leaves in the document while the picker is up, and what insertion swallows. */
+export const NOTE_LINK_PREFIX = "[[";
+
+/**
+ * Typing `[[` opens the note picker (B41) — the gesture anyone arriving from Obsidian
+ * tries first, and the reason the picker is not shortcut-only.
+ *
+ * Two things about this are deliberate and easy to "fix" into a bug.
+ *
+ * **It returns `null`**, so the two brackets are typed normally and stay in the document
+ * while the picker is up. Consuming them would mean a cancelled picker had silently eaten
+ * what was typed, and re-inserting them on cancel is a second transaction to get wrong.
+ * `insertNoteLinkOverPrefix` is the other half: it removes them on the way in, and checks
+ * they are still there rather than assuming.
+ *
+ * **The picker opens from a microtask**, not inline. This runs inside `handleTextInput`,
+ * within ProseMirror's own dispatch; calling a React setter there mounts an overlay in the
+ * middle of a transaction the view has not finished applying. Same class of hazard as the
+ * one `paste-images.ts` documents for `appendTransaction`.
+ */
+function noteLinkRule(context: CommandContext): InputRule {
+  return new InputRule(/\[\[$/, () => {
+    queueMicrotask(() => context.requestNoteLink(NOTE_LINK_PREFIX));
+    return null;
+  });
+}
+
 /**
  * Autoformatting, borrowed from Word rather than from markdown.
  *
@@ -106,19 +135,25 @@ export const TASK_RULES = [
  * dead-end. Rule order carries that: `taskInItem` matches the bare spelling too and
  * declines outside a list, and `inputRules` moves on to the next rule when a handler
  * answers null.
+ *
+ * `[[` is the fourth rule and the odd one out: it inserts nothing and opens a dialog
+ * instead — see `noteLinkRule` just above for why it declines rather than consuming.
  */
-const autoformat = inputRules({
-  rules: [
-    ...TASK_RULES.map((rule) => new InputRule(rule.match, rule.handler)),
-    wrappingInputRule(/^\s*([-+*])\s$/, schema.nodes.bulletList!),
-    wrappingInputRule(
-      /^(\d+)\.\s$/,
-      schema.nodes.orderedList!,
-      (match) => ({ start: Number(match[1]) }),
-      (match, node) => node.childCount + (node.attrs.start as number) === Number(match[1]),
-    ),
-  ],
-});
+function autoformat(context: CommandContext): ReturnType<typeof inputRules> {
+  return inputRules({
+    rules: [
+      ...TASK_RULES.map((rule) => new InputRule(rule.match, rule.handler)),
+      noteLinkRule(context),
+      wrappingInputRule(/^\s*([-+*])\s$/, schema.nodes.bulletList!),
+      wrappingInputRule(
+        /^(\d+)\.\s$/,
+        schema.nodes.orderedList!,
+        (match) => ({ start: Number(match[1]) }),
+        (match, node) => node.childCount + (node.attrs.start as number) === Number(match[1]),
+      ),
+    ],
+  });
+}
 
 export function emptyDocument(): PMNode {
   return schema.nodes.doc!.create(null, [schema.nodes.paragraph!.create()]);
@@ -132,7 +167,7 @@ export function createEditorState(
     doc,
     plugins: [
       history(),
-      autoformat,
+      autoformat(context),
       tagHighlight(),
       linkTitleHint(),
       taskCheckboxes(),
@@ -140,6 +175,10 @@ export function createEditorState(
       // Pictures that came in with a pasted web page: downloaded into `_attachments/`
       // and turned into embeds — see `paste-images.ts`.
       remoteImages(),
+      // Always a line below a table, so a note can be written past the end of one (B42).
+      trailingParagraph(),
+      // Column alignment and the caret's own cell — neither reachable from a stylesheet.
+      tableDecorations(),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

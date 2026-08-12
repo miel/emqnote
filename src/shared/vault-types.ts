@@ -213,6 +213,17 @@ export interface LinkCandidateSummary {
   title: string;
   /** The folder it lives in, so two notes of the same name are told apart by where they are. */
   folder: string;
+  /**
+   * How a `[[…]]` link should spell this note — the path with its extension taken off,
+   * which is `link-resolve.ts`'s `linkTargetFor`.
+   *
+   * It comes over IPC rather than being derived in the renderer because that function
+   * lives in `src/main/` and nothing under `src/renderer/` imports from there; a second
+   * implementation of "which extensions are note extensions" (B37) is exactly the kind of
+   * near-duplicate that drifts. `LinkPicker` ignores it — it only ever opens a note — but
+   * `NotePicker` (B41) writes it into the document.
+   */
+  target: string;
 }
 
 /** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */

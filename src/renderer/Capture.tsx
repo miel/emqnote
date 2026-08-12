@@ -14,6 +14,11 @@ import type { VaultFileEvent } from "../shared/vault-types.js";
 import { isoWithOffset } from "../shared/time.js";
 import { useBootstrap } from "./useBootstrap.js";
 import { ContextMenu } from "./library/ContextMenu.js";
+// Both from `library/` but used by both windows, the arrangement `ContextMenu` above
+// already established — which is also why the `.palette` surface they draw on moved
+// into `styles.css`, the only stylesheet this window loads.
+import { NotePicker } from "./library/NotePicker.js";
+import { TableGrid } from "./TableGrid.js";
 
 const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
@@ -88,11 +93,26 @@ export function Capture(): React.ReactElement {
     if (name !== null) editor.current?.insertAttachment(name);
   }, []);
 
+  /**
+   * The note picker (B41) and the table grid (B42), in the capture window as well as the
+   * library — the whole point being that they are reachable in the window notes are
+   * actually written in. `prefix` is what the user typed to get here (`"[["` or nothing),
+   * swallowed on insertion.
+   */
+  const [notePick, setNotePick] = useState<{ prefix: string; query: string } | null>(null);
+  const [tableGrid, setTableGrid] = useState<{ x: number; y: number } | null>(null);
+
+  const openNotePicker = useCallback((prefix: string) => {
+    setNotePick({ prefix, query: editor.current?.getSelectedText() ?? "" });
+  }, []);
+
   // Held in refs so the listeners below never close over stale values.
   const headerRef = useRef(header);
   headerRef.current = header;
   const linkOpenRef = useRef(false);
   linkOpenRef.current = link !== null;
+  const overlayOpenRef = useRef(false);
+  overlayOpenRef.current = notePick !== null || tableGrid !== null;
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -233,9 +253,10 @@ export function Capture(): React.ReactElement {
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // While the link box is open it owns the keyboard, or a window-level shortcut
-      // would throw focus back into the note and leave the box hanging there.
-      if (linkOpenRef.current) return;
+      // While the link box, the note picker or the table grid is open, it owns the
+      // keyboard — a window-level shortcut would otherwise throw focus back into the note
+      // and leave the overlay hanging there.
+      if (linkOpenRef.current || overlayOpenRef.current) return;
 
       const fires = (id: string): boolean => matches(shortcut(id), event, app.isMac);
 
@@ -291,6 +312,8 @@ export function Capture(): React.ReactElement {
         onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
         onImageRequested={() => void pickAndInsertImage()}
         onFileRequested={() => void pickAndInsertFile()}
+        onNoteLinkRequested={openNotePicker}
+        onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
         onContextMenu={(payload) => setEditorMenu(payload)}
       />
 
@@ -303,7 +326,42 @@ export function Capture(): React.ReactElement {
             run: (command) => editor.current?.runCommand(command),
             insertImage: () => void pickAndInsertImage(),
             insertFile: () => void pickAndInsertFile(),
+            insertNoteLink: () => openNotePicker(""),
+            // Where the menu is, not where the caret is: the pointer is already here and
+            // the menu is about to close from under it.
+            insertTable: () => setTableGrid({ x: editorMenu.x, y: editorMenu.y }),
           })}
+        />
+      )}
+
+      {notePick !== null && (
+        <NotePicker
+          initialQuery={notePick.query}
+          t={app.t}
+          onCancel={() => {
+            setNotePick(null);
+            editor.current?.focus();
+          }}
+          onPick={(candidate) => {
+            setNotePick(null);
+            editor.current?.insertNoteLink(candidate.target, candidate.title, notePick.prefix);
+          }}
+        />
+      )}
+
+      {tableGrid !== null && (
+        <TableGrid
+          x={tableGrid.x}
+          y={tableGrid.y}
+          t={app.t}
+          onCancel={() => {
+            setTableGrid(null);
+            editor.current?.focus();
+          }}
+          onPick={(rows, columns) => {
+            setTableGrid(null);
+            editor.current?.insertTable(rows, columns);
+          }}
         />
       )}
 
@@ -358,6 +416,22 @@ export function Capture(): React.ReactElement {
           onClick={() => void pickAndInsertFile()}
         >
           📎
+        </button>
+        <button
+          type="button"
+          className="help-button"
+          title={app.t("shortcut.insertNoteLink")}
+          onClick={() => openNotePicker("")}
+        >
+          🔗
+        </button>
+        <button
+          type="button"
+          className="help-button"
+          title={app.t("shortcut.insertTable")}
+          onClick={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
+        >
+          ▦
         </button>
         <button
           type="button"

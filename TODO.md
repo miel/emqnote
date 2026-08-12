@@ -3,9 +3,13 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 7 August 2026, at `v0.5.0` — four packages built in parallel on
-top of `v0.4.1`: pasting a picture from a web page, PDF/Office thumbnails,
-disk-change detection, and context menus with full keyboard navigation.
+Last updated 12 August 2026, on the `three-features` branch on top of `v0.6.0` —
+three features from daily use, built as three packages: an in-app PDF viewer
+window (**B40**), a picker that writes `[[…]]` note links (**B41**), and table
+editing in the WYSIWYG (**B42**, which closes the `prosemirror-tables` question
+B17 left open). All three were driven in the real app under `Xvfb`; the capture
+window is the one route left unwatched, as it has been since it gained no test
+harness. See `TEST-PROTOCOL.md` §12–§14.
 
 ## Where the project stands
 

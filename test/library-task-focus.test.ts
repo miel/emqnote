@@ -177,6 +177,7 @@ function buildFake(): CaptureApi {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    linkCandidates: async () => [],
     openExternal: async () => {},
     library,
   };

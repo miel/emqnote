@@ -26,6 +26,7 @@ import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
 import { Help } from "../Help.js";
 import { LinkPrompt } from "../LinkPrompt.js";
+import { TableGrid } from "../TableGrid.js";
 import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
@@ -34,6 +35,7 @@ import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
 import { FolderTree } from "./FolderTree.js";
 import { LinkPicker } from "./LinkPicker.js";
+import { NotePicker } from "./NotePicker.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
@@ -175,6 +177,13 @@ export function Library(): React.ReactElement {
   const [helpOpen, setHelpOpen] = useState(false);
   const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
+  /**
+   * The note picker (B41). `prefix` is what the user typed to open it — `"[["` from the
+   * input rule, `""` from everywhere else — and is handed straight back on insertion so
+   * those characters are swallowed rather than left in the sentence.
+   */
+  const [notePick, setNotePick] = useState<{ prefix: string; query: string } | null>(null);
+  const [tableGrid, setTableGrid] = useState<{ x: number; y: number } | null>(null);
   /** The note-list row context menu — Open/Move/Rename/Reveal/Delete on whatever row was right-clicked. */
   const [noteMenu, setNoteMenu] = useState<{ note: NoteSummary; x: number; y: number } | null>(
     null,
@@ -690,6 +699,16 @@ export function Library(): React.ReactElement {
   const pickAndInsertFile = useCallback(async () => {
     const name = await window.emqnote.pickAttachment("any");
     if (name !== null) editor.current?.insertAttachment(name);
+  }, []);
+
+  /**
+   * Opens the note picker, seeded with whatever words were selected — the common case
+   * being "write the sentence, notice it names a note, select it and link it", where
+   * retyping the title into the filter is work the selection already did.
+   */
+  const openNotePicker = useCallback((prefix: string) => {
+    const state = editor.current?.getSelectedText() ?? "";
+    setNotePick({ prefix, query: state });
   }, []);
 
   const onDocChange = useCallback(() => {
@@ -1388,6 +1407,24 @@ export function Library(): React.ReactElement {
                   <button
                     type="button"
                     disabled={!open.editable}
+                    title={app.t("shortcut.insertNoteLink")}
+                    onClick={() => openNotePicker("")}
+                  >
+                    🔗
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!open.editable}
+                    title={app.t("shortcut.insertTable")}
+                    onClick={() =>
+                      setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })
+                    }
+                  >
+                    ▦
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!open.editable}
                     title={app.t("shortcut.insertFile")}
                     onClick={() => void pickAndInsertFile()}
                   >
@@ -1439,6 +1476,8 @@ export function Library(): React.ReactElement {
                   onLinkRequested={() => setLink(editor.current?.beginLinkEdit() ?? null)}
                   onImageRequested={() => void pickAndInsertImage()}
                   onFileRequested={() => void pickAndInsertFile()}
+                  onNoteLinkRequested={openNotePicker}
+                  onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
                   onContextMenu={(payload) => setEditorMenu(payload)}
                 />
               </div>
@@ -1546,6 +1585,10 @@ export function Library(): React.ReactElement {
             run: (command) => editor.current?.runCommand(command),
             insertImage: () => void pickAndInsertImage(),
             insertFile: () => void pickAndInsertFile(),
+            insertNoteLink: () => openNotePicker(""),
+            // The grid opens where the menu was, not at the caret: that is where the
+            // pointer already is, and the menu is about to close from under it.
+            insertTable: () => setTableGrid({ x: editorMenu.x, y: editorMenu.y }),
           })}
         />
       )}
@@ -1598,6 +1641,31 @@ export function Library(): React.ReactElement {
             if (current.kind === "duplicateTitle") {
               void askRelinkThen({ kind: "rename", path: current.path, title: current.title });
             }
+          }}
+        />
+      )}
+
+      {notePick !== null && (
+        <NotePicker
+          initialQuery={notePick.query}
+          t={app.t}
+          onCancel={() => setNotePick(null)}
+          onPick={(candidate) => {
+            setNotePick(null);
+            editor.current?.insertNoteLink(candidate.target, candidate.title, notePick.prefix);
+          }}
+        />
+      )}
+
+      {tableGrid !== null && (
+        <TableGrid
+          x={tableGrid.x}
+          y={tableGrid.y}
+          t={app.t}
+          onCancel={() => setTableGrid(null)}
+          onPick={(rows, columns) => {
+            setTableGrid(null);
+            editor.current?.insertTable(rows, columns);
           }}
         />
       )}

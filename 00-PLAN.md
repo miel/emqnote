@@ -47,6 +47,17 @@ Sinds `v0.1.0` landde ook, buiten dit fasenplan om, **B22**: een Windows-install
 auto-updater (05-besluitenlog.md). Actuele versie: `v0.5.0` — vier pakketten werk, gebouwd
 in twee golven door parallelle agents, op basis van `v0.4.1`.
 
+Op 12 augustus 2026 landden drie functies uit het dagelijks gebruik, alle drie met een
+besluit: **B40** — een PDF wordt in de app zelf gelezen, in een eigen venster, in plaats van
+alleen als miniatuur te bestaan — **B41** — een `[[…]]`-verwijzing wordt geschreven door een
+notitie te kiezen, met `[[` of `Mod+Shift+K`, in beide vensters — en **B42** — tabellen
+kunnen gemaakt en bewerkt worden, met de hand gebouwd op het schema dat er al stond, wat
+meteen de vraag beantwoordt die B17 open liet over `prosemirror-tables`. Alle drie zijn
+onder `Xvfb` in de echte app bevestigd, inclusief werkelijke inkt op het canvas van de
+PDF-lezer en een opgeslagen tabel die byte-identiek terugkomt uit `npm run canonical`. Wat
+een mens nog moet nakijken staat in `TEST-PROTOCOL.md` §12–§14; het opnamevenster blijft de
+ene plek zonder testharnas.
+
 Op 7 augustus 2026 landden vier pakketten: plakken van een webafbeelding (pakket A),
 miniaturen voor PDF- en Office-bijlagen (pakket B, **B30**), een melding wanneer een open
 notitie buiten de app verandert of verdwijnt (pakket C, **B31**) en rechtsklikmenu's met

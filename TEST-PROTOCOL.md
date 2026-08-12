@@ -448,6 +448,71 @@ as a bare `[[Spelregels]]`.
 
 ---
 
+## 12. The PDF viewer (B40)
+
+Everything here except the two rows marked otherwise was driven end to end under `Xvfb` on
+12 August 2026, against a real three-page PDF — including counting dark pixels on the
+rendered canvas rather than trusting that a `<canvas>` existed. What is left is what only a
+person on real hardware can judge.
+
+| # | Do this | Expect |
+|---|---|---|
+| 12a | Put a real, text-heavy PDF in the vault, link it in a note, and click the chip | emqnote's own viewer window opens — not Preview, not Acrobat — showing page 1. The note keeps its thumbnail chip; that is what you clicked |
+| 12b | Read the text on the page | **This is the one that needs real hardware.** pdf.js is bundled without CMap and standard-font data, so a PDF using anything beyond the base 14 fonts may render with substituted glyphs. A document exported from Word or a scanner should look right; if it does not, that missing data is the first suspect |
+| 12c | Scroll from top to bottom | Pages render as they come into view, and the counter in the toolbar keeps up. No blank pages left behind after a fast scroll |
+| 12d | Type a page number in the box and press Enter | It jumps there. Typing nonsense (`0`, `999`, `abc`) clamps or does nothing — never an error |
+| 12e | Switch between Fit width, Fit page and a percentage | The pages re-render at the new size and stay sharp. Fit page **may magnify** a small page — that is deliberate, unlike the thumbnail, which never does |
+| 12f | Resize the window with Fit width selected | Pages follow the width. Nothing tears or leaves a half-drawn canvas |
+| 12g | Press ⧉ **Open in system viewer** | Preview/Acrobat opens the same file. This is the escape hatch for printing and annotating |
+| 12h | Click a *second* PDF in a note while the viewer is open | The same window retargets to the new file and comes forward — a second viewer window must not appear |
+| 12i | Click a `.docx` or `.xlsx` attachment | Still goes straight to Word/Excel. The viewer is for what the app can actually draw |
+| 12j | Click a PDF from the **capture window** — NEVER VERIFIED | The viewer opens the same way. The capture renderer has no harness in the suite, so this route has only been reasoned about |
+| 12k | Open a corrupt or password-protected PDF | The viewer says it cannot read that file, in words, on the page. Not a blank window and not a crash |
+| 12l | Quit the app with the viewer open | The viewer closes with everything else and leaves no stray process |
+
+## 13. Inserting a note link (B41)
+
+Driven under `Xvfb` on 12 August 2026 in the library reader: the picker opening from the
+toolbar and from a typed `[[`, filtering, insertion as `[[path|Title]]`, and the resulting
+link resolving back through B35. What is left is the capture window and the feel of it.
+
+| # | Do this | Expect |
+|---|---|---|
+| 13a | In the reader, type `[[` mid-sentence | The picker opens, listing notes. The two brackets you typed are still visible behind it |
+| 13b | Press Escape | The picker closes and **the `[[` is still there**, exactly as typed. Nothing was silently eaten and nothing needs undoing |
+| 13c | Type `[[` again and pick a note | The brackets are swallowed and a link chip appears reading the note's *title*. Save, then `cat` the file: it must say `[[<path>|<Title>]]`, never a bare `[[Title]]` |
+| 13d | Click that new chip | The note it names opens. It must not raise the ambiguity picker, even if another note shares the title — that is the whole reason the path is written |
+| 13e | Select a few words first, then press `Mod+Shift+K` | The picker opens with those words already in the filter, and picking a note replaces the selection |
+| 13f | Type a filter that matches nothing | "No note matches", not an empty box |
+| 13g | Try `tag:klantx` in the filter | It narrows the same way the library's search bar does — the picker runs the same query language, which is a consequence of using the index rather than a separate feature |
+| 13h | Do 13a–13d in the **capture window** — NEVER VERIFIED | Identical behaviour. No capture-renderer harness exists, and this is the window notes are actually written in, so it is the row most worth walking |
+| 13i | Open the picker in a vault of a few thousand notes | It appears without a stall, and typing stays responsive. The filtering happens in main against FTS5, so a slow picker here means something else is wrong |
+
+## 14. Tables (B42)
+
+Insertion, Tab, the trailing paragraph and alignment were all driven under `Xvfb` on
+12 August 2026, and the saved file came back byte-identical from `npm run canonical`. The
+grid is a hover gesture, which `--click-button` cannot drive, so its feel is untested.
+
+| # | Do this | Expect |
+|---|---|---|
+| 14a | Press `Mod+Alt+T`, or the ▦ button | An 8×8 grid appears at the caret with a "3 × 2 table" readout that follows the pointer |
+| 14b | Move with the arrow keys instead of the mouse, then press Enter | The same thing. The grid must be fully keyboard-drivable — the shortcut that opens it would otherwise not finish what it starts |
+| 14c | Open the grid near the right or bottom edge of the window | It stays on screen rather than hanging off the edge |
+| 14d | Insert a 3×3 and type across it with Tab | Each Tab selects the next cell's contents so you can overtype. The header row is bold |
+| 14e | Tab off the very last cell | A new empty row appears and the caret lands in its first cell |
+| 14f | Press Enter inside a cell | The line breaks *within* the cell. Save and check the file: it must be `<br>`, which is the only thing GFM has for this |
+| 14g | Click below the table | There is a paragraph there to land in. A table at the very bottom of a note must never be a dead end |
+| 14h | Right-click inside the table | Insert/delete row and column, delete table, and the four column-alignment items. Right-click *outside* a table: none of those appear |
+| 14i | Set a column to centre, save, `cat` the file | The delimiter row reads `:---:` for that column and `---` for the others. No cell padding anywhere, and always three dashes minimum |
+| 14j | Delete the last row, or the last column | The whole table goes. A table with no rows is not a thing that can exist, and an empty husk would be worse than the deletion you asked for |
+| 14k | Open a note with a table written in Obsidian, edit a cell, save | Run `npm run canonical` on it. Byte-identical, or one of the two is wrong and which is a decision |
+| 14l | Add a column to a table whose rows are *not* all the same length | Every row squares up to the same width. Hand-written markdown really does produce ragged rows |
+| 14m | Copy a table inside the editor and paste it | It comes back as a table, alignment included — not as loose text |
+| 14n | Do 14a–14e in the **capture window** — NEVER VERIFIED | Identical behaviour, same missing harness as 13h |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -456,7 +521,9 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3, §9.2, §10 or §11f fails, that is expected-ish rather than
-alarming: those five have never been watched working, and they are why this document
-exists. §4.5 is no longer one of them — since B36 the rendering itself has been seen
+If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h or §14n fails, that is
+expected-ish rather than alarming: those have never been watched working, and they are why
+this document exists. The last three are all the same gap — the capture window has no test
+harness — and §12b is the one thing in the PDF viewer that a Linux sandbox genuinely cannot
+answer. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.
