@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   attachmentName,
-  attachmentNameFromUrl,
   copyAttachment,
   resolveAttachment,
   saveAttachment,
@@ -192,45 +191,85 @@ describe("resolveAttachment", () => {
   });
 });
 
+/**
+ * An attachment filed somewhere other than `_attachments/`.
+ *
+ * A vault is a folder of files other tools write too — the same observation B37 makes
+ * about `.markdown` — and Obsidian's convention is a folder of the user's own choosing
+ * with a *path* in the target: `![[99 - Attachments/foo.png]]`. Every one of those drew
+ * nothing at all, because the only place resolution ever looked was `_attachments/`.
+ *
+ * The traversal guard is unchanged in kind, only in what it is anchored to: the vault
+ * rather than one folder inside it. Every refusal above still refuses.
+ */
+describe("resolveAttachment, for a target carrying a path", () => {
+  it("finds a picture in a folder the user chose", () => {
+    mkdirSync(join(vault, "99 - Attachments"), { recursive: true });
+    const file = join(vault, "99 - Attachments", "7337fdd5393e2f65959966ee448a92e8_MD5.png");
+    writeFileSync(file, "binary");
+
+    expect(
+      resolveAttachment(vault, "99 - Attachments/7337fdd5393e2f65959966ee448a92e8_MD5.png"),
+    ).toBe(realpathSync(file));
+  });
+
+  it("prefers _attachments/ when both hold that name", async () => {
+    const name = await saveAttachment(vault, new TextEncoder().encode("ours"), "foto.png");
+    mkdirSync(join(vault, "elders"), { recursive: true });
+    writeFileSync(join(vault, "elders", name), "theirs");
+
+    expect(resolveAttachment(vault, name)).toBe(realpathSync(join(vault, "_attachments", name)));
+  });
+
+  /**
+   * The guard that keeps `IPC.openWikiLink`'s two halves apart. It asks this first and
+   * only falls through to the index on null, so a path-form note link resolving here
+   * would hand the note to the OS default viewer instead of opening it in the library.
+   */
+  it("never resolves a note file, so a path-form note link still reaches the index", () => {
+    mkdirSync(join(vault, "01 Projecten"), { recursive: true });
+    writeFileSync(join(vault, "01 Projecten", "Rules.md"), "# Rules");
+    writeFileSync(join(vault, "01 Projecten", "Oud.markdown"), "# Oud");
+
+    expect(resolveAttachment(vault, "01 Projecten/Rules.md")).toBeNull();
+    expect(resolveAttachment(vault, "01 Projecten/Oud.markdown")).toBeNull();
+  });
+
+  it("cannot be talked out of the vault by a path", () => {
+    const outside = mkdtempSync(join(tmpdir(), "emqnote-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "top secret");
+
+    try {
+      expect(resolveAttachment(vault, "../secret.txt")).toBeNull();
+      expect(resolveAttachment(vault, "99 - Attachments/../../secret.txt")).toBeNull();
+      expect(resolveAttachment(vault, join(outside, "secret.txt"))).toBeNull();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlink inside the vault pointing outside it", () => {
+    const outside = mkdtempSync(join(tmpdir(), "emqnote-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "top secret");
+    mkdirSync(join(vault, "99 - Attachments"), { recursive: true });
+    symlinkSync(join(outside, "secret.txt"), join(vault, "99 - Attachments", "link.txt"));
+
+    try {
+      expect(resolveAttachment(vault, "99 - Attachments/link.txt")).toBeNull();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a folder, which is what keeps a bare note title from resolving", () => {
+    mkdirSync(join(vault, "Rules"), { recursive: true });
+    expect(resolveAttachment(vault, "Rules")).toBeNull();
+  });
+});
+
 describe("a saved attachment nothing references yet", () => {
   it("is found by findOrphanedAttachments", async () => {
     const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
     expect(findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
-  });
-});
-
-describe("attachmentNameFromUrl", () => {
-  /**
-   * The regression this exists for: both schemes are registered `standard: true`, so
-   * Chromium normalises `emqnote-thumb://offerte.pdf` to `emqnote-thumb://offerte.pdf/`
-   * before any handler sees it. `resolveAttachment` shrugged that off — `resolve()`
-   * drops a trailing slash — but `isPreviewable` read the extension as `.pdf/` and
-   * answered false, so the thumbnail handler 404'd for every PDF, on every platform,
-   * and the chip fell back exactly as if the file had no preview. B30's happy path was
-   * never reached once, on any machine, which is what "PDF preview does not work" was.
-   */
-  it("drops the trailing slash Chromium adds to a standard-scheme URL", () => {
-    expect(attachmentNameFromUrl("emqnote-thumb://offerte.pdf/", "emqnote-thumb")).toBe(
-      "offerte.pdf",
-    );
-    expect(
-      attachmentNameFromUrl("emqnote-attachment://2026-08-05-1030-foto.png/", "emqnote-attachment"),
-    ).toBe("2026-08-05-1030-foto.png");
-  });
-
-  it("leaves a name alone when there is no trailing slash", () => {
-    expect(attachmentNameFromUrl("emqnote-thumb://offerte.pdf", "emqnote-thumb")).toBe(
-      "offerte.pdf",
-    );
-  });
-
-  it("decodes percent-escapes, and does so after the slash is stripped", () => {
-    expect(attachmentNameFromUrl("emqnote-thumb://mijn%20offerte.pdf/", "emqnote-thumb")).toBe(
-      "mijn offerte.pdf",
-    );
-
-    // `%2F` is part of the name, not Chromium's punctuation: stripping after decoding
-    // would eat it and change which file was asked for.
-    expect(attachmentNameFromUrl("emqnote-thumb://a%2F", "emqnote-thumb")).toBe("a/");
   });
 });

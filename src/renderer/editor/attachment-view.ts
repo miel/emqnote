@@ -1,5 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
+import { attachmentUrl } from "../../shared/attachment-url.js";
+import { checkAttachment } from "./missing-attachments.js";
 
 /**
  * `wikiEmbed`'s real face in the editor: the picture itself for an image, the
@@ -11,9 +13,11 @@ import type { EditorView, NodeView } from "prosemirror-view";
  * a view concern and never touches what gets written to a `.md` file: an `<img>` here
  * is exactly as inert to `serializeBody` as the span it replaces on screen.
  *
- * A custom protocol rather than a `data:` URL — `emqnote-attachment://<name>` streams
- * the file from `_attachments/` through `resolveAttachment`'s traversal guard, so a
- * screenshot never has to cross IPC as base64 just to be shown once.
+ * A custom protocol rather than a `data:` URL — `emqnote-attachment://vault/<name>`
+ * streams the file through `resolveAttachment`'s traversal guard, so a screenshot never
+ * has to cross IPC as base64 just to be shown once. The URL is composed by
+ * `attachmentUrl`, which is where the reason the name sits in the *path* and not in the
+ * host is written down.
  */
 
 const IMAGE_EXTENSIONS = new Set([
@@ -75,14 +79,94 @@ function rememberFailedThumbnail(target: string, reason: string | true = true): 
   failedThumbnails.set(target, reason);
 }
 
+/**
+ * The warning glyph a chip wears when the file behind it is gone.
+ *
+ * Reuses `wiki-link-error-marker`, B36's class for an unrenderable PDF, rather than
+ * inventing a second one: both say "there is something wrong with the file this names",
+ * and one marker in one position is what keeps them from drifting into two dialects of
+ * the same complaint.
+ */
+function prependMarker(element: HTMLElement): void {
+  if (element.querySelector(".wiki-link-error-marker") !== null) return;
+
+  const marker = document.createElement("span");
+  marker.className = "wiki-link-error-marker";
+  marker.textContent = "⚠";
+  element.prepend(marker);
+}
+
+/**
+ * Marks a chip as naming a file that is not there — `data-link="missing"`, the same
+ * attribute B35's click handler already sets on a note link that resolves to nothing.
+ *
+ * Idempotent, because two independent routes can reach it for one picture: the batched
+ * `checkAttachment` answer, and the `<img>` load failing. Both are the same fact arriving
+ * twice, and whichever is first should win without the second undoing it.
+ */
+function markMissing(element: HTMLElement, target: string): void {
+  element.dataset.link = "missing";
+  element.title = `This vault has no attachment called "${target}".`;
+  prependMarker(element);
+}
+
+/**
+ * Sets a chip's text without losing a marker already on it.
+ *
+ * `textContent = label` is how the chip is drawn and how `revertToChip` puts it back
+ * after a failed thumbnail — and it wipes every child, the marker included. A missing PDF
+ * hits both paths (`checkAttachment` says it is gone, and the thumbnail fetch 404s on the
+ * same file), so without this the two answers raced and the loser erased the winner.
+ */
+function setChipLabel(element: HTMLElement, label: string): void {
+  element.textContent = label;
+  if (element.dataset.link === "missing") prependMarker(element);
+}
+
+/**
+ * A picture, with a chip in its place once the file turns out to be gone.
+ *
+ * The `<img>` sits inside a plain inline `<span>` rather than being the NodeView's own
+ * DOM, because a NodeView cannot swap the element ProseMirror mounted — and the missing
+ * state has to *replace* the picture, not decorate it. An inline span around an inline
+ * replaced element is layout-neutral: every rule in `styles.css` still matches the `<img>`
+ * itself, so nothing about how a present picture draws has changed.
+ */
 function imageView(target: string): NodeView {
+  const box = document.createElement("span");
+  box.className = "wiki-embed-image-box";
+
   const img = document.createElement("img");
   img.className = "wiki-embed-image";
-  img.src = `emqnote-attachment://${encodeURIComponent(target)}`;
+  img.src = attachmentUrl("emqnote-attachment", target);
   img.alt = target;
   img.draggable = true;
+  box.appendChild(img);
 
-  return { dom: img };
+  // Two routes to the same fact, kept both on purpose. The load failing is the protocol
+  // handler's own 404, decided by the very `resolveAttachment` the check below asks
+  // about, and it arrives without a round trip; the check catches the case the browser
+  // would draw its broken-image glyph for before the handler is even reached.
+  img.addEventListener("error", () => showMissingImage(box, target));
+  void checkAttachment(target).then((missing) => {
+    if (missing) showMissingImage(box, target);
+  });
+
+  return { dom: box };
+}
+
+function showMissingImage(box: HTMLElement, target: string): void {
+  if (box.dataset.link === "missing") return;
+
+  box.textContent = "";
+  const chip = document.createElement("span");
+  chip.className = "wiki-embed";
+  chip.dataset.target = target;
+  chip.textContent = target;
+  box.appendChild(chip);
+
+  box.dataset.link = "missing";
+  markMissing(chip, target);
 }
 
 /** The same span `toDOM` produces, for a target that is not a renderable image. */
@@ -91,6 +175,12 @@ function chipView(target: string): NodeView {
   span.className = "wiki-embed";
   span.dataset.target = target;
   span.textContent = target;
+
+  // An embed is always an attachment (§6.4 routes a picture through `wikiEmbed`), so
+  // there is no note-link case to hold this back for the way `wikiLinkNodeView` has.
+  void checkAttachment(target).then((missing) => {
+    if (missing) markMissing(span, target);
+  });
 
   return { dom: span };
 }
@@ -171,7 +261,7 @@ export function externalImageView(node: PMNode): NodeView {
  * bytes to the image, rather than adding a second request or a round trip to main.
  */
 function applyThumbnail(span: HTMLElement, img: HTMLImageElement, target: string, label: string): void {
-  const url = `emqnote-thumb://${encodeURIComponent(target)}`;
+  const url = attachmentUrl("emqnote-thumb", target);
 
   fetch(url)
     .then(async (response) => {
@@ -200,7 +290,7 @@ function revertToChip(span: HTMLElement, img: HTMLImageElement, label: string): 
   img.remove();
   span.classList.remove("wiki-link-preview");
   delete span.dataset.thumb;
-  span.textContent = label;
+  setChipLabel(span, label);
 }
 
 /**
@@ -217,13 +307,32 @@ function markThumbnailError(span: HTMLElement, img: HTMLImageElement, reason: st
   span.classList.remove("wiki-link-preview");
   span.dataset.thumb = "error";
   span.title = reason.trim() !== "" ? reason : "Could not render a preview for this file.";
+  prependMarker(span);
+}
 
-  if (span.querySelector(".wiki-link-error-marker") === null) {
-    const marker = document.createElement("span");
-    marker.className = "wiki-link-error-marker";
-    marker.textContent = "⚠";
-    span.prepend(marker);
-  }
+/**
+ * Whether a `[[…]]` target names a *file* rather than a note — the question that decides
+ * whether the missing-attachment marker applies at all.
+ *
+ * An extension, and not a note's own extension. That is deliberately looser than
+ * `isPreviewableTarget` and deliberately tighter than "everything": a `[[Some Note]]` or
+ * a `[[01 Projecten/Rules]]` is a note link, whose target may perfectly reasonably not
+ * exist yet (B35's own reasoning for why that case stays understated), and asking about
+ * one would draw a warning on a link that is doing nothing wrong. A `.pdf`, a `.docx` or
+ * a `.zip` names a file, and a file that is not there is a fact worth showing without
+ * being clicked first.
+ *
+ * `.md`/`.markdown` are excluded for the same reason `resolveAttachment` excludes them:
+ * a path-form note link is a note link, whichever way it is spelled.
+ */
+const NOTE_EXTENSIONS = new Set([".md", ".markdown"]);
+
+export function namesAFile(target: string): boolean {
+  const slash = Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\"));
+  const dot = target.lastIndexOf(".");
+  if (dot <= slash + 1) return false;
+
+  return !NOTE_EXTENSIONS.has(target.slice(dot).toLowerCase());
 }
 
 export function wikiLinkNodeView(node: PMNode): NodeView {
@@ -264,6 +373,16 @@ export function wikiLinkNodeView(node: PMNode): NodeView {
     }
   }
 
+  // Only for a target that names a file. A note link keeps B35's click-time answer, for
+  // the reason `styles.css`'s own note on `[data-link="missing"]` gives: resolving one
+  // needs the whole index, and a note that has not been written yet is a normal thing for
+  // a link to point at, not something to be told off about before it is even clicked.
+  if (namesAFile(target)) {
+    void checkAttachment(target).then((missing) => {
+      if (missing) markMissing(span, target);
+    });
+  }
+
   // Held down, not clicked: a click on an atom node would otherwise also try to place
   // the caret inside it, and `mousedown` is what ProseMirror uses to decide that.
   span.addEventListener("mousedown", (event) => event.preventDefault());
@@ -276,10 +395,18 @@ export function wikiLinkNodeView(node: PMNode): NodeView {
       // a link written by hand. Marked on the chip rather than raised as a dialog: the
       // fact belongs to the link, and it stays true for as long as the note is open.
       if (outcome === "none") {
-        span.dataset.link = "missing";
+        markMissing(span, target);
         span.title = `Nothing in this vault is called "${target}".`;
       } else {
+        // The click is the better answer of the two — it just found the thing — so it
+        // clears a marker the draw-time check may have drawn, glyph and all. Never the
+        // B36 one: `data-thumb="error"` wears the same glyph for a different complaint
+        // (a PDF that opens fine and still cannot be drawn), and that is still true.
+        const wasMissing = span.dataset.link === "missing";
         delete span.dataset.link;
+        if (wasMissing && span.dataset.thumb !== "error") {
+          span.querySelector(".wiki-link-error-marker")?.remove();
+        }
       }
     });
   });

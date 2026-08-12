@@ -2,6 +2,7 @@ import { Plugin, PluginKey, type EditorState, type Transaction } from "prosemirr
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
+import { attachmentNameFromUrl } from "../../shared/attachment-url.js";
 
 /**
  * Pasting a web page brings its pictures with it.
@@ -61,19 +62,21 @@ export const remoteImagesKey = new PluginKey<RemoteImagesState>("remoteImages");
  * The stored attachment an `emqnote-attachment://` address names, or null.
  *
  * Parsed off the raw string rather than through `new URL`: the scheme is registered as
- * `standard` in main, so a `URL` would lowercase the name (an attachment can collide
- * into `foto (2).png`, and the browser is free to percent-encode that space).
+ * `standard` in main, so a `URL` would lowercase the host (see `attachment-url.ts` on how
+ * much that costs) and is free to re-encode what it hands back.
+ *
+ * `attachmentNameFromUrl` is the shared reader, so this accepts the host form clipboard
+ * HTML copied before the switch to the path form still carries — the one place in the app
+ * where an old-shaped URL can genuinely turn up.
  */
 export function attachmentTargetOf(src: string): string | null {
   if (!src.toLowerCase().startsWith(ATTACHMENT_SCHEME)) return null;
 
-  const rest = src.slice(ATTACHMENT_SCHEME.length).replace(/\/+$/, "");
-  if (rest === "") return null;
-
   try {
-    return decodeURIComponent(rest);
+    const name = attachmentNameFromUrl(src, ATTACHMENT_SCHEME.slice(0, -"://".length));
+    return name === "" ? null : name;
   } catch {
-    return rest;
+    return null;
   }
 }
 

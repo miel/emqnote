@@ -154,6 +154,19 @@ export const IPC = {
    */
   openWikiLink: "app:open-wiki-link",
   /**
+   * Which of these `[[…]]` targets name no file in the vault — what draws the "missing
+   * attachment" marker on a chip or in place of a picture.
+   *
+   * A batch rather than one call per chip: a note full of screenshots would otherwise
+   * put one IPC round trip per embed on the path that draws it. Deliberately a
+   * filesystem question only (`resolveAttachment`, nothing else), never the vault-wide
+   * note resolution `openWikiLink` falls through to — that one needs the index, and
+   * `styles.css`'s own note on `[data-link="missing"]` is right that it has no business
+   * running every time a note is drawn. A plain `[[Some Note]]` is therefore never asked
+   * about here and keeps its click-time answer.
+   */
+  checkAttachments: "app:check-attachments",
+  /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
    */
@@ -408,6 +421,13 @@ export interface CaptureApi {
    * like a click that had not registered.
    */
   openWikiLink: (target: string) => Promise<WikiLinkOutcome>;
+  /**
+   * Answers the subset of `targets` that name no file in the vault, so a chip or an
+   * embed can say the attachment behind it is gone. An empty answer means "nothing is
+   * missing" *and* is what a vault that is not open yet gives back — the marker is an
+   * accusation, and it should not be made on an unanswerable question.
+   */
+  checkAttachments: (targets: string[]) => Promise<string[]>;
   /**
    * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —

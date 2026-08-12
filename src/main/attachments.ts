@@ -2,6 +2,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { copyFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { sanitiseTitle } from "./filename.js";
+import { isNoteFile } from "./note-files.js";
 import { ATTACHMENTS } from "./vault.js";
 
 /**
@@ -129,54 +130,25 @@ export async function copyAttachment(
 }
 
 /**
- * The attachment name carried by an `emqnote-attachment://` or `emqnote-thumb://` URL.
- *
- * Both schemes are registered `standard: true` in `index.ts` — which is what makes them
- * fetchable and addressable from a CSP at all, and also means Chromium parses them as
- * `scheme://<host>/<path>` and *normalises* what it parses. A URL with no path gets one:
- * `emqnote-thumb://offerte.pdf` arrives at the handler as
- * `emqnote-thumb://offerte.pdf/`, trailing slash and all.
- *
- * `resolveAttachment` never noticed, because `resolve()` and `realpathSync` drop a
- * trailing slash on the way to a real file — which is exactly why this went unseen for so
- * long, the attachment scheme having always worked. `isPreviewable` did notice: the last
- * extension of `offerte.pdf/` is `.pdf/`, which is in no allowlist, so the thumbnail
- * handler answered 404 for every PDF it was ever asked about, on every platform, and the
- * chip fell back exactly as if no thumbnail existed. That, not the OS provider, is what
- * "PDF preview does not work" was — B30's happy path was never once reached.
- *
- * The slash is stripped before decoding, never after: `%2F` in a name decodes to a slash
- * of its own, and that one is part of the name rather than Chromium's punctuation.
- */
-export function attachmentNameFromUrl(url: string, scheme: string): string {
-  const rest = url.slice(`${scheme}://`.length);
-  return decodeURIComponent(rest.endsWith("/") ? rest.slice(0, -1) : rest);
-}
-
-/**
- * The absolute path for a name under `_attachments/`, or `null` when it does not
- * resolve to a real file inside that folder.
+ * The absolute path of a real file `name` names inside `root`, or `null`.
  *
  * This is the guard the `emqnote-attachment://` protocol handler depends on to serve
  * files to a renderer at all safely. `resolve()` alone only normalises text — it does
  * not follow anything on disk — so a name like `../../secret` is caught by the prefix
- * check below before the filesystem is ever touched, and a symlink planted inside
- * `_attachments` pointing elsewhere would sail straight through that same check while
- * actually serving whatever it links to. `realpathSync` is what actually asks the
- * filesystem, so it runs on both sides of the second comparison — the same reasoning
- * `emptyTrash` in `vault-io.ts` already applies to `_trash`.
+ * check below before the filesystem is ever touched, and a symlink planted inside the
+ * folder pointing elsewhere would sail straight through that same check while actually
+ * serving whatever it links to. `realpathSync` is what actually asks the filesystem, so
+ * it runs on both sides of the second comparison — the same reasoning `emptyTrash` in
+ * `vault-io.ts` already applies to `_trash`.
  */
-export function resolveAttachment(vault: string, name: string): string | null {
-  const attachmentsDir = join(vault, ATTACHMENTS);
-  const candidate = resolve(attachmentsDir, name);
+function resolveInside(root: string, name: string): string | null {
+  const candidate = resolve(root, name);
 
-  if (candidate !== attachmentsDir && !candidate.startsWith(attachmentsDir + sep)) {
-    return null;
-  }
+  if (candidate !== root && !candidate.startsWith(root + sep)) return null;
 
-  let realAttachmentsDir: string;
+  let realRoot: string;
   try {
-    realAttachmentsDir = realpathSync(attachmentsDir);
+    realRoot = realpathSync(root);
   } catch {
     return null;
   }
@@ -188,9 +160,7 @@ export function resolveAttachment(vault: string, name: string): string | null {
     return null;
   }
 
-  if (real !== realAttachmentsDir && !real.startsWith(realAttachmentsDir + sep)) {
-    return null;
-  }
+  if (real !== realRoot && !real.startsWith(realRoot + sep)) return null;
 
   try {
     if (!statSync(real).isFile()) return null;
@@ -199,4 +169,34 @@ export function resolveAttachment(vault: string, name: string): string | null {
   }
 
   return real;
+}
+
+/**
+ * The absolute path an attachment target names, or `null` when it names no real file the
+ * app is willing to serve.
+ *
+ * Two places are tried, in this order:
+ *
+ * 1. **`<vault>/_attachments/`**, which is where everything this app stores lands and
+ *    what every target it writes is a bare name in.
+ * 2. **The vault itself**, for a target carrying a path — `![[99 - Attachments/foo.png]]`
+ *    or `[[99 - Attachments/foo.png|Open: Pasted image …png]]`, the shape an Obsidian
+ *    vault is full of. A vault is a folder other tools write too (B37 is the same
+ *    observation about `.markdown`), and refusing to draw a picture that is sitting right
+ *    there, because it is filed under a folder this app did not choose, made every
+ *    imported note look broken.
+ *
+ * **A note file is never resolved here**, and that exclusion is what keeps the two halves
+ * of `IPC.openWikiLink` from colliding: it asks this first and falls through to the index
+ * only on `null`, so without the guard a path-form note link like `[[01 Projecten/Rules.md]]`
+ * would be handed to the OS default viewer instead of being opened in the library. A
+ * target with no extension cannot collide — a note's file has one on disk, so nothing
+ * resolves at stage 2 — which is why the check is on the extension and not on a slash.
+ */
+export function resolveAttachment(vault: string, name: string): string | null {
+  const inAttachments = resolveInside(join(vault, ATTACHMENTS), name);
+  if (inAttachments !== null) return inAttachments;
+
+  if (isNoteFile(basename(name))) return null;
+  return resolveInside(vault, name);
 }

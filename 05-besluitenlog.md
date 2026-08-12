@@ -1047,6 +1047,84 @@ twee machines veranderde, zou een knop opleveren waarmee je er één van weggooi
 
 ---
 
+## B38 — Een bijlage wordt overal in de vault gevonden, en zijn URL draagt de naam in het pad
+
+**Genomen** op 12 augustus 2026. Gemeld als: verwijzingen in de vorm
+`![[99 - Attachments/7337fdd…_MD5.png]]` en
+`[[99 - Attachments/…png|Open: Pasted image 20260526104144.png]]` tekenen niets.
+
+`resolveAttachment` keek alleen in `_attachments/`. Dat klopte zolang elke bijlage er een
+was die deze app zelf had weggeschreven, en het is precies dezelfde constatering als B37
+over `.markdown`: een vault is een map op een OneDrive waar andere gereedschappen ook in
+schrijven, en Obsidian's eigen gewoonte is een map naar keuze met een **pad** in het doel.
+Een plaatje dat er gewoon stáát niet tekenen, omdat het onder een map hangt die deze app
+niet gekozen heeft, maakt elke geïmporteerde notitie stuk.
+
+Twee trappen, in deze volgorde: `_attachments/` eerst, dan de vault zelf. De traversal-guard
+is niet zwakker geworden, alleen verankerd aan de vault in plaats van aan één map erin —
+`realpathSync` aan beide kanten van de vergelijking, om dezelfde reden als bij `_trash`.
+
+**Een notitiebestand lost hier nooit op.** Dat is wat de twee helften van
+`IPC.openWikiLink` uit elkaar houdt: die vraagt dit eerst en valt alleen bij `null` door
+naar de index, dus zonder die uitsluiting zou `[[01 Projecten/Spelregels.md]]` aan de
+systeemviewer gegeven worden in plaats van in de bibliotheek te openen. De controle zit op
+de extensie en niet op een schuine streep: een doel zonder extensie kan sowieso niet
+botsen, want het bestand op schijf heeft er wel een.
+
+Onderweg kwam er een tweede, hardere reden boven dat een pad-doel *nooit* had kunnen
+werken, en die is van dezelfde familie als B36's schuine streep. Chromium canonicaliseert
+de host van een `standard: true`-schema, en dat is tegen een echte Electron-build gemeten
+in plaats van beredeneerd:
+
+- **De host wordt kleingeletterd.** `emq-a://Pasted%20image.png` kwam bij de handler aan als
+  `emq-a://pasted%20image.png/`. Elke naam die de app zelf schrijft is al kleine letters
+  (`attachmentName` doet dat), dus een vault van alleen eigen bestanden merkte er niets van;
+  een vault die in Obsidian geschreven is, staat er vol mee.
+- **Een `%2F` in de host maakt de URL onparseerbaar.** Geen verminkt verzoek — `fetch` gooit
+  "Failed to parse URL" voordat er iets verstuurd wordt. Een doel met een pad erin viel dus
+  niet eens uit te drukken, wat `resolveAttachment` ook bereid was te vinden.
+
+De naam staat daarom nu in het **pad**, achter één vaste host (`…://vault/<naam>`), waar
+hoofdletters en `%2F` letterlijk bewaard blijven. `attachment-url.ts` in `src/shared/` is
+de ene plek waar zo'n URL wordt samengesteld én teruggelezen; de oude host-vorm wordt nog
+gelezen, omdat klembord-HTML die binnen de app is gekopieerd hem draagt.
+
+---
+
+## B39 — Een notitie zegt het wanneer het bestand dat hij noemt weg is
+
+**Genomen** op 12 augustus 2026. Een ontbrekend plaatje tekende het gebroken-plaatje-icoon
+van de browser, en een ontbrekend bestand een gewone chip die bij een klik niets deed. Allebei
+lezen als "de app is stuk" in plaats van "dat bestand is er niet meer" — dezelfde klasse
+fout als de labelchip die B36 uit elkaar trok.
+
+De vraag wordt bij het **tekenen** gesteld, maar alleen voor een doel dat een *bestand*
+noemt: iets met een extensie die niet die van een notitie is. Een notitieverwijzing houdt
+haar antwoord-bij-klik uit B35, en dat is geen inconsequentie maar de kern ervan. Een
+bestand opzoeken is één `statSync`; een notitie opzoeken heeft de hele index nodig, en een
+verwijzing naar een notitie die nog geschreven moet worden is iets volstrekt normaals om in
+een notitie te hebben staan — daar hoort geen waarschuwing bij voordat er geklikt is.
+
+Drie dingen die dat betaalbaar en eerlijk houden:
+
+- **Eén IPC per notitie, niet één per chip.** `setDoc` bouwt alle NodeViews in één
+  synchrone doorloop, dus alle vragen van een notitie komen in dezelfde tick binnen en
+  worden op een microtask samengevoegd.
+- **Niets wordt onthouden tussen twee keer openen.** Een bijlage kán alsnog verschijnen —
+  een OneDrive-bestand dat klaar is met binnenhalen, een plaatje dat net geplakt is — en een
+  onthouden "weg" zou de markering over een plaatje heen blijven tekenen dat er inmiddels
+  is. (De miniatuurcache van B36 onthoudt wél, om de omgekeerde reden: dát een PDF niet te
+  tekenen is, is een eigenschap van de bytes.)
+- **Een onbeantwoordbare vraag levert geen markering op.** Geen vault open, geen brug, een
+  fout onderweg: dan wordt er niets gemarkeerd. De markering is een beschuldiging, en die
+  hoort niet uit onwetendheid te komen.
+
+De markering is dezelfde ⚠ die B36 gebruikt voor een PDF die niet te tekenen is. Eén
+markering op één plek, want beide zeggen "er is iets mis met het bestand dat hier genoemd
+wordt"; twee dialecten van dezelfde klacht zou alleen maar verwarren.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

@@ -51,7 +51,13 @@ function taskInItem(
 }
 
 /**
- * `- [] ` in an ordinary paragraph starts a task list.
+ * `[] ` in an ordinary paragraph starts a task list, with or without a bullet in front
+ * of it.
+ *
+ * The bullet is optional because that is what people actually type: a line beginning
+ * `[] ` is a checkbox everywhere else a checkbox exists, and before this it was the one
+ * spelling that did nothing at all — `taskInItem` declines outside a list and this rule
+ * insisted on a `- ` that a fresh paragraph has no reason to have.
  *
  * The wrappers are named outright instead of asked for from `findWrapping`, which
  * exists to *discover* a valid path and there is nothing to discover here — it also
@@ -83,7 +89,7 @@ function taskFromParagraph(
  */
 export const TASK_RULES = [
   { match: /^\[( |x|X)?\]\s$/, handler: taskInItem },
-  { match: /^[-*+]\s\[( |x|X)?\]\s$/, handler: taskFromParagraph },
+  { match: /^(?:[-*+]\s)?\[( |x|X)?\]\s$/, handler: taskFromParagraph },
 ] as const;
 
 /**
@@ -95,8 +101,11 @@ export const TASK_RULES = [
  *
  * Typed straight through, `- ` has already become a bullet by the time `[] ` arrives,
  * so `taskInItem` is the rule that normally fires. `taskFromParagraph` is for when it
- * has not: undoing the bullet autoformat leaves a literal `- ` in a paragraph, and
- * that has to reach the same place rather than dead-end.
+ * has not: a bare `[] ` at the start of a line, and a literal `- ` left in a paragraph
+ * by undoing the bullet autoformat. Both have to reach the same place rather than
+ * dead-end. Rule order carries that: `taskInItem` matches the bare spelling too and
+ * declines outside a list, and `inputRules` moves on to the next rule when a handler
+ * answers null.
  */
 const autoformat = inputRules({
   rules: [
