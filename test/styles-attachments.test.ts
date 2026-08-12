@@ -59,8 +59,16 @@ describe("styles.css: attachment chip borders (A3)", () => {
     expect(rule).toMatch(/border:\s*1px solid var\(--border\);/);
   });
 
-  it("extends the ProseMirror-selectednode outline to .wiki-link, not only the two image chips", () => {
-    const selector = css.match(/\.editor-content \.wiki-embed\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-embed-image\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-link\.ProseMirror-selectednode \{/);
+  /**
+   * `.wiki-embed-image-box` joined the list when the picture gained a wrapper it can be
+   * replaced inside (the missing-attachment chip): ProseMirror puts the class on the
+   * NodeView's own DOM, which is now the wrapper rather than the `<img>`, so leaving it
+   * out would have brought back exactly the invisible selection this rule exists to fix.
+   */
+  it("extends the ProseMirror-selectednode outline to .wiki-link, not only the image chips", () => {
+    const selector = css.match(
+      /\.editor-content \.wiki-embed\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-embed-image\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-embed-image-box\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-link\.ProseMirror-selectednode \{/,
+    );
     expect(selector).not.toBeNull();
   });
 });

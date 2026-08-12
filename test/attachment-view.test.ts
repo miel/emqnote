@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { wikiLinkNodeView } from "../src/renderer/editor/attachment-view.js";
+import {
+  attachmentNodeView,
+  namesAFile,
+  wikiLinkNodeView,
+} from "../src/renderer/editor/attachment-view.js";
 
 /**
  * `wikiLinkNodeView`'s markup, and B30/B36's addition on top of it: a first-page
@@ -31,8 +35,16 @@ async function flushAsync(): Promise<void> {
 }
 
 beforeEach(() => {
-  (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } }).emqnote = {
+  (
+    window as unknown as {
+      emqnote: { openWikiLink: ReturnType<typeof vi.fn>; checkAttachments: ReturnType<typeof vi.fn> };
+    }
+  ).emqnote = {
     openWikiLink: vi.fn().mockResolvedValue("attachment"),
+    // Nothing missing, unless a test says otherwise: `wikiLinkNodeView` asks this at
+    // draw time for any target that names a file, so every case here would otherwise
+    // reach an absent bridge.
+    checkAttachments: vi.fn().mockResolvedValue([]),
   };
   // A safe default so a test that does not care about the network path never makes a
   // real request in jsdom — overridden per test where the response actually matters.
@@ -66,13 +78,15 @@ describe("wikiLinkNodeView", () => {
     expect(span.dataset.thumb).toBeUndefined();
   });
 
-  it("fetches emqnote-thumb://<target>, not some other URL shape", () => {
+  it("fetches emqnote-thumb://vault/<target>, not some other URL shape", () => {
     const fetchMock = vi.fn(() => new Promise(() => {}));
     vi.stubGlobal("fetch", fetchMock);
 
     wikiLinkNodeView(fakeNode("2026-07-25-1055-offerte.pdf"));
 
-    expect(fetchMock).toHaveBeenCalledWith("emqnote-thumb://2026-07-25-1055-offerte.pdf");
+    // The name is in the path, not the host — Chromium lowercases a standard scheme's
+    // host and refuses a `%2F` in one outright. See `attachment-url.test.ts`.
+    expect(fetchMock).toHaveBeenCalledWith("emqnote-thumb://vault/2026-07-25-1055-offerte.pdf");
   });
 
   it("sets the image from the fetched blob and data-thumb=ok once it loads", async () => {
@@ -254,5 +268,182 @@ describe("wikiLinkNodeView", () => {
       (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
         .emqnote.openWikiLink,
     ).toHaveBeenCalledWith("Some Note");
+  });
+});
+
+/**
+ * The missing-attachment marker.
+ *
+ * A note that names a picture or a file which is no longer in the vault used to draw the
+ * browser's broken-image glyph (an embed) or an ordinary chip that did nothing when
+ * clicked (a link). Both read as the app being broken rather than the file being gone.
+ *
+ * The question is a filesystem one — `resolveAttachment` and nothing else, batched into
+ * one IPC per note by `missing-attachments.ts` — which is why it can be asked at draw
+ * time at all. A *note* link is deliberately never asked about: that needs the whole
+ * index, and B35's own reasoning is that a link to a note not yet written is a normal
+ * thing to have.
+ */
+function check(): ReturnType<typeof vi.fn> {
+  return (window as unknown as { emqnote: { checkAttachments: ReturnType<typeof vi.fn> } })
+    .emqnote.checkAttachments;
+}
+
+describe("namesAFile", () => {
+  it("accepts anything with an extension that is not a note's", () => {
+    expect(namesAFile("offerte.pdf")).toBe(true);
+    expect(namesAFile("99 - Attachments/foto.PNG")).toBe(true);
+    expect(namesAFile("verslag.docx")).toBe(true);
+  });
+
+  it("refuses a note link, however it is spelled", () => {
+    expect(namesAFile("Some Note")).toBe(false);
+    expect(namesAFile("01 Projecten/2026-08-05 1030 Rules")).toBe(false);
+    expect(namesAFile("01 Projecten/Rules.md")).toBe(false);
+    expect(namesAFile("Oud.markdown")).toBe(false);
+  });
+
+  it("refuses a dotted folder with no filename extension after it", () => {
+    expect(namesAFile("v1.2/Rules")).toBe(false);
+  });
+});
+
+describe("a target that names a file which is gone", () => {
+  it("marks the chip, with the same ⚠ B36 uses for a file it cannot draw", async () => {
+    check().mockResolvedValue(["verslag.docx"]);
+
+    const { dom } = wikiLinkNodeView(fakeNode("verslag.docx"));
+    const span = dom as HTMLElement;
+    await flushAsync();
+
+    expect(span.dataset.link).toBe("missing");
+    expect(span.querySelector(".wiki-link-error-marker")).not.toBeNull();
+    expect(span.title).toContain("verslag.docx");
+  });
+
+  it("leaves a chip alone when the file is there", async () => {
+    check().mockResolvedValue([]);
+
+    const { dom } = wikiLinkNodeView(fakeNode("verslag.docx"));
+    const span = dom as HTMLElement;
+    await flushAsync();
+
+    expect(span.dataset.link).toBeUndefined();
+    expect(span.querySelector(".wiki-link-error-marker")).toBeNull();
+  });
+
+  it("never asks about a note link — that question needs the index", async () => {
+    wikiLinkNodeView(fakeNode("Some Note"));
+    wikiLinkNodeView(fakeNode("01 Projecten/Rules"));
+    wikiLinkNodeView(fakeNode("01 Projecten/Rules.md"));
+    await flushAsync();
+
+    expect(check()).not.toHaveBeenCalled();
+  });
+
+  it("asks once for a whole note's worth of chips, not once each", async () => {
+    check().mockResolvedValue([]);
+
+    wikiLinkNodeView(fakeNode("een.pdf"));
+    wikiLinkNodeView(fakeNode("twee.docx"));
+    wikiLinkNodeView(fakeNode("een.pdf"));
+    await flushAsync();
+
+    expect(check()).toHaveBeenCalledTimes(1);
+    expect(check()).toHaveBeenCalledWith(["een.pdf", "twee.docx"]);
+  });
+
+  it("survives the bridge answering nothing at all — no marker, no throw", async () => {
+    check().mockRejectedValue(new Error("no vault"));
+
+    const { dom } = wikiLinkNodeView(fakeNode("verslag.docx"));
+    const span = dom as HTMLElement;
+    await flushAsync();
+
+    expect(span.dataset.link).toBeUndefined();
+  });
+
+  /**
+   * A missing PDF reaches the marker twice — the check says it is gone, and the thumbnail
+   * fetch 404s on the same file and rewrites the chip's text. `setChipLabel` is what keeps
+   * the second from erasing the first, whichever order they land in.
+   */
+  it("keeps its marker when a failed thumbnail redraws the chip's label", async () => {
+    check().mockResolvedValue(["2026-07-25-1055-kwijt.pdf"]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 404, ok: false, text: () => Promise.resolve("") }),
+    );
+
+    const { dom } = wikiLinkNodeView(fakeNode("2026-07-25-1055-kwijt.pdf"));
+    const span = dom as HTMLElement;
+    await flushAsync();
+
+    expect(span.dataset.link).toBe("missing");
+    expect(span.querySelector(".wiki-link-error-marker")).not.toBeNull();
+    expect(span.textContent).toContain("2026-07-25-1055-kwijt.pdf");
+  });
+});
+
+describe("an embedded picture that is gone", () => {
+  const embed = (target: string): HTMLElement =>
+    attachmentNodeView(fakeNode(target), undefined as never, (() => undefined) as never)
+      .dom as HTMLElement;
+
+  it("draws the picture while nothing says otherwise", async () => {
+    check().mockResolvedValue([]);
+
+    const box = embed("2026-08-05-1030-foto.png");
+    await flushAsync();
+
+    const img = box.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("emqnote-attachment://vault/2026-08-05-1030-foto.png");
+    expect(box.dataset.link).toBeUndefined();
+  });
+
+  it("puts a marked chip where the picture was", async () => {
+    check().mockResolvedValue(["2026-08-05-1030-weg.png"]);
+
+    const box = embed("2026-08-05-1030-weg.png");
+    await flushAsync();
+
+    expect(box.querySelector("img")).toBeNull();
+    expect(box.dataset.link).toBe("missing");
+
+    const chip = box.querySelector(".wiki-embed") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.dataset.link).toBe("missing");
+    expect(chip.querySelector(".wiki-link-error-marker")).not.toBeNull();
+    expect(chip.textContent).toContain("2026-08-05-1030-weg.png");
+  });
+
+  /**
+   * The other route to the same fact, and the one that arrives without a round trip: the
+   * protocol handler's own 404 is decided by the very `resolveAttachment` the check asks
+   * about. Whichever lands first wins; the second must not undo it.
+   */
+  it("takes the <img> load failing as the same answer", async () => {
+    check().mockResolvedValue([]);
+
+    const box = embed("2026-08-05-1030-stuk.png");
+    box.querySelector("img")!.dispatchEvent(new Event("error"));
+
+    expect(box.querySelector("img")).toBeNull();
+    expect(box.dataset.link).toBe("missing");
+
+    await flushAsync();
+    expect(box.dataset.link).toBe("missing"); // the "nothing missing" answer does not undo it
+  });
+
+  it("marks a non-image embed on the chip it already draws", async () => {
+    check().mockResolvedValue(["2026-08-05-1030-weg.pdf"]);
+
+    const chip = embed("2026-08-05-1030-weg.pdf");
+    await flushAsync();
+
+    expect(chip.className).toBe("wiki-embed");
+    expect(chip.dataset.link).toBe("missing");
+    expect(chip.querySelector(".wiki-link-error-marker")).not.toBeNull();
   });
 });

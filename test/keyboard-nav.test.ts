@@ -130,6 +130,7 @@ function buildFake(): CaptureApi {
     reloadNote: async () => {},
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
+    checkAttachments: async () => [],
     openExternal: async () => {},
     library,
   };

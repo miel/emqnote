@@ -26,10 +26,10 @@ const ROOT: FolderNode = {
 
 const SELECTION: Selection = { kind: "folder", path: "00 Inbox" };
 
-function renderFooter(tasksSelected = false): string {
+function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
   return renderToStaticMarkup(
     createElement(FolderTree, {
-      root: ROOT,
+      root,
       selected: SELECTION,
       facets: { tags: [], people: [], available: true },
       dragging: null,
@@ -100,6 +100,63 @@ describe("FolderTree footer order (bug 6)", () => {
     const tasksRowStart = html.lastIndexOf('<div class="branch', html.indexOf("Tasks label"));
     const tasksRow = html.slice(tasksRowStart, html.indexOf("Tasks label"));
     expect(tasksRow).toContain("branch-on");
+  });
+});
+
+/**
+ * `branch-trashed` dims and italicises a folder that has been thrown away, so it does not
+ * read as a live one. It was set on the Trash branch itself as well as on everything
+ * under it — and Trash is not a deleted folder, it is a destination in the sidebar
+ * alongside Tags, People and Tasks. The one row you deliberately click looked like the
+ * rows you had discarded.
+ */
+describe("only folders inside the trash are dimmed", () => {
+  const WITH_TRASHED_FOLDER: FolderNode = {
+    ...ROOT,
+    children: [
+      { path: "00 Inbox", name: "00 Inbox", noteCount: 1, children: [] },
+      {
+        path: "_trash",
+        name: "_trash",
+        noteCount: 0,
+        children: [
+          {
+            path: "_trash/Klant X",
+            name: "Klant X",
+            noteCount: 2,
+            children: [
+              { path: "_trash/Klant X/Oud", name: "Oud", noteCount: 1, children: [] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  /** The `<div class="branch…">` opening tag of the row carrying `label`. */
+  function rowOf(html: string, label: string): string {
+    const at = html.indexOf(`>${label}<`);
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(html.lastIndexOf("<div class=", at), at);
+  }
+
+  it("leaves the Trash row itself looking like every other footer row", () => {
+    const html = renderFooter(false, WITH_TRASHED_FOLDER);
+    expect(rowOf(html, "Trash label")).not.toContain("branch-trashed");
+  });
+
+  // Only one level deep is asserted because only one level is rendered: a branch below
+  // the root starts collapsed (`Branch`'s `useState(depth < 1)`), so `Oud` is in the tree
+  // data but not in the markup. The propagation itself is one expression and the same one
+  // either way.
+  it("dims a folder in the trash", () => {
+    const html = renderFooter(false, WITH_TRASHED_FOLDER);
+    expect(rowOf(html, "Klant X")).toContain("branch-trashed");
+  });
+
+  it("leaves a live folder alone", () => {
+    const html = renderFooter(false, WITH_TRASHED_FOLDER);
+    expect(rowOf(html, "00 Inbox")).not.toContain("branch-trashed");
   });
 });
 

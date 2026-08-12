@@ -208,6 +208,30 @@ describe("input rules", () => {
     expect(ruleThenType("- [x]", false)).toBe("- [x] Iets\n");
   });
 
+  /**
+   * The bare spelling, with no bullet in front of it. `[] ` at the start of a line is
+   * what a checkbox looks like everywhere else one exists, and it was the one spelling
+   * that did nothing at all: `taskInItem` declines outside a list, and `taskFromParagraph`
+   * insisted on a `- ` that a fresh paragraph has no reason to carry.
+   */
+  it("`[] ` at the start of a plain line starts a task list", () => {
+    expect(ruleThenType("[]", false)).toBe("- [ ] Iets\n");
+  });
+
+  it("`[ ] ` at the start of a plain line does too", () => {
+    expect(ruleThenType("[ ]", false)).toBe("- [ ] Iets\n");
+  });
+
+  it("`[x] ` at the start of a plain line starts a ticked one", () => {
+    expect(ruleThenType("[x]", false)).toBe("- [x] Iets\n");
+  });
+
+  it("only at the start — `[] ` mid-sentence is brackets, not a box", () => {
+    // The rules are anchored at the block, so this never matched; the point of pinning
+    // it is that loosening the bullet prefix did not quietly widen that too.
+    expect(ruleThenType("zie []", false)).toBe("zie \\[] Iets\n");
+  });
+
   it("leaves a bracket that is not a checkbox alone", () => {
     expect(ruleThenType("zie [1]", true)).toBe("- zie \\[1] Iets\n");
   });

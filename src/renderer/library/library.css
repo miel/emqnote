@@ -206,7 +206,12 @@
    to a live one — dimmed and italic so it reads as "already deleted" at a glance.
    `trashed` is propagated from the trash branch down to every row underneath it (see
    `Branch`'s own comment on why, unlike `glyph`, this one is), so a subfolder several
-   levels into the trash looks the same as the top-level one. */
+   levels into the trash looks the same as the top-level one.
+
+   The Trash row itself is deliberately *not* one of them — it is a destination in the
+   sidebar alongside Tags, People and Tasks, and it should read like them. That is
+   `trashRoot` rather than `trashed` in `FolderTree.tsx`: it seeds the flag for everything
+   below without wearing it. */
 .branch-trashed .branch-name {
   font-style: italic;
   opacity: 0.6;

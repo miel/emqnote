@@ -138,6 +138,7 @@ function buildFake(initial: OpenedNote): Fake {
     fetchRemoteImage: async () => null,
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
+    checkAttachments: async () => [],
     openExternal: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;

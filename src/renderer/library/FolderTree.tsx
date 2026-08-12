@@ -134,6 +134,7 @@ function Branch({
   onDropNote,
   glyph,
   trashed,
+  trashRoot,
   activePath,
   onActivate,
   onOpenMenu,
@@ -163,11 +164,21 @@ function Branch({
    */
   glyph?: React.ReactNode;
   /**
-   * Set on the trash branch and, unlike `glyph`, propagated to every row underneath it —
-   * a folder inside `_trash` is still inside `_trash`, which used to render identically
-   * to a live one. Undefined everywhere else in the tree.
+   * True for a row that is *inside* `_trash` — a folder that has been deleted, which
+   * used to render identically to a live one. Undefined everywhere else in the tree.
+   *
+   * Deliberately not set on the Trash row itself. Trash sits in the sidebar beside Tags,
+   * People and Tasks: it is a place you go to, and dimming it made the one row you click
+   * look like the rows you have thrown away — which is the reverse of what the dimming
+   * is for.
    */
   trashed?: boolean;
+  /**
+   * True for the Trash branch itself. Sets `trashed` on everything below it — a folder
+   * inside `_trash` is still inside `_trash`, however deep — without dimming this row.
+   * Unlike `glyph`, which stops here, this one propagates.
+   */
+  trashRoot?: boolean;
   /** The path currently holding this pane's one roving `tabIndex={0}`. */
   activePath: string;
   /** Fired on focus (a Tab landing here, or an arrow key moving here) — keeps `activePath` honest. */
@@ -293,7 +304,7 @@ function Branch({
               onCreateFolder={onCreateFolder}
               dragging={dragging}
               onDropNote={onDropNote}
-              trashed={trashed}
+              trashed={trashed === true || trashRoot === true}
               activePath={activePath}
               onActivate={onActivate}
               onOpenMenu={onOpenMenu}
@@ -517,7 +528,7 @@ export function FolderTree({
               selected={selected}
               onSelect={onSelect}
               glyph={trashGlyph}
-              trashed
+              trashRoot
               // No new folders inside the trash: it is a destination for deleted notes,
               // not a place to organise.
               onCreateFolder={() => {}}

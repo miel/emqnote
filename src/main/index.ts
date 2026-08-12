@@ -88,12 +88,8 @@ import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
-import {
-  attachmentNameFromUrl,
-  copyAttachment,
-  resolveAttachment,
-  saveAttachment,
-} from "./attachments.js";
+import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
+import { attachmentNameFromUrl } from "../shared/attachment-url.js";
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { shutdownPdfThumb } from "./pdf-thumb.js";
@@ -488,7 +484,7 @@ function installMinimalMenu(): void {
 }
 
 /**
- * Serves `_attachments/` files to a renderer as `emqnote-attachment://<name>`.
+ * Serves attachment files to a renderer as `emqnote-attachment://vault/<name>`.
  *
  * `net.fetch` on a `file://` URL is the modern replacement for the old
  * `protocol.registerFileProtocol` — it streams rather than buffering the whole file
@@ -500,7 +496,7 @@ function installMinimalMenu(): void {
  * is the only place the vault path actually changes and keeps the cache in step, so
  * this is never more than one event loop turn behind it. `resolveAttachment` is the
  * security boundary here regardless — a request for a name that does not resolve to a
- * real file inside `_attachments/` gets a 404, never a peek outside it.
+ * real file inside the vault gets a 404, never a peek outside it.
  */
 function registerAttachmentProtocol(): void {
   protocol.handle("emqnote-attachment", (request) => {
@@ -516,10 +512,10 @@ function registerAttachmentProtocol(): void {
 }
 
 /**
- * Serves a first-page PDF thumbnail as `emqnote-thumb://<name>` (B30, rendered in-house
- * since B36). Reuses `resolveAttachment` verbatim for the traversal guard — this is the
- * same `_attachments/` a name has to resolve inside, just a different rendering of the
- * same file — and adds `isPreviewable` on top, since a plain `[[Some Note]]` link or a
+ * Serves a first-page PDF thumbnail as `emqnote-thumb://vault/<name>` (B30, rendered
+ * in-house since B36). Reuses `resolveAttachment` verbatim for the traversal guard — this
+ * is the same file the attachment scheme would serve, just a different rendering of it —
+ * and adds `isPreviewable` on top, since a plain `[[Some Note]]` link or a
  * `.txt` attachment must 404 without ever reaching `ensureThumbnail` at all.
  *
  * Two failure shapes reach here, and they must not look the same: **404** for "nothing
@@ -898,6 +894,21 @@ function registerAppIpc(): void {
     }
 
     return resolved.kind === "unique" ? "note" : "ambiguous";
+  });
+
+  // Which `[[…]]` targets name no file — what marks a chip or an embed as pointing at a
+  // missing attachment. The same `resolveAttachment` the click and both protocol handlers
+  // use, so the marker can never disagree with what happens when the chip is clicked.
+  //
+  // A vault that is not open yet answers "nothing is missing" rather than "all of them":
+  // the marker is a statement about the vault, and an unanswerable question must not
+  // produce one. Not `async`, and deliberately so — this is `statSync` per target on a
+  // handful of targets, and the 80 ms hotkey budget is nowhere near it.
+  ipcMain.handle(IPC.checkAttachments, (_event, targets: string[]): string[] => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return [];
+
+    return targets.filter((target) => resolveAttachment(vault, target) === null);
   });
 
   // Mod+click on a weblink in the editor (B33). The renderer only reports where the

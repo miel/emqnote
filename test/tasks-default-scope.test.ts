@@ -98,6 +98,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     reloadNote: async () => {},
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
+    checkAttachments: async () => [],
     openExternal: async () => {},
     library,
   };

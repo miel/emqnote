@@ -541,6 +541,29 @@ body {
   color: var(--muted);
 }
 
+/* An *attachment* that is not there, which is a different statement from the note-link
+   case above and reads louder for it: a picture or a file named by a note was put in the
+   vault at some point, so its absence is a fact about the vault rather than an intention
+   not yet carried out. `attachment-view.ts` asks for these at draw time (one batched IPC
+   per note, `missing-attachments.ts`), which the comment above is right that a *note*
+   link cannot afford — resolving one needs the whole index, resolving this needs one
+   `statSync`.
+
+   Both chips carry `wiki-link-error-marker`, B36's ⚠, so "this file has a problem" looks
+   the same whether the problem is that it cannot be drawn or that it is gone. */
+.editor-content .wiki-embed[data-link="missing"] {
+  border-style: dashed;
+  color: var(--warning);
+}
+
+/* The wrapper `imageView` puts around the picture so the chip can take its place when the
+   file turns out to be gone. Plain `inline` and nothing else: an inline span around an
+   inline replaced element changes no layout, which is what keeps every rule below — the
+   size caps, the border, the alignment — matching the `<img>` exactly as before. */
+.editor-content .wiki-embed-image-box {
+  display: inline;
+}
+
 /* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
    target is a browser-renderable image. Capped rather than left at native size: a
    full-resolution screenshot pasted mid-paragraph should not be able to push the rest
@@ -564,6 +587,7 @@ body {
    two rather than being left out. */
 .editor-content .wiki-embed.ProseMirror-selectednode,
 .editor-content .wiki-embed-image.ProseMirror-selectednode,
+.editor-content .wiki-embed-image-box.ProseMirror-selectednode,
 .editor-content .wiki-link.ProseMirror-selectednode {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
