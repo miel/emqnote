@@ -11,6 +11,15 @@ import {
   toggleTask,
   toggleUnderline,
 } from "./commands.js";
+import {
+  addColumn,
+  addRow,
+  deleteColumn,
+  deleteRow,
+  deleteTable,
+  findTable,
+  setColumnAlign,
+} from "./table-commands.js";
 
 /** What the menu needs from the window around it, to actually carry out an item. */
 export interface EditorMenuActions {
@@ -18,6 +27,10 @@ export interface EditorMenuActions {
   run: (command: Command) => void;
   insertImage: () => void;
   insertFile: () => void;
+  /** Opens the note picker (B41). Nothing was typed to get here, so it swallows no prefix. */
+  insertNoteLink: () => void;
+  /** Opens the table size grid (B42). */
+  insertTable: () => void;
 }
 
 /**
@@ -87,5 +100,60 @@ export function buildEditorMenu(
       shortcut: formatFirstKey("insertFile", isMac),
       onSelect: actions.insertFile,
     },
+    {
+      label: t("menu.insertNoteLink"),
+      shortcut: formatFirstKey("insertNoteLink", isMac),
+      onSelect: actions.insertNoteLink,
+    },
+    {
+      label: t("menu.insertTable"),
+      shortcut: formatFirstKey("insertTable", isMac),
+      onSelect: actions.insertTable,
+    },
+    ...tableItems(state, t, actions),
+  ];
+}
+
+/**
+ * The row and column operations, shown only when the caret is actually in a table (B42).
+ *
+ * Always-present-but-disabled was the alternative and is worse: it would put five dead
+ * items on every right-click in a note that has no table in it, to save the discovery of
+ * five live ones in the rare note that does.
+ *
+ * These have no shortcuts of their own, deliberately — five more chords for something
+ * done a handful of times per table is how a registry stops being memorable. That does
+ * not put them behind a menu-only door: `Mod+Shift+M` opens this same menu at the caret,
+ * so the keyboard route and the pointer route land on the same items, which is what
+ * `CLAUDE.md`'s rule about menus actually asks for.
+ */
+function tableItems(
+  state: EditorState,
+  t: (key: string) => string,
+  actions: EditorMenuActions,
+): MenuItem[] {
+  if (findTable(state) === null) return [];
+
+  return [
+    { label: "" },
+    { label: t("menu.tableRowAbove"), onSelect: () => actions.run(addRow("before")) },
+    { label: t("menu.tableRowBelow"), onSelect: () => actions.run(addRow("after")) },
+    { label: t("menu.tableColumnLeft"), onSelect: () => actions.run(addColumn("before")) },
+    { label: t("menu.tableColumnRight"), onSelect: () => actions.run(addColumn("after")) },
+    { label: t("menu.tableDeleteRow"), onSelect: () => actions.run(deleteRow()) },
+    { label: t("menu.tableDeleteColumn"), onSelect: () => actions.run(deleteColumn()) },
+    {
+      label: t("menu.tableDelete"),
+      danger: true,
+      onSelect: () => actions.run(deleteTable()),
+    },
+    { label: "" },
+    // Alignment is per column and already in the file format (`:---`/`:---:`/`---:`); this
+    // is the first thing in the app that can *set* it. "Default" is a real fourth state,
+    // not a synonym for left — it is what a plain `---` means.
+    { label: t("menu.tableAlignLeft"), onSelect: () => actions.run(setColumnAlign("left")) },
+    { label: t("menu.tableAlignCenter"), onSelect: () => actions.run(setColumnAlign("center")) },
+    { label: t("menu.tableAlignRight"), onSelect: () => actions.run(setColumnAlign("right")) },
+    { label: t("menu.tableAlignDefault"), onSelect: () => actions.run(setColumnAlign(null)) },
   ];
 }

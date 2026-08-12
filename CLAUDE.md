@@ -206,6 +206,57 @@ note after another out of the same folder.
 
 **A `[[…]]` link's target is a path, its alias is what you read, and moving the note rewrites both** (B35). `link-resolve.ts` (Electron-free, tested directly) resolves a target in three stages — path, then title, then filename stem — and **a stage that matches does not fall through to the next one even when it matched several notes**: that is the difference between "ambiguous" (the picker) and "not found", and collapsing them would let a third note be chosen when two genuinely share a title. `note_links` in the index feeds `linkingNotes`, which resolves the whole table against one prepared index; `rewriteWikiLinks` in `vault-io.ts` does the writing through `parseNote` → mutate → `serializeNote` → `writeAtomic`, never a text substitution (B6), skipping any note `writer.activePath()` has claimed. Two things about it are load-bearing and easy to "fix" by mistake: **the confirmation is raised before the move, and dismissing it still carries the move out** — a target resolves against where the note is *now*, so after `moveNote` there is nothing left to find, and a question about a side effect must not silently undo the thing it is a side effect of — and **a link with no alias gains one spelled with its old target**, or a note nobody is looking at silently starts displaying a path where a word used to be. `IPC.openWikiLink` replaced `IPC.openAttachment` rather than sitting beside it: one click, one answer, attachment tried first because a filename is exact where the three note rules are progressively looser.
 
+**A PDF is read in the app, in a window of its own** (B40, extending B36 rather than
+replacing it). Clicking a `.pdf` opens emqnote's own viewer — `src/renderer/pdfview.ts`, a
+fourth renderer entry running pdf.js against the same `pdfjs-dist` devDependency the
+thumbnail uses — instead of handing the file to `shell.openPath`. `attachment-route.ts` is
+the whole of the rule and draws the split from `isPreviewable`, so a `.docx` still goes to
+the OS; **Open in system viewer** inside the viewer is the way back out for printing and
+annotating. Three things are load-bearing. **`emqnote-attachment` needed `corsEnabled: true`
+adding to its privileges**: the viewer reads the bytes with `fetch()`, and a `fetch`
+enforces CORS even for a scheme this app owns end to end — the exact trap B36 already fell
+into once, where every test passed and every thumbnail was silently broken in the real app.
+**`openExternally` takes no argument**, because main tracks which attachment it told the
+window to show and resolves it through `resolveAttachment` itself; a viewer that could name
+a path would hand a malicious PDF the one capability worth having. And **nothing in the
+thumbnail pipeline changed** — `pdf-thumb.ts`'s single-slot queue, `thumbnailKey` and the
+404/422 handler are untouched, which is precisely why a separate window was cheaper than a
+paged widget inside the note (that would have needed a per-page render and cache through
+that one-deep queue, and a tall atom fighting the editor for the wheel and the caret).
+
+**A `[[…]]` link is written by picking a note, always as `[[path|Title]]`** (B41).
+`NotePicker.tsx` opens on `[[`, on `Mod+Shift+K`, from a toolbar button and from the editor
+menu, in **both** windows. Never a bare `[[Title]]`: a path matches in `link-resolve.ts`'s
+first stage and cannot be ambiguous, a title matches in the second and two notes may share
+one — which would raise B35's picker on every future click over a question already answered
+at insertion. Two halves are easy to "fix" into a bug. **The input rule returns `null`**, so
+the two brackets are typed normally and simply stay there if the picker is cancelled;
+`insertNoteLinkOverPrefix` removes them on the way in and *checks they are still there*
+rather than assuming, because eating two characters of someone's sentence is worse than
+leaving two behind. **It opens from a `queueMicrotask`**, never inline — the rule runs inside
+`handleTextInput`, and mounting a React overlay mid-dispatch is the hazard `paste-images.ts`
+documents for `appendTransaction`. Candidates come from `IPC.linkCandidates`, which runs the
+same `searchNotes` the search bar does and adds `target` (`linkTargetFor`, main-side because
+B37 decides what a note extension is).
+
+**Tables are hand-rolled on the existing schema; `prosemirror-tables` is refused** (B42,
+closing the loose end B17 left). That library needs `tableRole`, a separate `table_header`
+and `colspan`/`rowspan`/`colwidth` on every cell — and *this schema is the file format*, while
+GFM cannot express a merged cell at all, so the editor could build what the serializer must
+refuse. `table-commands.ts` **rebuilds the table node and replaces it whole** on every
+operation rather than splicing at computed positions: a column insert touches every row, and
+the splicing version is correct right up until a ragged row makes it not. **Ragged rows are
+real** — `from-mdast.ts` does not pad to a common width — so every column operation squares
+the table up first, and the per-column `align` array is spliced in step or every column past
+the edit inherits its neighbour's. **`goToCell` must be chained in front of `tabIndent`** in
+`keymap.ts`: that one returns true unconditionally, so ordering is the entire mechanism and
+swapping the two lines silently removes cell navigation. Enter in a cell inserts a
+`hardBreak` (`tableCell` is `inline*`, so there is nothing to split, and `<br>` is what §3.5
+prescribes). `trailing-paragraph.ts` keeps an empty paragraph after a trailing table, code
+block, HTML block or rule so there is always somewhere to type; it never reaches a file
+because `withoutTrailingBlanks` already strips one on write, which is what makes the
+invariant free.
+
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
 
 **Tags come from two places that never write to each other.** The frontmatter `tags:` field holds what was typed in the capture window's tag field; `#tag` in the body stays in the body. `summarise()` in `vault-io.ts` merges them for display and filtering. Copying body tags into the frontmatter would mean editing one sentence rewrites the header, which is a B10 hazard.
@@ -277,6 +328,35 @@ Confirmed in the real app under `Xvfb`, driven over CDP: duplicating a note (the
 The thing that batch is worth remembering for is that **B38's URL half was measured, not reasoned about**, and the measurement changed the design. A twenty-line Electron script under `Xvfb` registered a `standard: true` scheme and fetched the two candidate URL shapes: the host form lowercased the name and refused a `%2F` outright, the path form carried both through verbatim. That took minutes and settled a question that had already produced one shipped bug of the same family (B36's trailing slash) — Chromium's canonicalisation of a custom scheme is not something to reason about from the URL Standard, because a `standard: true` scheme is not a non-special one.
 
 Confirmed in the real app under `Xvfb`, driven over CDP: a path-form `![[99 - Attachments/Pasted image ….png]]` genuinely painting its picture (`naturalWidth` non-zero, not merely an `<img>` in the DOM) and its aliased `[[…|Open: …]]` sibling answering `"attachment"` from `openWikiLink` and reaching `shell.openPath`; a missing embed replaced by a marked chip and a missing `.pdf` link marked, while a plain `[[Nog Te Schrijven]]` note link beside them stayed unmarked and unasked-about; the Trash row carrying no `branch-trashed` while a folder inside it does; and `[] Bellen met Jan` typed into a plain paragraph over CDP producing a real `<li data-checked="false">` with the checkbox widget in it. **Not confirmed live**: any of it in the *capture* window specifically, which still has no test harness — the same limitation every batch since the disk-change work has named.
+
+**Three features from daily use landed on 12 August 2026**, built as three packages on one
+branch. All three carry decisions: **B40** — a PDF is read in the app, in a window of its own
+— **B41** — a `[[…]]` link is written by picking a note — and **B42** — tables are hand-rolled
+on the existing schema, which finally answers the `prosemirror-tables` question B17 left open.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a genuine three-page PDF
+made with `pdflatex`: the viewer window opening on a chip click with the right page count,
+page 1 and page 3 drawn to real canvases with **actual dark pixels counted on them** rather
+than merely an `<img>`/`<canvas>` in the DOM (the B38 lesson), and the page counter following
+the scroll; `linkCandidates` answering over IPC with the extension-stripped target, the picker
+opening from the toolbar and from a typed `[[`, Escape leaving those two brackets exactly
+where they were, the chosen note landing as `[[path|Title]]` and that link then resolving
+through B35's own path back to the note; and the size grid inserting a 3×3 table, Tab moving
+between cells and appending a row off the last one, the trailing paragraph appearing below
+it, a file's `:---`/`---:` finally *drawing* as alignment, and the saved file coming back
+**byte-identical from `npm run canonical`** — a plain GFM table, three dashes, no cell
+padding.
+
+**Not confirmed live**, the same limitation every batch since the disk-change work has named:
+all three in the *capture* window specifically, which still has no test harness. Also unseen
+by a person: the viewer's font rendering on real macOS/Windows, and the felt behaviour of the
+hover grid, which `--click-button` cannot drive. All are `TEST-PROTOCOL.md` items.
+
+One thing that batch is worth remembering for: **`emqnote-attachment` needed `corsEnabled`**
+before the viewer could `fetch()` a single byte, and nothing under `test/` could have caught
+it — every test passed while the feature was dead. That is the second time this exact trap has
+been sprung (B36 hit it on `emqnote-thumb`), so treat "a renderer will `fetch()` this custom
+scheme" as requiring the privilege, not as something to discover in the running app.
 
 ## The documents
 

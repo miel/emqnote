@@ -83,3 +83,60 @@ describe("checkboxes pasted from elsewhere", () => {
     expect(outer.lastChild!.child(0).attrs.checked).toBe(true);
   });
 });
+
+/**
+ * The table half of the same problem (B42). Before this the three table nodes had no
+ * `parseDOM` at all, so copying a table inside the editor — which round-trips through the
+ * clipboard DOM — read back as nothing at all, and `align` had no DOM representation to
+ * survive even once they did.
+ */
+describe("tables through the DOM", () => {
+  function table(align: (string | null)[], rows: string[][]): PMNode {
+    const { table: tableType, tableRow, tableCell } = schema.nodes;
+    return tableType!.create(
+      { align },
+      rows.map((cells) =>
+        tableRow!.create(
+          null,
+          cells.map((text) =>
+            tableCell!.create(null, text === "" ? undefined : schema.text(text)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  it("comes back as a table at all, rather than as loose text", () => {
+    const original = doc!.create(null, [table([null, null], [["a", "b"], ["c", "d"]])]);
+    const back = fromHtml(toHtml(original));
+
+    expect(back.firstChild?.type.name).toBe("table");
+    expect(back.firstChild?.childCount).toBe(2);
+    expect(back.firstChild?.child(0).childCount).toBe(2);
+    expect(back.textBetween(0, back.content.size, " ")).toContain("a");
+  });
+
+  it("carries per-column alignment across, which has no other DOM representation", () => {
+    const original = doc!.create(null, [
+      table(["left", null, "right"], [["a", "b", "c"]]),
+    ]);
+    const back = fromHtml(toHtml(original));
+
+    expect(back.firstChild?.attrs.align).toEqual(["left", null, "right"]);
+  });
+
+  it("writes no data-align at all for a table that has none", () => {
+    const html = toHtml(doc!.create(null, [table([null, null], [["a", "b"]])]));
+    expect(html).not.toContain("data-align");
+  });
+
+  it("reads a <th> header row as ordinary cells — this schema has no header node", () => {
+    // Which is what makes a table pasted from anywhere else in the world come in as the
+    // right shape rather than as one row short.
+    const back = fromHtml("<table><tr><th>Naam</th><th>Bedrag</th></tr><tr><td>x</td><td>1</td></tr></table>");
+
+    expect(back.firstChild?.type.name).toBe("table");
+    expect(back.firstChild?.childCount).toBe(2);
+    expect(back.firstChild?.child(0).child(0).type.name).toBe("tableCell");
+  });
+});

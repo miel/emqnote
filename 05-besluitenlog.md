@@ -301,6 +301,9 @@ de Mac.
 samenwerkingshooks — moet hier zelf. Voor tabellen betekent dat `prosemirror-tables`,
 en dat komt pas in fase 4 aan de orde bij het plakken.
 
+*(Beantwoord op 12 augustus 2026, B42: het is ook `prosemirror-tables` niet geworden. Die
+bibliotheek eist haar eigen schemavorm, en dat schema is hier het bestandsformaat.)*
+
 ---
 
 ## B18 — Eén global shortcut, en niet op Ctrl+Shift+Space
@@ -1125,6 +1128,126 @@ wordt"; twee dialecten van dezelfde klacht zou alleen maar verwarren.
 
 ---
 
+## B40 — Een PDF wordt in de app zelf gelezen, in een eigen venster
+
+**Genomen** op 12 augustus 2026. B36 tekent de eerste pagina van een PDF en zet die als
+chip in de notitie. Verder kwam je niet: een klik gaf het bestand aan `shell.openPath`, en
+daarmee aan Preview of Acrobat. Pagina twee lezen betekende de app verlaten.
+
+Een PDF opent nu in een eigen venster van emqnote — één klik, meteen de pagina's, met
+**Open in system viewer** als knop in dat venster voor printen en annoteren. Alles wat de
+app níét kan tekenen (`.docx`, `.xlsx`) gaat onveranderd naar het besturingssysteem;
+`attachment-route.ts` zegt dat, en zegt niets anders. De chip in de notitie blijft wat hij
+was, want dat is het ding waarop geklikt wordt.
+
+**Waarom een venster en niet een bladerwidget ín de notitie.** Dat laatste was de eerste
+gedachte, en het is de duurdere van de twee. De wachtrij van `pdf-thumb.ts` is één
+plek diep en bedient de hele app: elke pagina zou een IPC-heen-en-weer met een PNG erin
+kosten, plus een cache met een paginadimensie erbij die er nu niet is. Hier wordt het
+document één keer geparseerd, in het eigen proces van dat venster, en blijft het open —
+een pagina omslaan is scrollen. Daarbovenop vecht een hoge widget binnen een ProseMirror-atoom
+met de editor om het scrollwiel, de cursor en de selectie, en dat levert de lezer niets op.
+
+**Aan de miniatuurpijplijn is niets veranderd.** Geen enkele regel van `pdf-thumb.ts`,
+`PdfThumbQueue`, `thumbnailKey`, de 404/422-protocolhandler of `failedThisSession`. Dat is
+precies waarom een apart venster goedkoper was.
+
+Eén ding moest wel: `emqnote-attachment` heeft er `corsEnabled: true` bij gekregen. Het
+venster haalt de bytes met `fetch()` op, en een `fetch` handhaaft CORS ook voor een schema
+dat deze app van begin tot eind zelf bezit — exact de val waar B36 al een keer in liep, waar
+alle tests bleven slagen en in de echte app niets werkte. Bevestigd onder `Xvfb`: een echte
+PDF van drie pagina's, het juiste aantal, en werkelijke inkt op het canvas gemeten in
+plaats van alleen een `<canvas>` in de DOM — de les van B38.
+
+Het venster is er één, hergebruikt: een tweede PDF richt het bestaande opnieuw. En
+`openExternally` heeft geen argument. Main weet zelf welke bijlage het dit venster te zien
+gaf en lost die op via `resolveAttachment`, dus het ergste wat een kwaadaardige PDF met die
+uitgang kan doen is vragen om het bestand waar hij zelf al in staat.
+
+---
+
+## B41 — Een notitieverwijzing wordt geschreven door een notitie te kiezen
+
+**Genomen** op 12 augustus 2026. B35 bouwde het hele apparaat om een `[[…]]`-verwijzing op
+te lossen, te herschrijven en bij twijfel een keuze te vragen — maar niets in de app
+*schreef* er ooit een. Je moest het pad van een notitie kennen en foutloos overtikken.
+Bijlagen hebben `Mod+Shift+I`, `Mod+Shift+A` en twee knoppen; verwijzingen hadden niets.
+
+De kiezer gaat open door `[[` te typen — het gebaar dat iedereen die uit Obsidian komt als
+eerste probeert — en verder met `Mod+Shift+K`, een knop in beide werkbalken en een regel in
+het rechtermuismenu. **In beide vensters**, want het opnamevenster is het venster waarin
+notities daadwerkelijk geschreven worden.
+
+Er wordt altijd `[[pad|Titel]]` weggeschreven, nooit een kaal `[[Titel]]`. Drie redenen, op
+volgorde van wat het kost om het fout te doen: een pad matcht in de eerste trap van
+`link-resolve.ts` en kan niet dubbelzinnig zijn, terwijl een titel in de tweede trap matcht
+en door twee notities gedeeld kan worden — dan komt de keuzedialoog de rest van het leven
+van die verwijzing bij elke klik terug, over een vraag die hier al beantwoord is.
+`rewriteWikiLinks` heeft een pad nodig om iets te hérschrijven als de notitie verhuist. En
+B35 geeft een verwijzing zonder alias er tóch een zodra de notitie verplaatst wordt; die
+alias komt er dus hoe dan ook, en nu ziet de gebruiker het woord dat hij zelf koos.
+
+**De `[[` blijft staan zolang de kiezer open is.** De inputregel neemt de twee tekens niet
+weg maar geeft `null` terug, zodat een geannuleerde kiezer precies achterlaat wat er getikt
+is — geen transactie om terug te draaien, en niets verrassends met de cursor. Het opruimen
+gebeurt bij het invoegen, en `insertNoteLinkOverPrefix` kíjkt eerst of ze er nog staan in
+plaats van dat aan te nemen: twee tekens uit iemands zin eten is een ergere fout dan er twee
+laten staan.
+
+**Het filteren gebeurt in main.** `MoveDialog` scoort een lijst mappen die hij in handen
+kreeg; een vault heeft duizenden notities en de index beantwoordt die vraag al met FTS5. Dat
+de filtertaal van de zoekbalk (`tag:`, `after:`) hier gratis in meekomt is daar een gevolg
+van, geen apart gebouwde feature.
+
+---
+
+## B42 — Tabellen worden met de hand gebouwd op het bestaande schema
+
+**Genomen** op 12 augustus 2026. `table`, `tableRow` en `tableCell` stonden al in het
+schema en liepen al byte-identiek rond (corpusgevallen 9, 13 en 14) — een in Obsidian
+geschreven tabel las en bewaarde correct. Maar er was geen enkel commando, geen sneltoets en
+geen menu-item dat er één *maakte*, en geen manier om een rij of kolom toe te voegen aan een
+tabel die er al stond.
+
+**`prosemirror-tables` is opnieuw afgewezen**, en daarmee is de losse eindje van B17
+dichtgelegd. Dat besluit sloot af met "voor tabellen betekent dat `prosemirror-tables`, en
+dat komt pas in fase 4 aan de orde bij het plakken" — dit is dat moment, en het antwoord is
+nee. Die bibliotheek eist haar eigen schemavorm: een `tableRole` op elk knooptype,
+een apart `table_header`, en `colspan`/`rowspan`/`colwidth` op elke cel. Hier ís dat schema
+het bestandsformaat (B6). GFM kan een samengevoegde cel helemaal niet uitdrukken —
+`03-markdown-dialect.md` §3.5 houdt die als ruwe HTML — dus de editor zou tabellen kunnen
+bouwen die de serializer moet weigeren. Dat is B6 van de verkeerde kant benaderd. Wat hier
+werkelijk nodig is, is een handvol bewerkingen op een rechthoek.
+
+Vier dingen die dragend zijn:
+
+- **Elke bewerking bouwt de tabel opnieuw op en vervangt hem in zijn geheel.** Een kolom
+  invoegen raakt elke rij, dus de variant die op berekende posities splitst moet bijhouden
+  hoeveel elke eerdere ingreep de volgende opschoof — rekenwerk dat klopt tot een ongelijke
+  rij het onderuithaalt.
+- **Ongelijke rijen zijn een echte vorm, geen hypothese.** `from-mdast.ts` vult niet aan tot
+  een gemeenschappelijke breedte, dus een met de hand geschreven korte rij komt als korte rij
+  binnen. Elke kolombewerking maakt de tabel eerst vierkant. De uitlijningsrij schuift mee,
+  anders erft elke kolom voorbij de ingreep die van zijn buurman.
+- **Tab moet vóór `tabIndent` in de ketting.** Die laatste geeft altijd `true` terug, dus wat
+  erachter staat draait nooit. `goToCell` weigert buiten een tabel, dus Tab in een lijst
+  verandert niet. Die volgorde ís het mechanisme; de twee regels omdraaien haalt
+  celnavigatie stilletjes weer weg.
+- **Er staat altijd een regel onder de laatste blok.** `doc` is `block+`, dus een notitie mag
+  op een tabel eindigen en dan is er geen tekstpositie meer achter. Een `appendTransaction`
+  zet er een lege alinea achter — ook achter een codeblok, een HTML-blok en een streep, want
+  dat is hetzelfde probleem. Het bereikt geen bestand: `withoutTrailingBlanks` in
+  `to-mdast.ts` haalt een lege slotalinea er bij het schrijven al af, en dáárom is de
+  invariant gratis.
+
+De maat wordt gekozen op een raster van 8×8, het gebaar uit Word — de hele editor is gebouwd
+op het idee dat iemand die Word kent geen tweede set gewoonten hoeft te leren. Kolomuitlijning
+is er als menu-item bij gekomen: het formaat droeg `:---` al en de eerste rij was altijd al de
+kop, maar niets in de app kon het zetten en niets liet het zien. Dat laatste kan CSS niet
+alleen — uitlijning staat per kolom in een array op de tabel — dus een decoratie tekent het.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1134,6 +1257,7 @@ wordt"; twee dialecten van dezelfde klacht zou alleen maar verwarren.
 | Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
+| Werken de kiezer (B41), het tabelraster (B42) en de PDF-lezer (B40) ook in het *opnamevenster*? | Nu — alle drie zijn op 12 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
 | ~~Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op?~~ | Vervallen — B36 stelt die vraag niet meer: pdf.js tekent de pagina, en dat is op 7 augustus 2026 onder `Xvfb` werkend gezien, op precies dezelfde Chromium die de verpakte app meelevert. Wat een mens nog moet nakijken staat in `TEST-PROTOCOL.md` §4.5 |
 | Verschijnt de eigen, knopvrije melding van het opnamevenster echt bij een externe wijziging? | Nu — het pad in de bibliotheek is op 7 augustus 2026 uitputtend bevestigd onder `Xvfb` (schoon/vuil/verwijderd, en geen valse balk bij eigen schrijfacties); het opnamevenster zelf nog niet, zie `TEST-PROTOCOL.md`, B31 |

@@ -17,6 +17,8 @@ const context: CommandContext = {
   openLinkPrompt: () => {},
   requestImage: () => {},
   requestFile: () => {},
+  requestNoteLink: () => {},
+  requestTable: () => {},
 };
 
 function mount(markdown: string): EditorView {

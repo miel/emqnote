@@ -139,6 +139,7 @@ function buildFake(initial: OpenedNote): Fake {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    linkCandidates: async () => [],
     openExternal: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;

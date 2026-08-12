@@ -10,6 +10,7 @@ import {
   tabOutdent,
   type CommandContext,
 } from "./commands.js";
+import { cellBreak, goToCell } from "./table-commands.js";
 
 /**
  * The shortcuts of Outlook and Word, deliberately to the letter.
@@ -43,13 +44,20 @@ export function outlookKeymap(context: CommandContext): Record<string, Command> 
   // `indent`/`outdent` ids but must *always* be consumed, whether or not there was
   // anywhere to indent to. Pressing Tab twice used to walk the caret out of the note and
   // into the header fields, because a failed indent fell through to the browser.
-  keys.Tab = tabIndent;
-  keys["Shift-Tab"] = tabOutdent;
+  //
+  // Which is exactly why the table pair has to be chained *in front* of them (B42):
+  // `tabIndent`/`tabOutdent` return true unconditionally, so nothing after them ever
+  // runs. `goToCell` declines outside a table, so Tab in a list is untouched — the
+  // ordering here is the whole of the mechanism, and swapping these two lines would
+  // silently take cell navigation away again.
+  keys.Tab = chainCommands(goToCell("next"), tabIndent);
+  keys["Shift-Tab"] = chainCommands(goToCell("previous"), tabOutdent);
 
   // Not in the registry: nothing to look up and nothing to show. Enter and Backspace are
   // the plain keys, and what makes them worth overriding is structural — ending a list
-  // from any depth, and promoting an item instead of merging two of them.
-  keys.Enter = chainCommands(enter, baseKeymap.Enter!);
+  // from any depth, promoting an item instead of merging two of them, and breaking a
+  // line inside a table cell, which cannot be split because it holds no paragraph.
+  keys.Enter = chainCommands(cellBreak, enter, baseKeymap.Enter!);
   keys.Backspace = chainCommands(backspace, baseKeymap.Backspace!);
 
   // Also not in the registry, and for the same reason: plain arrow-key navigation is not

@@ -652,6 +652,14 @@ export interface CommandContext {
   requestImage: () => void;
   /** Opens the unfiltered picker and inserts whatever comes back. */
   requestFile: () => void;
+  /**
+   * Opens the note picker and inserts a `[[…]]` link to whatever comes back (B41).
+   * `prefix` is what the user already typed to get here — `"[["` from the input rule,
+   * nothing from the shortcut, the toolbar or the menu — and is swallowed on insertion.
+   */
+  requestNoteLink: (prefix: string) => void;
+  /** Opens the size grid and inserts a table of whatever comes back (B42). */
+  requestTable: () => void;
 }
 
 /**
@@ -679,6 +687,16 @@ export const COMMANDS: Record<string, (context: CommandContext) => Command> = {
   },
   insertFile: (context) => () => {
     context.requestFile();
+    return true;
+  },
+  insertNoteLink: (context) => () => {
+    // No prefix: nothing was typed to get here. The `[[` route does not come through the
+    // keymap at all — it is an input rule, which calls the same context method itself.
+    context.requestNoteLink("");
+    return true;
+  },
+  insertTable: (context) => () => {
+    context.requestTable();
     return true;
   },
 

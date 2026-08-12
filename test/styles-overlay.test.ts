@@ -18,7 +18,17 @@ import { describe, expect, it } from "vitest";
  * "clicking the error bar only dims it".
  */
 
-const css = readFileSync(new URL("../src/renderer/library/library.css", import.meta.url), "utf8");
+/**
+ * Both files, concatenated, because the library window's cascade is both of them —
+ * `library.tsx` imports `styles.css` and then `library/library.css`. `.overlay` and the
+ * palette surface moved into the first when the note picker (B41) needed them in the
+ * capture window, which loads only that one; what the guard is about did not move with
+ * them, since `.library` still sits in the second.
+ */
+const css = [
+  readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8"),
+  readFileSync(new URL("../src/renderer/library/library.css", import.meta.url), "utf8"),
+].join("\n");
 
 function rule(selector: string): string {
   const match = css.match(new RegExp(`\\${selector} \\{[^}]*\\}`));
@@ -26,7 +36,7 @@ function rule(selector: string): string {
   return match![0];
 }
 
-describe("library.css: dialog overlays stack above the grid", () => {
+describe("the stylesheets: dialog overlays stack above the grid", () => {
   it("gives .overlay a z-index, not the default auto", () => {
     expect(rule(".overlay")).toMatch(/z-index:\s*\d+;/);
   });

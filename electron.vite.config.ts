@@ -43,13 +43,14 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        // Two entries: the capture/library bridge, and the hidden PDF-render window's
-        // own much smaller one (B36) — `src/preload/thumb.ts` exposes exactly the two
-        // channels that window needs, deliberately not the whole `emqnote` bridge, since
-        // a PDF is untrusted input passing through it.
+        // Three entries: the capture/library bridge, and one each for the two windows
+        // that parse a PDF — the hidden render window (B36) and the viewer (B40). Both of
+        // those expose exactly the two channels they need, deliberately not the whole
+        // `emqnote` bridge, since a PDF is untrusted input passing through them.
         input: {
           index: "src/preload/index.ts",
           thumb: "src/preload/thumb.ts",
+          pdfview: "src/preload/pdfview.ts",
         },
         external: ["electron"],
         output: { format: "cjs", entryFileNames: "[name].cjs" },
@@ -60,16 +61,20 @@ export default defineConfig({
     root: "src/renderer",
     build: {
       minify: "esbuild",
-      // Three windows, three entries. The capture window stays as small as it can be —
+      // Four windows, four entries. The capture window stays as small as it can be —
       // it is the one that has to appear instantly — so the library window's tree,
-      // list and dialogs are not loaded into it, and pdf.js (B36) sits in its own
-      // `thumb` entry rather than in either: neither window ever runs it directly, only
-      // the hidden render window does, and pdf.js is not a small library.
+      // list and dialogs are not loaded into it, and pdf.js sits in the two entries that
+      // actually run it, `thumb` (B36) and `pdfview` (B40), rather than in either of the
+      // note windows: neither of those ever runs it directly, and pdf.js is not a small
+      // library. That is also why the viewer is written against the DOM rather than in
+      // React — nothing in it needs a component tree, and this entry has no other reason
+      // to carry one.
       rollupOptions: {
         input: {
           capture: "src/renderer/index.html",
           library: "src/renderer/library.html",
           thumb: "src/renderer/thumb.html",
+          pdfview: "src/renderer/pdfview.html",
         },
       },
     },

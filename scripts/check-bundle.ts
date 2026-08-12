@@ -176,9 +176,12 @@ let failures = 0;
 for (const [path, scan] of [
   ...mainBundleFiles().map((path) => [path, externalsInEsm] as const),
   ["out/preload/index.cjs", externalsInCjs],
-  // The hidden PDF-render window's own preload (B36) — a second, much smaller bridge,
-  // checked the same way as the first.
+  // The two PDF windows' own preloads — the hidden renderer's (B36) and the viewer's
+  // (B40). Much smaller bridges than the first, checked exactly the same way: a preload
+  // that expects `node_modules` is the same invisible-from-the-project-directory,
+  // fatal-in-the-package failure whichever window loads it.
   ["out/preload/thumb.cjs", externalsInCjs],
+  ["out/preload/pdfview.cjs", externalsInCjs],
 ] as const) {
   const source = read(path);
   if (source === null) {

@@ -18,6 +18,8 @@ import {
   handleAttachmentPaste,
   insertAttachment,
 } from "./insert-attachment.js";
+import { insertNoteLinkOverPrefix } from "./insert-link.js";
+import { insertTable } from "./table-commands.js";
 import { handleListItemPaste } from "./paste-list-item.js";
 import { handleLinkClick } from "./link-click.js";
 import { isContextMenuKey } from "../library/roving.js";
@@ -47,8 +49,27 @@ export interface EditorHandle {
   applyLink: (href: string) => void;
   /** Replaces the selection with a wiki reference to an already-stored attachment. */
   insertAttachment: (name: string) => void;
+  /**
+   * Writes a `[[target|alias]]` link to a note the picker chose (B41). `prefix` is what
+   * the user typed to open the picker, swallowed on the way in — see
+   * `insertNoteLinkOverPrefix` for why it is removed here rather than by the input rule.
+   */
+  insertNoteLink: (target: string, alias: string, prefix: string) => void;
+  /** Inserts an empty `rows`×`columns` table and puts the caret in its first cell (B42). */
+  insertTable: (rows: number, columns: number) => void;
   /** Moves the caret to the ordinal-th task item and scrolls it into view. */
   focusTask: (ordinal: number) => void;
+  /**
+   * The words currently selected, as plain text — what seeds the note picker's filter
+   * (B41). Empty when the selection is collapsed, which is the ordinary case.
+   */
+  getSelectedText: () => string;
+  /**
+   * Where the caret is on screen, for anchoring a popover to it. Falls back to the
+   * editor's own top-left when there is no view yet, so a caller never has to hold two
+   * shapes for "somewhere sensible".
+   */
+  caretPoint: () => { x: number; y: number };
   /**
    * Runs a plain ProseMirror command against the live view and refocuses it — what the
    * note panel's right-click menu needs to carry out the item the caller picked, built
@@ -64,6 +85,15 @@ interface Props {
   onImageRequested: () => void;
   /** The file toolbar button and the insertFile shortcut both funnel through this. */
   onFileRequested: () => void;
+  /**
+   * The note picker (B41). `prefix` is what the user typed to get here — `"[["` from the
+   * input rule, `""` from the shortcut, the toolbar button and the menu — and the window
+   * hands it straight back to `insertNoteLinkOverPrefix` so those characters are swallowed
+   * on insertion rather than left in the sentence.
+   */
+  onNoteLinkRequested: (prefix: string) => void;
+  /** The table size grid (B42), from the toolbar button, the shortcut or the menu. */
+  onTableRequested: () => void;
   /**
    * A right-click (or the `ContextMenu` key/Mod-Shift-M) inside the note panel, in either
    * window — `Capture.tsx` and the library reader both pass this through to build the
@@ -84,7 +114,16 @@ interface Props {
  * The measurements on Windows leave no room to do that work on the way in.
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu, placeholder },
+  {
+    onChange,
+    onLinkRequested,
+    onImageRequested,
+    onFileRequested,
+    onNoteLinkRequested,
+    onTableRequested,
+    onContextMenu,
+    placeholder,
+  },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -104,8 +143,24 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // Held in refs so the effect below can stay dependency-free: recreating the view on
   // a prop change would throw away undo history and the caret.
-  const handlers = useRef({ onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu });
-  handlers.current = { onChange, onLinkRequested, onImageRequested, onFileRequested, onContextMenu };
+  const handlers = useRef({
+    onChange,
+    onLinkRequested,
+    onImageRequested,
+    onFileRequested,
+    onNoteLinkRequested,
+    onTableRequested,
+    onContextMenu,
+  });
+  handlers.current = {
+    onChange,
+    onLinkRequested,
+    onImageRequested,
+    onFileRequested,
+    onNoteLinkRequested,
+    onTableRequested,
+    onContextMenu,
+  };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
   // there is nothing here `state.ts`'s `createEditorState` needs to hold onto.
@@ -113,6 +168,8 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     openLinkPrompt: () => handlers.current.onLinkRequested(),
     requestImage: () => handlers.current.onImageRequested(),
     requestFile: () => handlers.current.onFileRequested(),
+    requestNoteLink: (prefix) => handlers.current.onNoteLinkRequested(prefix),
+    requestTable: () => handlers.current.onTableRequested(),
   });
 
   useEffect(() => {
@@ -241,6 +298,32 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const current = view.current;
       if (current === null) return;
       insertAttachment(current, name);
+    },
+    insertNoteLink: (target: string, alias: string, prefix: string) => {
+      const current = view.current;
+      if (current === null) return;
+      insertNoteLinkOverPrefix(current, target, alias, prefix);
+    },
+    insertTable: (rows: number, columns: number) => {
+      const current = view.current;
+      if (current === null) return;
+      insertTable(rows, columns)(current.state, current.dispatch);
+      current.focus();
+    },
+    getSelectedText: () => {
+      const current = view.current;
+      if (current === null) return "";
+      const { from, to } = current.state.selection;
+      return from === to ? "" : current.state.doc.textBetween(from, to, " ");
+    },
+    caretPoint: () => {
+      const current = view.current;
+      if (current === null) return { x: 0, y: 0 };
+
+      // `coordsAtPos` is in viewport coordinates, which is what a `position: fixed`
+      // popover wants — no scroll offset to add, and no getBoundingClientRect of our own.
+      const at = current.coordsAtPos(current.state.selection.from);
+      return { x: at.left, y: at.bottom + 4 };
     },
     focusTask: (ordinal: number) => {
       const current = view.current;

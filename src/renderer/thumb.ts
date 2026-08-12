@@ -6,6 +6,7 @@ import * as pdfjsLib from "pdfjs-dist";
 // this bundle, and `worker-src` falls back to `default-src` when it is not set
 // separately, so no CSP change is needed beyond the one line in `thumb.html`.
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { fitScale } from "../shared/pdf-fit.js";
 
 /**
  * The renderer half of B36's PDF-thumbnail pipeline. `pdf-thumb.ts` owns the window and
@@ -39,11 +40,6 @@ type PdfThumbResult =
   | { id: number; ok: false; error: string };
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-
-/** Fits `unscaled` inside `maxWidth`×`maxHeight`, preserving aspect ratio, never upscaling. */
-function fitScale(unscaledWidth: number, unscaledHeight: number, maxWidth: number, maxHeight: number): number {
-  return Math.min(1, maxWidth / unscaledWidth, maxHeight / unscaledHeight);
-}
 
 async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Array> {
   // No standard-font or CMap data bundled — this is a small preview image, not a

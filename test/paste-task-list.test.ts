@@ -41,6 +41,8 @@ function mount(markdown: string): EditorView {
       openLinkPrompt: () => undefined,
       requestImage: () => undefined,
       requestFile: () => undefined,
+      requestNoteLink: () => undefined,
+      requestTable: () => undefined,
     }),
   });
 }

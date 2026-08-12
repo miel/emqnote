@@ -18,6 +18,27 @@ import type { MarkSpec, Node as PMNode, NodeSpec } from "prosemirror-model";
  * note that saves differently from how it was typed.
  */
 
+/** Per column: how a GFM delimiter row spells it — `:---`, `:---:`, `---:` or plain `---`. */
+export type ColumnAlign = "left" | "center" | "right" | null;
+
+/**
+ * A table's per-column alignment, read back out of `data-align`.
+ *
+ * The counterpart of `table`'s `toDOM`, and it exists for the same reason `readChecked`
+ * below does: what `toDOM` writes and `parseDOM` reads have to be the same thing, or a
+ * copy-and-paste inside the editor quietly drops it. An empty entry is "no alignment set",
+ * which is a real state — `---` in the file — and not the same as `left`.
+ */
+function readAlign(dom: HTMLElement): ColumnAlign[] {
+  const attribute = dom.getAttribute("data-align");
+  if (attribute === null) return [];
+
+  return attribute.split(",").map((value): ColumnAlign => {
+    if (value === "left" || value === "center" || value === "right") return value;
+    return null;
+  });
+}
+
 /**
  * Whether a parsed `<li>` is a task item, and if so whether it is ticked.
  *
@@ -148,17 +169,39 @@ const nodes: Record<string, NodeSpec> = {
     // per column: "left" | "right" | "center" | null
     attrs: { align: { default: [] } },
     isolating: true,
-    toDOM: () => ["table", ["tbody", 0]],
+    // `data-align` is not decoration: without it the alignment is invisible to the DOM,
+    // and everything that round-trips a node through the clipboard — copying a table
+    // inside the editor does exactly that — would silently flatten every `:---` in it
+    // back to `---`. Same reasoning as `listItem`'s `data-checked` (see `readChecked`).
+    parseDOM: [
+      {
+        tag: "table",
+        getAttrs: (dom) => ({ align: readAlign(dom as HTMLElement) }),
+      },
+    ],
+    toDOM: (node) => {
+      const align = node.attrs.align as ColumnAlign[];
+      const attrs = align.some((value) => value !== null && value !== undefined)
+        ? { "data-align": align.map((value) => value ?? "").join(",") }
+        : {};
+      return ["table", attrs, ["tbody", 0]];
+    },
   },
 
   tableRow: {
     content: "tableCell+",
+    parseDOM: [{ tag: "tr" }],
     toDOM: () => ["tr", 0],
   },
 
   tableCell: {
     content: "inline*",
     isolating: true,
+    // `th` as well as `td`: this schema has no header node — the first row *is* the
+    // header, which the `table` comment above explains — but a table arriving from
+    // anywhere else in the world spells its header row with `th`, and reading those as
+    // ordinary cells is what makes such a table come in as the right shape.
+    parseDOM: [{ tag: "td" }, { tag: "th" }],
     toDOM: () => ["td", 0],
   },
 

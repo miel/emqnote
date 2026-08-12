@@ -93,11 +93,14 @@ import { attachmentNameFromUrl } from "../shared/attachment-url.js";
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { shutdownPdfThumb } from "./pdf-thumb.js";
+import { attachmentRoute } from "./attachment-route.js";
+import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import { isOpenableUrl } from "./remote-image.js";
 import type {
   ConflictChoice,
   ConflictPair,
+  LinkCandidateSummary,
   SaveNoteRequest,
   ScanProgress,
   Selection,
@@ -132,8 +135,13 @@ if (process.platform === "win32" && process.env.LOCALAPPDATA !== undefined) {
 // broken in the real app.
 protocol.registerSchemesAsPrivileged([
   {
+    // `corsEnabled` on this one is B40's: the viewer window `fetch()`es the PDF's bytes
+    // out of the vault, and a `fetch()` enforces CORS even for a scheme this app owns end
+    // to end — precisely the failure B36 hit above, where every test passed and every
+    // thumbnail was silently broken in the real app. An `<img src>` never needed it,
+    // which is why the attachment scheme got this far without.
     scheme: "emqnote-attachment",
-    privileges: { standard: true, secure: true, supportFetchAPI: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
   {
     scheme: "emqnote-thumb",
@@ -845,6 +853,25 @@ function registerAppIpc(): void {
   });
 
   /**
+   * One note, described the way both link dialogs want it: the ambiguity picker (B35),
+   * which needs the folder to tell two same-named notes apart, and the insertion picker
+   * (B41), which needs `target` — how a link to it is spelled.
+   *
+   * Shared because the two used to be one shape short of each other, and a picker whose
+   * rows disagree with the picker beside it about what a note *is* would be the same
+   * split `titleOf` in `vault-io.ts` had to close between the list and the reader.
+   */
+  const linkCandidateOf = (path: string, title: string): LinkCandidateSummary => {
+    const slash = path.lastIndexOf("/");
+    return {
+      path,
+      title,
+      folder: slash === -1 ? "" : path.slice(0, slash),
+      target: linkTargetFor(path),
+    };
+  };
+
+  /**
    * A click on a `[[…]]` chip, from either window (B35).
    *
    * The node cannot tell an attachment from a note — §6.4 spells both the same way — so
@@ -864,7 +891,12 @@ function registerAppIpc(): void {
 
     const attachment = resolveAttachment(vault, target);
     if (attachment !== null) {
-      void shell.openPath(attachment);
+      // A PDF opens in this app's own viewer (B40) — one click, straight to the pages,
+      // rather than handing the file to Preview or Acrobat and losing the reader out of
+      // the app. Everything else this app cannot draw still goes to the OS, which is
+      // exactly what `attachmentRoute` says and the only thing it says.
+      if (attachmentRoute(target) === "viewer") openPdfViewer(vault, target);
+      else void shell.openPath(attachment);
       return "attachment";
     }
 
@@ -876,14 +908,9 @@ function registerAppIpc(): void {
     showLibraryWindow();
     const library = getLibraryWindow();
     if (library !== null && !library.isDestroyed()) {
-      const summaries = paths.map((path) => {
-        const slash = path.lastIndexOf("/");
-        return {
-          path,
-          title: getNoteMeta(indexDb!, path)?.title ?? path,
-          folder: slash === -1 ? "" : path.slice(0, slash),
-        };
-      });
+      const summaries = paths.map((path) =>
+        linkCandidateOf(path, getNoteMeta(indexDb!, path)?.title ?? path),
+      );
       // A window that has only just been created by `showLibraryWindow` is still loading,
       // so the event would arrive before anything is listening for it. Waiting for the
       // renderer's own `did-finish-load` is what makes a link clicked from the capture
@@ -909,6 +936,36 @@ function registerAppIpc(): void {
     if (vault === null) return [];
 
     return targets.filter((target) => resolveAttachment(vault, target) === null);
+  });
+
+  /**
+   * The notes the picker offers when writing a `[[…]]` link (B41).
+   *
+   * Deliberately the *same* `searchNotes` the library's search bar runs, not a second
+   * listing: a vault has one idea of which notes exist and one filter language, and the
+   * picker inheriting `tag:` and `after:` for free is a consequence of that rather than a
+   * feature anyone had to build. `excludePath` keeps a brand-new, still-uncommitted note
+   * out of its own link picker.
+   *
+   * `linkTargetFor` is the reason this exists at all rather than the renderer mapping
+   * `library.search` itself — it is main-side (B37 decides what a note extension is), and
+   * a second copy of that rule in the renderer is one that drifts.
+   */
+  ipcMain.handle(IPC.linkCandidates, async (_event, query: string): Promise<LinkCandidateSummary[]> => {
+    // `loadSettings()` rather than the library group's own `vaultPath()` helper: this
+    // handler is registered with the app-level ones, beside `openWikiLink`, because the
+    // capture window calls it too.
+    const vault = loadSettings().vaultPath;
+    if (vault === null || indexDb === null) return [];
+
+    const notes = await searchNotes(vault, indexDb, parseSearchQuery(query), {
+      excludePath: writer.uncommittedNewPath() ?? undefined,
+    });
+
+    // Enough to scroll through, the same ceiling `MoveDialog` puts on folders and for the
+    // same reason: the picker is for finding a note, and a list nobody can read is not
+    // finding it. Anything past this is what the filter box is for.
+    return notes.slice(0, 50).map((note) => linkCandidateOf(note.path, note.title));
   });
 
   // Mod+click on a weblink in the editor (B33). The renderer only reports where the
@@ -1321,6 +1378,7 @@ app.on("will-quit", () => {
   // The hidden PDF-render window (B36) has nothing left to render once the app is on
   // its way out — same reasoning as the watcher and the scan worker just below.
   shutdownPdfThumb();
+  shutdownPdfViewer();
   // Registered unconditionally, so this can fire before `main` ever opened either of
   // these — the second-instance-lock check quits without calling `main` at all in that
   // path. The watcher closes first, same fire-and-forget style `writer.flush()` above

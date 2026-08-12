@@ -59,6 +59,8 @@ function mount(): EditorView {
       openLinkPrompt: () => undefined,
       requestImage: () => undefined,
       requestFile: () => undefined,
+      requestNoteLink: () => undefined,
+      requestTable: () => undefined,
     }),
     // As `Editor.tsx` registers it — the label a remote image is drawn as, and what the
     // `image-pending` decoration has to reach.

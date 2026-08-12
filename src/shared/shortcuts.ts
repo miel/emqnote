@@ -59,6 +59,28 @@ export const SHORTCUTS: ShortcutEntry[] = [
     group: "text",
     why: "The other half of the attachment split above: 'a' for attachment, the general case.",
   },
+  {
+    id: "insertNoteLink",
+    keys: ["Mod-Shift-k"],
+    where: "editor",
+    group: "text",
+    why:
+      "The shifted form of Mod-K, which is the weblink — the same letter for the same " +
+      "idea, and the shift saying 'the internal one', exactly as Mod-Shift-I sits beside " +
+      "Mod-K in the family above (B41). Typing `[[` reaches the same picker, which is " +
+      "what anyone arriving from Obsidian will try first.",
+  },
+  {
+    id: "insertTable",
+    keys: ["Mod-Alt-t"],
+    where: "editor",
+    group: "structure",
+    why:
+      "Mod-Shift-T is already the task item, and a table is not a text-level insertion " +
+      "like an image or a link — it is a block, which is why it sits in `structure` " +
+      "(B42). Mod-Alt is the modifier this registry already uses for a second thing on a " +
+      "taken letter, as Mod-Alt-H does for the highlight.",
+  },
 
   // ---- lists ----
   {
