@@ -20,10 +20,11 @@ export interface TaskExtract {
   text: string;
 }
 
-/** One `[[…]]` link as `buildRecord` extracts it — see `collectWikiLinkTargets` in `src/markdown/wiki-targets.ts`. */
+/** One `[[…]]`/`![[…]]` reference as `buildRecord` extracts it — see `collectWikiLinkTargets` in `src/markdown/wiki-targets.ts`. */
 export interface LinkExtract {
   target: string;
   alias: string | null;
+  kind: "link" | "embed";
 }
 
 export interface NoteRecord {
@@ -47,7 +48,7 @@ export interface NoteRecord {
   body: string;
   /** Every task item in the note, in document order — fills `note_tasks`, not the `notes` table itself. */
   tasks: TaskExtract[];
-  /** Every `[[…]]` link the note carries, in document order — fills `note_links`, same arrangement as `tasks`. */
+  /** Every `[[…]]` link and `![[…]]` embed the note carries, in document order — fills `note_links`, same arrangement as `tasks`. */
   links: LinkExtract[];
 }
 
@@ -73,8 +74,13 @@ export type IndexDb = Database.Database;
  * Version 2 is `note_links` (B35), for exactly the same reason: an existing index would
  * otherwise report that nothing in the vault links to anything, and a move would quietly
  * leave every link to the moved note pointing at where it used to be.
+ *
+ * Version 3 adds `kind` to that table and starts storing `![[…]]` embeds in it as well as
+ * `[[…]]` links (B45). Same reason a third time: an index built before this holds no embed
+ * rows at all, so a folder rename would go on quietly leaving every picture in that folder
+ * pointing at the old name — which is exactly the bug that was reported.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * One search-only virtual table rather than the `content=''` "contentless" table
@@ -158,7 +164,11 @@ function migrate(db: IndexDb): void {
     CREATE TABLE IF NOT EXISTS note_links (
       fromPath TEXT NOT NULL,
       target TEXT NOT NULL,
-      alias TEXT
+      alias TEXT,
+      -- 'link' for [[...]], 'embed' for ![[...]] (B45). The two are asked about
+      -- separately: B35's move/rename question is about links only, since that is what
+      -- resolves to a note, while a folder rename is about the path inside any target.
+      kind TEXT NOT NULL DEFAULT 'link'
     );
 
     CREATE INDEX IF NOT EXISTS note_links_from ON note_links(fromPath);
@@ -205,8 +215,8 @@ const upsertNoteStatements = (db: IndexDb) => ({
   `),
   deleteLinks: db.prepare(`DELETE FROM note_links WHERE fromPath = ?`),
   insertLink: db.prepare(`
-    INSERT INTO note_links (fromPath, target, alias)
-    VALUES (@fromPath, @target, @alias)
+    INSERT INTO note_links (fromPath, target, alias, kind)
+    VALUES (@fromPath, @target, @alias, @kind)
   `),
 });
 
@@ -258,6 +268,7 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
         fromPath: record.path,
         target: link.target,
         alias: link.alias,
+        kind: link.kind,
       });
     }
   })();
@@ -398,6 +409,8 @@ export interface LinkRow {
   fromPath: string;
   target: string;
   alias: string | null;
+  /** `[[…]]` or `![[…]]` — see the column's own comment in `migrate` (B45). */
+  kind: "link" | "embed";
 }
 
 /**
@@ -410,14 +423,14 @@ export interface LinkRow {
  */
 export function allLinks(db: IndexDb): LinkRow[] {
   return db
-    .prepare(`SELECT fromPath, target, alias FROM note_links ORDER BY fromPath`)
+    .prepare(`SELECT fromPath, target, alias, kind FROM note_links ORDER BY fromPath`)
     .all() as LinkRow[];
 }
 
 /** The links one note carries, for the rare case of asking about a single note. */
 export function linksFrom(db: IndexDb, path: string): LinkRow[] {
   return db
-    .prepare(`SELECT fromPath, target, alias FROM note_links WHERE fromPath = ?`)
+    .prepare(`SELECT fromPath, target, alias, kind FROM note_links WHERE fromPath = ?`)
     .all(path) as LinkRow[];
 }
 

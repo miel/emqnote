@@ -475,6 +475,95 @@ export function rewriteWikiLinks(
   return written;
 }
 
+/**
+ * Repoints every `[[…]]`/`![[…]]` target that starts with `from/` at `to/` instead — the
+ * other half of a folder rename (B45), and the half `rewriteWikiLinks` above cannot do.
+ *
+ * Two things separate this from that function, and both are the reason it exists rather
+ * than being folded in:
+ *
+ * - **It rewrites `wikiEmbed` as well as `wikiLink`.** An embed is how a picture is
+ *   written, its files move when their folder is renamed, and nothing in the app touched
+ *   them before: a note full of `![[99 - Attachments/foto.png]]` came back full of
+ *   missing-file markers. That is the bug this was written for.
+ * - **It swaps a path prefix rather than replacing a whole target.** `rewriteWikiLinks`
+ *   points a set of known spellings at one new target, which is what a single note moving
+ *   needs; a folder rename moves many files at once, each keeping its own name under a new
+ *   parent, and that is arithmetic on the string rather than a lookup.
+ *
+ * **No alias is touched, and none is invented.** B35 promotes a bare target to an alias
+ * because a title-form link rewritten to a path would silently start displaying a path.
+ * Nothing of the sort happens here: an embed has no alias at all, and a link whose target
+ * already was a path keeps displaying exactly what it displayed before.
+ *
+ * Through `parseNote` → mutate → `serializeNote` → `writeAtomic` like every other write
+ * (B6) — never a text substitution, since `[[` inside a code fence is not a link and the
+ * serializer is the one thing that knows how one is spelled. Returns how many files were
+ * actually written; a note in `skip` (the path the capture window has claimed) is left
+ * alone, its in-memory document being about to be written over anything landing here.
+ */
+export function rewriteTargetPrefix(
+  vault: string,
+  notePaths: string[],
+  from: string,
+  to: string,
+  skip?: string | null,
+): number {
+  if (from === to || from === "") return 0;
+
+  const prefix = `${from}/`;
+  let written = 0;
+
+  for (const notePath of notePaths) {
+    if (skip !== undefined && skip !== null && notePath === skip) continue;
+
+    const file = join(vault, notePath);
+    if (!existsSync(file)) continue;
+
+    const existing = readFileSync(file, "utf8");
+    const note = parseNote(existing);
+
+    const hits: { pos: number; node: PMNode }[] = [];
+    note.doc.descendants((node, pos) => {
+      const isReference = node.type.name === "wikiEmbed" || node.type.name === "wikiLink";
+      if (isReference && (node.attrs.target as string).startsWith(prefix)) {
+        hits.push({ pos, node });
+      }
+      return true;
+    });
+    if (hits.length === 0) continue;
+
+    // Backwards, so each replacement leaves the positions of the ones still to come
+    // untouched — the same reason `rewriteWikiLinks` reverses its own list.
+    let doc = note.doc;
+    for (const hit of hits.reverse()) {
+      const target = hit.node.attrs.target as string;
+      const replacement = hit.node.type.create(
+        { ...hit.node.attrs, target: `${to}/${target.slice(prefix.length)}` },
+        hit.node.content,
+        hit.node.marks,
+      );
+      doc = doc.replace(
+        hit.pos,
+        hit.pos + hit.node.nodeSize,
+        new Slice(Fragment.from(replacement), 0, 0),
+      );
+    }
+
+    const contents = serializeNote({
+      frontmatter: { ...note.frontmatter, modified: isoWithOffset(new Date()) },
+      doc,
+    });
+
+    if (!sameApartFromModified(existing, contents)) {
+      writeAtomic(file, contents);
+      written += 1;
+    }
+  }
+
+  return written;
+}
+
 /** Moves a note to another folder, without ever overwriting what is already there. */
 export function moveNote(vault: string, notePath: string, targetFolder: string): string {
   const from = join(vault, notePath);

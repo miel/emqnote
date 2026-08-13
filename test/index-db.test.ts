@@ -315,15 +315,15 @@ describe("the SQLite index", () => {
         record({
           path: "00 Inbox/Kickoff.md",
           links: [
-            { target: "01 Projecten/Rules", alias: "Rules" },
-            { target: "Losse aantekening", alias: null },
+            { target: "01 Projecten/Rules", alias: "Rules", kind: "link" },
+            { target: "Losse aantekening", alias: null, kind: "link" },
           ],
         }),
       );
 
       expect(linksFrom(db, "00 Inbox/Kickoff.md")).toEqual([
-        { fromPath: "00 Inbox/Kickoff.md", target: "01 Projecten/Rules", alias: "Rules" },
-        { fromPath: "00 Inbox/Kickoff.md", target: "Losse aantekening", alias: null },
+        { fromPath: "00 Inbox/Kickoff.md", target: "01 Projecten/Rules", alias: "Rules", kind: "link" },
+        { fromPath: "00 Inbox/Kickoff.md", target: "Losse aantekening", alias: null, kind: "link" },
       ]);
     });
 
@@ -333,8 +333,8 @@ describe("the SQLite index", () => {
         record({
           path: "00 Inbox/Kickoff.md",
           links: [
-            { target: "Rules", alias: null },
-            { target: "Rules", alias: "de regels" },
+            { target: "Rules", alias: null, kind: "link" },
+            { target: "Rules", alias: "de regels", kind: "link" },
           ],
         }),
       );
@@ -343,7 +343,7 @@ describe("the SQLite index", () => {
     });
 
     it("replaces the whole set on a re-upsert, so a removed link leaves no row behind", () => {
-      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null }] }));
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null, kind: "link" }] }));
       upsertNote(db, record({ path: "a.md", links: [] }));
 
       expect(linksFrom(db, "a.md")).toEqual([]);
@@ -351,15 +351,15 @@ describe("the SQLite index", () => {
     });
 
     it("goes away with the note", () => {
-      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null }] }));
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Rules", alias: null, kind: "link" }] }));
       deleteNote(db, "a.md");
 
       expect(allLinks(db)).toEqual([]);
     });
 
     it("reads the whole vault's links in one go, ordered by the note they sit in", () => {
-      upsertNote(db, record({ path: "b.md", links: [{ target: "Rules", alias: null }] }));
-      upsertNote(db, record({ path: "a.md", links: [{ target: "Kickoff", alias: null }] }));
+      upsertNote(db, record({ path: "b.md", links: [{ target: "Rules", alias: null, kind: "link" }] }));
+      upsertNote(db, record({ path: "a.md", links: [{ target: "Kickoff", alias: null, kind: "link" }] }));
 
       expect(allLinks(db).map((row) => row.fromPath)).toEqual(["a.md", "b.md"]);
     });
@@ -401,7 +401,7 @@ describe("the SQLite index", () => {
           title: "Kickoff project Alpha",
           body: "Kickoff met de klant over project Alpha.",
           tasks: [{ ordinal: 0, checked: false, text: "Offerte versturen" }],
-          links: [{ target: "Rules", alias: null }],
+          links: [{ target: "Rules", alias: null, kind: "link" }],
         }),
       );
 
@@ -469,7 +469,7 @@ describe("the SQLite index", () => {
           reopened,
           record({
             tasks: [{ ordinal: 0, checked: false, text: "Nieuw" }],
-            links: [{ target: "Rules", alias: null }],
+            links: [{ target: "Rules", alias: null, kind: "link" }],
           }),
         );
         expect(tasksIn(reopened, "", false)).toHaveLength(1);
@@ -488,11 +488,53 @@ describe("the SQLite index", () => {
      * scan — meaning it would carry no links at all, silently and permanently, and a move
      * would leave every link to the moved note pointing at where it used to be.
      */
+    /**
+     * The case B45 had to bump the version for, and the one that decides whether the fix
+     * reaches a vault that already exists. An index at version 2 holds every note and
+     * every `[[…]]` link, so `needsRefresh` re-reads nothing on the next scan — it would
+     * carry no `![[…]]` embed rows at all, and a folder rename would go on silently
+     * leaving every picture in that folder pointing at the old name.
+     */
+    it("rebuilds an index left at version 2, which has links but can never gain embeds", () => {
+      const path = join(mkdtempSync(join(tmpdir(), "emqnote-index-db-")), "index.db");
+
+      const first = openIndex(path);
+      upsertNote(first, record({ links: [{ target: "Rules", alias: null, kind: "link" }] }));
+      // Wind it back to what an index built before embeds were stored looked like: the
+      // table is there, with no `kind` column at all.
+      first.exec(`DROP TABLE note_links`);
+      first.exec(`CREATE TABLE note_links (fromPath TEXT NOT NULL, target TEXT NOT NULL, alias TEXT)`);
+      first.pragma("user_version = 2");
+      closeIndex(first);
+
+      const reopened = openIndex(path);
+      try {
+        expect(allNotes(reopened)).toEqual([]);
+
+        upsertNote(
+          reopened,
+          record({
+            links: [
+              { target: "Rules", alias: null, kind: "link" },
+              { target: "99 - Attachments/foto.png", alias: null, kind: "embed" },
+            ],
+          }),
+        );
+
+        expect(allLinks(reopened).map((row) => row.kind).sort()).toEqual(["embed", "link"]);
+      } finally {
+        closeIndex(reopened);
+        rmSync(path, { force: true });
+        rmSync(`${path}-wal`, { force: true });
+        rmSync(`${path}-shm`, { force: true });
+      }
+    });
+
     it("rebuilds an index left at version 1, which has notes but can never gain links", () => {
       const path = join(mkdtempSync(join(tmpdir(), "emqnote-index-db-")), "index.db");
 
       const first = openIndex(path);
-      upsertNote(first, record({ links: [{ target: "Rules", alias: null }] }));
+      upsertNote(first, record({ links: [{ target: "Rules", alias: null, kind: "link" }] }));
       // Wind it back to what an index built before `note_links` existed looked like.
       first.exec(`DROP TABLE note_links`);
       first.pragma("user_version = 1");
@@ -503,7 +545,7 @@ describe("the SQLite index", () => {
         expect(allNotes(reopened)).toEqual([]);
         expect(allLinks(reopened)).toEqual([]);
 
-        upsertNote(reopened, record({ links: [{ target: "Rules", alias: null }] }));
+        upsertNote(reopened, record({ links: [{ target: "Rules", alias: null, kind: "link" }] }));
         expect(allLinks(reopened)).toHaveLength(1);
       } finally {
         closeIndex(reopened);

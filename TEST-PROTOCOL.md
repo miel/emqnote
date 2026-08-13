@@ -555,6 +555,9 @@ whether ten buttons in a row are legible at a real window width.
 | 16j | Launch the app and look at the sidebar | Trash is folded. Unfold it: what is inside is dimmed and italic, and the Trash row itself is not |
 | 16k | Rename a folder holding notes that other notes link to | No dialog at all — the rename happens and the links follow. Check the referring file's bytes and click the link: it opens the note |
 | 16l | Rename a folder holding a note that is open in the capture window | Refused, with a message naming the reason. Nothing on disk moves |
+| 16m | Rename a folder of **attachments** — the `99 - Attachments` shape an Obsidian vault has — with notes embedding pictures out of it | Every `![[…]]` and `[[…\|…]]` naming a file in it follows the rename, and the pictures still *draw*. This is the case the first version missed entirely (B45); checking the bytes is not enough on its own, the picture has to appear |
+| 16n | Rename a folder whose name is the start of a sibling's (`Bijlagen` beside `Bijlagen extra`) | Only the renamed one's targets change |
+| 16o | Do 16m against a vault whose index predates this | It works on the first run: the schema bump forces a rebuild, and the only sign should be the scan bar at the top of the library |
 
 ---
 
