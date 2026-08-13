@@ -1,31 +1,39 @@
 import type { EditorView } from "prosemirror-view";
+import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
-import { isImageAttachment } from "./attachment-view.js";
+import { isEmbeddableAttachment } from "./attachment-view.js";
+
+/**
+ * `![[name]]` for anything this app can draw in the note, `[[name]]` for everything else —
+ * the choice between the two spellings, made in exactly one place.
+ *
+ * A PDF joined the first group at B43: an embedded one draws its first page at the width
+ * of the column, and inserting it as a link would have left the new feature reachable only
+ * by typing `![[…]]` by hand, which is not a thing a WYSIWYG editor lets you do. A `.docx`
+ * is still a link, because there is still nothing to draw for it.
+ */
+function attachmentNode(name: string): PMNode {
+  return isEmbeddableAttachment(name)
+    ? schema.nodes.wikiEmbed!.create({ target: name })
+    : schema.nodes.wikiLink!.create({ target: name });
+}
 
 /**
  * The one place a stored attachment turns into a document node — used by the toolbar
  * button, the keyboard shortcut, a clipboard paste and a file drop alike, so the
- * choice between `wikiEmbed` and `wikiLink` is made exactly once. `name` is always
- * already the stored filename `saveAttachment`/`pickAttachment` returned, never a raw
- * `File` — everything that writes bytes goes through main first (B6: a renderer never
- * writes a file), so by the time this runs the attachment already exists on disk.
+ * choice above is made exactly once. `name` is always already the stored filename
+ * `saveAttachment`/`pickAttachment` returned, never a raw `File` — everything that writes
+ * bytes goes through main first (B6: a renderer never writes a file), so by the time this
+ * runs the attachment already exists on disk.
  */
 export function insertAttachment(view: EditorView, name: string): void {
-  const node = isImageAttachment(name)
-    ? schema.nodes.wikiEmbed!.create({ target: name })
-    : schema.nodes.wikiLink!.create({ target: name });
-
-  view.dispatch(view.state.tr.replaceSelectionWith(node, false).scrollIntoView());
+  view.dispatch(view.state.tr.replaceSelectionWith(attachmentNode(name), false).scrollIntoView());
   view.focus();
 }
 
 /** Same insertion, at an explicit document position rather than the current selection — what a drop needs, since the drop point is rarely where the caret already was. */
 function insertAttachmentAt(view: EditorView, name: string, pos: number): void {
-  const node = isImageAttachment(name)
-    ? schema.nodes.wikiEmbed!.create({ target: name })
-    : schema.nodes.wikiLink!.create({ target: name });
-
-  view.dispatch(view.state.tr.insert(pos, node).scrollIntoView());
+  view.dispatch(view.state.tr.insert(pos, attachmentNode(name)).scrollIntoView());
   view.focus();
 }
 

@@ -246,6 +246,66 @@ export async function linkingNotes(
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * The same question as `linkingNotes`, asked about every note inside a folder at once —
+ * what a folder rename needs (B44), keyed by the note that is about to move.
+ *
+ * One index and one pass over the link table, not one of each per note. `linkingNotes`
+ * already refuses to resolve links one at a time for being quadratic; calling it once per
+ * note in a folder would rebuild its three lookup tables per note and reach the same shape
+ * from the other direction — a folder of fifty notes would walk the whole vault's links
+ * fifty times.
+ *
+ * Self-links are dropped for the reason `linkingNotes` gives, and so is any referrer that
+ * would be rewritten to the spelling it already has: a note *inside* the renamed folder
+ * moves with it, so a link from one of its neighbours keeps resolving either way. It is
+ * still rewritten, because the target path it names changes with the folder — but a
+ * referrer outside the folder and one inside it are told apart afterwards, by
+ * `folder-rename-links.ts`, not here.
+ */
+export async function linkingNotesUnder(
+  vault: string,
+  db: IndexDb,
+  folderPath: string,
+): Promise<Map<string, LinkingNote[]>> {
+  await ensureScanned(vault, db);
+  if (!available) return new Map();
+
+  const notes = allNotes(db);
+  const index = buildLinkIndex(notes.map((note) => ({ path: note.path, title: note.title })));
+  const titles = new Map(notes.map((note) => [note.path, note.title]));
+
+  const prefix = `${folderPath}/`;
+  const inside = new Set(notes.filter((note) => note.path.startsWith(prefix)).map((n) => n.path));
+  if (inside.size === 0) return new Map();
+
+  const found = new Map<string, Map<string, Set<string>>>();
+  for (const link of allLinks(db)) {
+    const resolved = resolveInIndex(index, link.target);
+    if (resolved.kind !== "unique" || !inside.has(resolved.path)) continue;
+    if (link.fromPath === resolved.path) continue;
+
+    let referrers = found.get(resolved.path);
+    if (referrers === undefined) {
+      referrers = new Map();
+      found.set(resolved.path, referrers);
+    }
+
+    const targets = referrers.get(link.fromPath);
+    if (targets === undefined) referrers.set(link.fromPath, new Set([link.target]));
+    else targets.add(link.target);
+  }
+
+  return new Map(
+    [...found.entries()].map(([notePath, referrers]) => [
+      notePath,
+      [...referrers.entries()]
+        .map(([path, targets]) => ({ path, title: titles.get(path) ?? path, targets: [...targets] }))
+        .sort((a, b) => a.path.localeCompare(b.path)),
+    ]),
+  );
+}
+
 export async function facets(vault: string, db: IndexDb, excludePath?: string): Promise<Facets> {
   await ensureScanned(vault, db);
   if (!available) return { tags: [], people: [], available: false };

@@ -15,6 +15,7 @@ import type {
   Selection,
   SortKey,
   VaultFileEvent,
+  WikiLinkOpen,
 } from "../shared/vault-types.js";
 
 /**
@@ -80,13 +81,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     renameNote: (path: string, title: string, rewriteLinks?: boolean) =>
       ipcRenderer.invoke(IPC.libraryRenameNote, path, title, rewriteLinks),
     linkingNotes: (path: string) => ipcRenderer.invoke(IPC.libraryLinkingNotes, path),
-    onOpenLink: (
-      handler: (event: { target: string; candidates: LinkCandidateSummary[] }) => void,
-    ) =>
-      subscribe<{ target: string; candidates: LinkCandidateSummary[] }>(
-        IPC.libraryOpenLink,
-        handler,
-      ),
+    onOpenLink: (handler: (event: WikiLinkOpen) => void) =>
+      subscribe<WikiLinkOpen>(IPC.libraryOpenLink, handler),
     duplicateNote: (path: string) => ipcRenderer.invoke(IPC.libraryDuplicateNote, path),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
     emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),

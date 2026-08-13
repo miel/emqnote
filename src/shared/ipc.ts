@@ -16,6 +16,7 @@ import type {
   TaskItem,
   VaultFileEvent,
   VaultLocation,
+  WikiLinkOpen,
 } from "./vault-types.js";
 
 /** The contract between main and renderer. Both sides import this file. */
@@ -304,9 +305,7 @@ export interface LibraryApi {
    * A `[[…]]` link was clicked somewhere and names a note. One candidate is a note to
    * open; several mean the target is ambiguous and the picker decides.
    */
-  onOpenLink: (
-    handler: (event: { target: string; candidates: LinkCandidateSummary[] }) => void,
-  ) => () => void;
+  onOpenLink: (handler: (event: WikiLinkOpen) => void) => () => void;
   /**
    * Copies a note beside itself with `-copy` appended to the title. `locked` when the
    * capture window has the *source* claimed — its edits may not have crossed the 800 ms

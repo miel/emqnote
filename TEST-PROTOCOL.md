@@ -513,6 +513,51 @@ grid is a hover gesture, which `--click-button` cannot drive, so its feel is unt
 
 ---
 
+## 15. A PDF embedded in the note (B43)
+
+Driven end to end under `Xvfb` on 13 August 2026 against a real three-page PDF, with **dark
+pixels counted on the drawn page** rather than an `<img>` merely being present. What is left
+is what only a person on a real display can judge: how a full-width page feels to read past.
+
+| # | Do this | Expect |
+|---|---|---|
+| 15a | Insert a PDF with 📎 (or `Mod+Shift+A`, or drop one in) | Its first page appears inline at the width of the note column, with the filename and a ⧉ on a bar underneath. `cat` the file: the line reads `![[…]]`, not `[[…]]` |
+| 15b | Scroll a long note past the embedded page | It reads as a picture in the text, not as a widget: the wheel scrolls the note and never gets caught by the page. This is the one thing a script cannot judge |
+| 15c | Click the ⧉ | B40's viewer window opens on that PDF. The inline page stays a page — it is deliberately page 1 only |
+| 15d | Click the page itself | It selects like a picture (blue outline) and Backspace deletes it. An atom you cannot select is one you cannot get rid of |
+| 15e | Put the caret beside it and press ← / → | The caret steps past the embed rather than landing on an invisible selection |
+| 15f | Type `[[offerte.pdf]]` by hand instead (or open an older note carrying one) | The small B36 chip with its thumbnail, unchanged. The two spellings mean two different things and neither is rewritten on open |
+| 15g | Delete the PDF out of `_attachments/` and reopen the note | A marked chip with ⚠ where the page was, naming the file |
+| 15h | Put the file back — **without restarting** — and reopen the note | The page draws again. This is the one that was broken in the first version: a missing file must not be remembered, only a PDF that genuinely cannot be rendered |
+| 15i | Embed a corrupt or password-protected PDF | A chip in the warning colour, and hovering says why. It must not look identical to 15g, and it must not look like a plain attachment |
+| 15j | Open a note with several embedded PDFs | They draw one after another, not all at once — one render window, one slot. Nothing about the window should stutter while they arrive |
+| 15k | Do 15a and 15c in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n |
+
+---
+
+## 16. The table toolbar, the back button and the folded Trash (13 August 2026)
+
+All three were driven under `Xvfb`, including `--click-button="Row ↓"` reaching a toolbar
+button and `npm run canonical` on the file afterwards. What a person still has to judge is
+whether ten buttons in a row are legible at a real window width.
+
+| # | Do this | Expect |
+|---|---|---|
+| 16a | Put the caret in a table | A row of buttons appears just above it: Row ↑ / Row ↓ / Col ← / Col → / Del row / Del col / Left / Centre / Right / Auto. Move the caret out of the table and it goes |
+| 16b | Look at the toolbar at a normal window width | Ten buttons that read as a toolbar rather than as clutter. Hovering each gives the full sentence ("Insert row below"). This is the judgement call automation cannot make |
+| 16c | Use each of the four row/column buttons, then `cat` the file | Plain GFM, three dashes, no cell padding. Run `npm run canonical`: byte-identical |
+| 16d | Put the caret in a column and click Centre | That column's delimiter becomes `:---:` and its neighbours stay `---`. The Centre button is the lit one; move to another column and the lit button follows |
+| 16e | Click Auto | Back to a plain `---`. "Auto" is a real fourth state, not a synonym for Left |
+| 16f | Right-click inside the table | The same operations are still in the menu, plus **Delete table**, which is deliberately not on the toolbar |
+| 16g | Click a `[[…]]` link to another note | The note opens with a `← <the note you came from>` button above its title. Click it: you are back, and the button is gone |
+| 16h | Follow three links in a row, then click back three times | One step per click, all the way out. Then open any note from the list: no back button at all |
+| 16i | Click a `[[…]]` link in the **capture window** — NEVER VERIFIED | The library opens the target *and* offers a way back to the note you were typing in. Same missing harness as 13h/14n |
+| 16j | Launch the app and look at the sidebar | Trash is folded. Unfold it: what is inside is dimmed and italic, and the Trash row itself is not |
+| 16k | Rename a folder holding notes that other notes link to | No dialog at all — the rename happens and the links follow. Check the referring file's bytes and click the link: it opens the note |
+| 16l | Rename a folder holding a note that is open in the capture window | Refused, with a message naming the reason. Nothing on disk moves |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -521,9 +566,10 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h or §14n fails, that is
-expected-ish rather than alarming: those have never been watched working, and they are why
-this document exists. The last three are all the same gap — the capture window has no test
-harness — and §12b is the one thing in the PDF viewer that a Linux sandbox genuinely cannot
-answer. §4.5 is no longer one of them — since B36 the rendering itself has been seen
+If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k or §16i fails,
+that is expected-ish rather than alarming: those have never been watched working, and they are
+why this document exists. §11f, §13h, §14n, §15k and §16i are all the same gap — the capture
+window has no test harness — and §12b is the one thing in the PDF viewer that a Linux sandbox
+genuinely cannot answer. §15b and §16b are a different kind of unwatched: they are judgements
+about how something feels or reads, which no script can make. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

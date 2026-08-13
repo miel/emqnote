@@ -8,6 +8,7 @@ import type {
   LinkCandidateSummary,
   NoteSummary,
   OpenedNote,
+  WikiLinkOpen,
 } from "../src/shared/vault-types.js";
 
 /**
@@ -25,6 +26,8 @@ import type {
 
 const NOTE_PATH = "00 Inbox/2026-08-08 0900 Spelregels.md";
 const MOVED_PATH = "01 Projecten/2026-08-08 0900 Spelregels.md";
+/** The note a `[[…]]` click leads to, titled differently so the two are never confused. */
+const LINKED_PATH = "03 Ander/2026-08-08 1100 Doel.md";
 
 // What `linkTargetFor` answers for each: the path with its note extension taken off,
 // which is the spelling `NotePicker` writes into a document (B41).
@@ -68,7 +71,7 @@ interface Fake {
   linkingNotes: ReturnType<typeof vi.fn>;
   openNoteMock: ReturnType<typeof vi.fn>;
   /** Fires the `library:open-link` push the way main does when a `[[…]]` chip is clicked. */
-  pushOpenLink: (event: { target: string; candidates: LinkCandidateSummary[] }) => void;
+  pushOpenLink: (event: WikiLinkOpen) => void;
 }
 
 function buildFake(): Fake {
@@ -86,6 +89,9 @@ function buildFake(): Fake {
     [NOTE_PATH, openedNote(NOTE_PATH, "Spelregels")],
     [MOVED_PATH, openedNote(MOVED_PATH, "Spelregels")],
     ["02 Klanten/Spelregels.md", openedNote("02 Klanten/Spelregels.md", "Spelregels")],
+    // A note with a title of its own, so a test can tell which of the two the reader is
+    // showing without going by the path.
+    [LINKED_PATH, openedNote(LINKED_PATH, "Doel")],
   ]);
 
   const moveNote = vi.fn(async (path: string) => ({ path }));
@@ -93,9 +99,7 @@ function buildFake(): Fake {
   const linkingNotes = vi.fn(async () => [] as { path: string; title: string }[]);
   const openNoteMock = vi.fn(async (path: string) => notesByPath.get(path) ?? null);
 
-  let openLinkHandler:
-    | ((event: { target: string; candidates: LinkCandidateSummary[] }) => void)
-    | null = null;
+  let openLinkHandler: ((event: WikiLinkOpen) => void) | null = null;
 
   const library: LibraryApi = {
     tree: async () => tree,
@@ -326,6 +330,7 @@ describe("internal note links in the library (B35)", () => {
         candidates: [
           { path: MOVED_PATH, title: "Spelregels", folder: "01 Projecten", target: MOVED_TARGET },
         ],
+        origin: null,
       });
     });
     await flush();
@@ -347,6 +352,7 @@ describe("internal note links in the library (B35)", () => {
             target: "02 Klanten/Spelregels",
           },
         ],
+        origin: null,
       });
     });
     await flush();
@@ -366,5 +372,139 @@ describe("internal note links in the library (B35)", () => {
 
     expect(fake.openNoteMock).toHaveBeenCalledWith("02 Klanten/Spelregels.md");
     expect(container.querySelector(".palette-title")).toBeNull();
+  });
+
+  /**
+   * The way back out of a followed link.
+   *
+   * Every case here is about *when the button applies*, which is the whole design: it is
+   * derived from the trail rather than stored on the note, so opening something else has
+   * to make it disappear without anything having to remember to clear anything.
+   */
+  describe("back to the note the link was clicked in", () => {
+    function backButton(): HTMLButtonElement | null {
+      return container.querySelector(".reader-back");
+    }
+
+    async function followLinkTo(path: string, title: string): Promise<void> {
+      await act(async () => {
+        fake.pushOpenLink({
+          target: title,
+          candidates: [{ path, title, folder: path.split("/")[0]!, target: path.replace(/\.md$/, "") }],
+          origin: null,
+        });
+      });
+      await flush();
+    }
+
+    it("names the note the click came from, and goes back to it", async () => {
+      await openTheNote();
+      expect(backButton()).toBeNull();
+
+      await followLinkTo(LINKED_PATH, "Doel");
+
+      expect(container.querySelector("h1")?.textContent).toBe("Doel");
+      expect(backButton()?.textContent).toBe("← Spelregels");
+
+      await act(async () => {
+        backButton()!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+
+      expect(fake.openNoteMock).toHaveBeenLastCalledWith(NOTE_PATH);
+      expect(container.querySelector("h1")?.textContent).toBe("Spelregels");
+      // Walked all the way back out: there is nowhere further to go.
+      expect(backButton()).toBeNull();
+    });
+
+    it("uses the origin main sent, for a link clicked in the capture window", async () => {
+      // Nothing open in this window at all — the click happened somewhere else, and the
+      // only thing that can name its note is main.
+      await act(async () => {
+        fake.pushOpenLink({
+          target: "Doel",
+          candidates: [
+            { path: LINKED_PATH, title: "Doel", folder: "03 Ander", target: LINKED_PATH },
+          ],
+          origin: { path: NOTE_PATH, title: "Vanuit het invoervenster" },
+        });
+      });
+      await flush();
+
+      expect(backButton()?.textContent).toBe("← Vanuit het invoervenster");
+    });
+
+    it("does not appear for a note opened from the list", async () => {
+      await openTheNote();
+      expect(backButton()).toBeNull();
+    });
+
+    it("disappears again when another note is opened any other way", async () => {
+      await openTheNote();
+      await followLinkTo(LINKED_PATH, "Doel");
+      expect(backButton()).not.toBeNull();
+
+      await openTheNote();
+
+      expect(backButton()).toBeNull();
+    });
+
+    it("walks back out of a chain of links one step at a time", async () => {
+      await openTheNote();
+      await followLinkTo(LINKED_PATH, "Doel");
+      await followLinkTo(MOVED_PATH, "Spelregels");
+
+      expect(backButton()?.textContent).toBe("← Doel");
+
+      await act(async () => {
+        backButton()!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+
+      expect(backButton()?.textContent).toBe("← Spelregels");
+    });
+
+    it("records nothing for a link that names the note already open", async () => {
+      await openTheNote();
+      await followLinkTo(NOTE_PATH, "Spelregels");
+
+      expect(backButton()).toBeNull();
+    });
+
+    it("remembers where the picker was raised from, not where the reader ended up", async () => {
+      await openTheNote();
+
+      await act(async () => {
+        fake.pushOpenLink({
+          target: "Spelregels",
+          candidates: [
+            { path: MOVED_PATH, title: "Spelregels", folder: "01 Projecten", target: MOVED_TARGET },
+            {
+              path: "02 Klanten/Spelregels.md",
+              title: "Spelregels",
+              folder: "02 Klanten",
+              target: "02 Klanten/Spelregels",
+            },
+          ],
+          origin: null,
+        });
+      });
+      await flush();
+
+      const rows = [...container.querySelectorAll(".palette-list li")];
+      await act(async () => {
+        rows[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+
+      expect(backButton()?.textContent).toBe("← Spelregels");
+
+      await act(async () => {
+        backButton()!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await flush();
+
+      expect(fake.openNoteMock).toHaveBeenLastCalledWith(NOTE_PATH);
+    });
   });
 });

@@ -1248,6 +1248,109 @@ alleen — uitlijning staat per kolom in een array op de tabel — dus een decor
 
 ---
 
+## B43 — Een PDF wordt met `![[…]]` in de notitie zelf gelezen
+
+**Genomen** op 13 augustus 2026. B36 tekent de eerste pagina van een PDF en B40 opent hem in
+een eigen venster — maar allebei pas ná een klik. In de notitie stond een chip van 96 pixels
+breed, en wie een offerte in zijn aantekeningen zet wil die zien staan, niet aanklikken. De
+vraag zoals hij binnenkwam: "er is een prachtige PDF-lezer, maar hij gaat pas open als je op
+de miniatuur klikt."
+
+**De twee schrijfwijzen betekenen nu twee verschillende dingen.** `![[offerte.pdf]]` tekent
+pagina één op de breedte van de kolom; `[[offerte.pdf]]` blijft de chip van B36, met de
+kleine miniatuur ernaast, die het venster van B40 opent. Dat onderscheid bestond al voor
+afbeeldingen — een embed tegenover een verwijzing — en het bestandsformaat wist het allang:
+`from-mdast.ts` heeft nooit naar de extensie achter een `![[…]]` gekeken. **Aan het formaat
+is dan ook geen letter veranderd.** Wat ontbrak was een NodeView en een grotere tekening.
+
+**Er komt geen pdf.js in de editorbundel.** Dat was de voor de hand liggende manier om een
+echte lezer in de notitie te zetten, en het is de verkeerde: het opnamevenster tekent
+dezelfde NodeView, en dat is het venster dat binnen 80 ms op het scherm moet staan met een
+bundel die daarom klein gehouden wordt. In plaats daarvan vraagt de embed dezelfde pijplijn
+als de chip om een tweede maat — `emqnote-thumb://vault/<naam>?size=page` — en tekent het
+verborgen venster van B36 die pagina, één keer, met de PNG op schijf in de cache. De bundel
+van het opnamevenster is na dit werk nog steeds vrij van pdf.js; `pdf-fit` zit alleen in de
+twee ingangen die er al in zaten.
+
+**Eén schema met een maat erop, geen tweede schema.** De doorloopbeveiliging van
+`resolveAttachment`, de `isPreviewable`-poort en de 404/422-splitsing zijn voor allebei
+dezelfde beslissingen. Twee handlers zouden twee plekken zijn om ze te veranderen. De maat
+staat in de *query* en niet in een tweede padsegment, omdat de naam één ondoorzichtig segment
+is (B38) — en `encodeURIComponent` maakt nooit een `?`, dus knippen bij de eerste `?` kan
+nooit in een naam snijden.
+
+**Alleen een 422 wordt onthouden, een ontbrekend bestand niet.** Dat is B39 van de andere
+kant: dat een PDF niet te tekenen is, is een eigenschap van de bytes en blijft waar; dát hij
+er niet is, is een eigenschap van dít moment — een OneDrive-bestand dat nog binnenkomt maakt
+het onwaar. Dit is niet uit de code afgeleid maar door het te draaien gevonden: in de eerste
+versie kwam een teruggezet bestand pas na een herstart weer als pagina terug. De herhaalde
+vraag kost één 404 uit `resolveAttachment` en bereikt de tekenpijplijn niet eens.
+
+**Een PDF invoegen schrijft nu `![[…]]`.** Anders was de hele functie alleen bereikbaar door
+met de hand `![[…]]` te tikken, en dat is precies wat een WYSIWYG-editor niet toelaat. Een
+`.docx` blijft een verwijzing, want daar valt nog steeds niets aan te tekenen. Een met de
+hand geschreven `[[offerte.pdf]]` blijft geldig en wordt bij het openen niet aangeraakt (B10).
+
+De balk onder de pagina draagt de bestandsnaam en de ⧉ naar het venster van B40 — daar
+worden pagina twee en verder gelezen, en dít blijft één pagina. Alleen die balk slikt de
+`mousedown`: op de pagina zelf klikken maakt een gewone `NodeSelection`, want een atoom dat je
+niet kunt selecteren is er één die je niet meer weg krijgt.
+
+Bevestigd onder `Xvfb` tegen een echte PDF van `pdflatex`: de pagina getekend op 1240×1754
+en weergegeven op 591 CSS-pixels, met **5678 werkelijk donkere pixels geteld** op het beeld —
+de les van B38, dat een `<img>` in de DOM geen bewijs is. Verder de ⧉ die het venster op drie
+pagina's opent, de gemarkeerde chip als het bestand weg is, en de pagina die terugkomt zodra
+het bestand terugkomt.
+
+---
+
+## B44 — Een map hernoemen repareert de verwijzingen erheen, zonder te vragen
+
+**Genomen** op 13 augustus 2026. `renameFolder` droeg deze zin: *"Nothing inside needs
+rewriting: wikilinks and embeds carry bare names, not paths."* Dat klopte toen het er stond en
+is bij B35 opgehouden te kloppen — een verwijzing die deze app schrijft is
+`[[01 Projecten/2026-08-05 1030 Rules|Rules]]`, een pad, en sinds B41 is dat de enige vorm die
+de app nog produceert. Een map hernoemen verplaatst dus elk pad eronder, en liet elke
+verwijzing erheen kapot achter. Stil, want een kapotte notitieverwijzing houdt zich
+opzettelijk gedeisd tot je erop klikt (B35) — het juiste gedrag voor een notitie die nog
+geschreven moet worden, het verkeerde voor een verwijzing die deze app zojuist zelf brak.
+
+De reparatie heeft dezelfde vorm als die van `IPC.libraryMoveNote`, één niveau hoger, en de
+volgorde is het dragende deel: **de vraag wordt vóór de hernoeming gesteld**, want een doel
+lost op tegen waar een notitie *nu* staat, en na `renameFolder` valt er niets meer te vinden.
+
+**Er wordt niet gevraagd.** Bij één notitie doet B35 dat wel, en dat is daar juist: verplaatsen
+is een keuze over die ene notitie, en de verwijzingen zijn een neveneffect. Een map hernoemen
+is geen gebaar over één notitie; een dialoog die notities telt waar de gebruiker niet aan
+dacht, staat in de weg van een reparatie die niemand redelijkerwijs kan willen weigeren. Dit
+is een keuze van de gebruiker, hier vastgelegd zodat de asymmetrie met B35 zichtbaar blijft.
+
+Twee dingen zijn makkelijk verkeerd te doen en daarom een eigen, Electron-vrije module
+(`folder-rename-links.ts`) waard. **Een verwijzende notitie kan zélf in de map staan** — die
+moet op haar *nieuwe* pad herschreven worden, anders schrijft de reparatie naar een pad dat
+niet meer bestaat en slaat `rewriteWikiLinks` het in stilte over. En **het nieuwe doel wordt
+samengesteld, niet opnieuw opgezocht**: opnieuw opzoeken zou eerst een scan kosten, terwijl het
+antwoord rekenwerk is — hetzelfde pad met één voorvoegsel verwisseld.
+
+`linkingNotesUnder` stelt de vraag voor de hele map in één keer: één opgebouwde index en één
+gang door de verwijzingstabel. `linkingNotes` weigert er al één-voor-één op te lossen omdat dat
+kwadratisch is; per notitie in een map die functie aanroepen bereikt dezelfde vorm van de
+andere kant.
+
+De hernoeming heeft er meteen de grendel bij gekregen die `IPC.libraryTrashFolder` al had en
+deze handler miste: een map met daarin een notitie die het opnamevenster geclaimd heeft, wordt
+geweigerd. `CaptureWriter` pint het pad waar hij naartoe schrijft vast, en de map eronder
+verplaatsen werkt dat pad niet bij — dezelfde "één notitie in twee mappen"-val.
+
+Een map *verwijderen* blijft de verwijzingen erheen wél breken, en dat is de bedoeling: die
+notities liggen in de prullenbak, en een verwijzing naar iets weggegooids hoort dat te zeggen.
+
+Bevestigd onder `Xvfb`: `Klant A` hernoemd naar `Klant Alpha`, het bestand op schijf draagt
+daarna `[[Klant Alpha/2026-08-12 1000 Doelnotitie|de regels]]`, er kwam geen dialoog, en de
+verwijzing opent de notitie weer.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1257,7 +1360,7 @@ alleen — uitlijning staat per kolom in een array op de tabel — dus een decor
 | Haalt Windows het latency-budget met de editor erin? | Nu — drie losse metingen (112/77/52 ms) zijn te weinig; zelftest daar draaien |
 | Hoeveel geheugen kost het residente proces in de praktijk? | Fase 1 — raakt B2 |
 | Hoe hardnekkig is de `mso-list`-reconstructie? | Fase 4 — het grootste onbekende stuk werk |
-| Werken de kiezer (B41), het tabelraster (B42) en de PDF-lezer (B40) ook in het *opnamevenster*? | Nu — alle drie zijn op 12 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
+| Werken de kiezer (B41), het tabelraster (B42), de PDF-lezer (B40), de ingesloten pagina (B43) en de tabelwerkbalk ook in het *opnamevenster*? | Nu — alle vijf zijn onder `Xvfb` in de bibliotheek bevestigd (12 en 13 augustus 2026); het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Tekent het opnamevenster een bijlage werkelijk? | Nu — CSP en NodeView staan er, alleen nooit met een echte afbeelding gezien; zie `TEST-PROTOCOL.md` |
 | ~~Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op?~~ | Vervallen — B36 stelt die vraag niet meer: pdf.js tekent de pagina, en dat is op 7 augustus 2026 onder `Xvfb` werkend gezien, op precies dezelfde Chromium die de verpakte app meelevert. Wat een mens nog moet nakijken staat in `TEST-PROTOCOL.md` §4.5 |
 | Verschijnt de eigen, knopvrije melding van het opnamevenster echt bij een externe wijziging? | Nu — het pad in de bibliotheek is op 7 augustus 2026 uitputtend bevestigd onder `Xvfb` (schoon/vuil/verwijderd, en geen valse balk bij eigen schrijfacties); het opnamevenster zelf nog niet, zie `TEST-PROTOCOL.md`, B31 |

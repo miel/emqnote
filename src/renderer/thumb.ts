@@ -33,6 +33,8 @@ interface PdfThumbRenderRequest {
   bytes: Uint8Array;
   maxWidth: number;
   maxHeight: number;
+  /** B43: the inline page render fills its box, a chip never magnifies. See `pdf-fit.ts`. */
+  allowUpscale?: boolean;
 }
 
 type PdfThumbResult =
@@ -53,7 +55,9 @@ async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Arr
     const page = await pdf.getPage(1);
     try {
       const unscaled = page.getViewport({ scale: 1 });
-      const scale = fitScale(unscaled.width, unscaled.height, request.maxWidth, request.maxHeight);
+      const scale = fitScale(unscaled.width, unscaled.height, request.maxWidth, request.maxHeight, {
+        allowUpscale: request.allowUpscale === true,
+      });
       const viewport = page.getViewport({ scale });
 
       const canvas = document.createElement("canvas");

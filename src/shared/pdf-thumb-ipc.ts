@@ -16,9 +16,22 @@ export interface PdfThumbRenderRequest {
   /** Ties a result back to the request that asked for it — see `pdf-thumb.ts`. */
   id: number;
   bytes: Uint8Array;
-  /** The box to fit the first page inside, preserving aspect ratio — `THUMBNAIL_SIZE`. */
+  /**
+   * The box to fit the first page inside, preserving aspect ratio — `THUMBNAIL_SIZE` for a
+   * chip, `PAGE_SIZE` for B43's inline embed (`thumbnail-cache.ts`).
+   */
   maxWidth: number;
   maxHeight: number;
+  /**
+   * Whether a page smaller than the box may be drawn larger to fill it.
+   *
+   * False for a thumbnail, for the reason `pdf-fit.ts` gives: a small page blown up is a
+   * blurry lie about the document. True for the inline page, where the box is a rendering
+   * resolution rather than a display size — pdf.js re-renders vector content at whatever
+   * scale it is given, so asking for more pixels there means a sharper page, not a
+   * magnified one.
+   */
+  allowUpscale?: boolean;
 }
 
 export type PdfThumbResult =

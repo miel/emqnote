@@ -7,7 +7,7 @@ import {
   PDF_THUMB_RESULT,
   type PdfThumbResult,
 } from "../shared/pdf-thumb-ipc.js";
-import { THUMBNAIL_SIZE } from "./thumbnail-cache.js";
+import { boxFor, type ThumbVariant } from "./thumbnail-cache.js";
 import { PdfThumbQueue } from "./pdf-thumb-queue.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -106,20 +106,23 @@ function ensureWindow(): ThumbWindow {
   return current;
 }
 
-async function renderOnce(bytes: Uint8Array): Promise<Buffer> {
+async function renderOnce(request: { bytes: Uint8Array; variant: ThumbVariant }): Promise<Buffer> {
   const thumb = ensureWindow();
   await thumb.ready;
 
   const id = nextRequestId;
   nextRequestId += 1;
+  const box = boxFor(request.variant);
 
   return new Promise<Buffer>((resolve, reject) => {
     pending = { id, resolve, reject };
     thumb.window.webContents.send(PDF_THUMB_RENDER, {
       id,
-      bytes,
-      maxWidth: THUMBNAIL_SIZE.width,
-      maxHeight: THUMBNAIL_SIZE.height,
+      bytes: request.bytes,
+      maxWidth: box.width,
+      maxHeight: box.height,
+      // Only the inline page (B43) fills its box — see `PdfThumbRenderRequest`.
+      allowUpscale: request.variant === "page",
     });
   });
 }
@@ -135,15 +138,21 @@ function destroyIdleWindow(): void {
 const queue = new PdfThumbQueue(renderOnce, destroyIdleWindow);
 
 /**
- * Reads `realPath` and renders its first page as a PNG sized to fit
- * `thumbnail-cache.ts`'s `THUMBNAIL_SIZE` box, preserving aspect ratio. Rejects rather
+ * Reads `realPath` and renders its first page as a PNG sized to fit the box `variant`
+ * names (`thumbnail-cache.ts`'s `THUMBNAIL_SIZE` for a chip, `PAGE_SIZE` for B43's inline
+ * embed), preserving aspect ratio. The queue is shared between the two on purpose: one
+ * render window, one slot, so opening a note full of PDFs cannot fan out into a dozen
+ * simultaneous renders whichever size they are. Rejects rather
  * than returning null, so `ensureThumbnail` can tell "nothing to preview" (the file
  * itself could not even be read) apart from "resolved, but pdf.js could not draw a page
  * from it" and answer 404 vs 422 accordingly.
  */
-export async function renderPdfThumbnail(realPath: string): Promise<Buffer> {
+export async function renderPdfThumbnail(
+  realPath: string,
+  variant: ThumbVariant = "chip",
+): Promise<Buffer> {
   const bytes = await readFile(realPath);
-  return queue.request(bytes);
+  return queue.request({ bytes, variant });
 }
 
 /** `will-quit` — nothing left to render once the app is on its way out. */

@@ -41,6 +41,14 @@ export const FOLDER_ERROR = {
   outside: "folder-leaves-vault",
   missing: "folder-not-found",
   exists: "folder-already-exists",
+  /**
+   * A note inside it is open in the capture window (B44). Renaming would move that file
+   * out from under `CaptureWriter`'s session, which pins the path it will write to next —
+   * the same "one note in two folders" hazard `IPC.libraryMoveNote` and
+   * `IPC.libraryTrashFolder` already refuse, arriving here as a code because the folder
+   * dialogs already decode one.
+   */
+  locked: "folder-holds-open-note",
 } as const;
 
 export type FolderErrorCode = (typeof FOLDER_ERROR)[keyof typeof FOLDER_ERROR];
@@ -224,6 +232,22 @@ export interface LinkCandidateSummary {
    * `NotePicker` (B41) writes it into the document.
    */
   target: string;
+}
+
+/**
+ * main → library: a `[[…]]` link was clicked somewhere and names a note.
+ *
+ * `origin` is the note the click came from, so the note that opens can offer a way back to
+ * it. Main can only answer that for the capture window, whose one open path genuinely is
+ * main's own state (`writer.activePath()`) — for a click in the library's own reader it is
+ * `null`, meaning "whatever that window currently has open", which the library substitutes
+ * itself. That asymmetry is the same one `own-writes.ts` already documents for disk-change
+ * events, and for the same reason: main has no reliable view of what the reader shows.
+ */
+export interface WikiLinkOpen {
+  target: string;
+  candidates: LinkCandidateSummary[];
+  origin: { path: string; title: string } | null;
 }
 
 /** A OneDrive conflict copy paired with the original it names a machine variant of — `src/main/conflicts.ts`. */

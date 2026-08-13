@@ -315,6 +315,7 @@ export function Capture(): React.ReactElement {
         onNoteLinkRequested={openNotePicker}
         onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
         onContextMenu={(payload) => setEditorMenu(payload)}
+        t={app.t}
       />
 
       {editorMenu !== null && (

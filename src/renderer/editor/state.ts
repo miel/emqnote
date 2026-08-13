@@ -14,6 +14,7 @@ import { taskHighlight } from "./task-highlight.js";
 import { remoteImages } from "./paste-images.js";
 import { trailingParagraph } from "./trailing-paragraph.js";
 import { tableDecorations } from "./table-align.js";
+import { tableToolbar } from "./table-toolbar.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -179,6 +180,8 @@ export function createEditorState(
       trailingParagraph(),
       // Column alignment and the caret's own cell — neither reachable from a stylesheet.
       tableDecorations(),
+      // The row/column/alignment buttons, shown above whichever table the caret is in.
+      tableToolbar(context),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

@@ -74,6 +74,21 @@ type Relinkable =
   | { kind: "move"; path: string; folder: string }
   | { kind: "rename"; path: string; title: string };
 
+/**
+ * The note a `[[…]]` click came from — enough of it to name a button and open it again.
+ *
+ * The title comes along rather than being looked up later: for a click in the *capture*
+ * window this side has never seen the note at all, and main already has its title in the
+ * index at the moment it sends the event.
+ */
+type NoteOrigin = { path: string; title: string };
+
+/**
+ * How far back the reader can walk. Long enough that no real chain of links reaches it,
+ * short enough that a resident window cannot accumulate an unbounded list.
+ */
+const BACK_STACK_LIMIT = 20;
+
 /** Which small dialog is open, if any. Only ever one at a time. */
 type Dialog =
   | { kind: "newFolder"; parent: string }
@@ -159,7 +174,23 @@ export function Library(): React.ReactElement {
   const [linkPick, setLinkPick] = useState<{
     target: string;
     candidates: LinkCandidateSummary[];
+    origin: NoteOrigin | null;
   } | null>(null);
+  /**
+   * The trail of `[[…]]` links followed to get to the note now open, so the reader can
+   * offer a way back to the one the click came from.
+   *
+   * A stack rather than one slot: following three links and walking back out is the same
+   * gesture three times, and anything less makes the third click a dead end.
+   *
+   * Nothing here is ever *cleared*. Each entry records which note it leads *to*, and the
+   * button only appears when that matches what is currently open — so opening a note any
+   * other way (a list row, a search hit, a task) simply does not match, and a push whose
+   * origin is not the current top starts a fresh chain rather than piling onto a stale
+   * one. That is what keeps this honest without every other navigation path having to
+   * remember to reset it.
+   */
+  const [backStack, setBackStack] = useState<{ from: NoteOrigin; to: string }[]>([]);
   /**
    * The title being edited in place, or null when the `<h1>` is showing instead.
    *
@@ -653,6 +684,24 @@ export function Library(): React.ReactElement {
   useEffect(() => window.emqnote.onVaultFileChanged(onFileChanged), [onFileChanged]);
 
   /**
+   * Records that `to` was reached by following a link out of `origin`.
+   *
+   * A push whose origin is not what the top entry already leads to starts a fresh chain:
+   * the old trail belongs to a note nobody is standing on any more, and keeping it would
+   * let the stack grow through a session of unrelated hops. A link to the note already
+   * open records nothing — there is nowhere to go back to.
+   */
+  const rememberOrigin = useCallback((origin: NoteOrigin | null, to: string) => {
+    if (origin === null || origin.path === to) return;
+
+    setBackStack((stack) => {
+      const top = stack[stack.length - 1];
+      const chain = top !== undefined && top.to === origin.path ? stack : [];
+      return [...chain, { from: origin, to }].slice(-BACK_STACK_LIMIT);
+    });
+  }, []);
+
+  /**
    * A `[[…]]` link was clicked, here or in the capture window, and names a note (B35).
    *
    * One candidate opens straight away; several raise the picker, because
@@ -660,17 +709,28 @@ export function Library(): React.ReactElement {
    * in different folders. Main sends the candidates rather than the renderer asking for
    * them: main is where the target was resolved, and resolving it a second time on this
    * side would be a second implementation of the same three rules.
+   *
+   * `event.origin` is where the click came from. Main fills it in for the capture window,
+   * whose open note it genuinely knows; `null` means the click was in this window's own
+   * reader, and the note this window has open *is* the origin.
    */
   useEffect(
     () =>
       window.emqnote.library.onOpenLink((event) => {
+        const current = openRef.current;
+        const origin =
+          event.origin ??
+          (current === null ? null : { path: current.path, title: current.title });
+
         if (event.candidates.length === 1) {
-          void openNote(event.candidates[0]!.path);
+          const candidate = event.candidates[0]!;
+          rememberOrigin(origin, candidate.path);
+          void openNote(candidate.path);
           return;
         }
-        if (event.candidates.length > 1) setLinkPick(event);
+        if (event.candidates.length > 1) setLinkPick({ ...event, origin });
       }),
-    [openNote],
+    [openNote, rememberOrigin],
   );
 
   // Whatever the bar was showing no longer applies once the reader is empty — cleared
@@ -1171,6 +1231,24 @@ export function Library(): React.ReactElement {
     return result.toggled;
   };
 
+  /**
+   * The note to walk back to, or null when the open note was not reached by a link.
+   *
+   * Derived rather than stored: the top entry names which note it leads *to*, and it only
+   * applies while that note is the one on screen. Opening something else makes the button
+   * disappear without anything having to clear the trail, and coming back to the note by
+   * a link again makes it reappear.
+   */
+  const backTo =
+    open === null ? null : (backStack.at(-1)?.to === open.path ? backStack.at(-1)!.from : null);
+
+  const goBack = (): void => {
+    const top = backStack.at(-1);
+    if (top === undefined) return;
+    setBackStack((stack) => stack.slice(0, -1));
+    void openNote(top.from.path);
+  };
+
   return (
     <div className="library-shell">
       {/* Above the conflict banner, and thinner: this one says "not everything is here
@@ -1347,6 +1425,21 @@ export function Library(): React.ReactElement {
             <>
               <header className="reader-header">
                 <div className="reader-titles">
+                  {/* Only for a note a `[[…]]` link led to, and only while that note is
+                      the one on screen — see `backTo`. Above the title rather than beside
+                      it: the title is already competing with the ⋯ menu for the header's
+                      one `nowrap` row, and this is a way out of the note rather than
+                      something about it. */}
+                  {backTo !== null && (
+                    <button
+                      type="button"
+                      className="reader-back"
+                      title={app.t("library.backTo").replace("{title}", backTo.title)}
+                      onClick={goBack}
+                    >
+                      ← {backTo.title}
+                    </button>
+                  )}
                   {editingTitle !== null ? (
                     <input
                       ref={titleInput}
@@ -1479,6 +1572,7 @@ export function Library(): React.ReactElement {
                   onNoteLinkRequested={openNotePicker}
                   onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
                   onContextMenu={(payload) => setEditorMenu(payload)}
+                  t={app.t}
                 />
               </div>
   
@@ -1677,6 +1771,9 @@ export function Library(): React.ReactElement {
           t={app.t}
           onCancel={() => setLinkPick(null)}
           onOpen={(path) => {
+            // The origin was captured when the event arrived, not now: by the time the
+            // picker is answered the reader may be showing something else entirely.
+            rememberOrigin(linkPick.origin, path);
             setLinkPick(null);
             void openNote(path);
           }}

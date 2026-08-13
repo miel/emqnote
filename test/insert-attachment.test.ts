@@ -55,12 +55,25 @@ describe("insertAttachment", () => {
     view.destroy();
   });
 
-  it("inserts a PDF as a wikiLink at the caret", () => {
+  // B43: a PDF is embedded, not linked. Inserting it as `[[…]]` — what this did before —
+  // would have left the inline first page reachable only by typing `![[…]]` by hand, which
+  // is not something a WYSIWYG editor lets anyone do.
+  it("inserts a PDF as a wikiEmbed at the caret, so it draws its first page", () => {
     const view = mount("Zie hier: X\n", "X");
     insertAttachment(view, "2026-08-04-1030-offerte.pdf");
 
     expect(serializeBody(view.state.doc)).toBe(
-      "Zie hier: X[[2026-08-04-1030-offerte.pdf]]\n",
+      "Zie hier: X![[2026-08-04-1030-offerte.pdf]]\n",
+    );
+    view.destroy();
+  });
+
+  it("still inserts a file it cannot draw as a wikiLink", () => {
+    const view = mount("Zie hier: X\n", "X");
+    insertAttachment(view, "2026-08-04-1030-begroting.xlsx");
+
+    expect(serializeBody(view.state.doc)).toBe(
+      "Zie hier: X[[2026-08-04-1030-begroting.xlsx]]\n",
     );
     view.destroy();
   });
@@ -90,18 +103,22 @@ describe("insertAttachment", () => {
     view.destroy();
   });
 
-  it("a PDF inserted this way serializes byte-identically to the corpus's own line", () => {
-    // test/corpus/21-links-en-bijlagen.md:10 is the specification for what this line
-    // is meant to look like; this asserts against the corpus file itself rather than a
-    // copy of it, so the two cannot drift apart silently.
+  it("writes an attachment reference the corpus itself spells the same way", () => {
+    // test/corpus/21-links-en-bijlagen.md is the specification for what these lines look
+    // like; this asserts against the corpus file itself rather than a copy of it, so the
+    // two cannot drift apart silently.
+    //
+    // The *file* line is the one an insertion no longer produces for a PDF (B43) — the
+    // corpus keeps it, because `[[offerte.pdf]]` is still a perfectly good thing to write
+    // by hand and still opens the viewer. What an insertion produces now is the embed
+    // line, so both are checked here: the one this writes, and the one it must still be
+    // able to read back.
     const corpus = readFileSync(
       join(process.cwd(), "test/corpus/21-links-en-bijlagen.md"),
       "utf8",
     );
-    const expectedLine = corpus
-      .split("\n")
-      .find((line) => line.startsWith("Bijlage als bestand: "));
-    expect(expectedLine).toBe("Bijlage als bestand: [[2026-07-25-1055-offerte.pdf]]");
+    const fileLine = corpus.split("\n").find((line) => line.startsWith("Bijlage als bestand: "));
+    expect(fileLine).toBe("Bijlage als bestand: [[2026-07-25-1055-offerte.pdf]]");
 
     const view = mount("Bijlage als bestand: X\n", "X");
     const doc = view.state.doc;
@@ -110,7 +127,12 @@ describe("insertAttachment", () => {
 
     insertAttachment(view, "2026-07-25-1055-offerte.pdf");
 
-    expect(serializeBody(view.state.doc)).toBe(`${expectedLine}\n`);
+    expect(serializeBody(view.state.doc)).toBe(
+      "Bijlage als bestand: ![[2026-07-25-1055-offerte.pdf]]\n",
+    );
+    // And the corpus's own spelling still parses and serializes untouched — a `[[…]]` to a
+    // PDF written by hand or by an older version of this app is not rewritten by opening it.
+    expect(serializeBody(docFromMarkdown(`${fileLine!}\n`))).toBe(`${fileLine!}\n`);
     view.destroy();
   });
 });

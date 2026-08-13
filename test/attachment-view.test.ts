@@ -436,14 +436,183 @@ describe("an embedded picture that is gone", () => {
     expect(box.dataset.link).toBe("missing"); // the "nothing missing" answer does not undo it
   });
 
-  it("marks a non-image embed on the chip it already draws", async () => {
-    check().mockResolvedValue(["2026-08-05-1030-weg.pdf"]);
+  it("marks a non-image, non-drawable embed on the chip it already draws", async () => {
+    check().mockResolvedValue(["2026-08-05-1030-begroting.xlsx"]);
 
-    const chip = embed("2026-08-05-1030-weg.pdf");
+    const chip = embed("2026-08-05-1030-begroting.xlsx");
     await flushAsync();
 
     expect(chip.className).toBe("wiki-embed");
     expect(chip.dataset.link).toBe("missing");
     expect(chip.querySelector(".wiki-link-error-marker")).not.toBeNull();
+  });
+});
+
+/**
+ * B43: `![[offerte.pdf]]` draws the first page at the width of the column, where
+ * `[[offerte.pdf]]` stays B36's small chip. The two spellings mean two different things,
+ * and every case below is about one of them not quietly becoming the other.
+ *
+ * Each test uses a filename of its own: `failedThumbnails` is module-level state that
+ * outlives one test, exactly as it outlives one note-open in the app.
+ */
+describe("a PDF embedded with ![[…]]", () => {
+  const embed = (target: string): HTMLElement =>
+    attachmentNodeView(fakeNode(target), undefined as never, (() => undefined) as never)
+      .dom as HTMLElement;
+
+  function respondWithPage(): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        blob: () => Promise.resolve(new Blob([new Uint8Array([1])], { type: "image/png" })),
+      }),
+    );
+    // jsdom has no object URLs of its own.
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:page" });
+  }
+
+  it("asks for the page-sized render, not the chip-sized one", async () => {
+    respondWithPage();
+
+    embed("2026-08-05-1030-offerte.pdf");
+    await flushAsync();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "emqnote-thumb://vault/2026-08-05-1030-offerte.pdf?size=page",
+    );
+  });
+
+  it("draws the page, with the filename and a way into the viewer beneath it", async () => {
+    respondWithPage();
+
+    const box = embed("2026-08-05-1030-notulen.pdf");
+    await flushAsync();
+
+    expect(box.className).toBe("wiki-embed-pdf");
+    expect(box.dataset.page).toBe("ok");
+    expect(box.querySelector("img")!.getAttribute("src")).toBe("blob:page");
+    expect(box.querySelector(".wiki-embed-pdf-name")!.textContent).toBe(
+      "2026-08-05-1030-notulen.pdf",
+    );
+    expect(box.querySelector(".wiki-embed-pdf-open")).not.toBeNull();
+  });
+
+  it("opens the viewer window from the bar, through the one channel a click already uses", async () => {
+    respondWithPage();
+
+    const box = embed("2026-08-05-1030-jaarplan.pdf");
+    await flushAsync();
+
+    (box.querySelector(".wiki-embed-pdf-open") as HTMLButtonElement).click();
+
+    const emqnote = (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
+      .emqnote;
+    expect(emqnote.openWikiLink).toHaveBeenCalledWith("2026-08-05-1030-jaarplan.pdf");
+  });
+
+  it("falls back to a marked chip when the file is gone", async () => {
+    check().mockResolvedValue(["2026-08-05-1030-verdwenen.pdf"]);
+
+    const box = embed("2026-08-05-1030-verdwenen.pdf");
+    await flushAsync();
+
+    expect(box.dataset.page).toBe("missing");
+    expect(box.querySelector("img")).toBeNull();
+
+    const chip = box.querySelector(".wiki-embed") as HTMLElement;
+    expect(chip.dataset.link).toBe("missing");
+    expect(chip.querySelector(".wiki-link-error-marker")).not.toBeNull();
+  });
+
+  it("says why when pdf.js could open the file and not draw it (422)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 422,
+        ok: false,
+        text: () => Promise.resolve("password-protected"),
+      }),
+    );
+
+    const box = embed("2026-08-05-1030-beveiligd.pdf");
+    await flushAsync();
+
+    // Not "missing": the file is very much there. B36's distinction, kept.
+    expect(box.dataset.page).toBe("error");
+    const chip = box.querySelector(".wiki-embed") as HTMLElement;
+    expect(chip.dataset.link).toBeUndefined();
+    expect(chip.dataset.thumb).toBe("error");
+    expect(chip.title).toBe("password-protected");
+    expect(chip.querySelector(".wiki-link-error-marker")).not.toBeNull();
+  });
+
+  /**
+   * B39, the other way round from the 422 below: an attachment that is not there *yet* is
+   * a fact about this moment — a OneDrive file still downloading — and a page that never
+   * reappeared until the app was restarted was exactly what B39 set out to prevent.
+   * Caught by running it, not by reading it.
+   */
+  it("asks again after a missing PDF reappears, rather than staying a chip for the session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 404, ok: false, text: () => Promise.resolve("") }),
+    );
+    check().mockResolvedValue(["2026-08-05-1030-onderweg.pdf"]);
+
+    const gone = embed("2026-08-05-1030-onderweg.pdf");
+    await flushAsync();
+    expect(gone.dataset.page).toBe("missing");
+
+    // The file lands.
+    respondWithPage();
+    check().mockResolvedValue([]);
+
+    const back = embed("2026-08-05-1030-onderweg.pdf");
+    await flushAsync();
+
+    expect(back.dataset.page).toBe("ok");
+    expect(back.querySelector("img")!.getAttribute("src")).toBe("blob:page");
+  });
+
+  it("does not ask again on a second render of a PDF it already failed on", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 422, ok: false, text: () => Promise.resolve("stuk") }),
+    );
+
+    embed("2026-08-05-1030-tweemaal.pdf");
+    await flushAsync();
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    const again = embed("2026-08-05-1030-tweemaal.pdf");
+    await flushAsync();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(again.dataset.page).toBe("error");
+    expect((again.querySelector(".wiki-embed") as HTMLElement).title).toBe("stuk");
+  });
+
+  it("leaves a linked PDF as B36's chip — `[[…]]` and `![[…]]` are not the same thing", async () => {
+    respondWithPage();
+
+    const link = wikiLinkNodeView(fakeNode("2026-08-05-1030-contract.pdf")).dom as HTMLElement;
+    await flushAsync();
+
+    expect(link.className).toContain("wiki-link");
+    expect(link.querySelector(".wiki-embed-pdf-bar")).toBeNull();
+    expect(fetch).toHaveBeenCalledWith("emqnote-thumb://vault/2026-08-05-1030-contract.pdf");
+  });
+
+  it("leaves an embedded picture alone — it never goes near the render pipeline", async () => {
+    check().mockResolvedValue([]);
+
+    const box = embed("2026-08-05-1030-plaatje.png");
+    await flushAsync();
+
+    expect(box.className).toBe("wiki-embed-image-box");
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

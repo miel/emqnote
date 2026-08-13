@@ -102,6 +102,20 @@ const DUTCH: Record<string, string> = {
   "menu.tableAlignRight": "Kolom rechts uitlijnen",
   "menu.tableAlignDefault": "Kolomuitlijning wissen",
 
+  // De knoppenbalk boven de tabel waar de cursor in staat. Kort, want er staan er tien
+  // naast elkaar; de volledige zin uit `menu.table*` hierboven staat in de tooltip.
+  "table.toolbar": "Tabelbewerkingen",
+  "table.rowAbove": "Rij ↑",
+  "table.rowBelow": "Rij ↓",
+  "table.columnLeft": "Kol ←",
+  "table.columnRight": "Kol →",
+  "table.deleteRow": "Rij weg",
+  "table.deleteColumn": "Kol weg",
+  "table.alignLeft": "Links",
+  "table.alignCenter": "Midden",
+  "table.alignRight": "Rechts",
+  "table.alignDefault": "Auto",
+
   // Link prompt
   "link.new": "Link",
   "link.edit": "Link bewerken",
@@ -150,6 +164,8 @@ const DUTCH: Record<string, string> = {
   "library.folder": "map",
   "library.folders": "mappen",
   "library.openInCapture": "Open voor bewerking in het invoervenster",
+  // De weg terug uit een gevolgde [[…]]-link. `{title}` is de notitie waar geklikt werd.
+  "library.backTo": "Terug naar {title}",
   "library.vaultRoot": "Hoofdmap",
   "library.trash": "Prullenbak",
   "library.tags": "Tags",
@@ -200,6 +216,7 @@ const DUTCH: Record<string, string> = {
   "folder.folder-leaves-vault": "Die naam wijst buiten de vault.",
   "folder.folder-not-found": "Die map bestaat niet meer.",
   "folder.folder-already-exists": "Er is al een map met die naam.",
+  "folder.folder-holds-open-note": "Er staat een notitie in die open is in het invoervenster.",
   "folder.failed": "De map kon niet hernoemd worden.",
   "folder.deleteFailed": "De map kon niet verwijderd worden.",
 
@@ -356,6 +373,21 @@ const ENGLISH: Record<string, string> = {
   "menu.tableAlignRight": "Align column right",
   "menu.tableAlignDefault": "Clear column alignment",
 
+  // The toolbar above whichever table the caret is in. Short, because ten of them sit in
+  // a row; the full sentence from `menu.table*` above is the tooltip. "Auto" is the
+  // fourth alignment state — a plain `---`, which is not the same as left.
+  "table.toolbar": "Table operations",
+  "table.rowAbove": "Row ↑",
+  "table.rowBelow": "Row ↓",
+  "table.columnLeft": "Col ←",
+  "table.columnRight": "Col →",
+  "table.deleteRow": "Del row",
+  "table.deleteColumn": "Del col",
+  "table.alignLeft": "Left",
+  "table.alignCenter": "Centre",
+  "table.alignRight": "Right",
+  "table.alignDefault": "Auto",
+
   "link.new": "Link",
   "link.edit": "Edit link",
   "link.placeholder": "https://…  (empty removes the link)",
@@ -400,6 +432,8 @@ const ENGLISH: Record<string, string> = {
   "library.folder": "folder",
   "library.folders": "folders",
   "library.openInCapture": "Open for editing in the capture window",
+  // The way back out of a followed [[…]] link. `{title}` is the note that was clicked in.
+  "library.backTo": "Back to {title}",
   "library.vaultRoot": "Vault root",
   "library.trash": "Trash",
   "library.tags": "Tags",
@@ -446,6 +480,7 @@ const ENGLISH: Record<string, string> = {
   "folder.folder-leaves-vault": "That name points outside the vault.",
   "folder.folder-not-found": "That folder no longer exists.",
   "folder.folder-already-exists": "There is already a folder with that name.",
+  "folder.folder-holds-open-note": "A note in it is open in the capture window.",
   "folder.failed": "The folder could not be renamed.",
   "folder.deleteFailed": "The folder could not be deleted.",
 

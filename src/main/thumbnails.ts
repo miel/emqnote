@@ -2,7 +2,7 @@ import { app } from "electron";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pruneThumbnails, thumbnailKey } from "./thumbnail-cache.js";
+import { pruneThumbnails, thumbnailKey, type ThumbVariant } from "./thumbnail-cache.js";
 import { decideThumbnailProbe } from "./thumbnail-probe.js";
 import { renderPdfThumbnail } from "./pdf-thumb.js";
 
@@ -16,8 +16,14 @@ import { renderPdfThumbnail } from "./pdf-thumb.js";
  * render call and the printing live here.
  */
 
-/** Beyond this, the oldest cached PNGs are evicted as a new one is generated. */
+/** Beyond either of these, the oldest cached PNGs are evicted as a new one is generated. */
 const MAX_CACHED_THUMBNAILS = 200;
+/**
+ * The byte ceiling that came with B43's full-width page renders — a few hundred KB each
+ * against a chip's few KB, so the count alone stopped being a meaningful bound on how much
+ * of `userData` this cache can occupy.
+ */
+const MAX_CACHED_BYTES = 300 * 1024 * 1024;
 
 /**
  * A generation that failed once this session is not retried on every render of the same
@@ -97,7 +103,11 @@ export type ThumbnailOutcome =
  * driven from `thumbnail-probe.ts`) still exists to name exactly what went wrong for one
  * file without guessing.
  */
-export async function ensureThumbnail(cacheDir: string, realPath: string): Promise<ThumbnailOutcome> {
+export async function ensureThumbnail(
+  cacheDir: string,
+  realPath: string,
+  variant: ThumbVariant = "chip",
+): Promise<ThumbnailOutcome> {
   let stats;
   try {
     stats = statSync(realPath);
@@ -105,7 +115,7 @@ export async function ensureThumbnail(cacheDir: string, realPath: string): Promi
     return { kind: "unavailable" };
   }
 
-  const key = thumbnailKey(realPath, stats.mtimeMs, stats.size);
+  const key = thumbnailKey(realPath, stats.mtimeMs, stats.size, variant);
   const cachedFile = join(cacheDir, `${key}.png`);
 
   if (existsSync(cachedFile)) return { kind: "ready", file: cachedFile };
@@ -114,10 +124,10 @@ export async function ensureThumbnail(cacheDir: string, realPath: string): Promi
   if (remembered !== undefined) return { kind: "failed", error: remembered };
 
   try {
-    const png = await renderPdfThumbnail(realPath);
+    const png = await renderPdfThumbnail(realPath, variant);
     await mkdir(cacheDir, { recursive: true });
     await writeAtomic(cachedFile, png);
-    pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS);
+    pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS, MAX_CACHED_BYTES);
 
     return { kind: "ready", file: cachedFile };
   } catch (error) {
@@ -196,7 +206,7 @@ export async function runThumbnailProbe(
       try {
         await mkdir(cacheDir, { recursive: true });
         await writeAtomic(cachedFile, png);
-        pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS);
+        pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS, MAX_CACHED_BYTES);
       } catch (error) {
         console.log(
           `pdf.js produced an image but writing it failed: ` +

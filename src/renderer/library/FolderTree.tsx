@@ -190,7 +190,13 @@ function Branch({
 }): React.ReactElement {
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
-  const [open, setOpen] = useState(depth < 1);
+  //
+  // The Trash is the exception at its own depth: it sits at the bottom of the sidebar and
+  // is the one branch whose contents are things already thrown away, so unfolding it by
+  // default spends the sidebar's remaining height on exactly the folders nobody is looking
+  // for. Only the row itself starts closed — `trashRoot` stops here rather than
+  // propagating, so a folder opened *inside* the trash still behaves like any other.
+  const [open, setOpen] = useState(depth < 1 && trashRoot !== true);
   const [over, setOver] = useState(false);
   const hasChildren = node.children.length > 0;
 
