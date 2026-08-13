@@ -58,6 +58,18 @@ function isPreviewableTarget(name: string): boolean {
 }
 
 /**
+ * Whether inserting this attachment should write `![[name]]` rather than `[[name]]` — that
+ * is, whether there is anything to *show* in the note as opposed to point at.
+ *
+ * Both groups this covers are drawn by `attachmentNodeView` below: a picture by the
+ * browser, a PDF's first page by pdf.js (B43). `insert-attachment.ts` asks this, so the
+ * question "can this be drawn" is answered once, here, next to the code that draws it.
+ */
+export function isEmbeddableAttachment(name: string): boolean {
+  return isImageAttachment(name) || isPreviewableTarget(name);
+}
+
+/**
  * A target whose thumbnail request has already failed once this session (a 404 or a
  * broken file) is not retried on every re-render of the same note — `setDoc` rebuilds
  * every NodeView on each note-open. Bounded so a long resident session browsing many
@@ -185,13 +197,133 @@ function chipView(target: string): NodeView {
   return { dom: span };
 }
 
+/**
+ * A PDF embedded in the note, drawn as its first page at the width of the column (B43).
+ *
+ * `![[offerte.pdf]]` is the inline page; `[[offerte.pdf]]` stays B36's small chip with a
+ * thumbnail beside its label. The two spellings mean two different things now, which is
+ * the whole of B43 — one to read from, one to point at.
+ *
+ * The page comes from the same `emqnote-thumb` pipeline the chip uses, asked for at
+ * `?size=page`: one pdf.js render in one hidden window, cached on disk, and no pdf.js in
+ * this bundle — the capture window is the one that has to appear inside 80 ms, and it
+ * draws this NodeView too.
+ *
+ * Only the bar swallows `mousedown`. Clicking the page itself still makes an ordinary
+ * `NodeSelection`, so the embed can be selected and deleted like the pictures beside it —
+ * an inline atom that could not be selected would be one you cannot get rid of.
+ */
+function pdfPageView(target: string): NodeView {
+  const box = document.createElement("span");
+  box.className = "wiki-embed-pdf";
+
+  const page = document.createElement("img");
+  page.className = "wiki-embed-pdf-page";
+  page.alt = target;
+  page.draggable = false;
+
+  const bar = document.createElement("span");
+  bar.className = "wiki-embed-pdf-bar";
+
+  const label = document.createElement("span");
+  label.className = "wiki-embed-pdf-name";
+  label.textContent = target;
+
+  // `openWikiLink` routes a `.pdf` through `attachmentRoute` to the viewer window (B40),
+  // so page 2 onwards is one click away and this stays a first page rather than a
+  // half-built reader. The whole bar is the target, not just the word.
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "wiki-embed-pdf-open";
+  open.textContent = "⧉";
+  open.title = target;
+  open.addEventListener("mousedown", (event) => event.preventDefault());
+  open.addEventListener("click", (event) => {
+    event.preventDefault();
+    void window.emqnote.openWikiLink(target);
+  });
+
+  bar.append(label, open);
+  box.append(page, bar);
+
+  // Keyed apart from the chip's own failures: the two are different renders of one file
+  // and a chip that could not be drawn says nothing about the page, or the reverse.
+  //
+  // **Only a 422 is remembered**, and the asymmetry is B39's rather than a shortcut. A
+  // render failure is a property of the bytes — a corrupt or password-protected PDF stays
+  // one — and re-asking costs a real pdf.js render, so it is worth not repeating. A file
+  // that is simply *not there* is a property of the moment: a OneDrive file finishing its
+  // download makes it there, and a page that never came back until the app was restarted
+  // is the failure B39 exists to prevent. That re-ask costs one 404 from
+  // `resolveAttachment`, which never reaches the render pipeline at all.
+  const remembered = failedThumbnails.get(`page:${target}`);
+  if (typeof remembered === "string") {
+    showPdfProblem(box, target, remembered);
+  } else {
+    fetch(attachmentUrl("emqnote-thumb", target, "page"))
+      .then(async (response) => {
+        if (response.status === 422) {
+          const reason = await response.text().catch(() => "");
+          rememberFailedThumbnail(`page:${target}`, reason);
+          showPdfProblem(box, target, reason);
+          return;
+        }
+        if (!response.ok) throw new Error(`emqnote-thumb: HTTP ${response.status}`);
+
+        const blob = await response.blob();
+        page.src = URL.createObjectURL(blob);
+        box.dataset.page = "ok";
+      })
+      .catch(() => showPdfProblem(box, target, null));
+  }
+
+  // The same draw-time question every other embed asks (B39). A PDF that is simply gone
+  // must say so rather than sit as an empty frame — and it arrives without a round trip
+  // through the render pipeline, so it usually answers first.
+  void checkAttachment(target).then((missing) => {
+    if (missing) showPdfProblem(box, target, null);
+  });
+
+  return { dom: box };
+}
+
+/**
+ * Replaces the page with the plain chip it would have been before B43, marked.
+ *
+ * `reason` is a 422's own message — pdf.js opened the file and could not draw it — and
+ * null covers the rest: the file is gone, or the fetch itself failed. `markMissing` is only
+ * right for the second, since the first is a statement about a file that is very much
+ * there, so the two take different marks for the same reason B36 split 404 from 422.
+ */
+function showPdfProblem(box: HTMLElement, target: string, reason: string | null): void {
+  if (box.dataset.page === "error" || box.dataset.page === "missing") return;
+
+  box.textContent = "";
+  box.dataset.page = reason === null ? "missing" : "error";
+
+  const chip = document.createElement("span");
+  chip.className = "wiki-embed";
+  chip.dataset.target = target;
+  chip.textContent = target;
+  box.append(chip);
+
+  if (reason === null) {
+    markMissing(chip, target);
+  } else {
+    chip.dataset.thumb = "error";
+    chip.title = reason.trim() !== "" ? reason : "Could not render a preview for this file.";
+    prependMarker(chip);
+  }
+}
+
 export function attachmentNodeView(
   node: PMNode,
   _view: EditorView,
   _getPos: () => number | undefined,
 ): NodeView {
   const target = node.attrs.target as string;
-  return isImageAttachment(target) ? imageView(target) : chipView(target);
+  if (isImageAttachment(target)) return imageView(target);
+  return isPreviewableTarget(target) ? pdfPageView(target) : chipView(target);
 }
 
 /**

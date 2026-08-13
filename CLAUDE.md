@@ -224,6 +224,38 @@ thumbnail pipeline changed** — `pdf-thumb.ts`'s single-slot queue, `thumbnailK
 paged widget inside the note (that would have needed a per-page render and cache through
 that one-deep queue, and a tall atom fighting the editor for the wheel and the caret).
 
+**A PDF embedded with `![[…]]` draws its first page in the note** (B43). The two spellings
+mean two different things now: `![[offerte.pdf]]` is the page at the width of the column,
+`[[offerte.pdf]]` is B36's small chip that opens B40's window. The file format needed no
+change at all — `from-mdast.ts` never looked at the extension behind a `![[…]]` — only a
+NodeView and a bigger render. **pdf.js does not enter the editor bundle**: the capture window
+draws this same NodeView and is the one that must appear inside 80 ms, so the embed asks the
+existing hidden-window pipeline for a second size (`emqnote-thumb://vault/<name>?size=page`,
+`PAGE_SIZE`) instead. One scheme with a size on it, not a second scheme — `resolveAttachment`'s
+traversal guard, `isPreviewable` and the 404/422 split are the same decisions for both, and
+the size lives in the *query* because the name is one opaque path segment (B38). Two things
+are easy to get wrong. **Only a 422 is remembered, never a missing file**: a render failure is
+a property of the bytes, but absence is a property of this moment (B39) — a OneDrive file
+finishing its download makes it false, and the first version of this did keep a returned PDF
+as a chip until the app was restarted, which is a bug that only running it can find. And
+**inserting a PDF now writes `![[…]]`**, because otherwise the feature is reachable only by
+typing `![[…]]` by hand, which a WYSIWYG editor does not allow; a `.docx` is still a link,
+and a hand-written `[[offerte.pdf]]` is still valid and still untouched on open (B10).
+
+**Renaming a folder repairs the links into it, without asking** (B44). `renameFolder`'s own
+comment used to say nothing inside needed rewriting because wikilinks carried bare names —
+true when written, false since B35, and the sentence is what kept the breakage invisible. The
+handler asks `linkingNotesUnder` **before** the rename (a target resolves against where a note
+is now) and rewrites after, exactly `IPC.libraryMoveNote`'s ordering. It does **not** confirm,
+unlike the single-note case: a folder rename is not a gesture about one note, and a dialog
+counting notes the user never thought about stands in front of a repair nobody can reasonably
+decline. `folder-rename-links.ts` is Electron-free and holds the two things easy to get wrong
+— **a referring note may itself be inside the folder** and must be rewritten at its *new*
+path, and **the new target is composed rather than re-resolved**, since re-resolving would
+need a scan and the answer is one prefix swapped for another. The handler also gained the
+`writer.activePath()` guard `IPC.libraryTrashFolder` already had. Deleting a folder still
+breaks its links on purpose: those notes are in the trash.
+
 **A `[[…]]` link is written by picking a note, always as `[[path|Title]]`** (B41).
 `NotePicker.tsx` opens on `[[`, on `Mod+Shift+K`, from a toolbar button and from the editor
 menu, in **both** windows. Never a bare `[[Title]]`: a path matches in `link-resolve.ts`'s
@@ -272,6 +304,8 @@ invariant free.
 **Every panel has a right-click menu, and every action behind one has a non-menu route too.** The folder tree, the note list and the note panel (both windows) each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the same reason `Ask.tsx` is a component and not `window.prompt`: nothing under `test/` can drive a native menu, it costs an IPC round trip per open, and `--click-button` (`library-window.ts`) has no way to reach into one. `--click-button` matching on `.branch`/`.branch-name` text is why nothing may move exclusively behind a menu. A roving `tabIndex` (`roving.ts`) keeps exactly one row per pane a Tab stop; Mod-Shift-M and the `ContextMenu` key open the menu at the focused row's own position, so the keyboard route and the mouse route land on the same component. `onRenameFolder`/`onDeleteFolder` take a `path` now, not the toolbar's `lastFolder` — a per-row menu has to act on the row that was actually right-clicked, and the toolbar keeps its old behaviour by passing `lastFolder` explicitly.
 
 The reader toolbar's Rename/Move/Duplicate/Reveal/Delete collapsed into one "⋯" `ContextMenu` for the same crowding reason the folder tree's rows did — but a menu *opened by a plain button* is a reachable route for `--click-button` (`"⋯>Rename"` works, matched two levels deep by `library-window.ts`'s selector, which now also reads `.context-menu-label`), so this does not violate the rule above. That only holds because a step taken while a menu is open searches **inside** the menu rather than the whole page: the folder toolbar's buttons carry the same `library.rename`/`library.delete` strings and sit earlier in document order, so an unscoped match would turn `"⋯>Delete"` into *Delete folder*. Any future panel that reuses a label a menu also uses depends on that scoping. The rule is unchanged for a menu that only opens on right-click or `Mod-Shift-M`/`ContextMenu`: `--click-button` still cannot reach one of those, which is why every one of *those* actions keeps a non-menu route too.
+
+B42's row, column and alignment commands were the exception that proved it: they existed from the start and lived *only* in the note panel's right-click menu, and were duly reported as missing features. `table-toolbar.ts` is the second route — a widget decoration above whichever table the caret is in, built on `checkbox.ts`'s recipe (`contentEditable="false"`, `stopEvent`, `ignoreSelection`, and a `preventDefault`ed `mousedown` so the command acts on the cell you clicked from). Its labels are short *visible* text (`table.rowAbove` → "Row ↑") with the menu's full sentence as the `title`, because `--click-button` matches a button on its own `textContent` — a glyph beside the word would put these straight back out of reach. Delete-table stays menu-only, being the destructive one. `t` reaches the plugin through `CommandContext` as its one optional field, falling back to English, so the half-dozen tests that build a context by hand need not carry a translator.
 
 ## Tests
 
@@ -358,6 +392,42 @@ it — every test passed while the feature was dead. That is the second time thi
 been sprung (B36 hit it on `emqnote-thumb`), so treat "a renderer will `fetch()` this custom
 scheme" as requiring the privilege, not as something to discover in the running app.
 
+**Six items from daily use landed on 13 August 2026.** Two carry decisions: **B43** — a PDF
+embedded with `![[…]]` draws its first page in the note — and **B44** — renaming a folder
+repairs the links into it, without asking. Of the other four, two were features and two were
+not: clicking an internal `[[…]]` link now leaves a `← Back to <note>` button in the reader
+(a stack, so a chain of links walks back out one step at a time; main supplies the origin for
+a click made in the capture window, and `null` means "whatever the library has open"), and the
+Trash branch starts folded, since it sits at depth 0 where `Branch` unfolds everything and so
+spent the bottom of the sidebar on folders nobody is looking for. **The two "add table
+options" items turned out to be already built** — B42 shipped insert/delete row and column
+*and* the four column alignments, all of them right-click-only, which is exactly why they read
+as missing; the work was the toolbar described under the context-menu rule above, not the
+commands.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a three-page PDF made with
+`pdflatex`: the inline page drawn at 1240×1754 and displayed at 591 CSS pixels with **5678
+genuinely dark pixels counted on it** (the B38 lesson — an `<img>` in the DOM is not proof),
+the ⧉ button raising B40's viewer on the right document, the marked chip when the file is
+removed and the page returning when it comes back; the back button naming its origin, walking
+back, and being absent for a note opened from the list; the Trash row folded on launch and
+dimming its contents on unfold; the table toolbar driving all four row/column operations and
+the alignment group, the saved file coming back **byte-identical from `npm run canonical`**
+as plain GFM, and `--click-button="Row ↓"` reaching a toolbar button; and a folder rename
+rewriting a link on disk with no dialog, after which the link opens its note again.
+
+The thing that batch is worth remembering for is that **running it found a bug reading it
+would not have**. B43's first version remembered every failed page render, including a 404 —
+so a PDF that was missing for one draw stayed a chip for the rest of the session, and a
+OneDrive file finishing its download never appeared. That is precisely what B39 forbids, and
+the code looked right: the 422 case and the 404 case were one `.catch`. Only the
+disappear-and-reappear cycle in the running app showed it.
+
+**Not confirmed live**, the same limitation every batch since the disk-change work has named:
+all six in the *capture* window specifically, which still has no test harness. Also unseen by
+a person: how a full-width PDF page feels to scroll past on a real display, and the toolbar's
+ten buttons at a real window width. Both are `TEST-PROTOCOL.md` items.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -369,7 +439,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B39, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B44, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.

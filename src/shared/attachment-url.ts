@@ -44,8 +44,33 @@ export const ATTACHMENT_URL_HOST = "vault";
  * `resolveAttachment`, which is the one place that decides what a name is allowed to
  * reach.
  */
-export function attachmentUrl(scheme: string, name: string): string {
-  return `${scheme}://${ATTACHMENT_URL_HOST}/${encodeURIComponent(name)}`;
+export function attachmentUrl(scheme: string, name: string, size?: ThumbSize): string {
+  const base = `${scheme}://${ATTACHMENT_URL_HOST}/${encodeURIComponent(name)}`;
+  return size === undefined || size === "chip" ? base : `${base}?size=${size}`;
+}
+
+/**
+ * Which render of a PDF's first page is being asked for (B43).
+ *
+ * `chip` is B36's small one — 256×320, drawn beside a `[[…]]` link's label. `page` is the
+ * inline embed's: the same first page, rendered large enough to fill the note's column at
+ * fit width. They are the same file through the same pipeline and differ only in the box
+ * the page is fitted into, which is exactly why this is a size on one scheme rather than a
+ * second scheme: `resolveAttachment`'s traversal guard, `isPreviewable`'s gate and the
+ * 404/422 split are the same decisions either way, and two handlers would be two places to
+ * change them.
+ *
+ * A query rather than a second path segment, because the name is one path segment and must
+ * stay opaque (see above) — `encodeURIComponent` never emits a `?`, so cutting the URL at
+ * the first one can never cut into a name.
+ */
+export type ThumbSize = "chip" | "page";
+
+/** Which size a thumb URL is asking for. Anything unrecognised is the chip, as before B43. */
+export function thumbSizeFromUrl(url: string): ThumbSize {
+  const query = url.indexOf("?");
+  if (query === -1) return "chip";
+  return new URLSearchParams(url.slice(query + 1)).get("size") === "page" ? "page" : "chip";
 }
 
 /**
@@ -59,7 +84,10 @@ export function attachmentUrl(scheme: string, name: string): string {
  * its own, and that one is part of the name rather than Chromium's punctuation.
  */
 export function attachmentNameFromUrl(url: string, scheme: string): string {
-  const rest = url.slice(`${scheme}://`.length);
+  // The query (B43's `?size=page`) is punctuation, never part of the name — cut before
+  // decoding, since `%3F` decodes to a question mark that *is* part of one.
+  const query = url.indexOf("?");
+  const rest = (query === -1 ? url : url.slice(0, query)).slice(`${scheme}://`.length);
   const slash = rest.indexOf("/");
 
   if (slash === -1) return decodeURIComponent(rest);

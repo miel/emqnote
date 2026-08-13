@@ -3,13 +3,26 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 12 August 2026, on the `three-features` branch on top of `v0.6.0` —
-three features from daily use, built as three packages: an in-app PDF viewer
-window (**B40**), a picker that writes `[[…]]` note links (**B41**), and table
-editing in the WYSIWYG (**B42**, which closes the `prosemirror-tables` question
-B17 left open). All three were driven in the real app under `Xvfb`; the capture
-window is the one route left unwatched, as it has been since it gained no test
-harness. See `TEST-PROTOCOL.md` §12–§14.
+Last updated 13 August 2026, on top of `v0.7.0` — six items from daily use.
+Two carry decisions: **B43**, a PDF embedded with `![[…]]` draws its first page
+in the note, and **B44**, renaming a folder repairs the links into it without
+asking. Two more were features: a `← Back to <note>` button after following an
+internal link, and the Trash branch folded by default. **Two were not work at
+all** — "add insert/delete row and column" and "add column alignment" were
+already built by B42 and only ever reachable by right-click, which is why they
+read as missing; what was built is a toolbar above the table.
+
+All six were driven in the real app under `Xvfb`, and doing so found a bug that
+reading the code did not: B43's first version remembered a *missing* PDF for the
+session, so a file put back never redrew. That is what B39 forbids, and only the
+disappear-and-reappear cycle showed it. The capture window is the one route left
+unwatched, as it has been since it gained no test harness. See
+`TEST-PROTOCOL.md` §15–§16.
+
+The previous batch, 12 August 2026 on `v0.6.0`: an in-app PDF viewer window
+(**B40**), a picker that writes `[[…]]` note links (**B41**), and table editing
+in the WYSIWYG (**B42**, which closed the `prosemirror-tables` question B17 left
+open). See `TEST-PROTOCOL.md` §12–§14.
 
 ## Where the project stands
 

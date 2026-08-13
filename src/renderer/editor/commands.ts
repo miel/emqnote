@@ -660,6 +660,16 @@ export interface CommandContext {
   requestNoteLink: (prefix: string) => void;
   /** Opens the size grid and inserts a table of whatever comes back (B42). */
   requestTable: () => void;
+  /**
+   * The window's own translator, for the one plugin that draws words rather than
+   * decorating text: `table-toolbar.ts`'s buttons.
+   *
+   * Optional, and the only optional field here, because a `CommandContext` is built by
+   * hand in half a dozen tests that have nothing to do with labels — the toolbar falls
+   * back to English (`translate("en-US", …)`) rather than making every one of them carry
+   * a translator they do not use.
+   */
+  t?: (key: string) => string;
 }
 
 /**

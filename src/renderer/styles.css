@@ -494,6 +494,52 @@ body {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
+/* The row/column/alignment buttons above whichever table the caret is in — a widget
+   decoration from `table-toolbar.ts`, so it sits in the document flow just before the
+   table and scrolls with it, and never reaches a file.
+
+   `user-select: none` and the `contenteditable="false"` the widget sets are two halves of
+   one thing: a control inside an editable document should not be selectable text, and a
+   drag across the note should not sweep the toolbar's own words into the selection. */
+.editor-content .table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0 0 4px;
+  user-select: none;
+}
+
+.editor-content .table-tool {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.editor-content .table-tool:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* The first button of a group — delete, then alignment — takes the gap instead of a
+   separator element, so the toolbar stays one flat row of buttons for `--click-button`. */
+.editor-content .table-tool-grouped {
+  margin-left: 10px;
+}
+
+/* What the column *is*, not only what the button would make it. All four alignment
+   buttons carry `aria-pressed`, so exactly one of them is lit at any time. */
+.editor-content .table-tool[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 /* ---- the table size grid (B42) ---- */
 
 /* A popover, not a centred dialog, so it appears where the gesture did: `.overlay-bare`
@@ -662,6 +708,88 @@ body {
   border-radius: 4px;
 }
 
+/* B43: a PDF embedded with `![[…]]`, drawn as its first page at the width of the column.
+   `inline-block` at `width: 100%` rather than `display: block`: `wikiEmbed` is an inline
+   atom in the schema (the dialect allows an embed mid-sentence), and a forced block display
+   would take a text position away on either side of it — the same thing `.wiki-link-preview`
+   uses `inline-flex` for, and what lets an arrow key step past it (`moveOverAtom`).
+
+   The page image itself is *not* capped in height the way `.wiki-embed-image` is: a note
+   that names a PDF means to show the page, and half a page with the rest cropped away is
+   worse than a tall one you scroll past. */
+.editor-content .wiki-embed-pdf {
+  display: inline-block;
+  width: 100%;
+  vertical-align: top;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  /* Nothing is drawn until the render lands. Without a floor the note would reflow by a
+     whole page height a moment after opening, dragging the text under the caret with it. */
+  min-height: 2em;
+}
+
+/* Hidden until `data-page="ok"`, for the same reason `.wiki-link-thumb` is: an `<img>` with
+   no `src` yet draws the browser's broken-image glyph, which reads as a failure rather than
+   as a wait. */
+.editor-content .wiki-embed-pdf-page {
+  display: none;
+  width: 100%;
+  height: auto;
+}
+
+.editor-content .wiki-embed-pdf[data-page="ok"] .wiki-embed-pdf-page {
+  display: block;
+}
+
+/* The filename and the way into the full viewer (B40). Below the page rather than above it:
+   the page is what the note is showing, and a bar over the top of it would be a caption
+   arguing with its own picture. */
+.editor-content .wiki-embed-pdf-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.editor-content .wiki-embed-pdf-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-content .wiki-embed-pdf-open {
+  flex: 0 0 auto;
+  font: inherit;
+  padding: 0 4px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* A PDF that opens fine and still cannot be drawn (a 422) — the same complaint, and so the
+   same colour, as the `.wiki-link` chip B36 marks. Both drop back to a plain chip first, so
+   this only ever applies to one. */
+.editor-content .wiki-embed[data-thumb="error"] {
+  color: var(--warning);
+}
+
+/* The frame is the page's; once the page has been replaced by a chip there is nothing left
+   for it to frame. */
+.editor-content .wiki-embed-pdf[data-page="error"],
+.editor-content .wiki-embed-pdf[data-page="missing"] {
+  width: auto;
+  min-height: 0;
+  border: 0;
+  vertical-align: baseline;
+}
+
 /* ProseMirror puts this class on the DOM of a `NodeSelection` — reachable by clicking
    an atom node directly, even though `moveOverAtom` (`editor/commands.ts`) steers the
    arrow keys around it into an ordinary text caret instead. Nothing styled it before,
@@ -672,6 +800,7 @@ body {
 .editor-content .wiki-embed.ProseMirror-selectednode,
 .editor-content .wiki-embed-image.ProseMirror-selectednode,
 .editor-content .wiki-embed-image-box.ProseMirror-selectednode,
+.editor-content .wiki-embed-pdf.ProseMirror-selectednode,
 .editor-content .wiki-link.ProseMirror-selectednode {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

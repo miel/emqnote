@@ -74,6 +74,7 @@ import {
   conflicts,
   facets,
   linkingNotes,
+  linkingNotesUnder,
   notesMatching,
   resolveNoteLink,
   searchNotes,
@@ -82,6 +83,7 @@ import {
   tasks as tasksMatching,
 } from "./vault-scan.js";
 import { linkTargetFor } from "./link-resolve.js";
+import { folderRenameRewrites } from "./folder-rename-links.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
@@ -89,7 +91,7 @@ import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
-import { attachmentNameFromUrl } from "../shared/attachment-url.js";
+import { attachmentNameFromUrl, thumbSizeFromUrl } from "../shared/attachment-url.js";
 import { isPreviewable } from "./thumbnail-cache.js";
 import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
 import { shutdownPdfThumb } from "./pdf-thumb.js";
@@ -97,6 +99,7 @@ import { attachmentRoute } from "./attachment-route.js";
 import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import { isOpenableUrl } from "./remote-image.js";
+import { FOLDER_ERROR } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -543,7 +546,14 @@ function registerThumbnailProtocol(): void {
     const resolved = resolveAttachment(vault, name);
     if (resolved === null || !isPreviewable(name)) return new Response(null, { status: 404 });
 
-    const outcome = await ensureThumbnail(thumbnailCacheDir(), resolved);
+    // `?size=page` is B43's inline embed asking for the same first page at the size a note
+    // column wants. Everything above this line — the traversal guard, the previewable
+    // gate — is the same question for both, which is why it is one handler and one scheme.
+    const outcome = await ensureThumbnail(
+      thumbnailCacheDir(),
+      resolved,
+      thumbSizeFromUrl(request.url),
+    );
     if (outcome.kind === "unavailable") return new Response(null, { status: 404 });
     if (outcome.kind === "failed") return new Response(outcome.error, { status: 422 });
 
@@ -885,7 +895,7 @@ function registerAppIpc(): void {
    * capture has no reader and no dialog for an ambiguous target, and the whole reason its
    * bundle is separate is that it must not grow one.
    */
-  ipcMain.handle(IPC.openWikiLink, async (_event, target: string): Promise<WikiLinkOutcome> => {
+  ipcMain.handle(IPC.openWikiLink, async (event, target: string): Promise<WikiLinkOutcome> => {
     const vault = loadSettings().vaultPath;
     if (vault === null) return "none";
 
@@ -911,11 +921,25 @@ function registerAppIpc(): void {
       const summaries = paths.map((path) =>
         linkCandidateOf(path, getNoteMeta(indexDb!, path)?.title ?? path),
       );
+      // Where the click came from, so the note that opens can offer a way back to it.
+      // Main can only answer this for the capture window, whose one open path genuinely
+      // is main's own state; for a click in the library's own reader it sends `null`,
+      // which that window reads as "the note I currently have open". Building a main-side
+      // view of what the reader shows is exactly the second source of truth the
+      // disk-change path already refuses to keep.
+      const originPath =
+        event.sender === getCaptureWindow()?.webContents ? writer.activePath() : null;
+      const origin =
+        originPath === null
+          ? null
+          : { path: originPath, title: getNoteMeta(indexDb!, originPath)?.title ?? originPath };
+
       // A window that has only just been created by `showLibraryWindow` is still loading,
       // so the event would arrive before anything is listening for it. Waiting for the
       // renderer's own `did-finish-load` is what makes a link clicked from the capture
       // window work on the first click rather than only once the library is already up.
-      const send = (): void => library.webContents.send(IPC.libraryOpenLink, { target, candidates: summaries });
+      const send = (): void =>
+        library.webContents.send(IPC.libraryOpenLink, { target, candidates: summaries, origin });
       if (library.webContents.isLoading()) library.webContents.once("did-finish-load", send);
       else send();
     }
@@ -1318,10 +1342,40 @@ function registerLibraryIpc(): void {
     app.quit();
   });
 
-  ipcMain.handle(IPC.libraryRenameFolder, (_event, path: string, name: string) => {
+  /**
+   * Renaming a folder moves every note inside it, so it moves every `[[path|Title]]` link
+   * target that points into it — and until B44 it simply broke them all, silently, since a
+   * note link says nothing about being broken until it is clicked (B35).
+   *
+   * The repair is the same shape as `IPC.libraryMoveNote`'s, one level up, and the
+   * ordering is the load-bearing half: the question is asked **before** the rename,
+   * because a target resolves against where a note is *now* and after `renameFolder` there
+   * is nothing left for the index to find. It is carried out without asking, unlike the
+   * single-note case — a folder rename is not a gesture anyone makes about one note, and a
+   * dialog counting notes the user has never thought about is friction in front of a
+   * repair they cannot reasonably want to decline.
+   *
+   * The lock guard is the one `IPC.libraryTrashFolder` already has and this handler was
+   * missing: `CaptureWriter`'s session pins the path it will write to next, and renaming
+   * the folder under it does not update that path, so the next debounced write would
+   * recreate the note in a folder that no longer exists.
+   */
+  ipcMain.handle(IPC.libraryRenameFolder, async (_event, path: string, name: string) => {
     const vault = vaultPath();
     if (vault === null) return path;
+
+    const active = writer.activePath();
+    if (active !== null && active.startsWith(`${path}/`)) {
+      throw new Error(FOLDER_ERROR.locked);
+    }
+
+    const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
     const renamed = renameFolder(vault, path, name);
+
+    for (const rewrite of folderRenameRewrites(path, renamed, linking)) {
+      rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
+    }
+
     notifyLibrary();
     return renamed;
   });

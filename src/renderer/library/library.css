@@ -647,6 +647,31 @@
   white-space: nowrap;
 }
 
+/* The way back out of a followed `[[…]]` link. Above the title and quieter than it: this
+   names a note you are *leaving*, and it must not compete with the name of the one you are
+   reading. `max-width` plus the ellipsis for the same reason the title has them — the
+   header is one `nowrap` row and a long note title would otherwise push the ⋯ menu off. */
+.reader-back {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.reader-back:hover {
+  color: var(--accent);
+}
+
 .reader-header h1 {
   margin: 0;
   font-size: 17px;

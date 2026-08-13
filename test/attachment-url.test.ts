@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { attachmentNameFromUrl, attachmentUrl } from "../src/shared/attachment-url.js";
+import {
+  attachmentNameFromUrl,
+  attachmentUrl,
+  thumbSizeFromUrl,
+} from "../src/shared/attachment-url.js";
 
 /**
  * The two custom protocol URLs, both directions.
@@ -94,5 +98,60 @@ describe("attachmentNameFromUrl", () => {
     // would eat it and change which file was asked for.
     expect(attachmentNameFromUrl("emqnote-thumb://a%2F", "emqnote-thumb")).toBe("a/");
     expect(attachmentNameFromUrl("emqnote-thumb://vault/a%2F", "emqnote-thumb")).toBe("a/");
+  });
+});
+
+/**
+ * B43's second render of the same file: `?size=page` asks the thumb handler for the first
+ * page at the size a note column wants, where no query at all still means B36's chip.
+ *
+ * A query rather than another path segment, because the name is one opaque segment — which
+ * is exactly why cutting the URL at the first `?` can never cut into a name.
+ */
+describe("the page-sized thumb URL", () => {
+  it("adds the size only when one other than the chip is asked for", () => {
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf")).toBe(
+      "emqnote-thumb://vault/offerte.pdf",
+    );
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "chip")).toBe(
+      "emqnote-thumb://vault/offerte.pdf",
+    );
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "page")).toBe(
+      "emqnote-thumb://vault/offerte.pdf?size=page",
+    );
+  });
+
+  it("reads the size back, and calls anything else the chip", () => {
+    expect(thumbSizeFromUrl("emqnote-thumb://vault/offerte.pdf?size=page")).toBe("page");
+    expect(thumbSizeFromUrl("emqnote-thumb://vault/offerte.pdf")).toBe("chip");
+    expect(thumbSizeFromUrl("emqnote-thumb://vault/offerte.pdf?size=enormous")).toBe("chip");
+    expect(thumbSizeFromUrl("emqnote-thumb://vault/offerte.pdf?")).toBe("chip");
+  });
+
+  it("never lets the query leak into the name", () => {
+    expect(
+      attachmentNameFromUrl("emqnote-thumb://vault/offerte.pdf?size=page", "emqnote-thumb"),
+    ).toBe("offerte.pdf");
+    // The old host form, which clipboard HTML written before B38 still carries.
+    expect(attachmentNameFromUrl("emqnote-thumb://offerte.pdf?size=page", "emqnote-thumb")).toBe(
+      "offerte.pdf",
+    );
+  });
+
+  it("keeps a question mark that is part of the name, since that one is encoded", () => {
+    const name = "waarom niet?.pdf";
+    const url = attachmentUrl("emqnote-thumb", name, "page");
+
+    expect(url).toBe("emqnote-thumb://vault/waarom%20niet%3F.pdf?size=page");
+    expect(attachmentNameFromUrl(url, "emqnote-thumb")).toBe(name);
+    expect(thumbSizeFromUrl(url)).toBe("page");
+  });
+
+  it("round-trips a path-form name with a size on it", () => {
+    const name = "99 - Attachments/offerte.pdf";
+    const url = attachmentUrl("emqnote-thumb", name, "page");
+
+    expect(attachmentNameFromUrl(url, "emqnote-thumb")).toBe(name);
+    expect(thumbSizeFromUrl(url)).toBe("page");
   });
 });

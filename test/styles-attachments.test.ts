@@ -66,9 +66,21 @@ describe("styles.css: attachment chip borders (A3)", () => {
    * out would have brought back exactly the invisible selection this rule exists to fix.
    */
   it("extends the ProseMirror-selectednode outline to .wiki-link, not only the image chips", () => {
-    const selector = css.match(
-      /\.editor-content \.wiki-embed\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-embed-image\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-embed-image-box\.ProseMirror-selectednode,\s*\n\.editor-content \.wiki-link\.ProseMirror-selectednode \{/,
+    // `.wiki-embed-pdf` is B43's, and joins for the same reason as the box above it: it is
+    // the NodeView's own DOM for an embedded PDF, so it is what the class lands on.
+    const rule = css.match(
+      /((?:\.editor-content \.[\w-]+\.ProseMirror-selectednode,\s*\n)+\.editor-content \.[\w-]+\.ProseMirror-selectednode) \{/,
     );
-    expect(selector).not.toBeNull();
+    expect(rule).not.toBeNull();
+
+    for (const name of [
+      "wiki-embed",
+      "wiki-embed-image",
+      "wiki-embed-image-box",
+      "wiki-embed-pdf",
+      "wiki-link",
+    ]) {
+      expect(rule![1]).toContain(`.editor-content .${name}.ProseMirror-selectednode`);
+    }
   });
 });

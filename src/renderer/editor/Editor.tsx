@@ -101,6 +101,12 @@ interface Props {
    * the browser's own falls through undisturbed.
    */
   onContextMenu?: (payload: { x: number; y: number; state: EditorState }) => void;
+  /**
+   * The window's own translator, for the labels on the table toolbar — the one thing
+   * inside the editor that draws words of its own. Optional: without it the toolbar falls
+   * back to English, which is what a test mounting this component bare gets.
+   */
+  t?: (key: string) => string;
   /** Shown while the document is empty, via CSS. */
   placeholder?: string;
 }
@@ -122,6 +128,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onNoteLinkRequested,
     onTableRequested,
     onContextMenu,
+    t,
     placeholder,
   },
   ref,
@@ -151,6 +158,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onNoteLinkRequested,
     onTableRequested,
     onContextMenu,
+    t,
   });
   handlers.current = {
     onChange,
@@ -160,6 +168,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onNoteLinkRequested,
     onTableRequested,
     onContextMenu,
+    t,
   };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
@@ -170,6 +179,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     requestFile: () => handlers.current.onFileRequested(),
     requestNoteLink: (prefix) => handlers.current.onNoteLinkRequested(prefix),
     requestTable: () => handlers.current.onTableRequested(),
+    // Left off entirely when the window passed none, rather than wrapped in something
+    // that answers the key back: `CommandContext.t` being absent is what the table
+    // toolbar's English fallback keys off, and a function returning `"table.rowAbove"`
+    // would satisfy that test and put the key on the button.
+    ...(t === undefined ? {} : { t: (key: string) => handlers.current.t!(key) }),
   });
 
   useEffect(() => {

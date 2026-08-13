@@ -711,7 +711,13 @@ export function createFolder(vault: string, parent: string, name: string): strin
  * accumulating in whichever they click next. For a container an error is the kinder
  * answer.
  *
- * Nothing inside needs rewriting: wikilinks and embeds carry bare names, not paths.
+ * **The links into it are repaired, but not here** (B44). This moves a directory and
+ * nothing else; `IPC.libraryRenameFolder` asks the index which notes link into the folder
+ * *before* calling this and rewrites them after, the same ordering `IPC.libraryMoveNote`
+ * uses for one note — a target resolves against where a note is now, so once the folder
+ * has moved there is nothing left to find. This comment used to say that nothing inside
+ * needed rewriting, because a wikilink carried a bare name rather than a path. That
+ * stopped being true at B35, and the sentence is what kept the breakage invisible.
  */
 export function renameFolder(vault: string, folderPath: string, name: string): string {
   if (folderPath === "") throw new Error(FOLDER_ERROR.root);

@@ -145,13 +145,12 @@ describe("only folders inside the trash are dimmed", () => {
     expect(rowOf(html, "Trash label")).not.toContain("branch-trashed");
   });
 
-  // Only one level deep is asserted because only one level is rendered: a branch below
-  // the root starts collapsed (`Branch`'s `useState(depth < 1)`), so `Oud` is in the tree
-  // data but not in the markup. The propagation itself is one expression and the same one
-  // either way.
-  it("dims a folder in the trash", () => {
+  // The dimming *inside* the trash is asserted in `folder-tree-trash-collapsed.test.ts`
+  // instead: the Trash branch now starts folded, so nothing under it is in a static
+  // render's markup at all, and checking the propagation means unfolding it first.
+  it("renders nothing from inside the trash until it is unfolded", () => {
     const html = renderFooter(false, WITH_TRASHED_FOLDER);
-    expect(rowOf(html, "Klant X")).toContain("branch-trashed");
+    expect(html).not.toContain("Klant X");
   });
 
   it("leaves a live folder alone", () => {
