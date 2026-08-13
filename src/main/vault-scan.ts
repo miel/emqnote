@@ -224,6 +224,12 @@ export async function linkingNotes(
 
   const found = new Map<string, Set<string>>();
   for (const link of allLinks(db)) {
+    // Links only, never embeds. `note_links` holds both since B45, and this question is
+    // B35's: which *notes* point at this note, so that moving it can offer to bring them
+    // along. An embed names a file, resolves through `resolveAttachment` rather than the
+    // index, and would only ever inflate the count in the confirmation.
+    if (link.kind !== "link") continue;
+
     // A note linking to itself is not something a rename has to repair: the link is
     // already inside the file being rewritten, and `rewriteWikiLinks` would be writing
     // over a move it has itself just performed.
@@ -281,6 +287,8 @@ export async function linkingNotesUnder(
 
   const found = new Map<string, Map<string, Set<string>>>();
   for (const link of allLinks(db)) {
+    if (link.kind !== "link") continue; // links only, same reason as `linkingNotes` above
+
     const resolved = resolveInIndex(index, link.target);
     if (resolved.kind !== "unique" || !inside.has(resolved.path)) continue;
     if (link.fromPath === resolved.path) continue;
@@ -304,6 +312,48 @@ export async function linkingNotesUnder(
         .sort((a, b) => a.path.localeCompare(b.path)),
     ]),
   );
+}
+
+/**
+ * Every note carrying a `[[…]]` or `![[…]]` target whose **path** lies inside `folderPath`,
+ * with those exact spellings — what a folder rename has to repair for attachments (B45).
+ *
+ * Deliberately nothing to do with resolution, and that is the whole difference from
+ * `linkingNotesUnder` beside it. That one asks "which notes point at this *note*", which
+ * needs `link-resolve.ts`'s three stages; this asks "which targets name something inside
+ * this folder", which is a question about the string. An attachment target never resolves
+ * to a note at all — that is exactly why the first version of B44's repair silently did
+ * nothing for a folder full of pictures — and `resolveAttachment` is path-based, so a
+ * target that carries a path breaks the moment that path changes.
+ *
+ * Embeds *and* links, because `[[99 - Attachments/offerte.pdf|Open: …]]` is as much a
+ * reference to a file in that folder as `![[99 - Attachments/foto.png]]` is. A path-form
+ * target that happens to name a note is caught here too and rewritten to exactly what
+ * `linkingNotesUnder`'s repair would have written, so the two passes agree; a bare
+ * `[[Rules]]` carries no path and is only ever the other pass's business.
+ */
+export async function targetsUnder(
+  vault: string,
+  db: IndexDb,
+  folderPath: string,
+): Promise<{ path: string; targets: string[] }[]> {
+  await ensureScanned(vault, db);
+  if (!available || folderPath === "") return [];
+
+  const prefix = `${folderPath}/`;
+  const found = new Map<string, Set<string>>();
+
+  for (const link of allLinks(db)) {
+    if (!link.target.startsWith(prefix)) continue;
+
+    const targets = found.get(link.fromPath);
+    if (targets === undefined) found.set(link.fromPath, new Set([link.target]));
+    else targets.add(link.target);
+  }
+
+  return [...found.entries()]
+    .map(([path, targets]) => ({ path, targets: [...targets] }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function facets(vault: string, db: IndexDb, excludePath?: string): Promise<Facets> {

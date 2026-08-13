@@ -60,6 +60,7 @@ import {
   readFolderTree,
   renameNote,
   resolveConflict,
+  rewriteTargetPrefix,
   rewriteWikiLinks,
   saveNote,
   toggleTask,
@@ -80,10 +81,11 @@ import {
   searchNotes,
   setScanRunner,
   startScan,
+  targetsUnder,
   tasks as tasksMatching,
 } from "./vault-scan.js";
 import { linkTargetFor } from "./link-resolve.js";
-import { folderRenameRewrites } from "./folder-rename-links.js";
+import { folderRenameRewrites, movedPath } from "./folder-rename-links.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
 import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./index-db.js";
 import { watchVault, type VaultWatcher } from "./index-watch.js";
@@ -1370,11 +1372,28 @@ function registerLibraryIpc(): void {
     }
 
     const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
+    // The other half (B45), and the one the first version of this was missing entirely:
+    // every target that *carries a path* into this folder — a picture, a PDF, a
+    // path-form note link. `linkingNotesUnder` above answers a question about resolution
+    // and an attachment never resolves to a note, so it can say nothing about the folder
+    // of images this was first reported for.
+    const carrying = indexDb === null ? [] : await targetsUnder(vault, indexDb, path);
+
     const renamed = renameFolder(vault, path, name);
 
     for (const rewrite of folderRenameRewrites(path, renamed, linking)) {
       rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
     }
+    // After the rename and after the link pass, so a note that was itself inside the
+    // folder is written at the path it now has. Both passes match on the *old* spelling,
+    // which exists only once, so neither can undo the other.
+    rewriteTargetPrefix(
+      vault,
+      carrying.map((one) => movedPath(one.path, path, renamed)),
+      path,
+      renamed,
+      writer.activePath(),
+    );
 
     notifyLibrary();
     return renamed;

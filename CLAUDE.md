@@ -256,6 +256,22 @@ need a scan and the answer is one prefix swapped for another. The handler also g
 `writer.activePath()` guard `IPC.libraryTrashFolder` already had. Deleting a folder still
 breaks its links on purpose: those notes are in the trash.
 
+**That repair has a second half, and shipping without it was a bug** (B45). It repaired only
+what resolved to a *note*, and an attachment never does — so renaming a folder of images left
+every `![[99 - Attachments/foto.png]]` in the vault pointing at the old name, which is what
+was reported. Two gaps at once: `note_links` held `[[…]]` only (`wiki-targets.ts` said why —
+"an attachment never moves as a consequence of a note moving", true until a *folder* could be
+renamed), and `rewriteWikiLinks` only ever touched `wikiLink` nodes. The index now stores
+embeds too behind a `kind` column (`SCHEMA_VERSION` 3, so one rebuild — B26 allows it), and
+`linkingNotes`/`linkingNotesUnder` filter to `kind='link'` so B35's question means exactly
+what it meant. The attachment half is deliberately **not** resolution: `targetsUnder` matches
+the *path in the target* as a string, because that is what `resolveAttachment` resolves and
+what a rename changes, and `rewriteTargetPrefix` swaps the one prefix in both node types. No
+alias is invented (a path-form target was never what the reader saw, and an embed has no
+alias) and a bare `![[foto.png]]` is left alone, carrying no folder to rewrite. The prefix
+matched is `Bijlagen/`, never `Bijlagen`, or a sibling folder called `Bijlagen extra` would
+move with it.
+
 **A `[[…]]` link is written by picking a note, always as `[[path|Title]]`** (B41).
 `NotePicker.tsx` opens on `[[`, on `Mod+Shift+K`, from a toolbar button and from the editor
 menu, in **both** windows. Never a bare `[[Title]]`: a path matches in `link-resolve.ts`'s
@@ -439,7 +455,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B44, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B45, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.

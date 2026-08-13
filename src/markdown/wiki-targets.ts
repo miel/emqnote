@@ -23,28 +23,38 @@ export function collectWikiTargets(doc: PMNode): Set<string> {
   return targets;
 }
 
-/** One `[[target|alias]]` exactly as the document spells it. `alias` is null when written `[[target]]`. */
+/** One `[[target|alias]]` or `![[target]]` exactly as the document spells it. */
 export interface WikiLinkRef {
   target: string;
+  /** Always null for an embed — `wikiEmbed` has no alias attribute to carry one. */
   alias: string | null;
+  /**
+   * Which of the two syntaxes wrote it. B35 only ever cared about `link`, and still only
+   * asks for those; `embed` is here because a *folder* rename moves the files an embed
+   * names, which is a question about the path in the target rather than about what it
+   * resolves to (B45).
+   */
+  kind: "link" | "embed";
 }
 
 /**
- * Every `[[…]]` link in a document, with its alias, in document order — what fills
- * `note_links` (B35).
+ * Every `[[…]]` and `![[…]]` reference in a document, with its alias and which syntax
+ * wrote it, in document order — what fills `note_links` (B35, extended by B45).
  *
  * Deliberately *not* `collectWikiTargets` above, and the difference is the whole reason
- * both exist. That one answers "is this file referenced at all", so it folds `wikiEmbed`
- * in, drops the alias and de-duplicates; this one answers "which links would have to be
- * rewritten if their target moved", which needs the alias (an un-aliased link displays
- * its own target, so a rewrite has to promote that target to an alias or the text on
- * screen silently changes) and needs every occurrence, since a note can link to the same
- * note twice with two different spellings.
+ * both exist. That one answers "is this file referenced at all", so it drops the alias and
+ * de-duplicates; this one answers "which references would have to be rewritten if what
+ * they name moved", which needs the alias (an un-aliased link displays its own target, so
+ * a rewrite has to promote that target to an alias or the text on screen silently changes)
+ * and needs every occurrence, since a note can name the same thing twice with two
+ * different spellings.
  *
- * `wikiEmbed` is excluded because an embed is always an attachment — §6.4 routes an image
- * through it — and an attachment never moves as a consequence of a note moving. A
- * `wikiLink` whose target turns out to name an attachment rather than a note simply never
- * resolves to a note path, which costs one row and nothing else.
+ * **`wikiEmbed` used to be excluded**, on the reasoning that an embed is always an
+ * attachment and an attachment never moves as a consequence of a *note* moving. That was
+ * true of everything B35 could do. It stopped being true when a folder could be renamed
+ * (B44): renaming `99 - Attachments` moves every file in it, and a path-form
+ * `![[99 - Attachments/foto.png]]` names one of them. Leaving embeds out of the index is
+ * precisely why the first version of that repair silently did nothing for pictures.
  */
 export function collectWikiLinkTargets(doc: PMNode): WikiLinkRef[] {
   const links: WikiLinkRef[] = [];
@@ -54,7 +64,10 @@ export function collectWikiLinkTargets(doc: PMNode): WikiLinkRef[] {
       links.push({
         target: node.attrs.target as string,
         alias: (node.attrs.alias as string | null) ?? null,
+        kind: "link",
       });
+    } else if (node.type.name === "wikiEmbed") {
+      links.push({ target: node.attrs.target as string, alias: null, kind: "embed" });
     }
     return true;
   });

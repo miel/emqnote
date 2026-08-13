@@ -1351,6 +1351,55 @@ verwijzing opent de notitie weer.
 
 ---
 
+## B45 — Ook `![[…]]` staat in de index, want een map hernoemen verplaatst bijlagen
+
+**Genomen** op 13 augustus 2026, na een foutmelding op B44: een map met afbeeldingen in de
+hoofdmap van de vault hernoemd, en geen enkele verwijzing naar die afbeeldingen werd
+bijgewerkt. Dat klopte, en het waren twee gaten tegelijk.
+
+Het eerste zit in de index. `note_links` bevatte alleen `[[…]]`-verwijzingen, met een
+expliciete reden in `wiki-targets.ts`: *"an attachment never moves as a consequence of a
+note moving"*. Dat was waar voor alles wat B35 kon — bij een notitie die verhuist blijft een
+bijlage staan waar hij stond. Het is onwaar geworden op het moment dat een **map** hernoemd
+kon worden (B44), want dan verplaatst elk bestand eronder wél. `linkingNotesUnder` vond dus
+nul notities voor een map vol plaatjes: er stond niets over te vinden. Dezelfde vorm als de
+zin in `renameFolder` die B44 zelf verving — een opmerking die klopte toen hij geschreven
+werd, later niet meer, en die precies daarom onzichtbaar maakte wat er stukging.
+
+Het tweede zit in het herschrijven: `rewriteWikiLinks` kijkt alleen naar `wikiLink`. Een
+`wikiEmbed` werd nooit aangeraakt, ook niet als hij toevallig wel gevonden was.
+
+**De index bewaart nu beide, met een `kind`-kolom** (`SCHEMA_VERSION` 3, dus één herbouw —
+B26 staat dat toe, want de index is een afgeleide cache buiten de vault). `linkingNotes` en
+`linkingNotesUnder` filteren op `kind='link'`, zodat de vraag van B35 — welke *notities*
+verwijzen hiernaar — exact blijft wat hij was en de bevestiging bij een verplaatsing geen
+plaatjes gaat meetellen.
+
+**De reparatie voor bijlagen doet geen resolutie, maar rekent op de tekst.**
+`linkingNotesUnder` vraagt "welke notities wijzen naar déze notitie", en dat vereist de drie
+trappen van `link-resolve.ts`. `targetsUnder` vraagt iets anders: "welk doel noemt een pad
+binnen deze map", en dat is een vraag over de string. Een bijlagedoel lost namelijk nooit op
+naar een notitie — dat is exact waarom de eerste versie zweeg — en `resolveAttachment` werkt
+op paden, dus een doel dat een pad draagt breekt zodra dat pad verandert.
+`rewriteTargetPrefix` wisselt dan één voorvoegsel om, in `wikiEmbed` én `wikiLink`, via
+`parseNote` → `serializeNote` → `writeAtomic` zoals elke andere schrijfactie (B6).
+
+Twee dingen die er bewust *niet* gebeuren. **Er wordt geen alias verzonnen**: B35 doet dat
+omdat een verwijzing op titel die een pad wordt anders ineens een pad laat zien, maar een
+doel dat al een pad was verandert niets aan wat er op het scherm staat, en een embed heeft
+helemaal geen alias. En **een kale naam blijft staan**: `![[foto.png]]` draagt geen map, dus
+er is niets om te herschrijven.
+
+De prefix is `Bijlagen/` en niet `Bijlagen`, anders zou een map die toevallig zo begint —
+`Bijlagen extra` — meeveranderen.
+
+Bevestigd in de echte app onder `Xvfb`: een echte PNG in `99 - Attachments` in de hoofdmap,
+de map hernoemd naar `Bijlagen` vanuit de werkbalk, en daarna zowel `![[Bijlagen/foto.png]]`
+als `[[Bijlagen/foto.png|de foto]]` op schijf — met de afbeelding daadwerkelijk getekend
+(`naturalWidth` 120) en zonder ontbrekend-markering.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

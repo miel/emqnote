@@ -12,6 +12,14 @@ all** — "add insert/delete row and column" and "add column alignment" were
 already built by B42 and only ever reachable by right-click, which is why they
 read as missing; what was built is a toolbar above the table.
 
+A follow-up on 13 August 2026 fixed a real gap in B44 reported from use
+(**B45**): renaming a folder of *attachments* updated nothing, because
+`note_links` held `[[…]]` links only and `rewriteWikiLinks` only ever touched
+`wikiLink` nodes. Embeds are indexed now, behind a `kind` column, and the
+attachment half of the repair matches the path in the target as a string rather
+than resolving it — an attachment target never resolves to a note, which is
+exactly why the first version was silent.
+
 All six were driven in the real app under `Xvfb`, and doing so found a bug that
 reading the code did not: B43's first version remembered a *missing* PDF for the
 session, so a file put back never redrew. That is what B39 forbids, and only the
