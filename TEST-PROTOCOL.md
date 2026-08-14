@@ -590,6 +590,46 @@ they crowd — plus everything in the capture window, which still has no harness
 
 ---
 
+## 18. The changes of 14 August 2026 — the imported vault, the PDF bar, the tray vault
+
+Everything below was driven end to end under `Xvfb` over CDP except §18n and §18o, and the
+image checks counted real pixels rather than trusting an `<img>` in the DOM. What is left is
+the tray — which no script can reach at all — plus everything in the capture window, which
+still has no harness, plus the handful of judgements about how something feels.
+
+To set this up you want a folder shaped like an Obsidian vault: a folder called
+`99 - Attachments` (no underscore — `_attachments` is the app's own and stays hidden) with a
+picture, a multi-page PDF and a `.docx` in it, and a note that ends in a table.
+
+| # | Do this | Expect |
+|---|---|---|
+| 18a | Open a note written elsewhere that **ends** in a table | There is an empty line below the table and you can click into it and type. Before this there was no caret position after the table at all |
+| 18b | Do 18a, then close the note **without typing** | The file is untouched: same bytes, same modified time. Check with `stat` and a hash, not by eye — B10 |
+| 18c | Same as 18a with a note ending in a code block, an HTML block or a `---` rule | Identical: a line to type on below each |
+| 18d | Open a note Obsidian wrote a PDF into (both `![[x.pdf]]` and `[[x.pdf]]`) | One PDF page. The chip that used to sit beside it is gone |
+| 18e | `cat` that same file | **Both** spellings are still in it. This is display-only; a vault shared with Obsidian must keep saying what Obsidian expects |
+| 18f | Put a `[[x.pdf]]` at the *top* of such a note and its `![[x.pdf]]` at the bottom | Both are drawn. Only neighbours are collapsed — two far-apart mentions are two deliberate mentions |
+| 18g | Mod+click the **last character** of a link, aiming at the right-hand half of it | It opens, first time. This is the "not the first time, sometimes not the second, third works" report |
+| 18h | Mod+click a bare URL that ends a paragraph | Opens. This shape used to be unopenable outright |
+| 18i | Plain-click the same spot as 18g | The caret is placed, nothing opens — B33 unchanged |
+| 18j | Click a chip drawn for `![](https://www.youtube.com/watch?v=…)` | The browser opens the address. A plain click, like every other chip |
+| 18k | Look at an embedded PDF | The bar is **above** the page: ◀ ▶, a page box with `/ 3` beside it, a Fit width/Fit page dropdown, the filename, then ⧉ with its words |
+| 18l | Type a page number into that box and press Enter | It goes there. Type nonsense or a page past the end: the box goes back to the page you are on, with no error |
+| 18m | Judge the bar at a **narrow** window width — NEVER JUDGED | Does the filename clip gracefully and the ⧉ stay reachable? The spacer is meant to make it so |
+| 18n | Insert → Divider | A line across the note, with a paragraph below it. Save and `npm run canonical`: plain `---`, byte-identical |
+| 18o | Open the tray menu → **Vault** — NEVER VERIFIED | A submenu: show in file manager, every vault this machine knows (the current one ticked and not clickable, an unavailable one greyed), and Choose another folder… |
+| 18p | Pick another vault from that submenu — NEVER VERIFIED | A dialog naming the restart. Confirm: the app restarts into the other vault. This is the one to test with a **half-typed note open in the library** — it must be on disk afterwards, in the vault it was typed in |
+| 18q | Cancel that dialog — NEVER VERIFIED | Nothing happens. No restart, no vault change |
+| 18r | Click the `99 - Attachments` folder in the tree | A **Files** section under the notes listing the picture, the PDF and the `.docx` with their type and size. It used to say "No notes" and show nothing |
+| 18s | Click the picture | It is drawn in the reader pane, fitted to it, with Open and Reveal above |
+| 18t | Click the PDF | Its first page, with ◀ ▶ and `1 / n`. Turning pages changes the picture |
+| 18u | Click the `.docx` | "No preview for this file type", and an Open button that hands it to the OS |
+| 18v | Judge the split when a folder holds both notes and 200 files — NEVER JUDGED | The files section is capped at half the pane so the notes stay reachable. Does that feel right? |
+| 18w | Settings → Orphaned attachments, on a **OneDrive** vault with files not yet downloaded | It finishes. It used to sit on "Looking…" indefinitely — and if it now fails it says so instead of looking busy for ever |
+| 18x | Do 18a–18n in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -598,10 +638,12 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k or §16i fails,
+If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q
+or §18x fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k and §16i are all the same gap — the capture
-window has no test harness — and §12b is the one thing in the PDF viewer that a Linux sandbox
+why this document exists. §11f, §13h, §14n, §15k, §16i and §18x are all the same gap — the capture
+window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
+scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b and §16b are a different kind of unwatched: they are judgements
 about how something feels or reads, which no script can make. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

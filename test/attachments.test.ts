@@ -270,6 +270,6 @@ describe("resolveAttachment, for a target carrying a path", () => {
 describe("a saved attachment nothing references yet", () => {
   it("is found by findOrphanedAttachments", async () => {
     const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
-    expect(findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
+    expect(await findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
   });
 });

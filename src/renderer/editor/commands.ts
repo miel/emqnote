@@ -26,6 +26,7 @@ const {
   heading,
   hardBreak,
   blockquote,
+  horizontalRule,
   wikiEmbed,
   wikiLink,
 } = schema.nodes;
@@ -541,6 +542,25 @@ export const softBreak: Command = (state, dispatch) => {
   return true;
 };
 
+/**
+ * A dividing line across the note.
+ *
+ * The node, its parsing and its serialization have been in place since the dialect was
+ * written — `---` in a file has always come back as a rule and gone out as one again, and
+ * `.editor-content hr` has always drawn it. There was simply no way to *make* one, which
+ * is what imported notes made visible: they arrive full of dividers nobody here could add.
+ *
+ * Nothing is needed below it: `horizontalRule` is in `trailing-paragraph.ts`'s
+ * `NEEDS_A_LINE_BELOW`, so a rule at the end of a note gets its line to type on from the
+ * same invariant a table does.
+ */
+export const insertHorizontalRule: Command = (state, dispatch) => {
+  if (dispatch) {
+    dispatch(state.tr.replaceSelectionWith(horizontalRule!.create()).scrollIntoView());
+  }
+  return true;
+};
+
 export function setHeading(level: number): Command {
   return setBlockType(heading!, { level });
 }
@@ -568,6 +588,19 @@ export interface LinkTarget {
  * `linkAt` (the caret) and `link-click.ts`'s `linkHrefAt` (a click, which has not yet
  * moved the selection when `handleClick` runs, so it cannot resolve through
  * `state.selection`).
+ *
+ * **Both sides of the position are asked, and the trailing one is not optional.** The
+ * `link` mark is `inclusive: false` (see `schema.ts`), which is what stops typing past
+ * the end of a link from extending it — and it also means `$pos.marks()` comes back empty
+ * at the *trailing* boundary of a run, where the text after carries no link. That
+ * boundary is the right-hand half of a link's last character, which is exactly where a
+ * pointer aimed at a short link lands. Without the `nodeBefore` fallback a Mod+click
+ * there resolved nothing, ProseMirror fell through to selecting the node instead, and the
+ * link opened only on the second or third try a little further left. Ctrl+K had the same
+ * hole from the keyboard side, with the caret parked at the end of a link.
+ *
+ * `nodeAfter` is still asked first: at a position between two different links, the one
+ * being pointed *into* is the one meant.
  */
 function linkRangeAt(doc: PMNode, pos: number): LinkTarget | null {
   const linkType = schema.marks.link!;
@@ -577,6 +610,7 @@ function linkRangeAt(doc: PMNode, pos: number): LinkTarget | null {
   const mark =
     marks.find((candidate) => candidate.type === linkType) ??
     $pos.nodeAfter?.marks.find((candidate) => candidate.type === linkType) ??
+    $pos.nodeBefore?.marks.find((candidate) => candidate.type === linkType) ??
     null;
 
   if (mark === null) return null;

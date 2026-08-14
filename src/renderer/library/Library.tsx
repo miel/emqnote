@@ -14,6 +14,7 @@ import {
   type Facets,
   type FolderNode,
   type LinkCandidateSummary,
+  type FileSummary,
   type NoteSummary,
   type OpenedNote,
   type ScanProgress,
@@ -38,6 +39,7 @@ import { LinkPicker } from "./LinkPicker.js";
 import { NotePicker } from "./NotePicker.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
+import { FilePreview } from "./FilePreview.js";
 import { OrphanedAttachments } from "./OrphanedAttachments.js";
 import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
 import { Settings } from "./Settings.js";
@@ -146,6 +148,9 @@ export function Library(): React.ReactElement {
   searchQueryRef.current = searchQuery;
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
+  /** The non-note files in the folder being browsed, and which one the reader is showing (B47). */
+  const [files, setFiles] = useState<FileSummary[]>([]);
+  const [openFile, setOpenFile] = useState<string | null>(null);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   /**
    * Persisted through `IPC.setSort`, following the pane-widths precedent exactly — starts
@@ -338,10 +343,20 @@ export function Library(): React.ReactElement {
    */
   const loadNotes = useCallback(async (target: Selection) => {
     const query = searchQueryRef.current;
+    const searching = query.trim() !== "";
     setNotes(
-      query.trim() === ""
-        ? await window.emqnote.library.notes(target)
-        : await window.emqnote.library.search(query),
+      searching
+        ? await window.emqnote.library.search(query)
+        : await window.emqnote.library.notes(target),
+    );
+
+    // Only a folder has files (B47). A tag, a person, the Tasks view and a search all
+    // draw from everywhere, and "which files are here" has no answer for any of them —
+    // so the section simply is not there rather than being there and empty.
+    setFiles(
+      !searching && target.kind === "folder"
+        ? await window.emqnote.library.folderFiles(target.path)
+        : [],
     );
   }, []);
 
@@ -591,6 +606,24 @@ export function Library(): React.ReactElement {
     // let further keystrokes queue up saves that will never land.
     if (result.locked) void refreshEditable();
   }, [loadNotes, refreshFacets, refreshEditable]);
+
+  /**
+   * Cancels the debounce and writes now — what every operation that moves a file out from
+   * under the editor does first, and what main asks for before it restarts into another
+   * vault (`IPC.libraryFlushSaves`).
+   */
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (dirty) await save();
+  }, [dirty, save]);
+
+  // Main is waiting on the reply before it restarts the app into another vault (B21), so
+  // this must be registered for as long as the window is open — the tray can ask at any
+  // moment, unlike Settings, which flushes on its own way out.
+  useEffect(() => window.emqnote.library.onFlushSaves(flushPendingSave), [flushPendingSave]);
 
   const openNote = useCallback(
     async (path: string, taskOrdinal?: number) => {
@@ -1392,14 +1425,31 @@ export function Library(): React.ReactElement {
         ) : (
           <NoteList
             notes={sorted}
+            files={files}
             selected={open?.path ?? null}
+            selectedFile={openFile}
+            // A file and a note are one selection between them: the reader shows one
+            // thing, so picking either has to put the other down.
+            onSelectFile={(path) => {
+              setOpenFile(path);
+              // Whatever is half-typed in the editor goes to disk before the editor stops
+              // being on screen — the same order every operation that puts a note away
+              // uses. The reader shows one thing, so a file selection puts the note down.
+              void flushPendingSave().then(() => {
+                setOpen(null);
+                openRef.current = null;
+              });
+            }}
             showing={selection}
             searching={searchQuery.trim() !== ""}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             sort={sort}
             onSort={onSort}
-            onSelect={(path) => void openNote(path)}
+            onSelect={(path) => {
+              setOpenFile(null);
+              void openNote(path);
+            }}
             onOpenInCapture={(path) => void openInCapture(path)}
             // Filed where you are standing, which includes the vault root — before this
             // every capture went to the Inbox and the root was browsable but unwritable.
@@ -1423,7 +1473,9 @@ export function Library(): React.ReactElement {
         />
 
         <section className="reader">
-          {open === null ? (
+          {open === null && openFile !== null ? (
+            <FilePreview path={openFile} t={app.t} />
+          ) : open === null ? (
             <div className="reader-empty">
               <p>{app.t("library.pick")}</p>
               <p className="reader-hint">{app.t("library.pickHint")}</p>
@@ -1811,13 +1863,7 @@ export function Library(): React.ReactElement {
           onChanged={() => void app.reload()}
           // Switching vault restarts the app, so anything still on the debounce has to
           // reach disk first — and into the vault it was typed in, not the new one.
-          onBeforeSwitch={async () => {
-            if (saveTimer.current !== null) {
-              clearTimeout(saveTimer.current);
-              saveTimer.current = null;
-            }
-            if (dirty) await save();
-          }}
+          onBeforeSwitch={flushPendingSave}
           onClose={() => setSettingsOpen(false)}
           // Settings closes first, then Orphaned Attachments opens — sequenced rather
           // than both flags flipped at once, so the two modals are never stacked on top

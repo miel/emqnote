@@ -65,6 +65,7 @@ function buildFake(): CaptureApi {
       selection.kind === "folder" && selection.path === "00 Inbox"
         ? [noteSummary(NOTE_PATH, "Test note")]
         : [],
+    folderFiles: async () => [],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async (path) => (path === NOTE_PATH ? note : null),
@@ -85,11 +86,11 @@ function buildFake(): CaptureApi {
     onRefresh: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
+    onFlushSaves: () => () => {},
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
     orphanedAttachments: async () => [],
-    attachmentPreview: async () => null,
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},

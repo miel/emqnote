@@ -4,6 +4,7 @@ import type {
   ConflictPair,
   DiffLine,
   Facets,
+  FileSummary,
   FolderNode,
   LinkCandidateSummary,
   LinkingNoteSummary,
@@ -61,6 +62,12 @@ export const IPC = {
   libraryOpen: "library:open",
   libraryTree: "library:tree",
   libraryNotes: "library:notes",
+  /**
+   * The files in a folder that are not notes — pictures, PDFs, documents (B47). Only a
+   * folder selection has an answer; a tag or a search does not, so the renderer asks for
+   * this beside `libraryNotes` rather than as part of it.
+   */
+  libraryFolderFiles: "library:folder-files",
   /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
@@ -89,6 +96,19 @@ export const IPC = {
   /** main → library renderer: how far the startup index scan has got. */
   libraryScanProgress: "library:scan-progress",
   /**
+   * main → library renderer: write anything pending, now, and say when it is done.
+   *
+   * Only the vault switch asks. Settings does its own flushing before calling
+   * `switchVault`, because the click is in that window — the tray's copy of the same
+   * gesture (14 August 2026) has no renderer to do it, and a debounced save landing after
+   * `app.relaunch()` would write the old note's bytes into the new vault at the same
+   * relative path. The reply comes back on `libraryFlushed`; main gives up waiting rather
+   * than hang on a window that is wedged.
+   */
+  libraryFlushSaves: "library:flush-saves",
+  /** library renderer → main: everything pending is on disk. */
+  libraryFlushed: "library:flushed",
+  /**
    * Where the scan is right now, for a library window that opened partway through and so
    * missed the events. Null once it has finished — or if it never had to run.
    */
@@ -105,8 +125,6 @@ export const IPC = {
 
   /** `_attachments/` files no note refers to any more — §6.5. */
   libraryOrphanedAttachments: "library:orphaned-attachments",
-  /** A data URL for one attachment, for the cleanup screen's thumbnail — null if it is not an image. */
-  libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
   /** Which notes link to one, so a move or a rename can offer to bring them along (B35). */
@@ -261,6 +279,8 @@ export interface LibraryApi {
   tree: () => Promise<FolderNode>;
   /** A folder, a tag or a person — whatever the left panel currently has selected. */
   notes: (selection: Selection) => Promise<NoteSummary[]>;
+  /** The non-note files in one folder, for the list's second section (B47). */
+  folderFiles: (folder: string) => Promise<FileSummary[]>;
   /**
    * `type:meeting attendee:"Jan de Vries" tag:klantx after:2026-01-01` plus free text —
    * `search-query.ts` parses it, `vault-scan.ts`'s `searchNotes` runs it. An empty or
@@ -354,15 +374,24 @@ export interface LibraryApi {
   /** How far the startup index scan has got, or null when nothing is scanning. */
   scanState: () => Promise<ScanProgress | null>;
   onScanProgress: (handler: (progress: ScanProgress | null) => void) => () => void;
+  /**
+   * Main asking for every pending save to land before it restarts the app into another
+   * vault. The handler writes, then calls the callback it is given.
+   */
+  onFlushSaves: (handler: () => Promise<void>) => () => void;
 
   conflicts: () => Promise<ConflictPair[]>;
   conflictDiff: (pair: ConflictPair) => Promise<DiffLine[]>;
   /** No `"merge"` branch here — that choice touches no file, so the renderer never calls this for it. */
   resolveConflict: (pair: ConflictPair, choice: ConflictChoice) => Promise<void>;
 
+  /**
+   * Vault-relative paths of the `_attachments/` files nothing names any more. The screen
+   * draws each one straight off `emqnote-attachment://` (B28) — there used to be a second
+   * call per file that base64'd the whole thing through IPC, which is what B28 refused for
+   * a note's own pictures and what made this screen load all-or-nothing.
+   */
   orphanedAttachments: () => Promise<string[]>;
-  /** `null` when the file is not a browser-renderable image type, or could not be read. */
-  attachmentPreview: (path: string) => Promise<string | null>;
   trashAttachment: (path: string) => Promise<string>;
 
   /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */

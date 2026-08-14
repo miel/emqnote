@@ -12,7 +12,8 @@ import { linkTitleHint } from "./link-title.js";
 import { taskCheckboxes } from "./checkbox.js";
 import { taskHighlight } from "./task-highlight.js";
 import { remoteImages } from "./paste-images.js";
-import { trailingParagraph } from "./trailing-paragraph.js";
+import { trailingParagraph, withTrailingParagraph } from "./trailing-paragraph.js";
+import { duplicateEmbedLinks } from "./duplicate-embed.js";
 import { tableDecorations } from "./table-align.js";
 import { tableToolbar } from "./table-toolbar.js";
 
@@ -165,7 +166,11 @@ export function createEditorState(
   context: CommandContext,
 ): EditorState {
   return EditorState.create({
-    doc,
+    // A note that already ends in a table (or a code block, an HTML block, a rule) gets
+    // its line to type on here rather than from the plugin below, which only ever runs
+    // after a change — see `withTrailingParagraph`. Every route into the editor comes
+    // through this function, so this is the one place it has to be done.
+    doc: withTrailingParagraph(doc),
     plugins: [
       history(),
       autoformat(context),
@@ -178,6 +183,9 @@ export function createEditorState(
       remoteImages(),
       // Always a line below a table, so a note can be written past the end of one (B42).
       trailingParagraph(),
+      // Obsidian's `[[x.pdf]]` beside its own `![[x.pdf]]`: the chip is hidden, the file
+      // keeps both (B48).
+      duplicateEmbedLinks(),
       // Column alignment and the caret's own cell — neither reachable from a stylesheet.
       tableDecorations(),
       // The row/column/alignment buttons, shown above whichever table the caret is in.

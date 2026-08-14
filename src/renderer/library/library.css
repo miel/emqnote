@@ -1172,3 +1172,101 @@
 .orphan .danger:hover {
   border-color: #c42b1c;
 }
+
+/* The files in a folder that are not notes (B47).
+ *
+ * A second section under the note list rather than rows mixed in among it: everything a
+ * note row carries — the sort order, dragging onto a folder, the menu with Move, Rename,
+ * Duplicate and Delete — is about notes, and a `.png` that answered half of those would
+ * read worse than one that plainly is not a note. It shares `.note`'s padding and hover
+ * so the two lists look like one pane, which they are. */
+.files-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.files-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  /* Never more than half the pane. A folder of two hundred pictures beside three notes
+     must not push the notes off the top of the list — the folder is still a folder of
+     notes first. */
+  max-height: 50%;
+  flex: 0 0 auto;
+}
+
+/* The reader pane showing a file instead of a note. */
+.file-preview {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.file-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-preview-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.file-preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Fits the pane rather than filling it: a 6000-pixel photo at its own size would be a
+   scroll bar in both directions before it was a preview. */
+.file-preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.file-preview-pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.file-preview-pages {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-preview-counter {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.file-preview-none {
+  color: var(--muted);
+  margin: auto;
+  max-width: 32ch;
+  text-align: center;
+}

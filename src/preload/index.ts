@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
     notes: (selection: Selection) => ipcRenderer.invoke(IPC.libraryNotes, selection),
+    folderFiles: (folder: string) => ipcRenderer.invoke(IPC.libraryFolderFiles, folder),
     search: (query: string) => ipcRenderer.invoke(IPC.librarySearch, query),
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
@@ -101,6 +102,17 @@ contextBridge.exposeInMainWorld("emqnote", {
     scanState: () => ipcRenderer.invoke(IPC.libraryScanState),
     onScanProgress: (handler: (progress: ScanProgress | null) => void) =>
       subscribe<ScanProgress | null>(IPC.libraryScanProgress, handler),
+    // Not `subscribe`: the point of this one is the reply. Main is waiting on
+    // `libraryFlushed` before it restarts into another vault, so the answer has to be
+    // sent after the handler's promise settles — including when it rejects, or a failed
+    // save would hold the switch open until main's own timeout.
+    onFlushSaves: (handler: () => Promise<void>) => {
+      const listener = (): void => {
+        void handler().finally(() => ipcRenderer.send(IPC.libraryFlushed));
+      };
+      ipcRenderer.on(IPC.libraryFlushSaves, listener);
+      return () => ipcRenderer.off(IPC.libraryFlushSaves, listener);
+    },
 
     conflicts: () => ipcRenderer.invoke(IPC.libraryConflicts),
     conflictDiff: (pair: ConflictPair) => ipcRenderer.invoke(IPC.libraryConflictDiff, pair),
@@ -108,7 +120,6 @@ contextBridge.exposeInMainWorld("emqnote", {
       ipcRenderer.invoke(IPC.libraryResolveConflict, pair, choice),
 
     orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
-    attachmentPreview: (path: string) => ipcRenderer.invoke(IPC.libraryAttachmentPreview, path),
     trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
 
     tasks: (scope: string, openOnly: boolean) =>

@@ -332,6 +332,26 @@ export async function linkingNotesUnder(
  * `linkingNotesUnder`'s repair would have written, so the two passes agree; a bare
  * `[[Rules]]` carries no path and is only ever the other pass's business.
  */
+/**
+ * Every `[[…]]` and `![[…]]` target in the vault, as spellings and nothing more.
+ *
+ * The orphaned-attachment scan's whole question: an attachment is referenced when some
+ * note names it, and B45 put embeds in `note_links` beside the links. Before this that
+ * scan rebuilt the set by reading and parsing every note in the vault on the main thread,
+ * inside the IPC call, which is what left the screen saying "Looking…" for as long as
+ * OneDrive took to hydrate them.
+ *
+ * `null` when the index could not be scanned — the caller falls back to reading the notes,
+ * rather than treating "no answer" as "nothing is referenced" and offering to delete
+ * every attachment in the vault.
+ */
+export async function referencedTargets(vault: string, db: IndexDb): Promise<string[] | null> {
+  await ensureScanned(vault, db);
+  if (!available) return null;
+
+  return allLinks(db).map((link) => link.target);
+}
+
 export async function targetsUnder(
   vault: string,
   db: IndexDb,

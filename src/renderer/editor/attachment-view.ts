@@ -230,6 +230,11 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
 
   const bar = document.createElement("span");
   bar.className = "wiki-embed-pdf-bar";
+  // Not editable text, and never the caret's business — the recipe `checkbox.ts` and
+  // `table-toolbar.ts` both follow. It matters more here than it did for six buttons: the
+  // bar now holds a real `<input>`, and without this ProseMirror would treat typing a page
+  // number as typing into the note.
+  bar.contentEditable = "false";
 
   /** Every control on the bar: never takes the caret, never opens the atom's selection. */
   const control = (className: string, label: string, title: string): HTMLButtonElement => {
@@ -245,27 +250,62 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
   const previous = control("wiki-embed-pdf-nav", "◀", say("pdf.previousPage"));
   const next = control("wiki-embed-pdf-nav", "▶", say("pdf.nextPage"));
 
+  // The counter is the viewer window's, down to the markup: a box you can type a page
+  // number into and a total beside it. It was a read-only "Page 2 of 7" until the person
+  // using both said outright that the window's bar is the one they wanted here.
   const counter = document.createElement("span");
   counter.className = "wiki-embed-pdf-counter";
+  const pageInput = document.createElement("input");
+  pageInput.type = "text";
+  pageInput.inputMode = "numeric";
+  pageInput.value = "1";
+  pageInput.setAttribute("aria-label", say("pdf.pageNumber"));
+  const pageTotal = document.createElement("span");
+  counter.append(pageInput, pageTotal);
 
-  const fit = control("wiki-embed-pdf-fit", say("pdf.fit"), say("pdf.fitPage"));
+  // Where the viewer's zoom select stands, and deliberately not a zoom: the page here is
+  // one `PAGE_SIZE` PNG that B36's hidden window already drew, so a percentage would only
+  // magnify a fixed number of pixels. The two fits are the two that cost nothing — the
+  // width of the column (B43's original), or the whole page inside 70vh. Real zoom, text
+  // selection and printing stay in B40's window, which is what the ⧉ opens.
+  const fit = document.createElement("select");
+  fit.className = "wiki-embed-pdf-fit";
+  fit.title = say("pdf.fit");
+  for (const [value, key] of [
+    ["width", "pdf.fitWidth"],
+    ["page", "pdf.fitPage"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = say(key);
+    fit.append(option);
+  }
+  fit.addEventListener("mousedown", (event) => event.stopPropagation());
 
   const label = document.createElement("span");
   label.className = "wiki-embed-pdf-name";
   label.textContent = target;
 
+  const spacer = document.createElement("span");
+  spacer.className = "wiki-embed-pdf-spacer";
+
   // `openWikiLink` routes a `.pdf` through `attachmentRoute` to the viewer window (B40),
   // which is where zooming, selecting text and the way out to the OS viewer live. The
   // page turning below is the reading this bar can do without a second window; that
-  // button is still the way to the one that can do the rest.
+  // button is still the way to the one that can do the rest. It carries its words as well
+  // as its glyph now, exactly as the window's own does — a lone ⧉ beside five other
+  // controls said nothing.
   const open = control("wiki-embed-pdf-open", "⧉", say("pdf.openViewer"));
+  open.append(document.createTextNode(` ${say("pdf.openViewer")}`));
   open.addEventListener("click", (event) => {
     event.preventDefault();
     void window.emqnote.openWikiLink(target);
   });
 
-  bar.append(previous, next, counter, fit, label, open);
-  box.append(page, bar);
+  bar.append(previous, next, counter, fit, label, spacer, open);
+  // Above the page, not below it. A bar under a full-height page is a bar you have to
+  // scroll the note to reach, which is the whole of why this moved.
+  box.append(bar, page);
 
   /**
    * Which page is drawn, and how many there are once anything knows.
@@ -283,15 +323,15 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
   let drawnUrl: string | null = null;
 
   const redrawControls = (): void => {
-    counter.textContent =
-      pages === null
-        ? say("pdf.page").replace("{page}", String(current))
-        : say("pdf.pageOf").replace("{page}", String(current)).replace("{pages}", String(pages));
+    pageInput.value = String(current);
+    // An em dash while the count is still on its way, the same placeholder the viewer
+    // window shows for the same moment.
+    pageTotal.textContent = `/ ${pages === null ? "–" : String(pages)}`;
     previous.disabled = current <= 1;
     next.disabled = pages !== null && current >= pages;
     // Both hidden rather than merely disabled for a one-page document: a pair of dead
     // arrows on every single-page PDF in the vault is exactly the clutter this bar is
-    // meant not to be. The counter still says "Page 1 of 1", which is the fact.
+    // meant not to be. The counter still says "1 / 1", which is the fact.
     const single = pages === 1;
     previous.hidden = single;
     next.hidden = single;
@@ -339,14 +379,38 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
     step(1);
   });
 
-  fit.addEventListener("click", (event) => {
-    event.preventDefault();
-    const toPage = box.dataset.fit !== "page";
-    box.dataset.fit = toPage ? "page" : "width";
-    fit.setAttribute("aria-pressed", String(toPage));
-    // The tooltip names what the *next* click does, which is the one thing a toggle can
-    // say that is true before it is pressed.
-    fit.title = say(toPage ? "pdf.fitWidth" : "pdf.fitPage");
+  // A page number typed in, committed on Enter and on leaving the box. Out-of-range and
+  // nonsense both put the current page back rather than being refused with a message:
+  // there is exactly one right answer to "what page am I on", and the box should always
+  // be showing it.
+  const goToTypedPage = (): void => {
+    const wanted = Number.parseInt(pageInput.value, 10);
+    if (!Number.isNaN(wanted) && wanted >= 1 && (pages === null || wanted <= pages)) {
+      if (wanted !== current) {
+        draw(wanted);
+        return;
+      }
+    }
+    redrawControls();
+  };
+
+  pageInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      goToTypedPage();
+      return;
+    }
+    if (event.key === "Escape") redrawControls();
+    // Everything else is swallowed rather than passed on: this box sits inside a
+    // contenteditable, and an arrow key or a Backspace that reached the view would move
+    // the caret in the note behind it. `stopEvent` covers ProseMirror's own handlers; this
+    // covers the keymaps bound above it.
+    event.stopPropagation();
+  });
+  pageInput.addEventListener("blur", goToTypedPage);
+
+  fit.addEventListener("change", () => {
+    box.dataset.fit = fit.value === "page" ? "page" : "width";
   });
 
   // Keyed apart from the chip's own failures: the two are different renders of one file
@@ -384,6 +448,10 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
 
   return {
     dom: box,
+    // Only the bar's own events. `checkbox.ts` and `table-toolbar.ts` both answer `true`
+    // unconditionally, but their DOM *is* the widget; here the page beside it must keep
+    // reaching ProseMirror, because clicking it is how the embed is selected and deleted.
+    stopEvent: (event) => event.target instanceof Node && bar.contains(event.target),
     // ProseMirror drops the NodeView when the embed is deleted, the note is closed or the
     // document is replaced — the last blob URL would otherwise stay alive for the rest of
     // the session, one per PDF per note-open.
@@ -466,11 +534,39 @@ function externalImageLabel(node: PMNode): string {
   }
 }
 
+/**
+ * The chip opens its address, on a plain click.
+ *
+ * Not every `![…](…)` in a vault points at a picture. `![](https://www.youtube.com/watch?v=…)`
+ * is a shape imported notes are full of — a video written with the image spelling — and
+ * before this the chip drawn for it was the one thing in a note that could be seen and not
+ * reached: no listener at all, so a click made an invisible `NodeSelection` and a Mod+click
+ * found no link *mark* to resolve.
+ *
+ * A plain click, deliberately, unlike a weblink in prose (B33). The rule there is that the
+ * link's own text has to stay editable, so the caret must win the plain click; a chip is an
+ * atom with no text to put a caret in, and its neighbours in this file — `chipView`,
+ * `wikiLinkNodeView` — have always opened on a plain click for exactly that reason.
+ *
+ * The scheme is decided again in main (`isOpenableUrl`, `remote-image.ts`), which refuses
+ * everything but http(s) — so a `data:` src, which this node can also hold, declines
+ * silently rather than being filtered twice.
+ */
 export function externalImageView(node: PMNode): NodeView {
   const span = document.createElement("span");
   span.className = "external-image";
   span.textContent = externalImageLabel(node);
-  span.title = (node.attrs.src as string | null) ?? "";
+
+  const src = (node.attrs.src as string | null) ?? "";
+  span.title = src;
+
+  // Held down, not clicked — the same reason `wikiLinkNodeView` does it: `mousedown` is
+  // what ProseMirror uses to decide it should select the atom under the pointer.
+  span.addEventListener("mousedown", (event) => event.preventDefault());
+  span.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (src !== "") void window.emqnote.openExternal(src);
+  });
 
   return { dom: span };
 }

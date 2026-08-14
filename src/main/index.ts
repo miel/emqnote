@@ -57,6 +57,7 @@ import {
   renameFolder,
   moveNote,
   openNote,
+  readFilesIn,
   readFolderTree,
   renameNote,
   resolveConflict,
@@ -77,6 +78,7 @@ import {
   linkingNotes,
   linkingNotesUnder,
   notesMatching,
+  referencedTargets,
   resolveNoteLink,
   searchNotes,
   setScanRunner,
@@ -91,7 +93,7 @@ import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./i
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
-import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
+import { findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import {
   attachmentNameFromUrl,
@@ -219,6 +221,69 @@ function notifyLibrary(): void {
   if (library !== null && !library.isDestroyed()) {
     library.webContents.send(IPC.libraryRefresh);
   }
+}
+
+/**
+ * Waits for the library window to write anything it still has pending.
+ *
+ * The library's save is debounced in the *renderer*, where main cannot see it — which is
+ * fine while the only way to switch vaults is a button in that same window, since
+ * `Settings.tsx` flushes on its way to `switchVault`. The tray's copy of the gesture has
+ * no such window in the loop, and a debounced write landing after `app.relaunch()` would
+ * put the old note's bytes into the new vault at the same relative path, creating the
+ * folder to hold it. Silently — the third of the four hazards B21 lists.
+ *
+ * Bounded, because this stands in front of a restart the user asked for: a library window
+ * that is wedged or mid-dialog must delay it, not cancel it. Two seconds is far longer
+ * than a write and far shorter than a hang worth noticing.
+ */
+function flushOpenLibrary(): Promise<void> {
+  const library = getLibraryWindow();
+  if (library === null || library.isDestroyed()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      ipcMain.off(IPC.libraryFlushed, done);
+      resolve();
+    };
+    const timer = setTimeout(done, 2000);
+
+    ipcMain.on(IPC.libraryFlushed, done);
+    library.webContents.send(IPC.libraryFlushSaves);
+  });
+}
+
+/**
+ * Points the app at another vault and restarts it.
+ *
+ * A restart and not a live switch, and that is B21 rather than laziness — four separate
+ * pieces of state are decided once and never revisited:
+ *
+ *  - `CaptureWriter.session.path` is fixed on the first write, so a half-typed note
+ *    would keep landing in the old vault.
+ *  - `ensureScanned` collapses concurrent callers onto one `running` promise *without
+ *    checking which vault it is for*, so a `facets()` straight after a switch can await
+ *    the old vault's scan and read its cache. `invalidate()` exists and has no callers.
+ *  - A pending `saveTimer` in the renderer would write the old note's bytes into the new
+ *    vault at the same relative path, with `writeAtomic`'s `mkdirSync` creating the
+ *    folder to hold it. Silently.
+ *  - `filesOnDemandWarned` — now per vault, precisely so the restart does not land in a
+ *    new OneDrive folder with the warning already suppressed.
+ *
+ * One function and not two copies of it: the tray reaches this as well as the settings
+ * panel (14 August 2026), and a second sequence written out beside this one is how one of
+ * those four gets forgotten on the path nobody tested.
+ */
+async function switchVaultTo(path: string): Promise<void> {
+  await writer.flush();
+  writer.finish();
+  await flushOpenLibrary();
+
+  adoptVault(path);
+
+  app.relaunch();
+  app.quit();
 }
 
 /**
@@ -376,7 +441,13 @@ async function main(): Promise<void> {
   // instance that is already running.
   if (selfTestRounds === 0) {
     app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
-    createTray();
+    // The same three the settings panel reaches over IPC. Handed in rather than imported,
+    // since `askForVault` and `switchVaultTo` live here and the tray is created here.
+    createTray({
+      list: () => listVaults(knownVaults(), findOneDriveCandidates(), loadSettings().vaultPath),
+      choose: askForVault,
+      switchTo: switchVaultTo,
+    });
     registerHotkey();
   }
 
@@ -1095,6 +1166,18 @@ function registerLibraryIpc(): void {
       : readFolderTree(vault, writer.uncommittedNewPath() ?? undefined);
   });
 
+  /**
+   * The non-note files in one folder (B47).
+   *
+   * Straight from disk, like `readNotesIn` and for the same reason (`vault-scan.ts`'s own
+   * comment: browsing one folder must not wait on a scan) — and doubly so here, since the
+   * index holds only notes and never could answer this.
+   */
+  ipcMain.handle(IPC.libraryFolderFiles, (_event, folder: string) => {
+    const vault = vaultPath();
+    return vault === null ? [] : readFilesIn(vault, folder);
+  });
+
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {
     const vault = vaultPath();
     // `indexDb` is only ever null in the sliver of startup before `main` opens it, and
@@ -1145,14 +1228,25 @@ function registerLibraryIpc(): void {
     },
   );
 
-  ipcMain.handle(IPC.libraryOrphanedAttachments, () => {
+  /**
+   * The cleanup screen's list.
+   *
+   * The reference set comes out of the index rather than out of every note on disk —
+   * `note_links` has held exactly it since B45 — which is what stopped this stalling at
+   * "Looking…" on a Files On-Demand vault. `ensureScanned` first, so a cold index is
+   * built once, with the progress bar the library already shows, instead of by a second
+   * walk nobody can see; `allLinks` is `null`-safe by being skipped entirely, in which
+   * case the scan falls back to reading the notes itself.
+   */
+  ipcMain.handle(IPC.libraryOrphanedAttachments, async () => {
     const vault = vaultPath();
-    return vault === null ? [] : findOrphanedAttachments(vault);
-  });
+    if (vault === null) return [];
 
-  ipcMain.handle(IPC.libraryAttachmentPreview, (_event, path: string) => {
-    const vault = vaultPath();
-    return vault === null ? null : attachmentPreview(vault, path);
+    const referenced = indexDb === null ? null : await referencedTargets(vault, indexDb);
+    // `null` means the index could not answer, not that nothing is referenced — the scan
+    // reads the notes itself in that case rather than offering to delete every attachment
+    // in the vault.
+    return findOrphanedAttachments(vault, referenced ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryTrashAttachment, (_event, path: string) => {
@@ -1355,36 +1449,11 @@ function registerLibraryIpc(): void {
 
   ipcMain.handle(IPC.chooseVault, () => askForVault());
 
-  /**
-   * Points the app at another vault and restarts it.
-   *
-   * A restart and not a live switch, and that is B21 rather than laziness — four
-   * separate pieces of state are decided once and never revisited:
-   *
-   *  - `CaptureWriter.session.path` is fixed on the first write, so a half-typed note
-   *    would keep landing in the old vault.
-   *  - `ensureScanned` collapses concurrent callers onto one `running` promise *without
-   *    checking which vault it is for*, so a `facets()` straight after a switch can
-   *    await the old vault's scan and read its cache. `invalidate()` exists and has no
-   *    callers.
-   *  - A pending `saveTimer` in the renderer would write the old note's bytes into the
-   *    new vault at the same relative path, with `writeAtomic`'s `mkdirSync` creating
-   *    the folder to hold it. Silently.
-   *  - `filesOnDemandWarned` — now per vault, precisely so the restart does not land in
-   *    a new OneDrive folder with the warning already suppressed.
-   *
-   * Everything in flight is flushed first. The renderer flushes its own pending save
-   * before it calls this.
-   */
-  ipcMain.handle(IPC.switchVault, async (_event, path: string) => {
-    await writer.flush();
-    writer.finish();
-
-    adoptVault(path);
-
-    app.relaunch();
-    app.quit();
-  });
+  // The whole of it is `switchVaultTo`, above — the settings panel and the tray reach the
+  // same function. This renderer has already flushed its own pending save on the way here;
+  // `flushOpenLibrary` inside asks again, which costs one no-op round trip and means the
+  // tray path is not relying on a window it did not go through.
+  ipcMain.handle(IPC.switchVault, (_event, path: string) => switchVaultTo(path));
 
   /**
    * Renaming a folder moves every note inside it, so it moves every `[[path|Title]]` link

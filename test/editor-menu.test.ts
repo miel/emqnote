@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EditorState } from "prosemirror-state";
+import { EditorState, type Command } from "prosemirror-state";
 import { schema } from "../src/markdown/schema.js";
 import { buildEditorMenu, type EditorMenuActions } from "../src/renderer/editor/editor-menu.js";
 import { formatFirstKey } from "../src/shared/shortcuts.js";
@@ -81,6 +81,24 @@ describe("buildEditorMenu", () => {
     expect(file?.shortcut).toBe(formatFirstKey("insertFile", false));
     expect(image?.onSelect).toBe(actions.insertImage);
     expect(file?.onSelect).toBe(actions.insertFile);
+  });
+
+  it("offers a divider, and running it puts a rule in the document", () => {
+    const items = buildEditorMenu(plainState(), false, t, actions);
+    const divider = items.find((item) => item.label === "menu.insertRule");
+
+    // No shortcut and no picker: the one insert item that is simply done. The Insert menu
+    // opens from a plain button, so `--click-button="Insert>…"` still reaches it.
+    expect(divider?.shortcut).toBeUndefined();
+
+    let ran: Command | null = null;
+    buildEditorMenu(plainState(), false, t, { ...actions, run: (command) => (ran = command) })
+      .find((item) => item.label === "menu.insertRule")!
+      .onSelect!();
+
+    let state = plainState();
+    ran!(state, (transaction) => (state = state.apply(transaction)));
+    expect(state.doc.child(0).type.name).toBe("horizontalRule");
   });
 
   it.each([true, false])(
