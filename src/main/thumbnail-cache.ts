@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /**
  * The naming, gating and pruning rules for the PDF/Office first-page thumbnail cache
@@ -82,11 +82,34 @@ export function thumbnailKey(
   mtimeMs: number,
   size: number,
   variant: ThumbVariant = "chip",
+  page = 1,
 ): string {
+  // Page 1 is spelled as the bare variant, so every key that existed before the inline
+  // embed could turn a page is byte-for-byte the key it was. A cache full of first pages
+  // survived this change untouched, which is the difference between one re-render per
+  // file and none at all.
+  const suffix = page > 1 ? `${variant}#${page}` : variant;
   return createHash("sha256")
-    .update(`${realPath}\0${mtimeMs}\0${size}\0${variant}`, "utf8")
+    .update(`${realPath}\0${mtimeMs}\0${size}\0${suffix}`, "utf8")
     .digest("hex")
     .slice(0, 32);
+}
+
+/**
+ * Where the page *count* of a document is kept: `<page-1 key>.pages`, a file holding one
+ * number.
+ *
+ * pdf.js knows how many pages a document has for free while it is rendering one, and
+ * nothing else can learn it without parsing the whole file again. The count has to outlive
+ * the render, because the PNG cache does: after a restart, page 1 of a PDF is a cache hit
+ * with no render behind it to ask, and "Page 1 of 7" would have nothing to say. So it sits
+ * beside the page-1 PNG, under that PNG's own key — which means it inherits the same
+ * staleness rule (`mtime`+`size` are in the key, so an edited file simply has a different
+ * one) and the same eviction, since `pruneThumbnails` drops a `.pages` file when the PNG
+ * it belongs to goes.
+ */
+export function pageCountKey(realPath: string, mtimeMs: number, size: number): string {
+  return thumbnailKey(realPath, mtimeMs, size, "page");
 }
 
 /**
@@ -106,12 +129,13 @@ export function thumbnailKey(
 export function pruneThumbnails(cacheDir: string, maxCount: number, maxBytes = Infinity): void {
   if (!existsSync(cacheDir)) return;
 
-  let names: string[];
+  let entries: string[];
   try {
-    names = readdirSync(cacheDir).filter((name) => name.endsWith(".png"));
+    entries = readdirSync(cacheDir);
   } catch {
     return;
   }
+  const names = entries.filter((name) => name.endsWith(".png"));
   if (names.length <= maxCount && maxBytes === Infinity) return;
 
   const files = names
@@ -145,6 +169,20 @@ export function pruneThumbnails(cacheDir: string, maxCount: number, maxBytes = I
       unlinkSync(path);
     } catch {
       // Already gone, or a transient lock on Windows/OneDrive — the next prune retries.
+    }
+  }
+
+  // The page-count sidecars (`pageCountKey`) follow their PNG rather than being counted
+  // against either cap: each is a handful of bytes, and one that outlived its page would
+  // be a number nothing can check — the PNG's key is the only thing that ties it to a
+  // file and an mtime. Kept exactly while the page-1 render it was written beside is.
+  const surviving = new Set(files.slice(0, keep).map(({ path }) => basename(path, ".png")));
+  for (const name of entries) {
+    if (!name.endsWith(".pages") || surviving.has(basename(name, ".pages"))) continue;
+    try {
+      unlinkSync(join(cacheDir, name));
+    } catch {
+      // Same as above.
     }
   }
 }

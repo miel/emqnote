@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trapTab } from "./focus-trap.js";
+import { useActiveRowVisible, useHoverGuard } from "./palette-scroll.js";
 import type { LinkCandidateSummary } from "../../shared/vault-types.js";
 
 interface Props {
@@ -34,6 +35,7 @@ const DEBOUNCE_MS = 150;
 export function NotePicker({ initialQuery, onPick, onCancel, t }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState(initialQuery);
   const [matches, setMatches] = useState<LinkCandidateSummary[]>([]);
   const [active, setActive] = useState(0);
@@ -42,6 +44,13 @@ export function NotePicker({ initialQuery, onPick, onCancel, t }: Props): React.
     input.current?.focus();
     input.current?.select();
   }, []);
+
+  // The list scrolls, and this is what makes the arrow keys scroll it — see
+  // `palette-scroll.ts`, which says why all three palette lists share one copy of it.
+  useActiveRowVisible(list, active, matches);
+  // …and this is what keeps the pointer resting over the list from undoing every arrow
+  // press as the rows scroll under it. See `palette-scroll.ts`.
+  const pointer = useHoverGuard();
 
   useEffect(() => {
     // `cancelled` rather than an abort: two answers can be in flight after a fast typist
@@ -80,10 +89,12 @@ export function NotePicker({ initialQuery, onPick, onCancel, t }: Props): React.
             trapTab(event, panel.current);
             if (event.key === "ArrowDown") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.min(index + 1, matches.length - 1));
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.max(index - 1, 0));
             }
             if (event.key === "Enter") {
@@ -97,13 +108,15 @@ export function NotePicker({ initialQuery, onPick, onCancel, t }: Props): React.
           }}
         />
 
-        <ul className="palette-list">
+        <ul className="palette-list" ref={list}>
           {matches.length === 0 && <li className="palette-empty">{t("link.noNoteMatch")}</li>}
           {matches.map((candidate, index) => (
             <li
               key={candidate.path}
               className={index === active ? "palette-on" : ""}
-              onMouseEnter={() => setActive(index)}
+              onMouseEnter={(event) => {
+                if (pointer.hover(event)) setActive(index);
+              }}
               onClick={() => choose(index)}
             >
               <span className="palette-primary">{candidate.title}</span>

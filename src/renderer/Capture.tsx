@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../markdown/schema.js";
-import { buildEditorMenu } from "./editor/editor-menu.js";
+import { buildEditorMenu, insertMenuItems } from "./editor/editor-menu.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
@@ -101,6 +101,13 @@ export function Capture(): React.ReactElement {
    */
   const [notePick, setNotePick] = useState<{ prefix: string; query: string } | null>(null);
   const [tableGrid, setTableGrid] = useState<{ x: number; y: number } | null>(null);
+  /**
+   * The status bar's "Insert" menu — the same four items as the library reader's, from
+   * `insertMenuItems`. It replaced four icon buttons (🖼 📎 🔗 ▦) sitting between the
+   * filename and the "?" button, which is the clutter that was reported in the reader
+   * header; leaving them here would give one app two vocabularies for one action.
+   */
+  const [insertMenu, setInsertMenu] = useState<{ x: number; y: number } | null>(null);
 
   const openNotePicker = useCallback((prefix: string) => {
     setNotePick({ prefix, query: editor.current?.getSelectedText() ?? "" });
@@ -335,6 +342,22 @@ export function Capture(): React.ReactElement {
         />
       )}
 
+      {insertMenu !== null && (
+        <ContextMenu
+          x={insertMenu.x}
+          y={insertMenu.y}
+          onClose={() => setInsertMenu(null)}
+          items={insertMenuItems(app.isMac, app.t, {
+            run: (command) => editor.current?.runCommand(command),
+            insertImage: () => void pickAndInsertImage(),
+            insertFile: () => void pickAndInsertFile(),
+            insertNoteLink: () => openNotePicker(""),
+            insertTable: () =>
+              setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 }),
+          })}
+        />
+      )}
+
       {notePick !== null && (
         <NotePicker
           initialQuery={notePick.query}
@@ -404,35 +427,18 @@ export function Capture(): React.ReactElement {
         </span>
         <button
           type="button"
-          className="help-button"
-          title={app.t("shortcut.insertImage")}
-          onClick={() => void pickAndInsertImage()}
+          className="help-button insert-button"
+          title={app.t("library.insert")}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            // Above the button, not below it: this bar is at the foot of the window, so
+            // a menu opening downwards would be clamped back over the button it came
+            // from. `ContextMenu` clamps to the viewport, and this hands it a point it
+            // can honour.
+            setInsertMenu({ x: rect.left, y: rect.top });
+          }}
         >
-          🖼
-        </button>
-        <button
-          type="button"
-          className="help-button"
-          title={app.t("shortcut.insertFile")}
-          onClick={() => void pickAndInsertFile()}
-        >
-          📎
-        </button>
-        <button
-          type="button"
-          className="help-button"
-          title={app.t("shortcut.insertNoteLink")}
-          onClick={() => openNotePicker("")}
-        >
-          🔗
-        </button>
-        <button
-          type="button"
-          className="help-button"
-          title={app.t("shortcut.insertTable")}
-          onClick={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
-        >
-          ▦
+          {app.t("library.insert")}
         </button>
         <button
           type="button"

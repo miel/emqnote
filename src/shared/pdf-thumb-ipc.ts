@@ -7,7 +7,7 @@
  * careful about, so the smaller this bridge the smaller the surface it hands back.
  */
 
-/** main → thumb renderer: here are the bytes, draw the first page. */
+/** main → thumb renderer: here are the bytes, draw a page. */
 export const PDF_THUMB_RENDER = "pdf-thumb:render";
 /** thumb renderer → main: here is the PNG, or here is why there isn't one. */
 export const PDF_THUMB_RESULT = "pdf-thumb:result";
@@ -32,8 +32,24 @@ export interface PdfThumbRenderRequest {
    * magnified one.
    */
   allowUpscale?: boolean;
+  /**
+   * Which page to draw, 1-based. Absent means the first, which is what every caller asked
+   * for before the inline embed could turn a page.
+   *
+   * A page past the end of the document is not checked here or in main: pdf.js is the only
+   * thing that knows how many there are, so asking for one is a render failure like any
+   * other and comes back through `ok: false`. The one caller that can turn a page is told
+   * the count by the render below, so in practice it never asks.
+   */
+  page?: number;
 }
 
 export type PdfThumbResult =
-  | { id: number; ok: true; png: Uint8Array }
+  /**
+   * `pages` is how many the document has — free at render time (pdf.js has just parsed
+   * the file) and otherwise expensive to learn, since it would mean parsing it again.
+   * `thumbnails.ts` keeps it beside the cached PNG so a page turn after a restart does
+   * not have to.
+   */
+  | { id: number; ok: true; png: Uint8Array; pages: number }
   | { id: number; ok: false; error: string };

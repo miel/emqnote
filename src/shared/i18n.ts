@@ -116,6 +116,17 @@ const DUTCH: Record<string, string> = {
   "table.alignRight": "Rechts",
   "table.alignDefault": "Auto",
 
+  // De balk onder een ingesloten pdf-pagina (B43). Bladeren gebeurt in de notitie zelf;
+  // ⧉ opent nog steeds het pdf-venster (B40), waar zoomen en de systeemviewer zitten.
+  "pdf.previousPage": "Vorige pagina",
+  "pdf.nextPage": "Volgende pagina",
+  "pdf.page": "Pagina {page}",
+  "pdf.pageOf": "Pagina {page} van {pages}",
+  "pdf.fit": "Passend",
+  "pdf.fitPage": "Hele pagina passend maken",
+  "pdf.fitWidth": "Op kolombreedte tonen",
+  "pdf.openViewer": "Openen in pdf-venster",
+
   // Link prompt
   "link.new": "Link",
   "link.edit": "Link bewerken",
@@ -148,8 +159,13 @@ const DUTCH: Record<string, string> = {
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   "library.delete": "Verwijderen",
-  /** The reader toolbar's "⋯" button, opening Rename/Move/Duplicate/Reveal/Delete. */
+  /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
+   *  Its `title`; `library.actions` is what is written on it. */
   "library.moreActions": "Meer acties",
+  /** On the button itself, where "⋯" used to be. */
+  "library.actions": "Acties",
+  /** The button that opened as four icons (🖼 🔗 ▦ 📎), in both windows. */
+  "library.insert": "Invoegen",
   "library.newNote": "Nieuwe notitie",
   "library.clearTrash": "Prullenbak legen",
   /** The folder toolbar's short form of `newFolder` — the panel itself already says
@@ -388,6 +404,19 @@ const ENGLISH: Record<string, string> = {
   "table.alignRight": "Right",
   "table.alignDefault": "Auto",
 
+  // The bar under an embedded PDF page (B43). Pages are turned in the note itself; ⧉
+  // still opens the PDF window (B40), which is where zoom and the system viewer live.
+  "pdf.previousPage": "Previous page",
+  "pdf.nextPage": "Next page",
+  // No total yet — the count is one round trip behind the picture, and a counter that
+  // waited for it would appear a moment after the page did.
+  "pdf.page": "Page {page}",
+  "pdf.pageOf": "Page {page} of {pages}",
+  "pdf.fit": "Fit",
+  "pdf.fitPage": "Fit the whole page",
+  "pdf.fitWidth": "Fit the column width",
+  "pdf.openViewer": "Open in the PDF window",
+
   "link.new": "Link",
   "link.edit": "Edit link",
   "link.placeholder": "https://…  (empty removes the link)",
@@ -419,8 +448,9 @@ const ENGLISH: Record<string, string> = {
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   "library.delete": "Delete",
-  /** The reader toolbar's "⋯" button, opening Rename/Move/Duplicate/Reveal/Delete. */
   "library.moreActions": "More actions",
+  "library.actions": "Actions",
+  "library.insert": "Insert",
   "library.newNote": "New note",
   "library.clearTrash": "Clear trash",
   "library.new": "New",

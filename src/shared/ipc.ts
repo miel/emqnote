@@ -168,6 +168,12 @@ export const IPC = {
    */
   checkAttachments: "app:check-attachments",
   /**
+   * How many pages an embedded PDF has, so the inline page (B43) can say "Page 2 of 7"
+   * and stop at the last one. On the top level, beside `checkAttachments`, because the
+   * embed draws in both windows.
+   */
+  pdfPageCount: "app:pdf-page-count",
+  /**
    * Notes to offer when writing a `[[…]]` link (B41) — the note picker's list.
    *
    * On the top level rather than under `library`, because the capture window opens the
@@ -437,6 +443,16 @@ export interface CaptureApi {
    * accusation, and it should not be made on an unanswerable question.
    */
   checkAttachments: (targets: string[]) => Promise<string[]>;
+  /**
+   * How many pages the PDF behind a `![[…]]` embed has, or `null` when that cannot be
+   * answered — no vault, not a PDF, the file is gone, or pdf.js could not open it. Only
+   * ever decides whether the page controls are offered: what went *wrong* is the embed's
+   * own page fetch to say, since that is the half that can tell a 404 from a 422.
+   *
+   * Costs a render the first time a document is asked about, which is the same render the
+   * embed's first page needs anyway — `ensureThumbnail` collapses the two into one.
+   */
+  pdfPageCount: (target: string) => Promise<number | null>;
   /**
    * The notes the picker offers when writing a `[[…]]` link (B41). A blank query lists
    * everything (capped), so opening the picker with nothing typed is a normal call rather

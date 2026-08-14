@@ -93,9 +93,18 @@ import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
-import { attachmentNameFromUrl, thumbSizeFromUrl } from "../shared/attachment-url.js";
+import {
+  attachmentNameFromUrl,
+  thumbPageFromUrl,
+  thumbSizeFromUrl,
+} from "../shared/attachment-url.js";
 import { isPreviewable } from "./thumbnail-cache.js";
-import { ensureThumbnail, runThumbnailProbe, thumbnailCacheDir } from "./thumbnails.js";
+import {
+  ensureThumbnail,
+  pdfPageCount,
+  runThumbnailProbe,
+  thumbnailCacheDir,
+} from "./thumbnails.js";
 import { shutdownPdfThumb } from "./pdf-thumb.js";
 import { attachmentRoute } from "./attachment-route.js";
 import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
@@ -548,13 +557,17 @@ function registerThumbnailProtocol(): void {
     const resolved = resolveAttachment(vault, name);
     if (resolved === null || !isPreviewable(name)) return new Response(null, { status: 404 });
 
-    // `?size=page` is B43's inline embed asking for the same first page at the size a note
-    // column wants. Everything above this line — the traversal guard, the previewable
-    // gate — is the same question for both, which is why it is one handler and one scheme.
+    // `?size=page` is B43's inline embed asking for the same page at the size a note
+    // column wants, and `&page=` is which one — the embed turns pages in place now.
+    // Everything above this line — the traversal guard, the previewable gate — is the
+    // same question whatever is asked for, which is why it is one handler and one scheme.
+    // A page past the end of the document is not checked here: only pdf.js knows where
+    // the end is, so it comes back as a 422 like any other render it could not do.
     const outcome = await ensureThumbnail(
       thumbnailCacheDir(),
       resolved,
       thumbSizeFromUrl(request.url),
+      thumbPageFromUrl(request.url),
     );
     if (outcome.kind === "unavailable") return new Response(null, { status: 404 });
     if (outcome.kind === "failed") return new Response(outcome.error, { status: 422 });
@@ -962,6 +975,35 @@ function registerAppIpc(): void {
     if (vault === null) return [];
 
     return targets.filter((target) => resolveAttachment(vault, target) === null);
+  });
+
+  /**
+   * How many pages an embedded PDF has — what lets the inline page (B43) say "Page 2 of 7"
+   * and stop offering a next page at the end.
+   *
+   * Over IPC rather than as a header on the `emqnote-thumb` response, which is where it is
+   * otherwise free. Two custom-scheme CORS traps have already shipped in this app (B36 on
+   * `emqnote-thumb`, B40 on `emqnote-attachment`), both invisible to every test and fatal
+   * in the real window, and a *custom response header* is the next rung of that same ladder
+   * — readable only with `Access-Control-Expose-Headers` set exactly right on a scheme
+   * whose canonicalisation had to be measured to be believed. This channel is the same
+   * question asked the way every other question in this app is asked, and it costs one
+   * round trip per embed, next to the `checkAttachments` one above it that every embed
+   * already makes.
+   *
+   * `null` means unanswerable — no vault, not a previewable name, the file is gone, or
+   * pdf.js could not open it. The embed's own page fetch is what says *which*, since it is
+   * the half that can tell a 404 from a 422; this one only ever offers or withholds the
+   * page controls.
+   */
+  ipcMain.handle(IPC.pdfPageCount, async (_event, target: string): Promise<number | null> => {
+    const vault = loadSettings().vaultPath;
+    if (vault === null || !isPreviewable(target)) return null;
+
+    const resolved = resolveAttachment(vault, target);
+    if (resolved === null) return null;
+
+    return pdfPageCount(thumbnailCacheDir(), resolved);
   });
 
   /**

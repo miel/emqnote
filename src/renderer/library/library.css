@@ -54,19 +54,25 @@
   outline: 0;
 }
 
+/* The group sits against the panel's left edge, on the same 8px the folder rows below it
+   start from, so the three buttons read as belonging to the tree rather than floating
+   above the middle of it. Only the *group* moves: each button keeps its natural width and
+   its centred text (a button's own default), which is what the note above the rule below
+   is about — `flex: 1` with left-aligned text was the version that made "+ New" read like
+   a heading the row started with. */
 .tree-toolbar {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
   padding: 0 8px 8px;
 }
 
-/* Natural width, centred — matching the note list's and the reader's own buttons rather
-   than stretching to fill the row: `flex: 1` plus left-aligned text used to make "+ New"
-   read like a label the row started with rather than a button. */
+/* Natural width — matching the note list's and the reader's own buttons rather than
+   stretching to fill the row. */
 .tree-toolbar button {
   font: inherit;
   font-size: 12px;
+  text-align: center;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--border);
@@ -647,19 +653,35 @@
   white-space: nowrap;
 }
 
-/* The way back out of a followed `[[…]]` link. Above the title and quieter than it: this
-   names a note you are *leaving*, and it must not compete with the name of the one you are
-   reading. `max-width` plus the ellipsis for the same reason the title has them — the
-   header is one `nowrap` row and a long note title would otherwise push the ⋯ menu off. */
+/* The way back out of a followed `[[…]]` link, at the foot of the pane rather than above
+   the title. It used to sit in `.reader-titles`, which grew the header by a line every
+   time a link was followed and shrank it again on the way back — a strip that changes
+   height under the note being read. Here it is the note's own bottom edge, which is
+   where a "you came from" belongs, and it is only in the tree at all when there is
+   somewhere to go back to (`backTo`), so a note reached from the list pays nothing.
+
+   `flex: 0 0 auto` because `.reader` is a column and `.reader-body` above it takes the
+   rest: without it this strip would be squeezed by a long note instead of holding its
+   own line. */
+.reader-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 6px 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* Quieter than the note it sits under: this names a note you are *leaving*, and it must
+   not compete with the one you are reading. The ellipsis stays for a long title. */
 .reader-back {
   display: block;
   max-width: 100%;
-  margin: 0 0 2px;
+  margin: 0;
   padding: 0;
   border: 0;
   background: none;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   cursor: pointer;
   overflow: hidden;

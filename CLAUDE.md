@@ -224,9 +224,9 @@ thumbnail pipeline changed** — `pdf-thumb.ts`'s single-slot queue, `thumbnailK
 paged widget inside the note (that would have needed a per-page render and cache through
 that one-deep queue, and a tall atom fighting the editor for the wheel and the caret).
 
-**A PDF embedded with `![[…]]` draws its first page in the note** (B43). The two spellings
-mean two different things now: `![[offerte.pdf]]` is the page at the width of the column,
-`[[offerte.pdf]]` is B36's small chip that opens B40's window. The file format needed no
+**A PDF embedded with `![[…]]` draws a page in the note, and turns them** (B43, B46). The
+two spellings mean two different things: `![[offerte.pdf]]` is the page at the width of the
+column, `[[offerte.pdf]]` is B36's small chip that opens B40's window. The file format needed no
 change at all — `from-mdast.ts` never looked at the extension behind a `![[…]]` — only a
 NodeView and a bigger render. **pdf.js does not enter the editor bundle**: the capture window
 draws this same NodeView and is the one that must appear inside 80 ms, so the embed asks the
@@ -241,6 +241,23 @@ as a chip until the app was restarted, which is a bug that only running it can f
 **inserting a PDF now writes `![[…]]`**, because otherwise the feature is reachable only by
 typing `![[…]]` by hand, which a WYSIWYG editor does not allow; a `.docx` is still a link,
 and a hand-written `[[offerte.pdf]]` is still valid and still untouched on open (B10).
+
+B46 adds page turning to that bar — previous/next, "Page 2 of 7", a Fit toggle — and adds
+**a number, not a pipeline**: `?size=page&page=3` is the same request through the same
+handler, the same traversal guard, the same 404/422 split and the same one-slot hidden
+window. Still no pdf.js in the capture window's bundle, which is what made it allowable at
+all. Three things are load-bearing. **Page 1 is spelled without the parameter**, in the URL
+and so in the cache key, or every first page already rendered into `userData` is orphaned —
+one pdf.js render each to make again. **The page count comes over `IPC.pdfPageCount`, never
+as a response header**: it is free at render time but has to outlive the render (after a
+restart page 1 is a cache hit with nothing to ask), so it is kept as `<page-1 key>.pages`
+beside the PNG — same staleness rule, same eviction — and *carried* over IPC because a
+custom response header on a custom scheme is the next rung of the ladder B36 and B40 each
+fell off once, invisible to every test and fatal in the real window. And **`ensureThumbnail`
+now collapses concurrent identical renders**, since the embed asks for its page and its
+count at once and three NodeViews of one PDF already asked three times. Fit is a second size
+*on screen* — the PNG stays `PAGE_SIZE` — and zoom, text selection and the way out to the
+system viewer stay in B40's window, which is what the ⧉ is still for.
 
 **Renaming a folder repairs the links into it, without asking** (B44). `renameFolder`'s own
 comment used to say nothing inside needed rewriting because wikilinks carried bare names —
@@ -319,7 +336,7 @@ invariant free.
 
 **Every panel has a right-click menu, and every action behind one has a non-menu route too.** The folder tree, the note list and the note panel (both windows) each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the same reason `Ask.tsx` is a component and not `window.prompt`: nothing under `test/` can drive a native menu, it costs an IPC round trip per open, and `--click-button` (`library-window.ts`) has no way to reach into one. `--click-button` matching on `.branch`/`.branch-name` text is why nothing may move exclusively behind a menu. A roving `tabIndex` (`roving.ts`) keeps exactly one row per pane a Tab stop; Mod-Shift-M and the `ContextMenu` key open the menu at the focused row's own position, so the keyboard route and the mouse route land on the same component. `onRenameFolder`/`onDeleteFolder` take a `path` now, not the toolbar's `lastFolder` — a per-row menu has to act on the row that was actually right-clicked, and the toolbar keeps its old behaviour by passing `lastFolder` explicitly.
 
-The reader toolbar's Rename/Move/Duplicate/Reveal/Delete collapsed into one "⋯" `ContextMenu` for the same crowding reason the folder tree's rows did — but a menu *opened by a plain button* is a reachable route for `--click-button` (`"⋯>Rename"` works, matched two levels deep by `library-window.ts`'s selector, which now also reads `.context-menu-label`), so this does not violate the rule above. That only holds because a step taken while a menu is open searches **inside** the menu rather than the whole page: the folder toolbar's buttons carry the same `library.rename`/`library.delete` strings and sit earlier in document order, so an unscoped match would turn `"⋯>Delete"` into *Delete folder*. Any future panel that reuses a label a menu also uses depends on that scoping. The rule is unchanged for a menu that only opens on right-click or `Mod-Shift-M`/`ContextMenu`: `--click-button` still cannot reach one of those, which is why every one of *those* actions keeps a non-menu route too.
+The reader toolbar's Rename/Move/Duplicate/Reveal/Delete collapsed into one **"Actions"** `ContextMenu` for the same crowding reason the folder tree's rows did — and the four insert glyphs (🖼 🔗 ▦ 📎) beside them collapsed into an **"Insert"** one, built from `editor-menu.ts`'s `insertMenuItems` so the toolbar and the note panel's right-click menu cannot drift; the capture window's status bar carries the same Insert button, since leaving its four glyphs there would give one app two vocabularies for one action. Both were labelled with a glyph until a second glyph-labelled menu appeared next to the first and neither said anything. A menu *opened by a plain button* is a reachable route for `--click-button` (`"Actions>Rename"` works, matched two levels deep by `library-window.ts`'s selector, which now also reads `.context-menu-label`), so this does not violate the rule above. That only holds because a step taken while a menu is open searches **inside** the menu rather than the whole page: the folder toolbar's buttons carry the same `library.rename`/`library.delete` strings and sit earlier in document order, so an unscoped match would turn `"Actions>Delete"` into *Delete folder*. Any future panel that reuses a label a menu also uses depends on that scoping. The rule is unchanged for a menu that only opens on right-click or `Mod-Shift-M`/`ContextMenu`: `--click-button` still cannot reach one of those, which is why every one of *those* actions keeps a non-menu route too.
 
 B42's row, column and alignment commands were the exception that proved it: they existed from the start and lived *only* in the note panel's right-click menu, and were duly reported as missing features. `table-toolbar.ts` is the second route — a widget decoration above whichever table the caret is in, built on `checkbox.ts`'s recipe (`contentEditable="false"`, `stopEvent`, `ignoreSelection`, and a `preventDefault`ed `mousedown` so the command acts on the cell you clicked from). Its labels are short *visible* text (`table.rowAbove` → "Row ↑") with the menu's full sentence as the `title`, because `--click-button` matches a button on its own `textContent` — a glyph beside the word would put these straight back out of reach. Delete-table stays menu-only, being the destructive one. `t` reaches the plugin through `CommandContext` as its one optional field, falling back to English, so the half-dozen tests that build a context by hand need not carry a translator.
 
@@ -444,6 +461,47 @@ all six in the *capture* window specifically, which still has no test harness. A
 a person: how a full-width PDF page feels to scroll past on a real display, and the toolbar's
 ten buttons at a real window width. Both are `TEST-PROTOCOL.md` items.
 
+**Five items from daily use landed on 13 August 2026**, on top of `v0.7.2`. One carries a
+decision: **B46** — the inline PDF page turns pages, through the same render as before. The
+other four: the note picker's list scrolls to the row the arrow keys land on (it always
+*could* scroll — nothing ever moved it, so a highlight past the bottom edge walked on
+invisibly, which is what "the list does not scroll" meant); the four insert glyphs became one
+**Insert** menu and `⋯` became **Actions**, in both windows (see the context-menu rule
+above); the folder toolbar's three buttons sit against the panel's left edge on the same 8px
+the folder rows start from, each keeping its own width and centred text; and the `← Back to
+<note>` control moved out of the reader header to a strip at the foot of the pane — the
+header is one `nowrap` row, and a second line in it grew and shrank the whole strip every
+time a link was followed. It sits outside `.reader-body` deliberately, since `reader-locked`
+makes that div unclickable and leaving a note must survive the capture window holding it.
+
+The thing that batch is worth remembering for is that **the scroll fix created a second bug
+that only running it could find**. All three palette lists set the highlight from
+`onMouseEnter`, which was harmless while the list never moved: a row could only arrive under
+the pointer if the pointer went to it. Once the arrow keys scroll, a pointer left resting
+over the list has row after row slide beneath it and Chromium dispatches a real `mouseenter`
+for each — measured in the running app, sixty arrow presses advanced the selection fifteen
+rows. `palette-scroll.ts`'s `createHoverGuard` decides it on the pointer's own coordinates: a
+boundary event synthesised because the page moved carries the position the pointer is still
+at, so a hover at the same point as the last one is the list moving rather than the hand.
+Deliberately not a "suppress hover for 150 ms after a key" timer, which would turn a question
+with an exact answer into a race.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a three-page PDF made with
+`pdflatex`: "Page 1 of 3" on opening, next/previous walking all three pages with **three
+genuinely different images counted in a canvas** (the B38 lesson — a changed `src` is not
+proof) and page 2 coming back byte-identical to itself, Next disabling on the last page, Fit
+taking the page from 836 to 513 pixels tall and back; the Insert menu listing its four items
+with their shortcuts and the Actions menu its five; the back button naming its origin at the
+foot of the pane with the header staying 58px whether it is there or not; the folder toolbar's
+three buttons starting at x=8; and the note picker walking row 0 → 41 → 0 with the list
+scrolled to 885 of 889 and the active row on screen throughout.
+
+**Not confirmed live**, the same limitation every batch since the disk-change work has named:
+all five in the *capture* window specifically, which still has no test harness — the Insert
+button in its status bar most of all, since that window is where notes are actually written.
+Also unseen by a person: how the Fit toggle feels against a real display, and whether the
+bar's six controls crowd a narrow note column. Both are `TEST-PROTOCOL.md` items.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -455,7 +513,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B45, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B46, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.

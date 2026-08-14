@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentNameFromUrl,
   attachmentUrl,
+  thumbPageFromUrl,
   thumbSizeFromUrl,
 } from "../src/shared/attachment-url.js";
 
@@ -153,5 +154,53 @@ describe("the page-sized thumb URL", () => {
 
     expect(attachmentNameFromUrl(url, "emqnote-thumb")).toBe(name);
     expect(thumbSizeFromUrl(url)).toBe("page");
+  });
+});
+
+/**
+ * Which page of the document, now that the inline embed turns them. A render parameter in
+ * exactly the way the size already was — same file, same guard, same 404/422 split, one
+ * more number for pdf.js.
+ */
+describe("the page number on a thumb URL", () => {
+  it("leaves page 1 unspelled, so its URL and its cache key are what they always were", () => {
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "page", 1)).toBe(
+      "emqnote-thumb://vault/offerte.pdf?size=page",
+    );
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "page")).toBe(
+      "emqnote-thumb://vault/offerte.pdf?size=page",
+    );
+  });
+
+  it("adds it from page 2 on, after the size", () => {
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "page", 7)).toBe(
+      "emqnote-thumb://vault/offerte.pdf?size=page&page=7",
+    );
+  });
+
+  it("never puts a page on a chip, which has only ever had one render", () => {
+    expect(attachmentUrl("emqnote-thumb", "offerte.pdf", "chip", 4)).toBe(
+      "emqnote-thumb://vault/offerte.pdf",
+    );
+  });
+
+  it("reads it back, and calls anything unusable page 1", () => {
+    expect(thumbPageFromUrl("emqnote-thumb://vault/offerte.pdf?size=page&page=7")).toBe(7);
+    expect(thumbPageFromUrl("emqnote-thumb://vault/offerte.pdf?size=page")).toBe(1);
+    expect(thumbPageFromUrl("emqnote-thumb://vault/offerte.pdf")).toBe(1);
+
+    // Off a URL, so it is served rather than policed: nonsense reads as the first page.
+    for (const query of ["page=0", "page=-3", "page=1.5", "page=twee", "page="]) {
+      expect(thumbPageFromUrl(`emqnote-thumb://vault/offerte.pdf?size=page&${query}`)).toBe(1);
+    }
+  });
+
+  it("keeps the name out of it, however the two are spelled", () => {
+    const name = "99 - Attachments/waarom niet?.pdf";
+    const url = attachmentUrl("emqnote-thumb", name, "page", 3);
+
+    expect(attachmentNameFromUrl(url, "emqnote-thumb")).toBe(name);
+    expect(thumbSizeFromUrl(url)).toBe("page");
+    expect(thumbPageFromUrl(url)).toBe(3);
   });
 });

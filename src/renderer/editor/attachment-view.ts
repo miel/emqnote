@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { attachmentUrl } from "../../shared/attachment-url.js";
+import { translate } from "../../shared/i18n.js";
 import { checkAttachment } from "./missing-attachments.js";
 
 /**
@@ -213,9 +214,14 @@ function chipView(target: string): NodeView {
  * `NodeSelection`, so the embed can be selected and deleted like the pictures beside it —
  * an inline atom that could not be selected would be one you cannot get rid of.
  */
-function pdfPageView(target: string): NodeView {
+function pdfPageView(target: string, t?: (key: string) => string): NodeView {
+  const say = (key: string): string => (t === undefined ? translate("en-US", key) : t(key));
+
   const box = document.createElement("span");
   box.className = "wiki-embed-pdf";
+  // Which of the two ways the page is sized. Width is the default and is what B43 shipped:
+  // the page at the width of the column, the way a picture is drawn.
+  box.dataset.fit = "width";
 
   const page = document.createElement("img");
   page.className = "wiki-embed-pdf-page";
@@ -225,26 +231,123 @@ function pdfPageView(target: string): NodeView {
   const bar = document.createElement("span");
   bar.className = "wiki-embed-pdf-bar";
 
+  /** Every control on the bar: never takes the caret, never opens the atom's selection. */
+  const control = (className: string, label: string, title: string): HTMLButtonElement => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.textContent = label;
+    button.title = title;
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    return button;
+  };
+
+  const previous = control("wiki-embed-pdf-nav", "◀", say("pdf.previousPage"));
+  const next = control("wiki-embed-pdf-nav", "▶", say("pdf.nextPage"));
+
+  const counter = document.createElement("span");
+  counter.className = "wiki-embed-pdf-counter";
+
+  const fit = control("wiki-embed-pdf-fit", say("pdf.fit"), say("pdf.fitPage"));
+
   const label = document.createElement("span");
   label.className = "wiki-embed-pdf-name";
   label.textContent = target;
 
   // `openWikiLink` routes a `.pdf` through `attachmentRoute` to the viewer window (B40),
-  // so page 2 onwards is one click away and this stays a first page rather than a
-  // half-built reader. The whole bar is the target, not just the word.
-  const open = document.createElement("button");
-  open.type = "button";
-  open.className = "wiki-embed-pdf-open";
-  open.textContent = "⧉";
-  open.title = target;
-  open.addEventListener("mousedown", (event) => event.preventDefault());
+  // which is where zooming, selecting text and the way out to the OS viewer live. The
+  // page turning below is the reading this bar can do without a second window; that
+  // button is still the way to the one that can do the rest.
+  const open = control("wiki-embed-pdf-open", "⧉", say("pdf.openViewer"));
   open.addEventListener("click", (event) => {
     event.preventDefault();
     void window.emqnote.openWikiLink(target);
   });
 
-  bar.append(label, open);
+  bar.append(previous, next, counter, fit, label, open);
   box.append(page, bar);
+
+  /**
+   * Which page is drawn, and how many there are once anything knows.
+   *
+   * `pages` starts null and usually stays that way for one round trip. Until it is known
+   * the counter says only which page this is and Next stays available — the alternative
+   * is a control that appears a moment after the page does, which reads as the app
+   * changing its mind. A next past the end comes back as a 422 and marks the chip, the
+   * same as any other page that could not be drawn; in practice the count arrives long
+   * before anyone clicks.
+   */
+  let current = 1;
+  let pages: number | null = null;
+  /** Revoked as the next page replaces it — a note left open should not leak one blob per turn. */
+  let drawnUrl: string | null = null;
+
+  const redrawControls = (): void => {
+    counter.textContent =
+      pages === null
+        ? say("pdf.page").replace("{page}", String(current))
+        : say("pdf.pageOf").replace("{page}", String(current)).replace("{pages}", String(pages));
+    previous.disabled = current <= 1;
+    next.disabled = pages !== null && current >= pages;
+    // Both hidden rather than merely disabled for a one-page document: a pair of dead
+    // arrows on every single-page PDF in the vault is exactly the clutter this bar is
+    // meant not to be. The counter still says "Page 1 of 1", which is the fact.
+    const single = pages === 1;
+    previous.hidden = single;
+    next.hidden = single;
+  };
+
+  const draw = (wanted: number): void => {
+    current = wanted;
+    redrawControls();
+
+    fetch(attachmentUrl("emqnote-thumb", target, "page", wanted))
+      .then(async (response) => {
+        if (response.status === 422) {
+          const reason = await response.text().catch(() => "");
+          // Remembered under the target, not the page: a document pdf.js cannot draw is
+          // one it cannot draw at any page, and the note is about to be redrawn as a chip
+          // anyway. See the note on `failedThumbnails` above for why only a 422 is kept.
+          rememberFailedThumbnail(`page:${target}`, reason);
+          showPdfProblem(box, target, reason);
+          return;
+        }
+        if (!response.ok) throw new Error(`emqnote-thumb: HTTP ${response.status}`);
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        if (drawnUrl !== null) URL.revokeObjectURL(drawnUrl);
+        drawnUrl = url;
+        page.src = url;
+        box.dataset.page = "ok";
+      })
+      .catch(() => showPdfProblem(box, target, null));
+  };
+
+  const step = (delta: number): void => {
+    const wanted = current + delta;
+    if (wanted < 1 || (pages !== null && wanted > pages)) return;
+    draw(wanted);
+  };
+
+  previous.addEventListener("click", (event) => {
+    event.preventDefault();
+    step(-1);
+  });
+  next.addEventListener("click", (event) => {
+    event.preventDefault();
+    step(1);
+  });
+
+  fit.addEventListener("click", (event) => {
+    event.preventDefault();
+    const toPage = box.dataset.fit !== "page";
+    box.dataset.fit = toPage ? "page" : "width";
+    fit.setAttribute("aria-pressed", String(toPage));
+    // The tooltip names what the *next* click does, which is the one thing a toggle can
+    // say that is true before it is pressed.
+    fit.title = say(toPage ? "pdf.fitWidth" : "pdf.fitPage");
+  });
 
   // Keyed apart from the chip's own failures: the two are different renders of one file
   // and a chip that could not be drawn says nothing about the page, or the reverse.
@@ -260,21 +363,16 @@ function pdfPageView(target: string): NodeView {
   if (typeof remembered === "string") {
     showPdfProblem(box, target, remembered);
   } else {
-    fetch(attachmentUrl("emqnote-thumb", target, "page"))
-      .then(async (response) => {
-        if (response.status === 422) {
-          const reason = await response.text().catch(() => "");
-          rememberFailedThumbnail(`page:${target}`, reason);
-          showPdfProblem(box, target, reason);
-          return;
-        }
-        if (!response.ok) throw new Error(`emqnote-thumb: HTTP ${response.status}`);
-
-        const blob = await response.blob();
-        page.src = URL.createObjectURL(blob);
-        box.dataset.page = "ok";
-      })
-      .catch(() => showPdfProblem(box, target, null));
+    redrawControls();
+    draw(1);
+    // Asked in parallel with the page itself rather than in front of it: both need the
+    // same pdf.js render on a cold cache, and `ensureThumbnail` collapses the two into
+    // one — so the picture is never held up waiting for a number it does not need.
+    void window.emqnote.pdfPageCount(target).then((count) => {
+      if (count === null) return;
+      pages = count;
+      redrawControls();
+    });
   }
 
   // The same draw-time question every other embed asks (B39). A PDF that is simply gone
@@ -284,7 +382,16 @@ function pdfPageView(target: string): NodeView {
     if (missing) showPdfProblem(box, target, null);
   });
 
-  return { dom: box };
+  return {
+    dom: box,
+    // ProseMirror drops the NodeView when the embed is deleted, the note is closed or the
+    // document is replaced — the last blob URL would otherwise stay alive for the rest of
+    // the session, one per PDF per note-open.
+    destroy: () => {
+      if (drawnUrl !== null) URL.revokeObjectURL(drawnUrl);
+      drawnUrl = null;
+    },
+  };
 }
 
 /**
@@ -316,14 +423,21 @@ function showPdfProblem(box: HTMLElement, target: string, reason: string | null)
   }
 }
 
+/**
+ * `t` is the window's own translator, for the words on the PDF bar — the same arrangement
+ * `table-toolbar.ts` uses and for the same reason: this is the second thing inside the
+ * editor that draws words of its own, and a NodeView has no React context to read one
+ * from. Absent falls back to English, which is what a test mounting this bare gets.
+ */
 export function attachmentNodeView(
   node: PMNode,
   _view: EditorView,
   _getPos: () => number | undefined,
+  t?: (key: string) => string,
 ): NodeView {
   const target = node.attrs.target as string;
   if (isImageAttachment(target)) return imageView(target);
-  return isPreviewableTarget(target) ? pdfPageView(target) : chipView(target);
+  return isPreviewableTarget(target) ? pdfPageView(target, t) : chipView(target);
 }
 
 /**

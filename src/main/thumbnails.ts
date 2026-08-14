@@ -1,8 +1,13 @@
 import { app } from "electron";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pruneThumbnails, thumbnailKey, type ThumbVariant } from "./thumbnail-cache.js";
+import {
+  pageCountKey,
+  pruneThumbnails,
+  thumbnailKey,
+  type ThumbVariant,
+} from "./thumbnail-cache.js";
 import { decideThumbnailProbe } from "./thumbnail-probe.js";
 import { renderPdfThumbnail } from "./pdf-thumb.js";
 
@@ -41,6 +46,13 @@ const MAX_CACHED_BYTES = 300 * 1024 * 1024;
 const failedThisSession = new Map<string, string>();
 const MAX_FAILED_ENTRIES = 500;
 
+/**
+ * Renders currently in flight, keyed by the cache file they are about to write. See
+ * `ensureThumbnail` for why: several askers want the same page at the same moment, and
+ * without this each one paid for its own pdf.js parse of the same document.
+ */
+const inFlight = new Map<string, Promise<ThumbnailOutcome>>();
+
 function rememberFailure(key: string, message: string): void {
   if (failedThisSession.size >= MAX_FAILED_ENTRIES) {
     const oldest = failedThisSession.keys().next().value;
@@ -68,7 +80,13 @@ export function thumbnailCacheDir(): string {
  * must not look identical to a plain `.txt` attachment (B36).
  */
 export type ThumbnailOutcome =
-  | { kind: "ready"; file: string }
+  /**
+   * `pages` is how many pages the document has, when that is known — from the render that
+   * just happened, or from the `.pages` sidecar a previous one left (`pageCountKey`). It
+   * is absent for a chip, which never asks, and for a page served out of a cache written
+   * before this existed.
+   */
+  | { kind: "ready"; file: string; pages?: number }
   | { kind: "unavailable" }
   | { kind: "failed"; error: string };
 
@@ -107,6 +125,7 @@ export async function ensureThumbnail(
   cacheDir: string,
   realPath: string,
   variant: ThumbVariant = "chip",
+  page = 1,
 ): Promise<ThumbnailOutcome> {
   let stats;
   try {
@@ -115,26 +134,72 @@ export async function ensureThumbnail(
     return { kind: "unavailable" };
   }
 
-  const key = thumbnailKey(realPath, stats.mtimeMs, stats.size, variant);
+  const key = thumbnailKey(realPath, stats.mtimeMs, stats.size, variant, page);
   const cachedFile = join(cacheDir, `${key}.png`);
+  const countFile = join(cacheDir, `${pageCountKey(realPath, stats.mtimeMs, stats.size)}.pages`);
 
-  if (existsSync(cachedFile)) return { kind: "ready", file: cachedFile };
+  if (existsSync(cachedFile)) {
+    return { kind: "ready", file: cachedFile, ...pagesOf(countFile) };
+  }
 
   const remembered = failedThisSession.get(key);
   if (remembered !== undefined) return { kind: "failed", error: remembered };
 
-  try {
-    const png = await renderPdfThumbnail(realPath, variant);
-    await mkdir(cacheDir, { recursive: true });
-    await writeAtomic(cachedFile, png);
-    pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS, MAX_CACHED_BYTES);
+  // Two NodeViews of the same PDF, or the inline embed asking for its page and its page
+  // count at once, are one render and not two or three. Without this the queue happily
+  // serialised three identical renders of one file, each paying pdf.js's parse in full —
+  // invisible except as a slow first draw, which is exactly the kind of cost that gets
+  // blamed on the wrong thing. Keyed on the cache file, so it collapses precisely what a
+  // cache hit would have collapsed a moment later.
+  const running = inFlight.get(cachedFile);
+  if (running !== undefined) return running;
 
-    return { kind: "ready", file: cachedFile };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    rememberFailure(key, message);
-    return { kind: "failed", error: message };
+  const attempt = (async (): Promise<ThumbnailOutcome> => {
+    try {
+      const { png, pages } = await renderPdfThumbnail(realPath, variant, page);
+      await mkdir(cacheDir, { recursive: true });
+      await writeAtomic(cachedFile, png);
+      // Written on every successful render, not only page 1's: a document reached at page
+      // 4 first (a reopened note remembers nothing, but a cache does) knows just as much.
+      await writeFile(countFile, String(pages), "utf8").catch(() => {});
+      pruneThumbnails(cacheDir, MAX_CACHED_THUMBNAILS, MAX_CACHED_BYTES);
+
+      return { kind: "ready", file: cachedFile, pages };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      rememberFailure(key, message);
+      return { kind: "failed", error: message };
+    } finally {
+      inFlight.delete(cachedFile);
+    }
+  })();
+
+  inFlight.set(cachedFile, attempt);
+  return attempt;
+}
+
+/** The sidecar's number, or nothing at all — an unreadable or nonsensical file is silence. */
+function pagesOf(countFile: string): { pages?: number } {
+  try {
+    const pages = Number(readFileSync(countFile, "utf8").trim());
+    return Number.isInteger(pages) && pages > 0 ? { pages } : {};
+  } catch {
+    return {};
   }
+}
+
+/**
+ * How many pages a PDF has, rendering its first page to find out if nothing knows yet.
+ *
+ * The render is not a side effect to apologise for: the one caller is the inline embed
+ * (`attachment-view.ts`), which is about to draw that very page, and the answer lands in
+ * the same cache the draw reads from. `null` means the question could not be answered —
+ * the file is gone, or pdf.js could not open it — and the embed's own fetch is what turns
+ * that into the marked chip, since it is the half that knows *which* of the two it was.
+ */
+export async function pdfPageCount(cacheDir: string, realPath: string): Promise<number | null> {
+  const outcome = await ensureThumbnail(cacheDir, realPath, "page", 1);
+  return outcome.kind === "ready" ? (outcome.pages ?? null) : null;
 }
 
 /**
@@ -193,7 +258,7 @@ export async function runThumbnailProbe(
 
       let png: Buffer;
       try {
-        png = await renderPdfThumbnail(resolved);
+        ({ png } = await renderPdfThumbnail(resolved));
       } catch (error) {
         console.log(
           `pdf.js could not render a first page: ` +

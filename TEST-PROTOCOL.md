@@ -439,7 +439,7 @@ as a bare `[[Spelregels]]`.
 | 11a | Click the path-form link | The note it names opens in the reader. The folder tree does not jump, exactly as a search result opening does not |
 | 11b | Click the bare `[[Spelregels]]` | A picker appears listing **both** notes, each with the folder it lives in beside it. Arrow keys move, Enter opens, Escape closes without opening anything |
 | 11c | Type `[[Iets dat niet bestaat]]` into a note and click it | Nothing opens; the chip turns dashed and muted, and hovering says nothing in the vault is called that. This is deliberately not an error dialog — a link to a note you have not written yet is a normal thing to have |
-| 11d | Move the linked-to note to another folder (drag it, or ⋯ → Move) | Before anything moves, a question: "2 notes link to this one — update them to follow?" with **Update** and **Leave them**. Choose Update: open both referencing notes and check the target now names the new folder, while the words on screen are unchanged |
+| 11d | Move the linked-to note to another folder (drag it, or Actions → Move) | Before anything moves, a question: "2 notes link to this one — update them to follow?" with **Update** and **Leave them**. Choose Update: open both referencing notes and check the target now names the new folder, while the words on screen are unchanged |
 | 11e | Repeat 11d and press Escape instead | **The note still moves** — only the links are left alone. This is the one dialog whose dismissal is not a cancel, and it is worth confirming it does not read as one |
 | 11f | Open a note in the **capture window** that carries a `[[…]]` note link, and click it — NEVER VERIFIED | The library window comes to the front with that note open. There is no capture-renderer harness in the suite, so this route has only ever been reasoned about, never watched |
 | 11g | Rename a note that others link to (click its title in the reader) | The same question as 11d, and the same two answers. Check a rewritten file's bytes: the alias must be untouched, and a link that had *no* alias must have gained one spelling out what it used to display |
@@ -523,7 +523,7 @@ is what only a person on a real display can judge: how a full-width page feels t
 |---|---|---|
 | 15a | Insert a PDF with 📎 (or `Mod+Shift+A`, or drop one in) | Its first page appears inline at the width of the note column, with the filename and a ⧉ on a bar underneath. `cat` the file: the line reads `![[…]]`, not `[[…]]` |
 | 15b | Scroll a long note past the embedded page | It reads as a picture in the text, not as a widget: the wheel scrolls the note and never gets caught by the page. This is the one thing a script cannot judge |
-| 15c | Click the ⧉ | B40's viewer window opens on that PDF. The inline page stays a page — it is deliberately page 1 only |
+| 15c | Click the ⧉ | B40's viewer window opens on that PDF. The inline page turns pages of its own now (§17), but zoom, text selection and the way out to the system viewer are still that window's job |
 | 15d | Click the page itself | It selects like a picture (blue outline) and Backspace deletes it. An atom you cannot select is one you cannot get rid of |
 | 15e | Put the caret beside it and press ← / → | The caret steps past the embed rather than landing on an invisible selection |
 | 15f | Type `[[offerte.pdf]]` by hand instead (or open an older note carrying one) | The small B36 chip with its thumbnail, unchanged. The two spellings mean two different things and neither is rewritten on open |
@@ -558,6 +558,35 @@ whether ten buttons in a row are legible at a real window width.
 | 16m | Rename a folder of **attachments** — the `99 - Attachments` shape an Obsidian vault has — with notes embedding pictures out of it | Every `![[…]]` and `[[…\|…]]` naming a file in it follows the rename, and the pictures still *draw*. This is the case the first version missed entirely (B45); checking the bytes is not enough on its own, the picture has to appear |
 | 16n | Rename a folder whose name is the start of a sibling's (`Bijlagen` beside `Bijlagen extra`) | Only the renamed one's targets change |
 | 16o | Do 16m against a vault whose index predates this | It works on the first run: the schema bump forces a rebuild, and the only sign should be the scan bar at the top of the library |
+
+---
+
+## 17. The changes of 13 August 2026 — inline page turning, Insert/Actions, the back strip
+
+Driven end to end under `Xvfb` against a real three-page PDF, with **three genuinely
+different images counted in a canvas** rather than a changed `src` being taken as proof. What
+is left is what only a person on a real display can judge — how the controls feel and whether
+they crowd — plus everything in the capture window, which still has no harness.
+
+| # | Do this | Expect |
+|---|---|---|
+| 17a | Open a note embedding a multi-page PDF | The page draws as before, with a bar underneath reading ◀ ▶ · "Page 1 of 3" · Fit · the filename · ⧉. ◀ is dimmed on page 1 |
+| 17b | Click ▶ twice, then ◀ once | Page 2, page 3, page 2 — the page *picture* changes each time, not only the counter. ▶ is dimmed on the last page |
+| 17c | Embed a **one-page** PDF | Both arrows are gone, not merely dimmed, and the counter says "Page 1 of 1" |
+| 17d | Click Fit | The whole page fits the window height, centred. Click again: back to the width of the column. This is a judgement call automation cannot make — does the page at 70vh actually read? |
+| 17e | Look at the bar in a **narrow** note column | Six controls plus a filename that ellipses. If they crowd or wrap, say so — automation measured only a 1600px window |
+| 17f | Turn several pages, then leave the note and come back | Back to page 1, and the pages you already looked at come back instantly (they are cached). Nothing should stutter |
+| 17g | Turn a page in a note whose PDF you then delete from `_attachments/`, and reopen | The marked ⚠ chip, exactly as §15g. Put the file back and reopen: the page returns without a restart |
+| 17h | Do 17a–17d in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k |
+| 17i | Look at the reader toolbar | Two buttons where six things used to be: **Insert** and **Actions**. No 🖼 🔗 ▦ 📎 |
+| 17j | Open Insert | Insert image / Insert file / Link to note… / Table…, each with its shortcut. Each one does what the same item in the right-click menu does |
+| 17k | Open Actions | Rename / Move / Duplicate / Reveal / Delete, unchanged |
+| 17l | Look at the **capture window's** status bar — NEVER VERIFIED | One **Insert** button in place of the four glyphs, opening the same four items. This is the one to check first: it is the window notes are actually written in |
+| 17m | Follow a `[[…]]` link | The `← <note>` strip is now at the *foot* of the reader, not above the title. The header must not change height as you follow links and come back |
+| 17n | Follow a link into a note the capture window has open | The note is dimmed and unclickable as before, and the back button at the foot still works — it is deliberately outside the locked area |
+| 17o | Open the note picker (`[[`, or Insert → Link to note…) in a vault with dozens of notes | Hold ArrowDown: the list scrolls with the highlight all the way to the last row, and back up again |
+| 17p | Do 17o with the **mouse pointer resting over the list** | The keyboard still wins: the rows scrolling under the pointer must not drag the highlight back. This is the bug the scrolling itself created |
+| 17q | Look at the folder panel's toolbar | + New / Rename / Delete sit against the left edge, lined up with the folder rows below, each button its own width with its text centred |
 
 ---
 

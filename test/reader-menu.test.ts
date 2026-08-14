@@ -6,7 +6,7 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-types.js";
 
 /**
- * The reader toolbar's "⋯" overflow menu — Rename/Move/Duplicate/Reveal/Delete, collapsed
+ * The reader toolbar's "Actions" overflow menu — Rename/Move/Duplicate/Reveal/Delete, collapsed
  * out of five always-on buttons that used to squeeze the title. Mounted through a real
  * `Library`, the same way `test/note-list-menu.test.ts` drives the note list's own
  * right-click menu: every item here reuses a handler that already lives on `Library.tsx`,
@@ -14,7 +14,7 @@ import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-ty
  *
  * Unlike the note-list menu, this one opens from a plain button click, not a right-click —
  * see CLAUDE.md's context-menu constraint for why that has to stay true for
- * `--click-button="⋯>Rename"` to keep working, which is a packaged-build concern this
+ * `--click-button="Actions>Rename"` to keep working, which is a packaged-build concern this
  * suite cannot exercise directly. What it can check is that the button opens the same
  * `ContextMenu` component with `.context-menu-label` spans, which is what that selector
  * depends on.
@@ -148,6 +148,7 @@ function buildFake(): Fake {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
     library,
@@ -206,7 +207,7 @@ describe("the reader toolbar's overflow menu", () => {
   function openOverflowMenu(): void {
     const button = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
-    ).find((node) => node.textContent === "⋯");
+    ).find((node) => node.textContent === "Actions");
     expect(button).not.toBeUndefined();
     act(() => {
       button!.click();
@@ -321,5 +322,65 @@ describe("the reader toolbar's overflow menu", () => {
     await flush();
 
     expect(fake.trashNote).toHaveBeenCalledWith(NOTE_PATH);
+  });
+
+  /**
+   * The Insert menu, which replaced 🖼 🔗 ▦ 📎 in this same toolbar. Same arrangement as
+   * the overflow menu above and for the same reason — what is worth pinning is that a
+   * plain button opens the real `ContextMenu` with `.context-menu-label` spans, since
+   * that is what `--click-button="Insert>Table…"` walks.
+   */
+  describe("the Insert menu", () => {
+    function openInsertMenu(): void {
+      const button = Array.from(
+        container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+      ).find((node) => node.textContent === "Insert");
+      expect(button).not.toBeUndefined();
+      act(() => {
+        button!.click();
+      });
+    }
+
+    it("offers image, file, note link and table — the four buttons it replaced", async () => {
+      const fake = buildFake();
+      await mountWithNoteOpen(fake);
+
+      openInsertMenu();
+      await flush();
+
+      const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
+        (node) => node.querySelector(".context-menu-label")!.textContent,
+      );
+      expect(labels).toEqual(["Insert image", "Insert file", "Link to note…", "Table…"]);
+    });
+
+    it("reaches the same note picker a typed [[ opens", async () => {
+      const fake = buildFake();
+      await mountWithNoteOpen(fake);
+
+      openInsertMenu();
+      await flush();
+      await act(async () => {
+        menuItem("Link to note…").click();
+      });
+      await flush();
+
+      // The picker's own filter box, on the palette surface — the one `NotePicker` draws.
+      expect(container.querySelector(".palette input")).not.toBeNull();
+    });
+
+    it("opens the table size grid, at the caret rather than at the button", async () => {
+      const fake = buildFake();
+      await mountWithNoteOpen(fake);
+
+      openInsertMenu();
+      await flush();
+      await act(async () => {
+        menuItem("Table…").click();
+      });
+      await flush();
+
+      expect(container.querySelector(".table-grid")).not.toBeNull();
+    });
   });
 });

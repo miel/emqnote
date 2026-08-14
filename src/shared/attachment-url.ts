@@ -44,9 +44,18 @@ export const ATTACHMENT_URL_HOST = "vault";
  * `resolveAttachment`, which is the one place that decides what a name is allowed to
  * reach.
  */
-export function attachmentUrl(scheme: string, name: string, size?: ThumbSize): string {
+export function attachmentUrl(
+  scheme: string,
+  name: string,
+  size?: ThumbSize,
+  page?: number,
+): string {
   const base = `${scheme}://${ATTACHMENT_URL_HOST}/${encodeURIComponent(name)}`;
-  return size === undefined || size === "chip" ? base : `${base}?size=${size}`;
+  if (size === undefined || size === "chip") return base;
+  // Page 1 is spelled without the parameter, deliberately: it is what every embed asked
+  // for before the inline viewer could turn a page, so the URL of a first page — and with
+  // it its cache key — is exactly the string it has always been.
+  return page === undefined || page <= 1 ? `${base}?size=${size}` : `${base}?size=${size}&page=${page}`;
 }
 
 /**
@@ -71,6 +80,26 @@ export function thumbSizeFromUrl(url: string): ThumbSize {
   const query = url.indexOf("?");
   if (query === -1) return "chip";
   return new URLSearchParams(url.slice(query + 1)).get("size") === "page" ? "page" : "chip";
+}
+
+/**
+ * Which page of the document is being asked for — 1-based, and 1 for anything that does
+ * not name one.
+ *
+ * The inline embed turns pages now, and a page is a *render parameter* in exactly the way
+ * the size already was: same file, same traversal guard, same 404/422 split, one more
+ * number handed to pdf.js. Anything unusable — a word, a zero, a negative, a fraction —
+ * reads as page 1 rather than as an error: this comes off a URL, and the handler's job is
+ * to serve a page, not to police one. A page past the end of the document is not decided
+ * here; that is a render failure, and pdf.js is what knows where the end is.
+ */
+export function thumbPageFromUrl(url: string): number {
+  const query = url.indexOf("?");
+  if (query === -1) return 1;
+
+  const asked = Number(new URLSearchParams(url.slice(query + 1)).get("page"));
+  if (!Number.isInteger(asked) || asked < 1) return 1;
+  return asked;
 }
 
 /**
