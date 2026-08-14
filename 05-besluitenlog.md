@@ -1268,6 +1268,18 @@ is er als menu-item bij gekomen: het formaat droeg `:---` al en de eerste rij wa
 kop, maar niets in de app kon het zetten en niets liet het zien. Dat laatste kan CSS niet
 alleen — uitlijning staat per kolom in een array op de tabel — dus een decoratie tekent het.
 
+**Uitlijnen per cel kan niet, en dat is geen tekortkoming van de knoppen maar van het
+formaat** (bijgeschreven 14 augustus 2026, uit dagelijks gebruik: "de uitlijningsknoppen
+werken op een hele kolom in plaats van op één cel"). GFM schrijft de uitlijning één keer op,
+in de scheidingsrij — `:---`, `:---:`, `---:` — dus `align` is een array op de *tabel* en
+`tableCell` heeft in het geheel geen attributen. Eén cel anders uitlijnen zou betekenen dat de
+tabel als ruwe HTML geschreven wordt, en dat breekt de byte-identieke round trip, de
+corpusbestanden en de weergave in Obsidian in één keer — dezelfde reden waarom een
+samengevoegde cel onmogelijk blijft (B6, B49). Wat de knoppen wél doen is precies wat er nog
+te doen valt: `setColumnAlign` leest `selectedRect` net als elk ander commando, dus zonder
+selectie is het de kolom van de cursor en met een rechthoek zijn het de kolommen die hij
+bestrijkt — nooit de hele tabel.
+
 ---
 
 ## B43 — Een PDF wordt met `![[…]]` in de notitie zelf gelezen

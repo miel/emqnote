@@ -662,6 +662,29 @@ with a real network on it.
 
 ---
 
+## 20. Four fixes from daily use (14 August 2026)
+
+Everything below has been driven under `Xvfb` in the **library** window except where it says
+otherwise. Note §19t is answered by 20a: the panel does scroll now.
+
+| # | Do this | Expect |
+|---|---|---|
+| 20a | Type `/` on an empty line in a **short** window and hold ArrowDown | The list scrolls with the highlight. No row is ever selected off the bottom edge, and the wrap back to the top scrolls back with it |
+| 20b | Judge that against a real display — NEVER JUDGED | Does the list scroll one row at a time, or jump? A rebuilt panel starts at the top each time, which is invisible if it is right and obvious if it is not |
+| 20c | Open a folder holding only files — an imported vault's `99 - Attachments` | The file list fills the whole pane. It used to stop at the halfway line with the bottom half blank |
+| 20d | Open a folder holding both notes and files | No blank strip anywhere: the note list takes what it needs and the files sit under it, ending at the foot of the pane |
+| 20e | Open a folder holding a few notes and *many* files | The file list still stops at half the pane — that cap protects the notes, and it is only lifted when there are none |
+| 20f | Look at a note with a `>` quote in it | The quoted text leans. A `*word*` inside the quote stands upright, so emphasis inside a quote is still visible |
+| 20g | Judge the italic against a real display — NEVER JUDGED | Does the quote read as quoted rather than as a mistake, at the font your machine uses? |
+| 20h | Put the caret mid-word in a table cell and hold Shift+Right | The text selection grows inside the cell, as in any editor |
+| 20i | Keep going past the end of that cell | It becomes the same tinted rectangle the mouse makes, both cells whole. Before this it silently spilled across the cell boundary and Backspace then did nothing |
+| 20j | Press Backspace there | Exactly those cells empty. Save and `npm run canonical`: byte-identical |
+| 20k | Select part of a cell and press Shift+Down | Whole cells, two rows of them — a cell has no line below to extend to |
+| 20l | Ask a table's alignment buttons to align one cell | They cannot, by design: GFM writes alignment once per column. They act on the caret's column, or on the columns a rectangle covers. See B42 |
+| 20m | Do 20a, 20f, 20h–20k in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h/18x/19u |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -671,12 +694,12 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x or §19u fails,
+§18x, §19u or §20m fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i, §18x and §19u are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u and §20m are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
-genuinely cannot answer. §15b, §16b, §19b and §19t are a different kind of unwatched: they are judgements
+genuinely cannot answer. §15b, §16b, §19b, §19t, §20b and §20g are a different kind of unwatched: they are judgements
 about how something feels or reads, which no script can make. §19m is a third kind: what a
 remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

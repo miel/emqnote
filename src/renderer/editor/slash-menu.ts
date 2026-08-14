@@ -206,6 +206,28 @@ function buildPanel(
     dom.style.top = `${fits ? below : Math.max(4, at.top - box.height - 4)}px`;
   }
 
+  // The highlight has to stay visible, and this panel clips at `46vh` — so the arrow keys
+  // walked it past the bottom edge invisibly, which is the same report `palette-scroll.ts`
+  // answers for the note picker, the link picker and the move dialog. Its hook cannot be
+  // reused: that one takes a React ref to a `<ul>` and this menu is plain DOM (see the note
+  // at the top of this file). What is reused is its answer — `block: "nearest"` is the only
+  // option that leaves an already-visible row exactly where it is — and its `typeof` guard,
+  // for the same reason: jsdom implements no scrolling at all, so every test that opens this
+  // menu would throw here.
+  //
+  // Its *other* half, `createHoverGuard`, is deliberately not needed. That exists because
+  // those three lists take the highlight from `onMouseEnter`, so a list scrolling under a
+  // stationary pointer moves the highlight back; this menu binds no `mouseenter` at all.
+  // Adding one would bring that bug with it.
+  //
+  // Placed last because the panel has to be where it will be seen before it is scrolled, and
+  // the rows are only offset from a positioned panel. `active` indexes the buttons, so it
+  // means nothing when the only child is the "nothing matches" line.
+  const row = dom.children[active];
+  if (items.length > 0 && row instanceof HTMLElement && typeof row.scrollIntoView === "function") {
+    row.scrollIntoView({ block: "nearest" });
+  }
+
   return { dom, destroy: () => dom.remove() };
 }
 

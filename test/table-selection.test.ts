@@ -299,6 +299,92 @@ describe("extendCellSelection", () => {
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1) });
     expect(extendCellSelection("down")(state, undefined)).toBe(false);
   });
+
+  /**
+   * The half that was missing, and the reason Shift+arrow behaved unlike the mouse.
+   *
+   * Shift+Right inside a word grows an ordinary text selection — the case above — and the
+   * press that reaches the end of the cell has to escalate to a rectangle. It did not: the
+   * command bailed on any selection that was not a caret, `prosemirror-view` extended a
+   * `TextSelection` across the `isolating` boundary instead, and Backspace over the result
+   * did nothing because `clearCells` rightly refuses that state.
+   */
+  it("escalates a text selection that has grown to the end of its cell", () => {
+    const long = "| hallo | b |\n| --- | --- |\n| c | d |\n";
+    const doc = docFromMarkdown(long);
+    const start = cellPos(doc, "hallo") + 1;
+    const state = EditorState.create({
+      schema,
+      doc,
+      // "hallo" selected from its first character to its last: not a caret, and at the edge.
+      selection: TextSelection.create(doc, start, start + 5),
+    });
+
+    const after = run(state, extendCellSelection("right"));
+    expect(isCellSelection(after.selection)).toBe(true);
+    expect(selectedRect(after)).toMatchObject({ top: 0, bottom: 0, left: 0, right: 1 });
+  });
+
+  it("escalates downwards from a part-selected cell, since a cell has no line below", () => {
+    const long = "| hallo | b |\n| --- | --- |\n| c | d |\n";
+    const doc = docFromMarkdown(long);
+    const start = cellPos(doc, "hallo") + 1;
+    const state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, start, start + 2),
+    });
+
+    const after = run(state, extendCellSelection("down"));
+    expect(selectedRect(after)).toMatchObject({ top: 0, bottom: 1, left: 0, right: 0 });
+  });
+
+  /** `$from` is the end that is *not* moving in a backwards selection, so it cannot be asked. */
+  it("reads the edge off the head, not the start, of a backwards selection", () => {
+    const long = "| a | hallo |\n| --- | --- |\n| c | d |\n";
+    const doc = docFromMarkdown(long);
+    const start = cellPos(doc, "hallo") + 1;
+    const state = EditorState.create({
+      schema,
+      // Anchor at the end of the word, head at its start: Shift+Left again leaves the cell.
+      doc,
+      selection: TextSelection.create(doc, start + 5, start),
+    });
+
+    const after = run(state, extendCellSelection("left"));
+    expect(selectedRect(after)).toMatchObject({ top: 0, bottom: 0, left: 0, right: 1 });
+  });
+
+  it("repairs a text selection that already spans two cells", () => {
+    const doc = docFromMarkdown(THREE_BY_THREE);
+    const state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, cellPos(doc, "a") + 1, cellPos(doc, "b") + 1),
+    });
+
+    const after = run(state, extendCellSelection("right"));
+    expect(isCellSelection(after.selection)).toBe(true);
+    expect(selectedRect(after)).toMatchObject({ top: 0, bottom: 0, left: 0, right: 2 });
+  });
+
+  it("declines past the last column, whether or not text is selected", () => {
+    const doc = docFromMarkdown(THREE_BY_THREE);
+    const start = cellPos(doc, "c") + 1;
+    const caret = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, start + 1),
+    });
+    const selected = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, start, start + 1),
+    });
+
+    expect(extendCellSelection("right")(caret, undefined)).toBe(false);
+    expect(extendCellSelection("right")(selected, undefined)).toBe(false);
+  });
 });
 
 describe("cellPointerAt", () => {

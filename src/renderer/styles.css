@@ -391,6 +391,15 @@ body {
   padding-left: calc(1.6em - 3px);
   border-left: 3px solid var(--border);
   color: var(--muted);
+  /* Quoted text leans. Display only — the file still says `>` and nothing else changes. */
+  font-style: italic;
+}
+
+/* An emphasised word inside a quote has to lean the other way to be seen at all: the
+   browser's own rule already italicises `<em>`, so without this the one mark whose whole
+   job is to stand out is the one that disappears. */
+.editor-content blockquote em {
+  font-style: normal;
 }
 
 /* Nested quotes are how repeated Ctrl+M is stored. Only the innermost line is drawn:

@@ -11,6 +11,7 @@ import {
   findTable,
   matrixOf,
   rectOfContext,
+  tableContextAt,
   tableFrom,
   tableType,
   type TableContext,
@@ -284,13 +285,27 @@ export function clearCells(): Command {
  *
  * With a rectangle already up it moves the head cell, so the selection grows and shrinks
  * the way every other Shift+arrow does. Without one it starts a rectangle — but only when
- * the caret is at the edge of its cell in that direction, so Shift+Left inside a word still
- * selects text. Up and down have no such edge to test for: a cell holds inline content, so
- * there is no line above to extend to, and extending to the cell above is the only reading
- * left.
+ * the *head* is at the edge of its cell in that direction, so Shift+Right inside a word
+ * still extends the text selection, and only the press that would leave the cell escalates.
+ * Up and down have no such edge to test for: a cell holds inline content, so there is no
+ * line above to extend to, and extending to the cell above is the only reading left.
  *
  * Declines at the edge of the table and outside one, so nothing else about arrow keys or
  * text selection changes.
+ *
+ * **Both ends are asked about separately, and a selection that is already growing is not
+ * excluded.** The first version bailed on `!selection.empty` and read the edge off `$from`,
+ * and both were wrong in the same way — they assumed the selection was a caret. Once
+ * Shift+Right had grown a text selection to the end of a cell, the next press declined, and
+ * `prosemirror-view`'s own `selectHorizontally` extended a `TextSelection` straight across
+ * the `isolating` cell boundary: the browser drew something, the rectangle was never made,
+ * and `clearCells` then refused the state so Backspace did nothing. That is exactly the bug
+ * B49 exists to prevent, still reachable from the keyboard. Reading `$head` also fixes
+ * Shift+Left out of a backwards selection, whose `$from` is the end that is not moving.
+ *
+ * A `TextSelection` that already spans two cells — arrived at some other way — is repaired
+ * rather than refused: its ends name the anchor and head cells, and one more Shift+arrow
+ * turns it into the rectangle it should have been.
  */
 export function extendCellSelection(direction: "left" | "right" | "up" | "down"): Command {
   return (state, dispatch) => {
@@ -310,24 +325,30 @@ export function extendCellSelection(direction: "left" | "right" | "up" | "down")
       table = selection.$headCell.node(-1);
       tablePos = selection.$headCell.before(-1);
     } else {
-      const context = findTable(state);
-      if (context === null) return false;
-      if (!selection.empty) return false;
+      const anchor = tableContextAt(selection.$anchor);
+      const head = tableContextAt(selection.$head);
+      if (anchor === null || head === null) return false;
+      // One table, or the rectangle would be arithmetic over two different matrices.
+      if (anchor.pos !== head.pos) return false;
 
-      const { $from } = selection;
-      const atStart = $from.parentOffset === 0;
-      const atEnd = $from.parentOffset === $from.parent.content.size;
-      if (direction === "left" && !atStart) return false;
-      if (direction === "right" && !atEnd) return false;
+      const { $head } = selection;
+      const atStart = $head.parentOffset === 0;
+      const atEnd = $head.parentOffset === $head.parent.content.size;
+      // Only when the two ends are in one cell is there text left to extend; across cells
+      // the offset within the head's own cell says nothing about whether to escalate,
+      // because the selection has already left one.
+      const withinCell = anchor.row === head.row && anchor.cell === head.cell;
+      if (withinCell && direction === "left" && !atStart) return false;
+      if (withinCell && direction === "right" && !atEnd) return false;
 
-      const pos = cellPosAt(context.node, context.pos, context.row, context.cell);
+      const pos = cellPosAt(anchor.node, anchor.pos, anchor.row, anchor.cell);
       if (pos === null) return false;
 
       $anchorCell = doc.resolve(pos);
-      headRow = context.row;
-      headColumn = context.cell;
-      table = context.node;
-      tablePos = context.pos;
+      headRow = head.row;
+      headColumn = head.cell;
+      table = head.node;
+      tablePos = head.pos;
     }
 
     const wantedRow = headRow + (direction === "up" ? -1 : direction === "down" ? 1 : 0);
