@@ -1,4 +1,5 @@
 import { Plugin } from "prosemirror-state";
+import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
 
 /**
@@ -22,6 +23,31 @@ import { schema } from "../../markdown/schema.js";
  * that broke it — rather than a side effect with a network call behind it.
  */
 const NEEDS_A_LINE_BELOW = new Set(["table", "codeBlock", "htmlBlock", "horizontalRule"]);
+
+/**
+ * The same invariant, established once for a document that arrives already ending in one
+ * of those blocks — which the plugin below cannot do.
+ *
+ * `appendTransaction` restores the invariant *after* something breaks it, and opening a
+ * note breaks nothing: `createEditorState` builds the state with `EditorState.create` and
+ * `Editor.tsx`'s `setDoc` hands it straight to `updateState`, so no transaction is ever
+ * dispatched and the plugin never runs. A note written in Obsidian that ends in a table
+ * therefore opened with no text position after it at all — no caret, no way to add a
+ * paragraph below without pushing the table down from above. Notes written here end that
+ * way too as soon as they are reopened, since `withoutTrailingBlanks` strips the paragraph
+ * on the way out.
+ *
+ * This still changes no file, for exactly the reason the plugin does not: the serializer
+ * drops the trailing empty paragraph again, so the bytes are identical and B10 holds. The
+ * document is returned unchanged when it does not apply, so the common case allocates
+ * nothing.
+ */
+export function withTrailingParagraph(doc: PMNode): PMNode {
+  const last = doc.lastChild;
+  if (last === null || !NEEDS_A_LINE_BELOW.has(last.type.name)) return doc;
+
+  return doc.type.create(doc.attrs, doc.content.addToEnd(schema.nodes.paragraph!.create()));
+}
 
 export function trailingParagraph(): Plugin {
   const paragraph = schema.nodes.paragraph!;

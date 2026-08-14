@@ -2,6 +2,7 @@ import type { Command, EditorState } from "prosemirror-state";
 import { formatFirstKey } from "../../shared/shortcuts.js";
 import type { MenuItem } from "../library/ContextMenu.js";
 import {
+  insertHorizontalRule,
   isMarkActive,
   toggleBulletList,
   toggleEm,
@@ -96,8 +97,8 @@ export function buildEditorMenu(
 }
 
 /**
- * The four things that can be put *into* a note: a picture, a file, a link to another
- * note, a table.
+ * The five things that can be put *into* a note: a picture, a file, a link to another
+ * note, a table, a dividing line.
  *
  * Shared between this menu and the toolbar's own "Insert" button, which replaced the four
  * icon buttons (🖼 🔗 ▦ 📎) that used to sit in the reader header and the capture window's
@@ -106,7 +107,13 @@ export function buildEditorMenu(
  * right-click menu from `buildEditorMenu` rather than each listing the items.
  *
  * Not a group with a separator: `buildEditorMenu` places it after one it already draws,
- * and the toolbar menu is nothing but these four.
+ * and the toolbar menu is nothing but these five.
+ *
+ * The rule is the one of them with no shortcut and no picker behind it — it goes through
+ * `run` like the table operations do, since there is nothing to choose. It deliberately
+ * has no `---` input rule either: that is a markdown spelling, and seeing markdown while
+ * typing is one of the four reasons Obsidian did not stick (`state.ts`'s `autoformat`
+ * says the same, with `[] ` as the one documented exception).
  */
 export function insertMenuItems(
   isMac: boolean,
@@ -133,6 +140,10 @@ export function insertMenuItems(
       label: t("menu.insertTable"),
       shortcut: formatFirstKey("insertTable", isMac),
       onSelect: actions.insertTable,
+    },
+    {
+      label: t("menu.insertRule"),
+      onSelect: () => actions.run(insertHorizontalRule),
     },
   ];
 }

@@ -592,6 +592,24 @@ export function Library(): React.ReactElement {
     if (result.locked) void refreshEditable();
   }, [loadNotes, refreshFacets, refreshEditable]);
 
+  /**
+   * Cancels the debounce and writes now — what every operation that moves a file out from
+   * under the editor does first, and what main asks for before it restarts into another
+   * vault (`IPC.libraryFlushSaves`).
+   */
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (dirty) await save();
+  }, [dirty, save]);
+
+  // Main is waiting on the reply before it restarts the app into another vault (B21), so
+  // this must be registered for as long as the window is open — the tray can ask at any
+  // moment, unlike Settings, which flushes on its own way out.
+  useEffect(() => window.emqnote.library.onFlushSaves(flushPendingSave), [flushPendingSave]);
+
   const openNote = useCallback(
     async (path: string, taskOrdinal?: number) => {
       const request = ++openNoteRequest.current;
@@ -1811,13 +1829,7 @@ export function Library(): React.ReactElement {
           onChanged={() => void app.reload()}
           // Switching vault restarts the app, so anything still on the debounce has to
           // reach disk first — and into the vault it was typed in, not the new one.
-          onBeforeSwitch={async () => {
-            if (saveTimer.current !== null) {
-              clearTimeout(saveTimer.current);
-              saveTimer.current = null;
-            }
-            if (dirty) await save();
-          }}
+          onBeforeSwitch={flushPendingSave}
           onClose={() => setSettingsOpen(false)}
           // Settings closes first, then Orphaned Attachments opens — sequenced rather
           // than both flags flipped at once, so the two modals are never stacked on top

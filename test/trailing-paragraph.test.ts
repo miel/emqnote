@@ -5,6 +5,7 @@ import { serializeBody } from "../src/markdown/index.js";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import { insertTable } from "../src/renderer/editor/table-commands.js";
+import { withTrailingParagraph } from "../src/renderer/editor/trailing-paragraph.js";
 import { docFromMarkdown } from "./helpers/editing.js";
 
 /**
@@ -84,13 +85,39 @@ describe("trailingParagraph", () => {
       ["Text.\n\n---\n", "horizontalRule"],
     ] as const) {
       const state = stateOf(markdown);
-      // Parsed straight from the file the block really is last — that is the state a note
-      // is opened in, and the plugin only fires on a change, so provoke one.
-      expect(state.doc.lastChild!.type.name).toBe(type);
+      // Parsed straight from the file the block really is last, and the line below it now
+      // arrives with the state rather than with the first edit — see `withTrailingParagraph`.
+      expect(state.doc.child(state.doc.childCount - 2).type.name).toBe(type);
+      expect(state.doc.lastChild!.type.name).toBe("paragraph");
 
       let next = state;
       next = next.apply(next.tr.insert(0, schema.nodes.paragraph!.create()));
       expect(next.doc.lastChild!.type.name).toBe("paragraph");
     }
+  });
+
+  /**
+   * The half that only shows up on a note this app did not write.
+   *
+   * `appendTransaction` restores the invariant after a change; opening a note is not a
+   * change, so a file that already ends in a table used to open with no text position
+   * after it at all. Notes written here end that way too as soon as they are reopened,
+   * since the serializer strips the paragraph on the way out.
+   */
+  it("gives a note that already ends in a table a line to type on, without touching it", () => {
+    const markdown = "Imported.\n\n| a | b |\n| --- | --- |\n| c | d |\n";
+    const state = stateOf(markdown);
+
+    expect(state.doc.lastChild!.type.name).toBe("paragraph");
+    expect(state.doc.lastChild!.content.size).toBe(0);
+    expect(Selection.atEnd(state.doc).$head.parent.type.name).toBe("paragraph");
+
+    // B10: opening a note must not change what would be written back.
+    expect(serializeBody(state.doc)).toBe(markdown);
+  });
+
+  it("leaves a document that needs no line below it alone", () => {
+    const doc = docFromMarkdown("Just prose.\n");
+    expect(withTrailingParagraph(doc)).toBe(doc);
   });
 });

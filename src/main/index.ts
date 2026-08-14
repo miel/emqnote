@@ -222,6 +222,69 @@ function notifyLibrary(): void {
 }
 
 /**
+ * Waits for the library window to write anything it still has pending.
+ *
+ * The library's save is debounced in the *renderer*, where main cannot see it — which is
+ * fine while the only way to switch vaults is a button in that same window, since
+ * `Settings.tsx` flushes on its way to `switchVault`. The tray's copy of the gesture has
+ * no such window in the loop, and a debounced write landing after `app.relaunch()` would
+ * put the old note's bytes into the new vault at the same relative path, creating the
+ * folder to hold it. Silently — the third of the four hazards B21 lists.
+ *
+ * Bounded, because this stands in front of a restart the user asked for: a library window
+ * that is wedged or mid-dialog must delay it, not cancel it. Two seconds is far longer
+ * than a write and far shorter than a hang worth noticing.
+ */
+function flushOpenLibrary(): Promise<void> {
+  const library = getLibraryWindow();
+  if (library === null || library.isDestroyed()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      ipcMain.off(IPC.libraryFlushed, done);
+      resolve();
+    };
+    const timer = setTimeout(done, 2000);
+
+    ipcMain.on(IPC.libraryFlushed, done);
+    library.webContents.send(IPC.libraryFlushSaves);
+  });
+}
+
+/**
+ * Points the app at another vault and restarts it.
+ *
+ * A restart and not a live switch, and that is B21 rather than laziness — four separate
+ * pieces of state are decided once and never revisited:
+ *
+ *  - `CaptureWriter.session.path` is fixed on the first write, so a half-typed note
+ *    would keep landing in the old vault.
+ *  - `ensureScanned` collapses concurrent callers onto one `running` promise *without
+ *    checking which vault it is for*, so a `facets()` straight after a switch can await
+ *    the old vault's scan and read its cache. `invalidate()` exists and has no callers.
+ *  - A pending `saveTimer` in the renderer would write the old note's bytes into the new
+ *    vault at the same relative path, with `writeAtomic`'s `mkdirSync` creating the
+ *    folder to hold it. Silently.
+ *  - `filesOnDemandWarned` — now per vault, precisely so the restart does not land in a
+ *    new OneDrive folder with the warning already suppressed.
+ *
+ * One function and not two copies of it: the tray reaches this as well as the settings
+ * panel (14 August 2026), and a second sequence written out beside this one is how one of
+ * those four gets forgotten on the path nobody tested.
+ */
+async function switchVaultTo(path: string): Promise<void> {
+  await writer.flush();
+  writer.finish();
+  await flushOpenLibrary();
+
+  adoptVault(path);
+
+  app.relaunch();
+  app.quit();
+}
+
+/**
  * The notes linking to one, as `rewriteWikiLinks` wants them — the two move/rename
  * handlers ask the same question the same way, and the index may not be open yet.
  */
@@ -376,7 +439,13 @@ async function main(): Promise<void> {
   // instance that is already running.
   if (selfTestRounds === 0) {
     app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
-    createTray();
+    // The same three the settings panel reaches over IPC. Handed in rather than imported,
+    // since `askForVault` and `switchVaultTo` live here and the tray is created here.
+    createTray({
+      list: () => listVaults(knownVaults(), findOneDriveCandidates(), loadSettings().vaultPath),
+      choose: askForVault,
+      switchTo: switchVaultTo,
+    });
     registerHotkey();
   }
 
@@ -1355,36 +1424,11 @@ function registerLibraryIpc(): void {
 
   ipcMain.handle(IPC.chooseVault, () => askForVault());
 
-  /**
-   * Points the app at another vault and restarts it.
-   *
-   * A restart and not a live switch, and that is B21 rather than laziness — four
-   * separate pieces of state are decided once and never revisited:
-   *
-   *  - `CaptureWriter.session.path` is fixed on the first write, so a half-typed note
-   *    would keep landing in the old vault.
-   *  - `ensureScanned` collapses concurrent callers onto one `running` promise *without
-   *    checking which vault it is for*, so a `facets()` straight after a switch can
-   *    await the old vault's scan and read its cache. `invalidate()` exists and has no
-   *    callers.
-   *  - A pending `saveTimer` in the renderer would write the old note's bytes into the
-   *    new vault at the same relative path, with `writeAtomic`'s `mkdirSync` creating
-   *    the folder to hold it. Silently.
-   *  - `filesOnDemandWarned` — now per vault, precisely so the restart does not land in
-   *    a new OneDrive folder with the warning already suppressed.
-   *
-   * Everything in flight is flushed first. The renderer flushes its own pending save
-   * before it calls this.
-   */
-  ipcMain.handle(IPC.switchVault, async (_event, path: string) => {
-    await writer.flush();
-    writer.finish();
-
-    adoptVault(path);
-
-    app.relaunch();
-    app.quit();
-  });
+  // The whole of it is `switchVaultTo`, above — the settings panel and the tray reach the
+  // same function. This renderer has already flushed its own pending save on the way here;
+  // `flushOpenLibrary` inside asks again, which costs one no-op round trip and means the
+  // tray path is not relying on a window it did not go through.
+  ipcMain.handle(IPC.switchVault, (_event, path: string) => switchVaultTo(path));
 
   /**
    * Renaming a folder moves every note inside it, so it moves every `[[path|Title]]` link

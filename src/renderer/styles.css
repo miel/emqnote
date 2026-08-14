@@ -614,6 +614,15 @@ body {
   cursor: pointer;
 }
 
+/* A chip standing next to its own embed of the same file (B48). Obsidian writes the pair,
+   and read here it is a page with a chip pointing straight back at it. `display: none`
+   rather than `visibility: hidden`: the second leaves the gap the chip occupied, which is
+   the whitespace that made them neighbours in the first place. The node itself is
+   untouched and so is the file — this is a decoration, `duplicate-embed.ts`. */
+.editor-content .wiki-link-duplicated {
+  display: none;
+}
+
 /* B30's first-page thumbnail. `.wiki-link-preview` only ever appears alongside a real
    `<img>` (see `wikiLinkNodeView`), so a plain link or a non-previewable attachment
    never pays for this rule at all. The chip becomes a small inline-flex row rather than
@@ -754,25 +763,39 @@ body {
   margin: 0 auto;
 }
 
-/* The filename and the way into the full viewer (B40). Below the page rather than above it:
-   the page is what the note is showing, and a bar over the top of it would be a caption
-   arguing with its own picture. */
+/* The navigation bar, above the page since 14 August 2026 and shaped like the PDF window's
+   own toolbar (`pdfview.css`'s `.pdfview-toolbar`), which is the bar the person reading
+   these asked for by name. It sat *below* the page until then, on the argument that a bar
+   over a picture is a caption arguing with it — true for a caption, and wrong for a control
+   strip: at `data-fit="width"` an A4 page is two or three screens tall, so the way to turn
+   to page 2 was to scroll to the bottom of page 1 first.
+
+   Deliberately restyled here rather than shared with `pdfview.css`: that file keeps its own
+   `--pdf-*` variables on purpose (see its header), and this bar sits inside a note, where
+   the note's own surface and border are what it has to agree with. */
 .editor-content .wiki-embed-pdf-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 6px;
-  border-top: 1px solid var(--border);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
   background: var(--surface);
   font-size: 0.85em;
   color: var(--muted);
 }
 
 .editor-content .wiki-embed-pdf-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* What pushes the way-out button to the far end, exactly as `.pdfview-spacer` does. The
+   filename used to do this job with `flex: 1`, which meant a long name shoved the button
+   off the edge instead of being clipped itself. */
+.editor-content .wiki-embed-pdf-spacer {
+  flex: 1 1 auto;
 }
 
 .editor-content .wiki-embed-pdf-open,
@@ -780,11 +803,25 @@ body {
 .editor-content .wiki-embed-pdf-fit {
   flex: 0 0 auto;
   font: inherit;
-  padding: 0 4px;
+  padding: 1px 6px;
   color: var(--accent);
   background: none;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
   cursor: pointer;
+}
+
+.editor-content .wiki-embed-pdf-open:hover:not(:disabled),
+.editor-content .wiki-embed-pdf-nav:hover:not(:disabled),
+.editor-content .wiki-embed-pdf-fit:hover {
+  border-color: var(--border);
+}
+
+/* The Fit control is a `<select>` now, standing where the window's zoom select stands. It
+   is not a zoom: the page is one fixed-size PNG the hidden window already drew, so the two
+   options are the two sizes that cost no second render. */
+.editor-content .wiki-embed-pdf-fit {
+  color: var(--text);
 }
 
 /* Turning a page is the one control here that can be unavailable — page 1 has no previous
@@ -796,20 +833,28 @@ body {
   cursor: default;
 }
 
-/* Between the arrows and the filename, and the only thing on this bar that must not move
-   as the number in it grows: a counter that shifted from "Page 9 of 12" to "Page 10 of 12"
-   would drag the whole bar sideways under the pointer. */
+/* A page number you can type into, plus the total beside it — `.pdfview-counter`'s markup
+   and its behaviour. Fixed width and tabular figures for the reason the read-only counter
+   before it needed them: a box that grew from "9" to "10" would drag the whole bar sideways
+   under the pointer that is aiming at the next arrow. */
 .editor-content .wiki-embed-pdf-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* Pressed reads as a mode that is *on*, not as a button waiting to be clicked — this is
-   the one control on the bar that keeps a state. */
-.editor-content .wiki-embed-pdf-fit[aria-pressed="true"] {
+.editor-content .wiki-embed-pdf-counter input {
+  font: inherit;
+  width: 3em;
+  text-align: right;
   color: var(--text);
-  text-decoration: underline;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
 }
 
 /* A PDF that opens fine and still cannot be drawn (a 422) — the same complaint, and so the
@@ -869,6 +914,11 @@ body {
   border-radius: 4px;
   padding: 0 5px;
   font-size: 0.9em;
+  /* It opens its address on a plain click, like every other chip in the note — see
+     `externalImageView`. Honest at all times, unlike `.link-mod-hover`'s pointer, which
+     only appears while the modifier is down because a plain click on a *link* does not
+     open it. */
+  cursor: pointer;
 }
 
 /* While `paste-images.ts` has a download in the air for this picture. The class is an

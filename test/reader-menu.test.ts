@@ -102,6 +102,7 @@ function buildFake(): Fake {
     onRefresh: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
+    onFlushSaves: () => () => {},
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
@@ -341,7 +342,7 @@ describe("the reader toolbar's overflow menu", () => {
       });
     }
 
-    it("offers image, file, note link and table — the four buttons it replaced", async () => {
+    it("offers image, file, note link, table and a divider", async () => {
       const fake = buildFake();
       await mountWithNoteOpen(fake);
 
@@ -351,7 +352,15 @@ describe("the reader toolbar's overflow menu", () => {
       const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
         (node) => node.querySelector(".context-menu-label")!.textContent,
       );
-      expect(labels).toEqual(["Insert image", "Insert file", "Link to note…", "Table…"]);
+      // The first four are the buttons it replaced; the divider joined them on
+      // 14 August 2026, the one insert item with no picker and no shortcut behind it.
+      expect(labels).toEqual([
+        "Insert image",
+        "Insert file",
+        "Link to note…",
+        "Table…",
+        "Divider",
+      ]);
     });
 
     it("reaches the same note picker a typed [[ opens", async () => {

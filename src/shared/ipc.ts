@@ -89,6 +89,19 @@ export const IPC = {
   /** main → library renderer: how far the startup index scan has got. */
   libraryScanProgress: "library:scan-progress",
   /**
+   * main → library renderer: write anything pending, now, and say when it is done.
+   *
+   * Only the vault switch asks. Settings does its own flushing before calling
+   * `switchVault`, because the click is in that window — the tray's copy of the same
+   * gesture (14 August 2026) has no renderer to do it, and a debounced save landing after
+   * `app.relaunch()` would write the old note's bytes into the new vault at the same
+   * relative path. The reply comes back on `libraryFlushed`; main gives up waiting rather
+   * than hang on a window that is wedged.
+   */
+  libraryFlushSaves: "library:flush-saves",
+  /** library renderer → main: everything pending is on disk. */
+  libraryFlushed: "library:flushed",
+  /**
    * Where the scan is right now, for a library window that opened partway through and so
    * missed the events. Null once it has finished — or if it never had to run.
    */
@@ -354,6 +367,11 @@ export interface LibraryApi {
   /** How far the startup index scan has got, or null when nothing is scanning. */
   scanState: () => Promise<ScanProgress | null>;
   onScanProgress: (handler: (progress: ScanProgress | null) => void) => () => void;
+  /**
+   * Main asking for every pending save to land before it restarts the app into another
+   * vault. The handler writes, then calls the callback it is given.
+   */
+  onFlushSaves: (handler: () => Promise<void>) => () => void;
 
   conflicts: () => Promise<ConflictPair[]>;
   conflictDiff: (pair: ConflictPair) => Promise<DiffLine[]>;

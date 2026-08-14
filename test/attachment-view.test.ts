@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attachmentNodeView,
+  externalImageView,
   namesAFile,
   wikiLinkNodeView,
 } from "../src/renderer/editor/attachment-view.js";
@@ -41,6 +42,7 @@ beforeEach(() => {
         openWikiLink: ReturnType<typeof vi.fn>;
         checkAttachments: ReturnType<typeof vi.fn>;
         pdfPageCount: ReturnType<typeof vi.fn>;
+        openExternal: ReturnType<typeof vi.fn>;
       };
     }
   ).emqnote = {
@@ -53,6 +55,8 @@ beforeEach(() => {
     // its first page, and an unknown count is a normal state (the counter simply says
     // "Page 1" and leaves Next available).
     pdfPageCount: vi.fn().mockResolvedValue(null),
+    // `externalImageView`'s chip reaches this, and main decides the scheme again.
+    openExternal: vi.fn().mockResolvedValue(undefined),
   };
   // A safe default so a test that does not care about the network path never makes a
   // real request in jsdom — overridden per test where the response actually matters.
@@ -493,6 +497,16 @@ describe("a PDF embedded with ![[…]]", () => {
   const bar = (box: HTMLElement, className: string): HTMLElement =>
     box.querySelector(className) as HTMLElement;
 
+  /** What the counter reads, as one string — a typed-in page box plus its total. */
+  const counterOf = (box: HTMLElement): string => {
+    const counter = bar(box, ".wiki-embed-pdf-counter");
+    const input = counter.querySelector("input") as HTMLInputElement;
+    return `${input.value} ${counter.querySelector("span")!.textContent}`;
+  };
+
+  const pageBox = (box: HTMLElement): HTMLInputElement =>
+    bar(box, ".wiki-embed-pdf-counter").querySelector("input") as HTMLInputElement;
+
   const navButtons = (box: HTMLElement): HTMLButtonElement[] =>
     [...box.querySelectorAll<HTMLButtonElement>(".wiki-embed-pdf-nav")];
 
@@ -641,10 +655,11 @@ describe("a PDF embedded with ![[…]]", () => {
       const box = embed("2026-08-13-1000-eenpagina.pdf");
       await flushAsync();
 
-      // No total: `pdfPageCount` answered null. The counter still says where you are, and
-      // Next stays available — a control that appeared a moment later would read as the
-      // app changing its mind.
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1");
+      // No total: `pdfPageCount` answered null. The box still says where you are and the
+      // total is a dash, exactly as the PDF window's own toolbar shows it — and Next stays
+      // available, since a control that appeared a moment later would read as the app
+      // changing its mind.
+      expect(counterOf(box)).toBe("1 / –");
       expect(navButtons(box)[1]!.disabled).toBe(false);
     });
 
@@ -655,7 +670,7 @@ describe("a PDF embedded with ![[…]]", () => {
       const box = embed("2026-08-13-1000-drie.pdf");
       await flushAsync();
 
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 3");
+      expect(counterOf(box)).toBe("1 / 3");
       const [previous, next] = navButtons(box);
       expect(previous!.disabled).toBe(true);
       expect(next!.disabled).toBe(false);
@@ -674,13 +689,13 @@ describe("a PDF embedded with ![[…]]", () => {
       expect(fetch).toHaveBeenLastCalledWith(
         "emqnote-thumb://vault/2026-08-13-1000-bladeren.pdf?size=page&page=2",
       );
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 2 of 3");
+      expect(counterOf(box)).toBe("2 / 3");
 
       navButtons(box)[1]!.click();
       await flushAsync();
 
       // The end of the document: nothing further to offer.
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 3 of 3");
+      expect(counterOf(box)).toBe("3 / 3");
       expect(navButtons(box)[1]!.disabled).toBe(true);
     });
 
@@ -701,7 +716,7 @@ describe("a PDF embedded with ![[…]]", () => {
       expect(fetch).toHaveBeenLastCalledWith(
         "emqnote-thumb://vault/2026-08-13-1000-terug.pdf?size=page",
       );
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 4");
+      expect(counterOf(box)).toBe("1 / 4");
     });
 
     it("hides both arrows for a one-page document rather than showing two dead ones", async () => {
@@ -712,27 +727,70 @@ describe("a PDF embedded with ![[…]]", () => {
       await flushAsync();
 
       expect(navButtons(box).every((button) => button.hidden)).toBe(true);
-      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 1");
+      expect(counterOf(box)).toBe("1 / 1");
     });
 
-    it("toggles between the column width and the whole page, and says which is next", async () => {
+    it("chooses between the column width and the whole page, where the window puts zoom", async () => {
       respondWithPage();
 
       const box = embed("2026-08-13-1000-passend.pdf");
       await flushAsync();
 
-      const fit = bar(box, ".wiki-embed-pdf-fit") as HTMLButtonElement;
+      const fit = bar(box, ".wiki-embed-pdf-fit") as HTMLSelectElement;
+      // Two options and no percentages: the page is one already-rendered PNG, so a zoom
+      // would only magnify a fixed number of pixels. Real zoom is behind the ⧉.
+      expect([...fit.options].map((option) => option.textContent)).toEqual([
+        "Fit width",
+        "Fit page",
+      ]);
       expect(box.dataset.fit).toBe("width");
-      expect(fit.title).toBe("Fit the whole page");
 
-      fit.click();
+      fit.value = "page";
+      fit.dispatchEvent(new Event("change"));
       expect(box.dataset.fit).toBe("page");
-      expect(fit.getAttribute("aria-pressed")).toBe("true");
-      expect(fit.title).toBe("Fit the column width");
 
-      fit.click();
+      fit.value = "width";
+      fit.dispatchEvent(new Event("change"));
       expect(box.dataset.fit).toBe("width");
-      expect(fit.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("goes to a page typed into the box, on Enter", async () => {
+      respondWithPage();
+      sayPageCount(7);
+
+      const box = embed("2026-08-13-1000-getypt.pdf");
+      await flushAsync();
+
+      const input = pageBox(box);
+      input.value = "5";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await flushAsync();
+
+      expect(fetch).toHaveBeenLastCalledWith(
+        "emqnote-thumb://vault/2026-08-13-1000-getypt.pdf?size=page&page=5",
+      );
+      expect(counterOf(box)).toBe("5 / 7");
+    });
+
+    it("puts the page it is on back when the box is given nonsense or a page that is not there", async () => {
+      respondWithPage();
+      sayPageCount(3);
+
+      const box = embed("2026-08-13-1000-onzin.pdf");
+      await flushAsync();
+      const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      for (const typed of ["nine", "0", "12", ""]) {
+        const input = pageBox(box);
+        input.value = typed;
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await flushAsync();
+
+        // There is one right answer to "what page am I on", so the box goes back to
+        // showing it rather than refusing with a message.
+        expect(counterOf(box)).toBe("1 / 3");
+      }
+      expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
     });
 
     it("still opens the viewer window, which is where zoom and the system viewer live", async () => {
@@ -780,5 +838,53 @@ describe("a PDF embedded with ![[…]]", () => {
 
     expect(box.className).toBe("wiki-embed-image-box");
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `![](https://…)` pointing at something that is not a picture — a YouTube address, in
+ * the report that prompted this. The chip drawn for it used to be the one thing in a note
+ * that could be seen and not reached.
+ */
+describe("externalImageView", () => {
+  function chip(src: string, alt: string | null = null): HTMLElement {
+    return externalImageView({ attrs: { src, alt, title: null } } as never).dom as HTMLElement;
+  }
+
+  function opened(): ReturnType<typeof vi.fn> {
+    return (window as unknown as { emqnote: { openExternal: ReturnType<typeof vi.fn> } }).emqnote
+      .openExternal;
+  }
+
+  it("opens its address on a plain click, like every other chip in a note", () => {
+    const span = chip("https://www.youtube.com/watch?v=RQBhuL9Ve8g");
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+
+    span.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(opened()).toHaveBeenCalledWith("https://www.youtube.com/watch?v=RQBhuL9Ve8g");
+  });
+
+  it("swallows mousedown so the click never turns into a NodeSelection", () => {
+    const span = chip("https://example.com/thing");
+    const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+
+    span.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("labels itself with the alt text, falling back to the host", () => {
+    expect(chip("https://www.youtube.com/watch?v=x", "De demo").textContent).toBe("De demo");
+    expect(chip("https://www.youtube.com/watch?v=x").textContent).toBe("www.youtube.com");
+    expect(chip("https://www.youtube.com/watch?v=x").title).toBe(
+      "https://www.youtube.com/watch?v=x",
+    );
+  });
+
+  it("asks nothing at all for an empty src", () => {
+    chip("").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(opened()).not.toHaveBeenCalled();
   });
 });

@@ -124,6 +124,7 @@ function buildFake(): Fake {
     onRefresh: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
+    onFlushSaves: () => () => {},
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},

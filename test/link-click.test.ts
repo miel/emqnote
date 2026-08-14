@@ -90,6 +90,42 @@ describe("handleLinkClick", () => {
     view.destroy();
   });
 
+  /**
+   * The reported "not the first time, sometimes not the second, but the third works".
+   *
+   * The `link` mark is `inclusive: false`, so at the far end of a run `$pos.marks()` is
+   * empty and the text after it carries no link — and that position is the right-hand
+   * half of the last character, which is where a pointer aimed at a short link lands.
+   */
+  it("opens from the trailing edge of the link, not only from inside it", () => {
+    const view = mount("Zie [Anthropic](https://www.anthropic.com/) voor meer.\n");
+    const end = caretAfter(view.state.doc, "Anthropic");
+
+    expect(handleLinkClick(view, end, clickEvent(true))).toBe(true);
+    expect(openExternal).toHaveBeenCalledWith("https://www.anthropic.com/");
+    view.destroy();
+  });
+
+  it("opens from the leading edge too", () => {
+    const view = mount("Zie [Anthropic](https://www.anthropic.com/) voor meer.\n");
+    const start = caretAfter(view.state.doc, "Anthropic") - "Anthropic".length;
+
+    expect(handleLinkClick(view, start, clickEvent(true))).toBe(true);
+    expect(openExternal).toHaveBeenCalledWith("https://www.anthropic.com/");
+    view.destroy();
+  });
+
+  it("a bare URL at the end of a line opens from its last character", () => {
+    // The shape an imported note is full of: `remark-gfm` turns it into a link mark, and
+    // it ends the paragraph, so there is no text after it at all.
+    const view = mount("Zie https://www.anthropic.com/\n");
+    const end = caretAfter(view.state.doc, "anthropic.com/");
+
+    expect(handleLinkClick(view, end, clickEvent(true))).toBe(true);
+    expect(openExternal).toHaveBeenCalledWith("https://www.anthropic.com/");
+    view.destroy();
+  });
+
   it("refuses a non-http(s) href without ever asking main", () => {
     const view = mount("Mail [mij](mailto:iemand@example.com) gerust.\n");
     const pos = caretAfter(view.state.doc, "mi") - 1;

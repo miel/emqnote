@@ -53,6 +53,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     onRefresh: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
+    onFlushSaves: () => () => {},
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},

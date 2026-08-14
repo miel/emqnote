@@ -90,6 +90,7 @@ const DUTCH: Record<string, string> = {
   "menu.insertFile": "Bestand invoegen",
   "menu.insertNoteLink": "Link naar notitie…",
   "menu.insertTable": "Tabel…",
+  "menu.insertRule": "Scheidingslijn",
   "menu.tableRowAbove": "Rij hierboven invoegen",
   "menu.tableRowBelow": "Rij hieronder invoegen",
   "menu.tableColumnLeft": "Kolom links invoegen",
@@ -116,15 +117,15 @@ const DUTCH: Record<string, string> = {
   "table.alignRight": "Rechts",
   "table.alignDefault": "Auto",
 
-  // De balk onder een ingesloten pdf-pagina (B43). Bladeren gebeurt in de notitie zelf;
-  // ⧉ opent nog steeds het pdf-venster (B40), waar zoomen en de systeemviewer zitten.
+  // De balk boven een ingesloten pdf-pagina (B43/B46), sinds 14 augustus 2026 in de vorm
+  // van de werkbalk van het pdf-venster zelf. Bladeren gebeurt in de notitie; ⧉ opent nog
+  // steeds dat venster (B40), waar zoomen en de systeemviewer zitten.
   "pdf.previousPage": "Vorige pagina",
   "pdf.nextPage": "Volgende pagina",
-  "pdf.page": "Pagina {page}",
-  "pdf.pageOf": "Pagina {page} van {pages}",
-  "pdf.fit": "Passend",
-  "pdf.fitPage": "Hele pagina passend maken",
-  "pdf.fitWidth": "Op kolombreedte tonen",
+  "pdf.pageNumber": "Paginanummer",
+  "pdf.fit": "Passend maken",
+  "pdf.fitPage": "Hele pagina",
+  "pdf.fitWidth": "Kolombreedte",
   "pdf.openViewer": "Openen in pdf-venster",
 
   // Link prompt
@@ -377,6 +378,7 @@ const ENGLISH: Record<string, string> = {
   "menu.insertFile": "Insert file",
   "menu.insertNoteLink": "Link to note…",
   "menu.insertTable": "Table…",
+  "menu.insertRule": "Divider",
   "menu.tableRowAbove": "Insert row above",
   "menu.tableRowBelow": "Insert row below",
   "menu.tableColumnLeft": "Insert column left",
@@ -408,13 +410,12 @@ const ENGLISH: Record<string, string> = {
   // still opens the PDF window (B40), which is where zoom and the system viewer live.
   "pdf.previousPage": "Previous page",
   "pdf.nextPage": "Next page",
-  // No total yet — the count is one round trip behind the picture, and a counter that
-  // waited for it would appear a moment after the page did.
-  "pdf.page": "Page {page}",
-  "pdf.pageOf": "Page {page} of {pages}",
+  // The total is one round trip behind the picture, so the box beside it reads "/ –"
+  // until the count lands rather than appearing a moment after the page does.
+  "pdf.pageNumber": "Page number",
   "pdf.fit": "Fit",
-  "pdf.fitPage": "Fit the whole page",
-  "pdf.fitWidth": "Fit the column width",
+  "pdf.fitPage": "Fit page",
+  "pdf.fitWidth": "Fit width",
   "pdf.openViewer": "Open in the PDF window",
 
   "link.new": "Link",

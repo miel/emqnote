@@ -131,6 +131,7 @@ function buildFake(): CaptureApi {
     onRefresh: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
+    onFlushSaves: () => () => {},
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
