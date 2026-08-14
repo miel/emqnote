@@ -470,6 +470,28 @@ als parameter krijgt — dezelfde discipline als `vault-io.ts`. `remembered.ts` 
 of een zelftest mag dus nooit in de onthouden lijst belanden; onthouden gebeurt alleen
 vanuit de expliciete handeling, in `adoptVault`.
 
+**Aangevuld op 14 augustus 2026: het kan ook vanuit het menubalkpictogram.** De herstart-eis
+verandert niet — de vier stukken staat hierboven staan er nog precies zo — maar de enige weg
+ernaartoe was de Instellingen van het bibliotheekvenster, en op macOS is dat twee vensters
+weg van het pictogram dat verder zo'n beetje het hele oppervlak van de app is. Het regeltje
+`Vault: <pad>` is een submenu geworden: tonen in de verkenner, de vaults die deze machine
+kent (uit dezelfde `listVaults` die het instellingenscherm toont, dus de twee kunnen niet
+uit elkaar gaan lopen), en de mappenkiezer. Wat het menu *bevat* staat in een Electron-vrije
+`vault-menu.ts`, want een `Menu`-sjabloon is onder `vitest` niet te bouwen en
+`--click-button` komt een native menu sowieso niet in — dezelfde zet als `vaults.ts` en
+`attachment-route.ts`.
+
+Twee dingen die deze weg wél nodig had. Er wordt **bevestigd** met een dialoog die de
+herstart benoemt: het instellingenscherm vraagt het al, en één klik twee regels diep in een
+menu waarvan de buren onschuldig zijn is makkelijker per ongeluk te maken dan een handeling
+in twee stappen. En de bibliotheek **spoelt haar eigen wachtende schrijfactie eerst** —
+`IPC.libraryFlushSaves`, met een antwoord waar main op wacht en een grens van twee seconden.
+Settings deed dat zelf op weg naar `switchVault`, want de klik zat in dat venster; het menu
+heeft geen venster in de lus, en dat is precies het derde gevaar uit de lijst hierboven.
+`switchVaultTo` is nu één functie die beide routes aanroepen — een tweede uitgeschreven
+volgorde ernaast is hoe er één van die vier vergeten wordt op het pad dat niemand getest
+heeft.
+
 ---
 
 ## B22 — Toch een installer en een auto-updater, alleen op Windows anders dan verwacht
@@ -1447,6 +1469,72 @@ bij het openen, drie **werkelijk verschillende beelden** geteld (elk in een canv
 uitgerekend, niet alleen een `src` die veranderde — de les van B38), terugbladeren dat exact
 hetzelfde beeld oplevert als de eerste keer, de volgende-knop die op de laatste pagina
 uitgaat, en Fit die de pagina van 836 naar 513 pixels hoogte brengt.
+
+## B47 — Bestanden die geen notitie zijn, staan gewoon in de bibliotheek
+
+**Genomen** op 14 augustus 2026, uit een vault die in Obsidian is begonnen. Zo'n vault
+bewaart zijn afbeeldingen en pdf's in een doodgewone map naast de notities — meestal
+`99 - Attachments` — en die map was doorbladerbaar en volstrekt leeg: een `0` in de boom en
+"Geen notities" zodra je erop klikte. Alles wat erin stond was onzichtbaar voor de app.
+
+**Er hoefde niets gebouwd te worden om die bestanden te *tonen*.** `resolveAttachment` lost
+sinds B38 een willekeurig vault-relatief pad op, `emqnote-attachment://` levert het uit
+(B28), `emqnote-thumb://…?size=page` tekent er een pdf-pagina van (B36/B43) en
+`openWikiLink` stuurt een `.docx` al naar het besturingssysteem en een `.pdf` naar het
+venster van B40. Het enige dat ontbrak was iets dat ze *opsomt*: `readFilesIn`.
+
+**Een aparte lijst en een apart type, geen bredere `NoteSummary`.** Sorteren, slepen,
+verplaatsen, dupliceren, taken en de conflictcontrole nemen allemaal een `NoteSummary` aan,
+en geen van die vragen betekent iets voor een `.png`. Een bestandsrij die de helft van dat
+menu zou beantwoorden en de andere helft niet, leest slechter dan een rij die zichtbaar geen
+notitie is. Daarom een tweede sectie onder de notities, met alleen wat een bestand heeft:
+naam, soort, grootte, datum. Er zit ook geen verwijderen bij — één onomkeerbare handeling
+naast de prullenbak is genoeg (B24/B27).
+
+`_attachments` blijft verborgen en onbladerbaar. Dat is de eigen map van de app en die heeft
+zijn eigen scherm (§6.5); dit gaat over de map die de *gebruiker* heeft gemaakt.
+
+**Het voorbeeldvenster is de leeskant van dezelfde beslissing.** Een afbeelding tekent
+zichzelf via het protocol, een pdf vraagt de pagina op die de verborgen tekenwindow toch al
+maakt — met opzet geen pdf.js in de bibliotheekbundel, dezelfde grens die B43 trekt — en
+alles daarbuiten zegt dat het geen voorbeeld heeft en biedt de systeemviewer aan. Dat laatste
+is geen verontschuldiging maar het antwoord: deze app heeft niets te zoeken in het tekenen
+van Office-formaten, en het besturingssysteem eronder wel.
+
+**Hetzelfde argument heeft en passant het scherm voor verweesde bijlagen gerepareerd.** Dat
+haalde elk voorbeeld als base64 door IPC — het hele bestand, ~1,37× opgeblazen — en vroeg ze
+allemaal tegelijk op, zodat er niets verscheen tot de laatste binnen was. Dat is precies wat
+B28 voor de afbeeldingen in een notitie heeft geweigerd; de uitzondering die hier ooit is
+opgeschreven luidde "het is één bestand, één keer", en dat is het niet.
+
+---
+
+## B48 — Een verwijzing naast zijn eigen insluiting wordt niet getekend
+
+**Genomen** op 14 augustus 2026, uit dezelfde geïmporteerde vault. Obsidian schrijft bij het
+invoegen van een pdf twee dingen: de insluiting `![[99 - Attachments/offerte.pdf]]` en er
+pal naast de gewone verwijzing `[[99 - Attachments/offerte.pdf]]`. Gelezen in deze app is dat
+een hele pagina met daaronder een chip die naar de pagina erboven wijst.
+
+**Het bestand houdt allebei de spellingen.** Dit is een `DecorationSet` en niets anders, dus
+er is geen B10- of B6-vraag te beantwoorden: er wordt niets herschreven, er valt bij het
+bewaren niets weg, en een vault die met Obsidian gedeeld wordt blijft precies zeggen wat
+Obsidian verwacht. Verbergen is ook de omkeerbare helft van de keuze — het knooppunt staat er
+nog gewoon, dus Backspace haalt het alsnog echt weg als dat de bedoeling was.
+
+**Alleen als ze buren zijn.** Een verwijzing en een insluiting aan weerszijden van een lange
+notitie zijn twee bedoelde vermeldingen van hetzelfde bestand, en de tweede stilzwijgend
+opslokken zou deze regel iets laten beslissen wat hij niet kan weten. Het paar dat Obsidian
+schrijft staat altijd naast elkaar, en dat is dus het hele criterium: dezelfde alinea, niets
+ertussen dan witruimte of een regelovergang, in willekeurige volgorde.
+
+**Wat het draaien wél vond en het lezen niet:** de eerste versie zette `display: none` op
+`.wiki-link-duplicated`, wat op specificiteit gelijkspeelt met `.wiki-link-preview`
+(`display: inline-flex`, voor een chip met een miniatuur erop) en op bronvolgorde verliest.
+Een `.pdf` — het enige soort chip waarvoor Obsidian dit paar überhaupt schrijft — bleef dus
+gewoon getekend worden. Beide klassenamen op één selector nu.
+
+---
 
 ## Open punten
 

@@ -618,8 +618,13 @@ body {
    and read here it is a page with a chip pointing straight back at it. `display: none`
    rather than `visibility: hidden`: the second leaves the gap the chip occupied, which is
    the whitespace that made them neighbours in the first place. The node itself is
-   untouched and so is the file — this is a decoration, `duplicate-embed.ts`. */
-.editor-content .wiki-link-duplicated {
+   untouched and so is the file — this is a decoration, `duplicate-embed.ts`.
+
+   Both class names on one selector on purpose. `.wiki-link-preview` below sets
+   `display: inline-flex` for a chip with a thumbnail on it, ties this on specificity and
+   wins on source order — so a `.pdf`, which is the only kind of chip Obsidian writes this
+   pair for, went on being drawn. Found by opening such a note, not by reading this. */
+.editor-content .wiki-link.wiki-link-duplicated {
   display: none;
 }
 

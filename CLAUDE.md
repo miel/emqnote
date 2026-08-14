@@ -259,6 +259,42 @@ count at once and three NodeViews of one PDF already asked three times. Fit is a
 *on screen* — the PNG stays `PAGE_SIZE` — and zoom, text selection and the way out to the
 system viewer stay in B40's window, which is what the ⧉ is still for.
 
+That bar sits **above** the page since 14 August 2026 and is shaped like the viewer window's
+own toolbar (`pdfview.css`'s `.pdfview-toolbar`), which is the bar the person using both asked
+for by name: `◀ ▶`, a typed page box with its total beside it, a Fit width/Fit page select
+where the window puts zoom, the filename, and a ⧉ that carries its words as well as its glyph.
+It was below the page on the argument that a bar over a picture is a caption arguing with it —
+true for a caption, wrong for a control strip: at `data-fit="width"` an A4 page is two or three
+screens tall, so the way to reach page 2 was to scroll past page 1 first. **There is
+deliberately no percentage zoom**: the page is one already-rendered `PAGE_SIZE` PNG, so a zoom
+could only magnify a fixed number of pixels — real zoom stays behind the ⧉, which is what B46
+already says it is for. The page box means the bar now holds an `<input>` inside a
+`contenteditable`, so it needs `contentEditable = "false"` and a **`stopEvent` scoped to the
+bar** — `checkbox.ts` and `table-toolbar.ts` both answer `true` unconditionally because their
+DOM *is* the widget, while here the page beside it must keep reaching ProseMirror, since
+clicking it is how the embed gets selected and deleted.
+
+**A plain `[[…]]` link standing next to its own `![[…]]` embed is not drawn** (B48).
+Obsidian writes both when it inserts a PDF, so an imported note reads as a full page with a
+chip underneath pointing back at the page above it. `duplicate-embed.ts` is a `DecorationSet`
+and nothing else: **the file keeps both spellings**, which is what makes this legal without a
+B10 or B6 argument at all, and the hidden node is still a real atom so Backspace removes it
+for good if that was the intent. **Adjacent only** — same textblock, nothing between them but
+whitespace or a `hardBreak`, either order — because a link and an embed at opposite ends of a
+long note are two deliberate mentions and swallowing the second would be this rule deciding
+something it cannot know. One trap, found by running it and not by reading it: `display: none`
+on `.wiki-link-duplicated` alone ties `.wiki-link-preview`'s `display: inline-flex` on
+specificity and loses on source order, so the one kind of chip this pair is ever written for —
+a `.pdf`, which has a thumbnail — went on being drawn. Both class names on one selector.
+
+**A dividing line can be inserted** (14 August 2026). `horizontalRule` has been in the schema,
+the parser, the serializer and `.editor-content hr` since the dialect was written; nothing
+could *make* one, which imported notes made visible by arriving full of them. It is the fifth
+entry in `insertMenuItems`, so the toolbar's Insert button in both windows and the note
+panel's right-click menu all get it from one list. **No shortcut and no `---` input rule**:
+the Insert menu opens from a plain button so `--click-button` reaches it, and a `---`
+autoformat would be a markdown spelling, which `state.ts`'s `autoformat` refuses on principle.
+
 **Renaming a folder repairs the links into it, without asking** (B44). `renameFolder`'s own
 comment used to say nothing inside needed rewriting because wikilinks carried bare names —
 true when written, false since B35, and the sentence is what kept the breakage invisible. The
@@ -288,6 +324,65 @@ alias is invented (a path-form target was never what the reader saw, and an embe
 alias) and a bare `![[foto.png]]` is left alone, carrying no folder to rewrite. The prefix
 matched is `Bijlagen/`, never `Bijlagen`, or a sibling folder called `Bijlagen extra` would
 move with it.
+
+**A folder's files that are not notes are listed and previewed** (B47). A vault started in
+Obsidian keeps its pictures and PDFs in an ordinary folder beside the notes — `99 - Attachments`,
+usually — and that folder was browsable and completely empty: a `0` badge in the tree,
+"No notes" on clicking it. **Nothing had to be built to *show* them**: `resolveAttachment`
+resolves an arbitrary vault-relative path (B38), `emqnote-attachment://` serves it (B28),
+`emqnote-thumb://…?size=page` draws a PDF page (B36/B43) and `openWikiLink` already routes a
+`.docx` to the OS and a `.pdf` to B40's window. `readFilesIn` is the only new piece.
+**A separate call and a separate type, never a widened `NoteSummary`**: sort, drag, move,
+duplicate, tasks and the conflict check all take one, and none of those questions means
+anything for a `.png` — a file row answering half that menu would read worse than one that
+plainly is not a note. There is no delete on this path either (B24/B27). `_attachments` stays
+hidden and unbrowsable; it is the app's own folder and has §6.5's screen. The reader pane's
+PDF preview asks the hidden window for its page like the inline embed does — **no pdf.js in
+the library bundle**, the same line B43 draws.
+
+**The orphaned-attachment scan is answered from the index, and it has an error state.** It
+stalled at "Looking…" for four separate reasons, and all four are worth not reintroducing:
+there was no `.catch` at all, so a rejected `invoke` left the one loading state set forever;
+it walked the whole vault and `readFileSync` + `parseNote`d every note synchronously inside
+`ipcMain.handle`, which on a Files On-Demand vault blocks on one network hydration per note;
+that walk honoured neither `isHidden` nor `_trash`, so a `_templates` note naming a picture
+counted as a reference to it; and each preview came back as the whole file base64'd through
+IPC with `Promise.all` over all of them, so nothing appeared until the last one landed.
+`note_links` has held exactly the reference set since B45, so `referencedTargets` hands it
+over — **the trash is still read separately**, because `index-scan.ts` leaves it out on
+purpose (a deleted note must not resurface under its tags) and this question counts a trashed
+note as a reference on purpose (it can be restored). Both are right; they just are not the
+same question.
+
+**A weblink's mark is resolved from both sides of the click position.** The `link` mark is
+`inclusive: false` (`schema.ts`), which is what stops typing past a link from extending it —
+and it also means `$pos.marks()` is empty at the *trailing* boundary of a run, where the text
+after carries no link. That boundary is the right-hand half of a link's last character, which
+is exactly where a pointer aimed at a short link lands, so Mod+click there resolved nothing,
+ProseMirror fell through to selecting the node (Mod is also its `selectNodeModifier`), and the
+link opened only on the second or third try further left. `linkRangeAt` asks `nodeBefore` as
+well as `nodeAfter` now, which fixes Ctrl+K at the end of a link along with it. A bare URL
+ending a paragraph — the common Obsidian shape — was unopenable outright.
+
+**The chip drawn for `![](https://…)` opens its address on a plain click.** Not every
+`![…](…)` in a vault points at a picture: `![](https://www.youtube.com/watch?v=…)` is a video
+written with the image spelling, and `externalImageView` had no listener at all, so it was the
+one thing in a note that could be seen and not reached. A *plain* click, unlike a weblink in
+prose (B33): that rule exists because a link's own text has to stay editable, and a chip is an
+atom with no text to put a caret in — `chipView` and `wikiLinkNodeView` have always opened on a
+plain click for the same reason. Main's `isOpenableUrl` still decides the scheme.
+
+**The vault can be switched from the tray, through the same function Settings uses** (B21,
+extended). `switchVaultTo` is that function; a second sequence written out beside it is how
+one of B21's four pieces of state gets forgotten on the path nobody tested. The tray's flat
+`Vault: <path>` row is a submenu — reveal, the vaults `listVaults` knows, the picker — and
+what it *contains* lives in an Electron-free `vault-menu.ts`, because a `Menu` template cannot
+be built under `vitest` and `--click-button` cannot reach a native menu at all. Two things this
+route needed that Settings did not: a confirmation naming the restart (one click two rows into
+a menu of harmless neighbours is easier to make by accident than a two-step dialog), and
+**`IPC.libraryFlushSaves`**, a bounded round trip that makes the library write its debounced
+save before `app.relaunch()`. Settings flushed in its own renderer because the click was there;
+the tray has no window in the loop, and that is B21's third hazard exactly.
 
 **A `[[…]]` link is written by picking a note, always as `[[path|Title]]`** (B41).
 `NotePicker.tsx` opens on `[[`, on `Mod+Shift+K`, from a toolbar button and from the editor
@@ -502,6 +597,52 @@ button in its status bar most of all, since that window is where notes are actua
 Also unseen by a person: how the Fit toggle feels against a real display, and whether the
 bar's six controls crowd a narrow note column. Both are `TEST-PROTOCOL.md` items.
 
+**Ten items from daily use landed on 14 August 2026**, built as five packages on one branch.
+They are not ten unrelated defects: the largest theme is that **a vault this app did not write
+was a second-class citizen** — a table written elsewhere could not be typed past, Obsidian's
+PDF pairs drew twice, an `Attachments` folder full of pictures was invisible, and Mod+click on
+a link took two or three tries. Two decisions came out of it: **B47** — non-note files are
+listed and previewed in the library — and **B48** — a link beside its own embed is hidden on
+screen and untouched on disk. **B21 gained a paragraph**: the vault can be switched from the
+tray, through the same `switchVaultTo` Settings uses.
+
+The rest, in one line each: a note that already *ends* in a table opens with a line to type on
+(`trailingParagraph`'s `appendTransaction` only ever ran after a change, and opening a note is
+not one — the existing test said so in a comment); a divider can be inserted; the inline PDF
+bar moved above the page and took the viewer window's shape; the `![](youtube-url)` chip opens;
+and the orphaned-attachment scan stopped stalling at "Looking…".
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a three-page PDF from
+`pdflatex` and hand-written Obsidian-shaped notes: a note ending in a table opening with a
+paragraph after it, typing landing in it and reaching disk — and a second such note opened and
+left alone with **hash and mtime both unchanged** (B10); the duplicate chip carrying
+`wiki-link-duplicated` with a computed `display: none` and a **zero-width box**, the page still
+drawn, and the file still holding both spellings; Mod+click on the **last character** of a link
+taking the click (`preventDefault` on the `mouseup` ProseMirror calls `handleClick` from) while
+a plain click at the same point still places the caret; the YouTube chip taking its own click;
+the PDF bar above the page with `1 / 3`, next/previous walking all three pages with **three
+genuinely different images fingerprinted from a canvas** and page 1 coming back byte-identical
+to itself, a typed `3` + Enter landing on the same page 3 image as the arrows did, Fit going
+836 → 513 → 836 px, and **607 truly dark pixels** counted on the full-resolution page; the
+Insert menu listing five items and Divider producing a real `<hr>` with the file coming back
+**byte-identical from `npm run canonical`**; the imported `99 - Attachments` folder listing its
+three files with type and size where it used to say "No notes", the PNG drawing off
+`emqnote-attachment://` (`naturalWidth` 64, not merely an `<img>`), the PDF drawing its page
+and paging to a different image, and the `.docx` offering the system viewer; and the orphan
+screen finishing with its preview drawn off the protocol rather than a base64 data URL.
+
+The thing this batch is worth remembering for is that **running it found a CSS bug reading it
+could not**. B48's hide rule was `display: none` on `.wiki-link-duplicated`, which ties
+`.wiki-link-preview`'s `display: inline-flex` on specificity and loses on source order — so the
+one kind of chip Obsidian ever writes this pair for, a `.pdf` with a thumbnail, went on being
+drawn while every unit test passed. That is the same family as B36's trailing slash and B40's
+missing `corsEnabled`.
+
+**Not confirmed live**: the tray's vault submenu, which no script can reach — a tray is not
+driveable and `--click-button` cannot enter a native menu, which is why `vault-menu.ts` exists
+to be tested apart from it. And, the limitation every batch since the disk-change work has
+named, all ten in the *capture* window specifically. Both are `TEST-PROTOCOL.md` items.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -513,7 +654,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B46, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B48, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.
