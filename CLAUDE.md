@@ -741,6 +741,55 @@ three in the *capture* window specifically. Also unseen by a person: how a dragg
 feels on a real display, and whether the `/` panel's sixteen rows crowd a short window. Both
 are `TEST-PROTOCOL.md` items.
 
+**Five reports from daily use landed on 14 August 2026**, on top of `v0.8.0`, and one of the
+five turned out not to be a bug. The four that were: the `/` menu now scrolls to its
+highlight (`slash-menu.ts` rebuilds its panel on every move, so the element's `scrollTop` was
+thrown away while `active` walked past a `46vh` clip — the same report `palette-scroll.ts`
+answers for the three React pickers, fixed with its answer rather than its code, since this
+menu is plain DOM by decision); a folder's file list uses the whole pane when there are no
+notes above it (`.files-list`'s `max-height: 50%` protects the note list, so it is lifted when
+there is no note list to protect — and `.notes-list` grows now, or the leftover height
+collected *under* the file list instead, which read as the same truncation); quoted text is
+italic, with `.editor-content blockquote em` put back upright, because the browser's own rule
+already italicises `<em>` and the one mark whose job is to stand out would otherwise be the
+one that disappears; and Shift+arrow in a table now makes the rectangle the mouse makes.
+
+That last one is B49 working as its own text already said it should. `extendCellSelection`
+bailed on any selection that was not a caret and read the cell edge off `$from`, and both
+assumptions break the moment Shift+Right has grown a text selection: at the end of the cell
+the command declined, `prosemirror-view`'s `selectHorizontally` extended a `TextSelection`
+across the `isolating` boundary, and `clearCells` then rightly refused that state — so
+Backspace did nothing. Exactly the bug B49 exists to prevent, still reachable from the
+keyboard. It reads `$head` now (the end that is moving; `$from` is the other one in a
+backwards selection), asks `tableContextAt` about **both** ends separately (new in
+`table-geometry.ts`, `findTable` is one line over it), and escalates on the press that would
+leave the cell — so text selection inside a cell still works, and a cross-cell
+`TextSelection` that arrived some other way is repaired rather than refused.
+
+**The fifth was not a bug**: "the alignment buttons work on a whole column instead of one
+cell". GFM writes alignment once per column, in the delimiter row, so `align` is an array on
+the *table* node and `tableCell` has no attributes at all — a per-cell alignment cannot be
+written down, and writing the table as raw HTML to get one is what B6 forbids. The command
+already scopes to the caret's column and to the columns a rectangle covers, never the whole
+table. B42 has the paragraph; nothing in the code changed.
+
+Confirmed in the real app under `Xvfb`, driven over CDP: the `/` menu in a window short
+enough to clip 230px of it, walking all sixteen rows with **every row's box measured inside
+the panel's** and `scrollTop` rising to 226 and back to 0 on the wrap — then `/divid` + Enter
+still making a real `<hr>` that survived the next words typed; an imported `99 - Attachments`
+folder's file list ending exactly at the foot of the pane (733px of 733) with all twelve rows
+and a computed `max-height: none`, and a mixed folder keeping the cap with no blank strip
+anywhere; `getComputedStyle` answering `italic` on a quote and `normal` on the `<em>` inside
+it, with ordinary paragraphs untouched; and Shift+Right five times growing the text selection
+*inside* a cell with no cell painted, the sixth press painting **exactly two** cells (a real
+computed fill, not a class in the DOM), Shift+Down making it four, Backspace emptying those
+four and nothing else, and the file coming back **byte-identical from `npm run canonical`**.
+
+**Not confirmed live**: all four in the *capture* window specifically, the limitation every
+batch since the disk-change work has named. Also unseen by a person: whether the `/` list
+scrolls smoothly on a real display, and whether an italic quote reads well in the font a real
+machine uses. Both are `TEST-PROTOCOL.md` items (§20).
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -752,7 +801,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B48, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B51, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.

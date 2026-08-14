@@ -1,4 +1,4 @@
-import { Fragment, type Node as PMNode } from "prosemirror-model";
+import { Fragment, type Node as PMNode, type ResolvedPos } from "prosemirror-model";
 import type { EditorState } from "prosemirror-state";
 import { schema, type ColumnAlign } from "../../markdown/schema.js";
 
@@ -57,21 +57,31 @@ export function rectOfContext(context: TableContext): TableRect {
   };
 }
 
-/** The table the caret is in, with which cell of it, or null when the caret is elsewhere. */
-export function findTable(state: EditorState): TableContext | null {
-  const { $from } = state.selection;
-
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if ($from.node(depth).type !== tableType) continue;
+/**
+ * The table one position is in, with which cell of it, or null when it is elsewhere.
+ *
+ * Split out from `findTable` because a selection has two ends and they are not always in
+ * the same cell: `extendCellSelection` has to ask this of the anchor and of the head
+ * separately, and `$from` — which is what `findTable` asks about — is the *head* of a
+ * backwards selection, so it answers the wrong one half the time.
+ */
+export function tableContextAt($pos: ResolvedPos): TableContext | null {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type !== tableType) continue;
     return {
-      node: $from.node(depth),
-      pos: $from.before(depth),
-      row: depth < $from.depth ? $from.index(depth) : 0,
-      cell: depth + 1 < $from.depth ? $from.index(depth + 1) : 0,
+      node: $pos.node(depth),
+      pos: $pos.before(depth),
+      row: depth < $pos.depth ? $pos.index(depth) : 0,
+      cell: depth + 1 < $pos.depth ? $pos.index(depth + 1) : 0,
     };
   }
 
   return null;
+}
+
+/** The table the caret is in, with which cell of it, or null when the caret is elsewhere. */
+export function findTable(state: EditorState): TableContext | null {
+  return tableContextAt(state.selection.$from);
 }
 
 /**

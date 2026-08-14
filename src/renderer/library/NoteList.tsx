@@ -239,7 +239,13 @@ export function NoteList({
               {`${files.length} ${t(files.length === 1 ? "library.file" : "library.files")}`}
             </span>
           </div>
-          <ul className="files-list" role="listbox">
+          {/* `files-only` lifts the "never more than half the pane" cap, which is there to
+              keep a folder of pictures from pushing the notes off the top and so means
+              nothing when there are no notes — the same condition the tab stop below reads. */}
+          <ul
+            className={`files-list${notes.length === 0 ? " files-only" : ""}`}
+            role="listbox"
+          >
             {files.map((file) => (
               <li
                 key={file.path}

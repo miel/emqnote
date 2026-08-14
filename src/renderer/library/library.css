@@ -360,11 +360,17 @@
   color: #c42b1c;
 }
 
+/* `flex: 1 1 auto` and not the default `0 1 auto`: without the grow, a short note list left
+   the leftover height at the *foot* of the column — under the file list below it, which then
+   read as a list cut off halfway with nothing under it. The note list is what the empty space
+   belongs to. `min-height: 0` so it may shrink past its content and scroll instead. */
 .notes-list {
   margin: 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .note {
@@ -1206,9 +1212,20 @@
   overflow-y: auto;
   /* Never more than half the pane. A folder of two hundred pictures beside three notes
      must not push the notes off the top of the list — the folder is still a folder of
-     notes first. */
+     notes first. `0 1 auto` rather than `0 0 auto`: the cap keeps it from growing, and
+     refusing to shrink as well only meant it overflowed a short pane. */
   max-height: 50%;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+/* The cap above protects the notes, so it lifts when there are none to protect — which is
+   the case this whole section exists for (B47): an imported vault's `99 - Attachments`
+   folder, where the file list is the whole of the pane. Capped there, it drew its files in
+   the top half and left the bottom half of the pane blank. */
+.files-list.files-only {
+  max-height: none;
+  flex: 1 1 auto;
 }
 
 /* The reader pane showing a file instead of a note. */
