@@ -6,6 +6,8 @@ import { schema } from "../src/markdown/schema.js";
 import { serializeBody } from "../src/markdown/index.js";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
+import type { Node as PMNode } from "prosemirror-model";
+import { CellSelection } from "../src/renderer/editor/table-selection.js";
 import { docFromMarkdown, caretAfter } from "./helpers/editing.js";
 
 /**
@@ -212,6 +214,77 @@ describe("the alignment group", () => {
     button("Centre").click();
 
     expect(button("Centre").getAttribute("aria-pressed")).toBe("true");
+    expect(button("Auto").getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+/**
+ * The same buttons, driven over a selected rectangle (B49). What is checked here is that
+ * the toolbar and the selection agree — the rectangle maths itself is
+ * `table-selection.test.ts`'s business.
+ */
+describe("with a rectangle of cells selected", () => {
+  /** The position *before* the cell whose text is `needle`. */
+  function cellPosOf(doc: PMNode, needle: string): number {
+    let found: number | null = null;
+    doc.descendants((node, pos) => {
+      if (found !== null) return false;
+      if (node.type === schema.nodes.tableCell && node.textContent === needle) {
+        found = pos;
+        return false;
+      }
+      return true;
+    });
+    if (found === null) throw new Error(`no cell holding ${needle}`);
+    return found;
+  }
+
+  /** A live view with the rectangle between the two named cells selected. */
+  function mountSelecting(markdown: string, anchor: string, head: string): EditorView {
+    const doc = docFromMarkdown(markdown);
+    const base = createEditorState(doc, CONTEXT);
+    const selection = CellSelection.between(doc, cellPosOf(doc, anchor), cellPosOf(doc, head));
+    if (selection === null) throw new Error("those two cells do not make a rectangle");
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    view = new EditorView(host, {
+      state: EditorState.create({ schema, doc, plugins: base.plugins, selection }),
+    });
+    return view;
+  }
+
+  it("still appears, above the table the rectangle is in", () => {
+    mountSelecting(THREE_BY_TWO, "a", "e");
+    expect(toolbar()).not.toBeNull();
+  });
+
+  it("deletes every row the rectangle touches", () => {
+    mountSelecting("| a | b |\n| --- | --- |\n| c | d |\n| e | f |\n", "a", "c");
+    button("Del row").click();
+
+    expect(markdown()).toBe("| e | f |\n| --- | --- |\n");
+  });
+
+  it("deletes every column the rectangle touches", () => {
+    mountSelecting(THREE_BY_TWO, "a", "e");
+    button("Del col").click();
+
+    expect(markdown()).toBe("| c |\n| --- |\n| f |\n");
+  });
+
+  it("aligns every column the rectangle covers", () => {
+    mountSelecting(THREE_BY_TWO, "a", "e");
+    button("Centre").click();
+
+    expect(markdown()).toBe("| a | b | c |\n| :---: | :---: | --- |\n| d | e | f |\n");
+  });
+
+  it("lights no alignment button when the spanned columns disagree", () => {
+    mountSelecting("| a | b |\n| :--- | ---: |\n| c | d |\n", "a", "b");
+
+    expect(button("Left").getAttribute("aria-pressed")).toBe("false");
+    expect(button("Right").getAttribute("aria-pressed")).toBe("false");
     expect(button("Auto").getAttribute("aria-pressed")).toBe("false");
   });
 });

@@ -41,6 +41,12 @@ describe("the stylesheets: dialog overlays stack above the grid", () => {
     expect(rule(".overlay")).toMatch(/z-index:\s*\d+;/);
   });
 
+  it("gives the slash menu one too, though it mounts from a plugin rather than an overlay", () => {
+    // B51's panel is appended to `document.body` by a ProseMirror plugin, so it never sits
+    // inside an `.overlay` and inherits none of its stacking. Same trap, new door.
+    expect(rule(".slash-menu")).toMatch(/z-index:\s*\d+;/);
+  });
+
   it("puts that z-index above the grid's own stacking level", () => {
     const overlayZ = Number(/z-index:\s*(\d+);/.exec(rule(".overlay"))![1]);
 

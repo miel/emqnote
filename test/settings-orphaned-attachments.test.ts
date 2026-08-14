@@ -64,6 +64,7 @@ describe("Settings > Orphaned attachments section (bug 7)", () => {
         createElement(Settings, {
           locale: "en-US",
           hotkey: "CommandOrControl+Shift+Space",
+          loadRemoteImages: true,
           vaultPath: null,
           t: englishText,
           onChanged: () => {},
@@ -98,6 +99,7 @@ describe("Settings > Orphaned attachments section (bug 7)", () => {
         createElement(Settings, {
           locale: "en-US",
           hotkey: "CommandOrControl+Shift+Space",
+          loadRemoteImages: true,
           vaultPath: null,
           t: englishText,
           onChanged: () => {},

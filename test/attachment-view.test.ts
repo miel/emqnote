@@ -846,9 +846,43 @@ describe("a PDF embedded with ![[…]]", () => {
  * the report that prompted this. The chip drawn for it used to be the one thing in a note
  * that could be seen and not reached.
  */
+/**
+ * Records what a probe `Image` was pointed at, without letting jsdom try to load it.
+ *
+ * The setter is patched on the prototype rather than the constructor swapped: the module
+ * under test calls the bare `Image` global, and which object that resolves to under vitest
+ * is not something a test should have to know.
+ */
+function spyOnImageSrc(): { seen: string[]; restore: () => void } {
+  const seen: string[] = [];
+  const prototype = globalThis.Image.prototype as unknown as object;
+  const original = Object.getOwnPropertyDescriptor(prototype, "src");
+
+  Object.defineProperty(prototype, "src", {
+    configurable: true,
+    set(value: string) {
+      seen.push(value);
+    },
+    get() {
+      return seen[seen.length - 1] ?? "";
+    },
+  });
+
+  return {
+    seen,
+    restore: () => {
+      if (original === undefined) delete (prototype as Record<string, unknown>).src;
+      else Object.defineProperty(prototype, "src", original);
+    },
+  };
+}
+
 describe("externalImageView", () => {
   function chip(src: string, alt: string | null = null): HTMLElement {
-    return externalImageView({ attrs: { src, alt, title: null } } as never).dom as HTMLElement;
+    // `false` — B50's own setting off, which is also the only state jsdom can model: it
+    // has no `emqnote-remote://` to load from, so an `Image` probe would sit unresolved.
+    return externalImageView({ attrs: { src, alt, title: null } } as never, false)
+      .dom as HTMLElement;
   }
 
   function opened(): ReturnType<typeof vi.fn> {
@@ -873,6 +907,40 @@ describe("externalImageView", () => {
     span.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("asks for nothing at all when the setting is off (B50)", () => {
+    // Main refuses the request either way. This is the second half of that, and it is
+    // there because Chromium answers a URL it has already drawn out of its own image
+    // cache without consulting the protocol handler — so a note reopened after the switch
+    // went off kept showing its pictures until this stopped the asking.
+    const created = spyOnImageSrc();
+
+    try {
+      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null } } as never, false);
+      expect(created.seen).toEqual([]);
+
+      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null } } as never, true);
+      expect(created.seen).toEqual(["emqnote-remote://vault/https%3A%2F%2Fexample.com%2Fa.png"]);
+    } finally {
+      created.restore();
+    }
+  });
+
+  it("asks for a data: address too, which is the only way one draws in the capture window", () => {
+    const created = spyOnImageSrc();
+
+    try {
+      externalImageView({ attrs: { src: "data:image/png;base64,AAA", alt: null, title: null } } as never, true);
+      // `index.html`'s CSP allows no `data:` in `img-src` — only `library.html` does — so
+      // an inline picture in a note would draw in one window and not the other if this
+      // took a short cut. Through main it is decoded, sniffed and cached like any other.
+      expect(created.seen).toEqual([
+        "emqnote-remote://vault/data%3Aimage%2Fpng%3Bbase64%2CAAA",
+      ]);
+    } finally {
+      created.restore();
+    }
   });
 
   it("labels itself with the alt text, falling back to the host", () => {

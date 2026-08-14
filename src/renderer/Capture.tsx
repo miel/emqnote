@@ -321,6 +321,7 @@ export function Capture(): React.ReactElement {
         onFileRequested={() => void pickAndInsertFile()}
         onNoteLinkRequested={openNotePicker}
         onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
+        loadRemoteImages={app.loadRemoteImages}
         onContextMenu={(payload) => setEditorMenu(payload)}
         t={app.t}
       />

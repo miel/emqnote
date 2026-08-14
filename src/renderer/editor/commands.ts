@@ -1,5 +1,6 @@
 import type { Node as PMNode, NodeType, ResolvedPos } from "prosemirror-model";
 import {
+  NodeSelection,
   Selection,
   TextSelection,
   type Command,
@@ -218,6 +219,17 @@ export const outdent: Command = (state, dispatch) => {
   if (isInList(state)) return liftListItem(listItem!)(state, dispatch);
   return lift(state, dispatch);
 };
+
+/**
+ * A quote, asked for by name rather than as a side effect of indenting.
+ *
+ * `indent` above has always been able to make one, but only where there was no list to
+ * sink into — which is fine as a fallback and useless as a menu item, since the same item
+ * would mean two different things depending on where the caret was. B51's `/` menu is the
+ * first thing in the app that offers "quote" as itself, so this is the command it names.
+ */
+export const wrapInBlockquote: Command = (state, dispatch) =>
+  wrapIn(blockquote!)(state, dispatch);
 
 /**
  * Moves an empty paragraph that sits directly after a list into that list's last item.
@@ -553,11 +565,31 @@ export const softBreak: Command = (state, dispatch) => {
  * Nothing is needed below it: `horizontalRule` is in `trailing-paragraph.ts`'s
  * `NEEDS_A_LINE_BELOW`, so a rule at the end of a note gets its line to type on from the
  * same invariant a table does.
+ *
+ * **The caret is moved onto that line, and it has to be.** `replaceSelectionWith` leaves a
+ * `NodeSelection` on the rule itself — a rule is a selectable leaf — so the very next
+ * character typed *replaces the rule that was just inserted*. Found by running it (B51's
+ * `/divider`, which is now much the easiest way to reach this command, and typing on): the
+ * divider appeared, the next word swallowed it, and nothing about the code read as wrong.
+ * The line below is created here rather than waited for, because `trailingParagraph`'s
+ * `appendTransaction` runs after this transaction is applied and there has to be somewhere
+ * to put the caret now.
  */
 export const insertHorizontalRule: Command = (state, dispatch) => {
-  if (dispatch) {
-    dispatch(state.tr.replaceSelectionWith(horizontalRule!.create()).scrollIntoView());
+  if (dispatch === undefined) return true;
+
+  const tr = state.tr.replaceSelectionWith(horizontalRule!.create());
+
+  // Only when the rule really is what ended up selected. Anywhere else the caret is
+  // already somewhere sensible and moving it would be this command overreaching.
+  if (tr.selection instanceof NodeSelection && tr.selection.node.type === horizontalRule) {
+    const after = tr.selection.to;
+    const next = tr.doc.resolve(after).nodeAfter;
+    if (next === null || !next.isTextblock) tr.insert(after, paragraph!.create());
+    tr.setSelection(TextSelection.create(tr.doc, after + 1));
   }
+
+  dispatch(tr.scrollIntoView());
   return true;
 };
 

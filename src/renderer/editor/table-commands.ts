@@ -1,9 +1,25 @@
-import { Fragment, type Node as PMNode } from "prosemirror-model";
-import { TextSelection, type Command, type EditorState } from "prosemirror-state";
+import { type Node as PMNode } from "prosemirror-model";
+import { TextSelection, type Command } from "prosemirror-state";
 import { schema, type ColumnAlign } from "../../markdown/schema.js";
+import {
+  alignOf,
+  cellPosAt,
+  cellStart,
+  cellsInRect,
+  columnCount,
+  emptyCell,
+  findTable,
+  matrixOf,
+  rectOfContext,
+  tableFrom,
+  tableType,
+  type TableContext,
+  type TableRect,
+} from "./table-geometry.js";
+import { CellSelection, isCellSelection, selectedRect } from "./table-selection.js";
 
 /**
- * Everything the editor can do to a table (B42).
+ * Everything the editor can do to a table (B42, extended to a rectangle by B49).
  *
  * Hand-rolled rather than `prosemirror-tables`, and the reason is the schema: here it is
  * *also* the file format. `prosemirror-tables` requires its own shape — a `tableRole` on
@@ -18,102 +34,27 @@ import { schema, type ColumnAlign } from "../../markdown/schema.js";
  * position-splicing version has to track how much each earlier edit shifted the ones after
  * it — arithmetic that is correct right up until a ragged row makes it not. Rebuilding
  * costs one `replaceWith` on a node that is, by nature, small.
+ *
+ * Every operation also reads **`selectedRect`**, never a single row and column. A caret
+ * makes a one-cell rectangle and a `CellSelection` makes a bigger one, so "delete row"
+ * means *the rows this touches* in both cases through one code path — which is what let
+ * B49 reach all of these without rewriting any of them.
  */
 
 export type { ColumnAlign };
-
-const tableType = schema.nodes.table!;
-const tableRowType = schema.nodes.tableRow!;
-const tableCellType = schema.nodes.tableCell!;
-
-export interface TableContext {
-  node: PMNode;
-  /** The position immediately before the table node. */
-  pos: number;
-  row: number;
-  cell: number;
-}
-
-/** The table the caret is in, with which cell of it, or null when the caret is elsewhere. */
-export function findTable(state: EditorState): TableContext | null {
-  const { $from } = state.selection;
-
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if ($from.node(depth).type !== tableType) continue;
-    return {
-      node: $from.node(depth),
-      pos: $from.before(depth),
-      row: depth < $from.depth ? $from.index(depth) : 0,
-      cell: depth + 1 < $from.depth ? $from.index(depth + 1) : 0,
-    };
-  }
-
-  return null;
-}
+export type { TableContext, TableRect };
+// Re-exported because `table-align.ts`, `editor-menu.ts` and the tests have always asked
+// this module for them; only where they are *written* moved (see `table-geometry.ts`).
+export { columnCount, findTable };
 
 /**
- * The widest row.
- *
- * Rows genuinely can differ: `from-mdast.ts` builds a row per source line without padding
- * to a common width, so a hand-written file with a short row parses to a short row. Every
- * column operation squares the table up first rather than assuming it already is one.
- */
-export function columnCount(node: PMNode): number {
-  let widest = 0;
-  for (let row = 0; row < node.childCount; row += 1) {
-    widest = Math.max(widest, node.child(row).childCount);
-  }
-  return widest;
-}
-
-function emptyCell(): PMNode {
-  return tableCellType.create();
-}
-
-function matrixOf(node: PMNode): PMNode[][] {
-  const width = columnCount(node);
-
-  return Array.from({ length: node.childCount }, (_unused, r) => {
-    const row = node.child(r);
-    const cells = Array.from({ length: row.childCount }, (_ignored, c) => row.child(c));
-    // Squared up here, once, so every caller below can index without checking.
-    while (cells.length < width) cells.push(emptyCell());
-    return cells;
-  });
-}
-
-function tableFrom(matrix: PMNode[][], align: ColumnAlign[]): PMNode {
-  const rows = matrix.map((cells) => tableRowType.create(null, Fragment.from(cells)));
-  return tableType.create({ align }, Fragment.from(rows));
-}
-
-function alignOf(node: PMNode): ColumnAlign[] {
-  const width = columnCount(node);
-  const align = [...((node.attrs.align as ColumnAlign[] | undefined) ?? [])];
-  while (align.length < width) align.push(null);
-  return align.slice(0, width);
-}
-
-/** Where the inline content of cell [row, cell] starts, given the table's own position. */
-function cellStart(node: PMNode, tablePos: number, row: number, cell: number): number {
-  let pos = tablePos + 1;
-  for (let r = 0; r < row; r += 1) pos += node.child(r).nodeSize;
-
-  const rowNode = node.child(row);
-  pos += 1;
-  for (let c = 0; c < cell; c += 1) pos += rowNode.child(c).nodeSize;
-
-  return pos + 1;
-}
-
-/**
- * Replaces `context`'s table with a rebuilt one and selects the whole of cell
- * [row, cell] — selecting rather than collapsing because every caller here has just moved
- * the caret somewhere the user did not click, and a selected cell is one that can be
- * overtyped, which is what Word does on Tab.
+ * Replaces `rect`'s table with a rebuilt one and selects the whole of cell [row, cell] —
+ * selecting rather than collapsing because every caller here has just moved the caret
+ * somewhere the user did not click, and a selected cell is one that can be overtyped,
+ * which is what Word does on Tab.
  */
 function replaceTable(
-  context: TableContext,
+  rect: TableRect,
   matrix: PMNode[][],
   align: ColumnAlign[],
   caret: { row: number; cell: number },
@@ -123,11 +64,11 @@ function replaceTable(
     if (dispatch === undefined) return true;
 
     const rebuilt = tableFrom(matrix, align);
-    const tr = state.tr.replaceWith(context.pos, context.pos + context.node.nodeSize, rebuilt);
+    const tr = state.tr.replaceWith(rect.pos, rect.pos + rect.node.nodeSize, rebuilt);
 
     const row = Math.min(caret.row, rebuilt.childCount - 1);
     const cell = Math.min(caret.cell, rebuilt.child(row).childCount - 1);
-    const start = cellStart(rebuilt, context.pos, row, cell);
+    const start = cellStart(rebuilt, rect.pos, row, cell);
     const size = rebuilt.child(row).child(cell).content.size;
 
     dispatch(tr.setSelection(TextSelection.create(tr.doc, start, start + size)).scrollIntoView());
@@ -181,16 +122,22 @@ export function insertTable(rows: number, columns: number): Command {
   };
 }
 
+/**
+ * A row above or below the selection. As many rows as the selection is tall, so that
+ * "Row ↓" on three selected rows adds three — the Word behaviour, and the only reading of
+ * the button that does not make a rectangle mean less than a caret.
+ */
 export function addRow(where: "before" | "after"): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
+    const rect = selectedRect(state);
+    if (rect === null) return false;
 
-    const matrix = matrixOf(context.node);
-    const at = where === "before" ? context.row : context.row + 1;
-    matrix.splice(at, 0, matrix[0]!.map(() => emptyCell()));
+    const matrix = matrixOf(rect.node);
+    const at = where === "before" ? rect.top : rect.bottom + 1;
+    const added = rect.bottom - rect.top + 1;
+    matrix.splice(at, 0, ...Array.from({ length: added }, () => matrix[0]!.map(() => emptyCell())));
 
-    return replaceTable(context, matrix, alignOf(context.node), { row: at, cell: context.cell })(
+    return replaceTable(rect, matrix, alignOf(rect.node), { row: at, cell: rect.left })(
       state,
       dispatch,
     );
@@ -199,93 +146,200 @@ export function addRow(where: "before" | "after"): Command {
 
 export function addColumn(where: "before" | "after"): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
+    const rect = selectedRect(state);
+    if (rect === null) return false;
 
-    const at = where === "before" ? context.cell : context.cell + 1;
-    const matrix = matrixOf(context.node).map((cells) => {
+    const at = where === "before" ? rect.left : rect.right + 1;
+    const added = rect.right - rect.left + 1;
+    const matrix = matrixOf(rect.node).map((cells) => {
       const next = [...cells];
-      next.splice(at, 0, emptyCell());
+      next.splice(at, 0, ...Array.from({ length: added }, () => emptyCell()));
       return next;
     });
 
     // The alignment array is per column, so it has to move in step or every column past
     // the edit inherits its neighbour's alignment.
-    const align = alignOf(context.node);
-    align.splice(at, 0, null);
+    const align = alignOf(rect.node);
+    align.splice(at, 0, ...Array.from({ length: added }, (): ColumnAlign => null));
 
-    return replaceTable(context, matrix, align, { row: context.row, cell: at })(state, dispatch);
+    return replaceTable(rect, matrix, align, { row: rect.top, cell: at })(state, dispatch);
   };
 }
 
 /**
- * Removes the row the caret is in — or the whole table, when it was the only row. A table
- * with no rows is not a thing the schema allows (`tableRow+`), and an empty husk would be
- * worse than the deletion the user clearly meant.
+ * Removes every row the selection touches — or the whole table, when that is all of them.
+ * A table with no rows is not a thing the schema allows (`tableRow+`), and an empty husk
+ * would be worse than the deletion the user clearly meant.
  */
 export function deleteRow(): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
-    if (context.node.childCount <= 1) return deleteTable()(state, dispatch);
+    const rect = selectedRect(state);
+    if (rect === null) return false;
 
-    const matrix = matrixOf(context.node);
-    matrix.splice(context.row, 1);
+    const removed = rect.bottom - rect.top + 1;
+    if (removed >= rect.node.childCount) return deleteTable()(state, dispatch);
 
-    return replaceTable(context, matrix, alignOf(context.node), {
-      row: Math.max(0, context.row - 1),
-      cell: context.cell,
+    const matrix = matrixOf(rect.node);
+    matrix.splice(rect.top, removed);
+
+    return replaceTable(rect, matrix, alignOf(rect.node), {
+      row: Math.max(0, rect.top - 1),
+      cell: rect.left,
     })(state, dispatch);
   };
 }
 
-/** The column counterpart, with the same "last one takes the table with it" rule. */
+/** The column counterpart, with the same "the last one takes the table with it" rule. */
 export function deleteColumn(): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
-    if (columnCount(context.node) <= 1) return deleteTable()(state, dispatch);
+    const rect = selectedRect(state);
+    if (rect === null) return false;
 
-    const matrix = matrixOf(context.node).map((cells) => {
+    const removed = rect.right - rect.left + 1;
+    if (removed >= columnCount(rect.node)) return deleteTable()(state, dispatch);
+
+    const matrix = matrixOf(rect.node).map((cells) => {
       const next = [...cells];
-      next.splice(context.cell, 1);
+      next.splice(rect.left, removed);
       return next;
     });
 
-    const align = alignOf(context.node);
-    align.splice(context.cell, 1);
+    const align = alignOf(rect.node);
+    align.splice(rect.left, removed);
 
-    return replaceTable(context, matrix, align, {
-      row: context.row,
-      cell: Math.max(0, context.cell - 1),
+    return replaceTable(rect, matrix, align, {
+      row: rect.top,
+      cell: Math.max(0, rect.left - 1),
     })(state, dispatch);
   };
 }
 
 export function deleteTable(): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
+    const rect = selectedRect(state);
+    if (rect === null) return false;
     if (dispatch === undefined) return true;
 
-    dispatch(
-      state.tr.delete(context.pos, context.pos + context.node.nodeSize).scrollIntoView(),
-    );
+    dispatch(state.tr.delete(rect.pos, rect.pos + rect.node.nodeSize).scrollIntoView());
     return true;
   };
 }
 
-/** Sets the alignment of the column the caret is in — the `:---`/`:---:`/`---:` the file already carries. */
+/** Sets the alignment of every column the selection covers — the `:---`/`:---:`/`---:` the file already carries. */
 export function setColumnAlign(align: ColumnAlign): Command {
   return (state, dispatch) => {
-    const context = findTable(state);
-    if (context === null) return false;
+    const rect = selectedRect(state);
+    if (rect === null) return false;
     if (dispatch === undefined) return true;
 
-    const next = alignOf(context.node);
-    next[context.cell] = align;
+    const next = alignOf(rect.node);
+    for (let column = rect.left; column <= rect.right; column += 1) next[column] = align;
 
-    dispatch(state.tr.setNodeMarkup(context.pos, undefined, { align: next }));
+    // `setNodeMarkup` and not a rebuild: nothing about the cells changed, and rebuilding
+    // would throw away a cell selection standing over them for a change to one attribute.
+    dispatch(state.tr.setNodeMarkup(rect.pos, undefined, { align: next }));
+    return true;
+  };
+}
+
+/**
+ * Empties every selected cell, leaving the table's shape alone.
+ *
+ * What Backspace over a rectangle has to mean. A `TextSelection` spanning cells cannot do
+ * it: `tableCell` is `isolating`, so a single replace step across the boundary is refused
+ * and the keystroke does nothing at all — which is the bug B49 exists to fix. One replace
+ * per cell, inside that cell's own bounds, never crosses a boundary.
+ *
+ * Walked back to front so each position is still valid when its turn comes; the caret is
+ * then put in the first cell of the rectangle, which is where typing should continue.
+ *
+ * It succeeds whenever a rectangle is selected, even one that is already empty — the
+ * collapse to a caret is the useful half there, and it is what lets `handleTextInput`
+ * treat "cleared" as "there is now a caret to type at" without a second case.
+ */
+export function clearCells(): Command {
+  return (state, dispatch) => {
+    if (!isCellSelection(state.selection)) return false;
+
+    const rect = state.selection.rect();
+    const cells = cellsInRect(rect).filter((cell) => cell.node.content.size > 0);
+    if (dispatch === undefined) return true;
+
+    const tr = state.tr;
+    for (const cell of [...cells].reverse()) {
+      tr.delete(cell.pos + 1, cell.pos + cell.node.nodeSize - 1);
+    }
+
+    const table = tr.doc.nodeAt(rect.pos);
+    const anchor = table === null ? null : cellPosAt(table, rect.pos, rect.top, rect.left);
+    if (anchor !== null) tr.setSelection(TextSelection.create(tr.doc, anchor + 1));
+
+    dispatch(tr.scrollIntoView());
+    return true;
+  };
+}
+
+/**
+ * Shift+arrow across a cell boundary selects cells (B49).
+ *
+ * With a rectangle already up it moves the head cell, so the selection grows and shrinks
+ * the way every other Shift+arrow does. Without one it starts a rectangle — but only when
+ * the caret is at the edge of its cell in that direction, so Shift+Left inside a word still
+ * selects text. Up and down have no such edge to test for: a cell holds inline content, so
+ * there is no line above to extend to, and extending to the cell above is the only reading
+ * left.
+ *
+ * Declines at the edge of the table and outside one, so nothing else about arrow keys or
+ * text selection changes.
+ */
+export function extendCellSelection(direction: "left" | "right" | "up" | "down"): Command {
+  return (state, dispatch) => {
+    const selection = state.selection;
+    const doc = state.doc;
+
+    let $anchorCell;
+    let headRow: number;
+    let headColumn: number;
+    let table: PMNode;
+    let tablePos: number;
+
+    if (isCellSelection(selection)) {
+      $anchorCell = selection.$anchorCell;
+      headRow = selection.$headCell.index(-1);
+      headColumn = selection.$headCell.index();
+      table = selection.$headCell.node(-1);
+      tablePos = selection.$headCell.before(-1);
+    } else {
+      const context = findTable(state);
+      if (context === null) return false;
+      if (!selection.empty) return false;
+
+      const { $from } = selection;
+      const atStart = $from.parentOffset === 0;
+      const atEnd = $from.parentOffset === $from.parent.content.size;
+      if (direction === "left" && !atStart) return false;
+      if (direction === "right" && !atEnd) return false;
+
+      const pos = cellPosAt(context.node, context.pos, context.row, context.cell);
+      if (pos === null) return false;
+
+      $anchorCell = doc.resolve(pos);
+      headRow = context.row;
+      headColumn = context.cell;
+      table = context.node;
+      tablePos = context.pos;
+    }
+
+    const wantedRow = headRow + (direction === "up" ? -1 : direction === "down" ? 1 : 0);
+    const wantedColumn = headColumn + (direction === "left" ? -1 : direction === "right" ? 1 : 0);
+
+    const headPos = cellPosAt(table, tablePos, wantedRow, wantedColumn);
+    if (headPos === null) return false;
+    if (dispatch === undefined) return true;
+
+    dispatch(
+      state.tr.setSelection(new CellSelection($anchorCell, doc.resolve(headPos))).scrollIntoView(),
+    );
     return true;
   };
 }
@@ -316,7 +370,7 @@ export function goToCell(direction: "next" | "previous"): Command {
     if (target >= context.node.childCount * width) {
       const matrix = matrixOf(context.node);
       matrix.push(matrix[0]!.map(() => emptyCell()));
-      return replaceTable(context, matrix, alignOf(context.node), {
+      return replaceTable(rectOfContext(context), matrix, alignOf(context.node), {
         row: matrix.length - 1,
         cell: 0,
       })(state, dispatch);
@@ -334,9 +388,7 @@ export function goToCell(direction: "next" | "previous"): Command {
     const start = cellStart(context.node, context.pos, row, cell);
     const size = rowNode.child(cell).content.size;
     dispatch(
-      state.tr
-        .setSelection(TextSelection.create(state.doc, start, start + size))
-        .scrollIntoView(),
+      state.tr.setSelection(TextSelection.create(state.doc, start, start + size)).scrollIntoView(),
     );
     return true;
   };

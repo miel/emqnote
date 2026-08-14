@@ -10,7 +10,7 @@ import {
   tabOutdent,
   type CommandContext,
 } from "./commands.js";
-import { cellBreak, goToCell } from "./table-commands.js";
+import { cellBreak, clearCells, extendCellSelection, goToCell } from "./table-commands.js";
 
 /**
  * The shortcuts of Outlook and Word, deliberately to the letter.
@@ -58,7 +58,13 @@ export function outlookKeymap(context: CommandContext): Record<string, Command> 
   // from any depth, promoting an item instead of merging two of them, and breaking a
   // line inside a table cell, which cannot be split because it holds no paragraph.
   keys.Enter = chainCommands(cellBreak, enter, baseKeymap.Enter!);
-  keys.Backspace = chainCommands(backspace, baseKeymap.Backspace!);
+  // `clearCells` first, and it declines unless a rectangle of cells is selected (B49). A
+  // `TextSelection` spanning cells cannot be deleted at all — `tableCell` is `isolating`,
+  // so the one replace step it would take is refused and the key does nothing, which is
+  // exactly the report this answers. Delete gets it too: the two keys mean the same thing
+  // when what is selected is a rectangle rather than a caret.
+  keys.Backspace = chainCommands(clearCells(), backspace, baseKeymap.Backspace!);
+  keys.Delete = chainCommands(clearCells(), baseKeymap.Delete!);
 
   // Also not in the registry, and for the same reason: plain arrow-key navigation is not
   // a "shortcut" the help sheet should list. Beside a `wikiEmbed`/`wikiLink` atom,
@@ -68,6 +74,16 @@ export function outlookKeymap(context: CommandContext): Record<string, Command> 
   // movement and Shift-extended selection are unaffected.
   keys.ArrowLeft = moveOverAtom("left");
   keys.ArrowRight = moveOverAtom("right");
+
+  // Shift+arrow inside a table selects cells once it would leave the one the caret is in
+  // (B49). Each declines outside a table and, for left/right, whenever there is still text
+  // in the cell to extend over — so ordinary Shift-extended selection is untouched. They
+  // are not in the registry for the same reason the arrow keys above are not: extending a
+  // selection is not a shortcut the help sheet should list.
+  keys["Shift-ArrowLeft"] = extendCellSelection("left");
+  keys["Shift-ArrowRight"] = extendCellSelection("right");
+  keys["Shift-ArrowUp"] = extendCellSelection("up");
+  keys["Shift-ArrowDown"] = extendCellSelection("down");
 
   return keys;
 }

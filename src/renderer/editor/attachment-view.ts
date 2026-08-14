@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { attachmentUrl } from "../../shared/attachment-url.js";
+import { isFetchableImageSrc } from "./paste-images.js";
 import { translate } from "../../shared/i18n.js";
 import { checkAttachment } from "./missing-attachments.js";
 
@@ -509,18 +510,21 @@ export function attachmentNodeView(
 }
 
 /**
- * `image`'s real face: a label, never an `<img>`.
+ * `image`'s two faces: a label, and — since B50 — the picture itself once main has it.
  *
- * An `image` node in this app only ever holds a *remote* address — an attachment is a
- * `wikiEmbed` instead (`insert-attachment.ts`) — and the CSP allows no remote image
- * source in either window, so the browser drew a broken-image glyph for every one of
- * them. That looks like a bug both where it is the honest fallback for a paste whose
- * download was refused (`paste-images.ts`) and in a note written in Obsidian that
- * already carried `![alt](https://…)` before this app ever opened it.
+ * An `image` node in this app only ever holds a *remote* address; an attachment is a
+ * `wikiEmbed` instead (`insert-attachment.ts`). The CSP allows no remote image source in
+ * either window and still does not: what changed is that main will fetch the address
+ * itself, through the same allowlist a pasted image goes through, cache the bytes outside
+ * the vault and serve them over `emqnote-remote://`. So the renderer never reaches the
+ * network, the note still reads offline once it has been read once, and the objection the
+ * old comment here recorded — "a note that quietly fetches from it every time it is opened
+ * is a tracking pixel with extra steps" — is answered by *where* the fetch happens and by
+ * the Settings switch that turns it off, not by refusing to draw the picture.
  *
- * Deliberately no `<img>` at all rather than an `img-src` widened to `https:`: the
- * address came off a pasted page, and a note that quietly fetches from it every time it
- * is opened is a tracking pixel with extra steps.
+ * `img-src` was deliberately not widened to `https:`, which would have been the one-line
+ * version of this and would have put the fetching back in the renderer, on every open, with
+ * no cache and no way to say no.
  */
 function externalImageLabel(node: PMNode): string {
   const alt = (node.attrs.alt as string | null) ?? "";
@@ -552,7 +556,7 @@ function externalImageLabel(node: PMNode): string {
  * everything but http(s) — so a `data:` src, which this node can also hold, declines
  * silently rather than being filtered twice.
  */
-export function externalImageView(node: PMNode): NodeView {
+export function externalImageView(node: PMNode, loadRemoteImages = true): NodeView {
   const span = document.createElement("span");
   span.className = "external-image";
   span.textContent = externalImageLabel(node);
@@ -562,11 +566,63 @@ export function externalImageView(node: PMNode): NodeView {
 
   // Held down, not clicked — the same reason `wikiLinkNodeView` does it: `mousedown` is
   // what ProseMirror uses to decide it should select the atom under the pointer.
-  span.addEventListener("mousedown", (event) => event.preventDefault());
-  span.addEventListener("click", (event) => {
+  const hold = (event: Event): void => event.preventDefault();
+  const open = (event: Event): void => {
     event.preventDefault();
     if (src !== "") void window.emqnote.openExternal(src);
-  });
+  };
+  span.addEventListener("mousedown", hold);
+  span.addEventListener("click", open);
+
+  // The chip is what is drawn *first*, and what stays if anything goes wrong (B50). The
+  // picture takes its place only once a real load has succeeded, so a refusal in main, the
+  // setting being off, or being offline on a cold cache all end in the state this NodeView
+  // has always had — no flash of a broken image, and nothing to undo.
+  //
+  // A `data:` address goes the same way rather than straight into an `<img>`: the capture
+  // window's CSP allows no `data:` in `img-src` (only the library's does), so the short cut
+  // would draw in one window and not the other — and through main the bytes are sniffed and
+  // capped like everything else.
+  //
+  // A probe `Image` rather than a `fetch`: nothing here needs a status code (B36's reason
+  // for fetching a thumbnail), and staying on `<img>` is what lets `emqnote-remote` do
+  // without `corsEnabled` — the privilege whose absence has silently killed a feature twice.
+  //
+  // The same element is reused rather than wrapped in one. A NodeView cannot swap the
+  // element ProseMirror mounted, and `paste-images.ts`'s `image-pending` decoration lands
+  // on exactly that element — a wrapper would have quietly moved the marker off the chip
+  // it marks. So the span changes what it *is*: `.wiki-embed-image-box`, the class
+  // `imageView` already uses for a picture that may have to become a chip again.
+  // `loadRemoteImages` is the window's own copy of the setting, and the reason the
+  // renderer holds one at all is a measurement: main refuses the request correctly when the
+  // switch is off, but Chromium answers a *repeat* of a URL it has already drawn out of its
+  // own image cache without going near the protocol handler, `no-store` and all. So a note
+  // reopened after switching it off went on showing its pictures. Main stays the authority —
+  // nothing here can talk it into serving one — and this is what stops the question being
+  // asked a second time in a session where the answer is now no.
+  if (loadRemoteImages && isFetchableImageSrc(src)) {
+    const url = attachmentUrl("emqnote-remote", src);
+    const probe = new Image();
+    probe.addEventListener("load", () => {
+      const picture = document.createElement("img");
+      picture.className = "wiki-embed-image";
+      picture.src = url;
+      picture.alt = externalImageLabel(node);
+      picture.title = src;
+      picture.draggable = true;
+
+      span.textContent = "";
+      span.classList.remove("external-image");
+      span.classList.add("wiki-embed-image-box");
+      span.removeAttribute("title");
+      // A picture is not a chip: clicking one should select the node so it can be deleted,
+      // exactly as every other inline picture in a note does, rather than raise a browser.
+      span.removeEventListener("mousedown", hold);
+      span.removeEventListener("click", open);
+      span.append(picture);
+    });
+    probe.src = url;
+  }
 
   return { dom: span };
 }

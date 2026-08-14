@@ -30,6 +30,7 @@ const FALLBACK: Bootstrap = {
   vaultPath: null,
   libraryPaneWidths: null,
   librarySort: "modified",
+  loadRemoteImages: true,
 };
 
 /**

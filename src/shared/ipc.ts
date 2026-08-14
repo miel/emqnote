@@ -141,6 +141,12 @@ export const IPC = {
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
   setHotkey: "app:set-hotkey",
+  /**
+   * renderer → main: whether a picture named by a web address is fetched and drawn (B50).
+   * The renderer only reports the switch; whether an image is served is decided in main,
+   * in the `emqnote-remote` handler, which reads the same setting.
+   */
+  setLoadRemoteImages: "app:set-load-remote-images",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
   /** renderer → main, fire-and-forget: the note list's sort order changed. */
@@ -232,6 +238,8 @@ export interface Bootstrap {
   libraryPaneWidths: { tree: number; notes: number } | null;
   /** The note list's last sort order — see `setPaneWidths`'s comment for the precedent this follows. */
   librarySort: SortKey;
+  /** Whether a `![…](https://…)` picture is fetched and drawn (B50) — for the Settings row. */
+  loadRemoteImages: boolean;
 }
 
 /**
@@ -432,6 +440,7 @@ export interface CaptureApi {
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  setLoadRemoteImages: (load: boolean) => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */

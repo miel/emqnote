@@ -1599,6 +1599,7 @@ export function Library(): React.ReactElement {
                   onFileRequested={() => void pickAndInsertFile()}
                   onNoteLinkRequested={openNotePicker}
                   onTableRequested={() => setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })}
+                  loadRemoteImages={app.loadRemoteImages}
                   onContextMenu={(payload) => setEditorMenu(payload)}
                   t={app.t}
                 />
@@ -1858,6 +1859,7 @@ export function Library(): React.ReactElement {
         <Settings
           locale={app.locale}
           hotkey={app.hotkey}
+          loadRemoteImages={app.loadRemoteImages}
           vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}

@@ -62,9 +62,11 @@ function mount(): EditorView {
       requestNoteLink: () => undefined,
       requestTable: () => undefined,
     }),
-    // As `Editor.tsx` registers it — the label a remote image is drawn as, and what the
-    // `image-pending` decoration has to reach.
-    nodeViews: { image: externalImageView },
+    // As `Editor.tsx` registers it — the chip a remote image is drawn as, and what the
+    // `image-pending` decoration has to reach. `false` for B50's own setting: this file is
+    // about the paste pipeline, and a NodeView that started probing `emqnote-remote://`
+    // would be asking a protocol that does not exist under jsdom.
+    nodeViews: { image: (node) => externalImageView(node, false) },
   });
 }
 

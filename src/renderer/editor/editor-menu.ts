@@ -4,6 +4,8 @@ import type { MenuItem } from "../library/ContextMenu.js";
 import {
   insertHorizontalRule,
   isMarkActive,
+  setHeading,
+  setParagraph,
   toggleBulletList,
   toggleEm,
   toggleHighlight,
@@ -11,6 +13,7 @@ import {
   toggleStrong,
   toggleTask,
   toggleUnderline,
+  wrapInBlockquote,
 } from "./commands.js";
 import {
   addColumn,
@@ -145,6 +148,65 @@ export function insertMenuItems(
       label: t("menu.insertRule"),
       onSelect: () => actions.run(insertHorizontalRule),
     },
+  ];
+}
+
+/**
+ * What typing `/` at the start of a line offers (B51).
+ *
+ * The blocks a line can be turned into, then the five things that can be put into one —
+ * `insertMenuItems` verbatim, so the toolbar's Insert button, the right-click menu and
+ * this cannot come to offer different things or spell them differently. That is the same
+ * reason `buildEditorMenu` calls it rather than listing the five itself.
+ *
+ * The mark toggles (bold, italic, …) are deliberately absent. Every item here is
+ * something a line *becomes* or something inserted at the caret; a mark toggle on the
+ * empty line this menu opens from would only arm the next thing typed, which is not what
+ * picking an item from a list looks like it does. They keep their chords and their place
+ * in the right-click menu, where there is a selection to apply them to.
+ *
+ * The heading and paragraph labels come from the `shortcut.*` names rather than new
+ * `menu.*` ones. Those strings are what the help sheet already calls these commands, and
+ * one name per command is worth more here than a tidy namespace — see `shortcuts.ts` on
+ * why a second definition is the thing to avoid.
+ */
+export function slashMenuItems(
+  isMac: boolean,
+  t: (key: string) => string,
+  actions: EditorMenuActions,
+): MenuItem[] {
+  const headings = [1, 2, 3, 4, 5, 6].map((level) => ({
+    label: t(`shortcut.heading${level}`),
+    shortcut: formatFirstKey(`heading${level}`, isMac),
+    onSelect: () => actions.run(setHeading(level)),
+  }));
+
+  return [
+    ...headings,
+    {
+      label: t("shortcut.paragraph"),
+      shortcut: formatFirstKey("paragraph", isMac),
+      onSelect: () => actions.run(setParagraph),
+    },
+    { label: "" },
+    {
+      label: t("menu.bulletList"),
+      shortcut: formatFirstKey("bulletList", isMac),
+      onSelect: () => actions.run(toggleBulletList),
+    },
+    {
+      label: t("menu.orderedList"),
+      shortcut: formatFirstKey("orderedList", isMac),
+      onSelect: () => actions.run(toggleOrderedList),
+    },
+    {
+      label: t("menu.insertTask"),
+      shortcut: formatFirstKey("task", isMac),
+      onSelect: () => actions.run(toggleTask),
+    },
+    { label: t("menu.quote"), onSelect: () => actions.run(wrapInBlockquote) },
+    { label: "" },
+    ...insertMenuItems(isMac, t, actions),
   ];
 }
 

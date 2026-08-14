@@ -865,6 +865,15 @@
   color: var(--warning);
 }
 
+/* The sentence under a switch that needs one — B50's, which is the first setting here
+   whose consequence is not obvious from its own label. Muted rather than warning-coloured:
+   it explains, it does not caution. */
+.settings-note {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ---- where the notes live ---- */
 
 /* The row above the list gets its own rule: the button here says what it does rather
