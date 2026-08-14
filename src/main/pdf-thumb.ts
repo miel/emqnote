@@ -41,9 +41,15 @@ interface ThumbWindow {
 let current: ThumbWindow | null = null;
 let nextRequestId = 1;
 
+/** One page, plus how many the document turned out to have. See `pdf-thumb-ipc.ts`. */
+export interface RenderedPage {
+  png: Buffer;
+  pages: number;
+}
+
 interface Pending {
   id: number;
-  resolve: (png: Buffer) => void;
+  resolve: (page: RenderedPage) => void;
   reject: (error: Error) => void;
 }
 
@@ -64,7 +70,7 @@ ipcMain.on(PDF_THUMB_RESULT, (event, result: PdfThumbResult) => {
   if (pending === null || pending.id !== result.id) return; // stale — already timed out
 
   settlePending((entry) => {
-    if (result.ok) entry.resolve(Buffer.from(result.png));
+    if (result.ok) entry.resolve({ png: Buffer.from(result.png), pages: result.pages });
     else entry.reject(new Error(result.error));
   });
 });
@@ -106,7 +112,11 @@ function ensureWindow(): ThumbWindow {
   return current;
 }
 
-async function renderOnce(request: { bytes: Uint8Array; variant: ThumbVariant }): Promise<Buffer> {
+async function renderOnce(request: {
+  bytes: Uint8Array;
+  variant: ThumbVariant;
+  page: number;
+}): Promise<RenderedPage> {
   const thumb = ensureWindow();
   await thumb.ready;
 
@@ -114,7 +124,7 @@ async function renderOnce(request: { bytes: Uint8Array; variant: ThumbVariant })
   nextRequestId += 1;
   const box = boxFor(request.variant);
 
-  return new Promise<Buffer>((resolve, reject) => {
+  return new Promise<RenderedPage>((resolve, reject) => {
     pending = { id, resolve, reject };
     thumb.window.webContents.send(PDF_THUMB_RENDER, {
       id,
@@ -123,6 +133,7 @@ async function renderOnce(request: { bytes: Uint8Array; variant: ThumbVariant })
       maxHeight: box.height,
       // Only the inline page (B43) fills its box — see `PdfThumbRenderRequest`.
       allowUpscale: request.variant === "page",
+      page: request.page,
     });
   });
 }
@@ -138,8 +149,8 @@ function destroyIdleWindow(): void {
 const queue = new PdfThumbQueue(renderOnce, destroyIdleWindow);
 
 /**
- * Reads `realPath` and renders its first page as a PNG sized to fit the box `variant`
- * names (`thumbnail-cache.ts`'s `THUMBNAIL_SIZE` for a chip, `PAGE_SIZE` for B43's inline
+ * Reads `realPath` and renders page `page` (1-based, the first by default) as a PNG sized
+ * to fit the box `variant` names (`thumbnail-cache.ts`'s `THUMBNAIL_SIZE` for a chip, `PAGE_SIZE` for B43's inline
  * embed), preserving aspect ratio. The queue is shared between the two on purpose: one
  * render window, one slot, so opening a note full of PDFs cannot fan out into a dozen
  * simultaneous renders whichever size they are. Rejects rather
@@ -150,9 +161,10 @@ const queue = new PdfThumbQueue(renderOnce, destroyIdleWindow);
 export async function renderPdfThumbnail(
   realPath: string,
   variant: ThumbVariant = "chip",
-): Promise<Buffer> {
+  page = 1,
+): Promise<RenderedPage> {
   const bytes = await readFile(realPath);
-  return queue.request({ bytes, variant });
+  return queue.request({ bytes, variant, page });
 }
 
 /** `will-quit` — nothing left to render once the app is on its way out. */

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   isPreviewable,
+  pageCountKey,
   pruneThumbnails,
   thumbnailKey,
 } from "../src/main/thumbnail-cache.js";
@@ -78,6 +79,32 @@ describe("thumbnailKey", () => {
     expect(page).not.toBe(chip);
     expect(thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "chip")).toBe(chip);
   });
+
+  /**
+   * Page 1 keeps the key it had before the inline embed could turn a page. Not a nicety:
+   * a changed key orphans every cached first page in `userData`, and every one of them is
+   * a pdf.js render that would have to happen again.
+   */
+  it("spells page 1 as the bare variant, and everything after it apart", () => {
+    const first = thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "page");
+
+    expect(thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "page", 1)).toBe(first);
+
+    const second = thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "page", 2);
+    const third = thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "page", 3);
+    expect(new Set([first, second, third]).size).toBe(3);
+  });
+
+  it("keeps the page count beside the page-1 render, under that render's own key", () => {
+    // Which is what makes an edited file's count stale by construction: `mtime` and
+    // `size` are in the key, so a changed PDF simply has a different sidecar.
+    expect(pageCountKey("/vault/_attachments/offerte.pdf", 1000, 500)).toBe(
+      thumbnailKey("/vault/_attachments/offerte.pdf", 1000, 500, "page"),
+    );
+    expect(pageCountKey("/vault/_attachments/offerte.pdf", 2000, 500)).not.toBe(
+      pageCountKey("/vault/_attachments/offerte.pdf", 1000, 500),
+    );
+  });
 });
 
 describe("pruneThumbnails", () => {
@@ -133,6 +160,30 @@ describe("pruneThumbnails", () => {
       pruneThumbnails(dir, 100, 250);
 
       expect(readdirSync(dir).sort()).toEqual(["2.png", "3.png"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The `.pages` sidecars follow their PNG rather than being counted against either cap:
+   * each is a handful of bytes, and one that outlived its page would be a number nothing
+   * can check — the PNG's key is the only thing tying it to a file and an mtime.
+   */
+  it("drops a page-count sidecar when the render it belongs to is evicted", () => {
+    const dir = mkdtempSync(join(tmpdir(), "emqnote-thumb-"));
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        const path = join(dir, `${i}.png`);
+        writeFileSync(path, "x");
+        writeFileSync(join(dir, `${i}.pages`), "12");
+        const when = new Date(2026, 0, 1 + i);
+        utimesSync(path, when, when);
+      }
+
+      pruneThumbnails(dir, 1);
+
+      expect(readdirSync(dir).sort()).toEqual(["2.pages", "2.png"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

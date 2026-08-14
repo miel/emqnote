@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trapTab } from "./focus-trap.js";
+import { useActiveRowVisible, useHoverGuard } from "./palette-scroll.js";
 import type { LinkCandidateSummary } from "../../shared/vault-types.js";
 
 interface Props {
@@ -38,6 +39,12 @@ export function LinkPicker({
   // would be a second implementation of `roving.ts` for four items in a modal.
   useEffect(() => list.current?.focus(), []);
 
+  // Short by construction, so this rarely has anything to do — but "rarely" is not
+  // "never" (a common word as a filename can answer to a dozen notes), and the arrow keys
+  // here work exactly as they do in the note picker. See `palette-scroll.ts`.
+  useActiveRowVisible(list, active, candidates);
+  const pointer = useHoverGuard();
+
   const choose = (index: number): void => {
     const picked = candidates[index];
     if (picked !== undefined) onOpen(picked.path);
@@ -58,10 +65,12 @@ export function LinkPicker({
             trapTab(event, panel.current);
             if (event.key === "ArrowDown") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.min(index + 1, candidates.length - 1));
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.max(index - 1, 0));
             }
             if (event.key === "Enter") {
@@ -78,7 +87,9 @@ export function LinkPicker({
             <li
               key={candidate.path}
               className={index === active ? "palette-on" : ""}
-              onMouseEnter={() => setActive(index)}
+              onMouseEnter={(event) => {
+                if (pointer.hover(event)) setActive(index);
+              }}
               onClick={() => choose(index)}
             >
               <span className="palette-primary">{candidate.title}</span>

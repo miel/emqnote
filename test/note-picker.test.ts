@@ -179,6 +179,37 @@ describe("NotePicker", () => {
     expect(container.querySelector(".palette-empty")!.textContent).toBe("link.noNoteMatch");
   });
 
+  /**
+   * The list has always had `max-height: 46vh; overflow-y: auto`, and nothing ever
+   * scrolled it — focus stays in the filter box, so a highlight arrowed past the bottom
+   * edge simply walked on out of sight. jsdom implements no scrolling at all, which is
+   * why this stubs the method rather than measuring a `scrollTop`: what is worth pinning
+   * is that the *row that just became active* is the one asked to come into view.
+   */
+  it("scrolls the row the arrow keys land on into view", async () => {
+    const scrollIntoView = vi.fn();
+    (Element.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView =
+      scrollIntoView;
+
+    await mount();
+    const input = container.querySelector("input")!;
+    scrollIntoView.mockClear();
+
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // `nearest`, so a row already on screen is left exactly where it is — the mouse sets
+    // `active` too, and a list that re-centred on hover would twitch under the pointer.
+    expect(scrollIntoView.mock.calls[0]![0]).toEqual({ block: "nearest" });
+    expect(scrollIntoView.mock.instances[0]).toBe(
+      container.querySelectorAll(".palette-list li")[1],
+    );
+
+    delete (Element.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
   it("debounces, so a typed word is one question and not five", async () => {
     await mount();
     linkCandidates.mockClear();

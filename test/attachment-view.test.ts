@@ -37,7 +37,11 @@ async function flushAsync(): Promise<void> {
 beforeEach(() => {
   (
     window as unknown as {
-      emqnote: { openWikiLink: ReturnType<typeof vi.fn>; checkAttachments: ReturnType<typeof vi.fn> };
+      emqnote: {
+        openWikiLink: ReturnType<typeof vi.fn>;
+        checkAttachments: ReturnType<typeof vi.fn>;
+        pdfPageCount: ReturnType<typeof vi.fn>;
+      };
     }
   ).emqnote = {
     openWikiLink: vi.fn().mockResolvedValue("attachment"),
@@ -45,6 +49,10 @@ beforeEach(() => {
     // draw time for any target that names a file, so every case here would otherwise
     // reach an absent bridge.
     checkAttachments: vi.fn().mockResolvedValue([]),
+    // Unanswerable unless a test says otherwise — the inline PDF embed asks this beside
+    // its first page, and an unknown count is a normal state (the counter simply says
+    // "Page 1" and leaves Next available).
+    pdfPageCount: vi.fn().mockResolvedValue(null),
   };
   // A safe default so a test that does not care about the network path never makes a
   // real request in jsdom — overridden per test where the response actually matters.
@@ -470,9 +478,23 @@ describe("a PDF embedded with ![[…]]", () => {
         blob: () => Promise.resolve(new Blob([new Uint8Array([1])], { type: "image/png" })),
       }),
     );
-    // jsdom has no object URLs of its own.
-    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:page" });
+    // jsdom has no object URLs of its own. `revokeObjectURL` matters as much as
+    // `createObjectURL` here: turning a page revokes the one before it, and a missing
+    // stub would throw out of the fetch chain rather than fail visibly.
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:page", revokeObjectURL: () => {} });
   }
+
+  /** How many pages main says the document has, for the bar's counter and its arrows. */
+  function sayPageCount(pages: number): void {
+    (window as unknown as { emqnote: { pdfPageCount: ReturnType<typeof vi.fn> } }).emqnote
+      .pdfPageCount = vi.fn().mockResolvedValue(pages);
+  }
+
+  const bar = (box: HTMLElement, className: string): HTMLElement =>
+    box.querySelector(className) as HTMLElement;
+
+  const navButtons = (box: HTMLElement): HTMLButtonElement[] =>
+    [...box.querySelectorAll<HTMLButtonElement>(".wiki-embed-pdf-nav")];
 
   it("asks for the page-sized render, not the chip-sized one", async () => {
     respondWithPage();
@@ -604,6 +626,150 @@ describe("a PDF embedded with ![[…]]", () => {
     expect(link.className).toContain("wiki-link");
     expect(link.querySelector(".wiki-embed-pdf-bar")).toBeNull();
     expect(fetch).toHaveBeenCalledWith("emqnote-thumb://vault/2026-08-05-1030-contract.pdf");
+  });
+
+  /**
+   * The page controls (next/previous, "Page X of Y", Fit). The point of every case here
+   * is that turning a page is the *same* request one number apart — same scheme, same
+   * traversal guard, same 404/422 split — and that the bar never claims to know something
+   * it has not been told.
+   */
+  describe("its page controls", () => {
+    it("says which page it is on before anything knows how many there are", async () => {
+      respondWithPage();
+
+      const box = embed("2026-08-13-1000-eenpagina.pdf");
+      await flushAsync();
+
+      // No total: `pdfPageCount` answered null. The counter still says where you are, and
+      // Next stays available — a control that appeared a moment later would read as the
+      // app changing its mind.
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1");
+      expect(navButtons(box)[1]!.disabled).toBe(false);
+    });
+
+    it("counts the pages once main answers, and stops at the last one", async () => {
+      respondWithPage();
+      sayPageCount(3);
+
+      const box = embed("2026-08-13-1000-drie.pdf");
+      await flushAsync();
+
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 3");
+      const [previous, next] = navButtons(box);
+      expect(previous!.disabled).toBe(true);
+      expect(next!.disabled).toBe(false);
+    });
+
+    it("asks for the page it moved to, at the page size, and updates the counter", async () => {
+      respondWithPage();
+      sayPageCount(3);
+
+      const box = embed("2026-08-13-1000-bladeren.pdf");
+      await flushAsync();
+
+      navButtons(box)[1]!.click();
+      await flushAsync();
+
+      expect(fetch).toHaveBeenLastCalledWith(
+        "emqnote-thumb://vault/2026-08-13-1000-bladeren.pdf?size=page&page=2",
+      );
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 2 of 3");
+
+      navButtons(box)[1]!.click();
+      await flushAsync();
+
+      // The end of the document: nothing further to offer.
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 3 of 3");
+      expect(navButtons(box)[1]!.disabled).toBe(true);
+    });
+
+    it("goes back the way it came", async () => {
+      respondWithPage();
+      sayPageCount(4);
+
+      const box = embed("2026-08-13-1000-terug.pdf");
+      await flushAsync();
+
+      navButtons(box)[1]!.click();
+      await flushAsync();
+      navButtons(box)[0]!.click();
+      await flushAsync();
+
+      // Page 1 is spelled without the parameter, which is what keeps its cache key — and
+      // every key written before the bar existed — exactly what it was.
+      expect(fetch).toHaveBeenLastCalledWith(
+        "emqnote-thumb://vault/2026-08-13-1000-terug.pdf?size=page",
+      );
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 4");
+    });
+
+    it("hides both arrows for a one-page document rather than showing two dead ones", async () => {
+      respondWithPage();
+      sayPageCount(1);
+
+      const box = embed("2026-08-13-1000-losbladig.pdf");
+      await flushAsync();
+
+      expect(navButtons(box).every((button) => button.hidden)).toBe(true);
+      expect(bar(box, ".wiki-embed-pdf-counter").textContent).toBe("Page 1 of 1");
+    });
+
+    it("toggles between the column width and the whole page, and says which is next", async () => {
+      respondWithPage();
+
+      const box = embed("2026-08-13-1000-passend.pdf");
+      await flushAsync();
+
+      const fit = bar(box, ".wiki-embed-pdf-fit") as HTMLButtonElement;
+      expect(box.dataset.fit).toBe("width");
+      expect(fit.title).toBe("Fit the whole page");
+
+      fit.click();
+      expect(box.dataset.fit).toBe("page");
+      expect(fit.getAttribute("aria-pressed")).toBe("true");
+      expect(fit.title).toBe("Fit the column width");
+
+      fit.click();
+      expect(box.dataset.fit).toBe("width");
+      expect(fit.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("still opens the viewer window, which is where zoom and the system viewer live", async () => {
+      respondWithPage();
+
+      const box = embed("2026-08-13-1000-venster.pdf");
+      await flushAsync();
+
+      (box.querySelector(".wiki-embed-pdf-open") as HTMLButtonElement).click();
+
+      const emqnote = (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
+        .emqnote;
+      expect(emqnote.openWikiLink).toHaveBeenCalledWith("2026-08-13-1000-venster.pdf");
+    });
+
+    it("falls back to the marked chip when a later page cannot be drawn", async () => {
+      respondWithPage();
+      sayPageCount(2);
+
+      const box = embed("2026-08-13-1000-halfstuk.pdf");
+      await flushAsync();
+      expect(box.dataset.page).toBe("ok");
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          status: 422,
+          ok: false,
+          text: () => Promise.resolve("page 2 is damaged"),
+        }),
+      );
+      navButtons(box)[1]!.click();
+      await flushAsync();
+
+      expect(box.dataset.page).toBe("error");
+      expect((box.querySelector(".wiki-embed") as HTMLElement).title).toBe("page 2 is damaged");
+    });
   });
 
   it("leaves an embedded picture alone — it never goes near the render pipeline", async () => {

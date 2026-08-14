@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trapTab } from "./focus-trap.js";
 import { score } from "./fuzzy.js";
+import { useActiveRowVisible, useHoverGuard } from "./palette-scroll.js";
 
 interface Props {
   folders: string[];
@@ -19,6 +20,7 @@ export function MoveDialog({
 }: Props): React.ReactElement {
   const input = useRef<HTMLInputElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
@@ -36,6 +38,11 @@ export function MoveDialog({
   }, [folders, current, query]);
 
   useEffect(() => setActive(0), [query]);
+
+  // Fifty folders in a list six deep: the same "the list does not scroll" the note picker
+  // was reported for, one component over. See `palette-scroll.ts`.
+  useActiveRowVisible(list, active, matches);
+  const pointer = useHoverGuard();
 
   const choose = (index: number): void => {
     const picked = matches[index];
@@ -58,10 +65,12 @@ export function MoveDialog({
             trapTab(event, panel.current);
             if (event.key === "ArrowDown") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.min(index + 1, matches.length - 1));
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
+              pointer.keyboardMoved();
               setActive((index) => Math.max(index - 1, 0));
             }
             if (event.key === "Enter") {
@@ -75,13 +84,15 @@ export function MoveDialog({
           }}
         />
 
-        <ul className="palette-list">
+        <ul className="palette-list" ref={list}>
           {matches.length === 0 && <li className="palette-empty">{t("library.noFolderMatch")}</li>}
           {matches.map((entry, index) => (
             <li
               key={entry.folder}
               className={index === active ? "palette-on" : ""}
-              onMouseEnter={() => setActive(index)}
+              onMouseEnter={(event) => {
+                if (pointer.hover(event)) setActive(index);
+              }}
               onClick={() => choose(index)}
             >
               {entry.folder === "" ? t("library.vaultRoot") : entry.folder}

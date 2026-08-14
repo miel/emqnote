@@ -147,6 +147,7 @@ function buildFake(initial: OpenedNote): Fake {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
     fetchRemoteImage: async () => null,

@@ -35,15 +35,25 @@ interface PdfThumbRenderRequest {
   maxHeight: number;
   /** B43: the inline page render fills its box, a chip never magnifies. See `pdf-fit.ts`. */
   allowUpscale?: boolean;
+  /** Which page, 1-based. Absent is the first — see `pdf-thumb-ipc.ts`. */
+  page?: number;
 }
 
 type PdfThumbResult =
-  | { id: number; ok: true; png: Uint8Array }
+  | { id: number; ok: true; png: Uint8Array; pages: number }
   | { id: number; ok: false; error: string };
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Array> {
+/**
+ * Draws one page and says how many there are.
+ *
+ * The count comes back with every render because it is free here and expensive anywhere
+ * else: pdf.js has just parsed the document, and asking again later means parsing the
+ * whole file a second time to learn one number. It is what lets the inline embed say
+ * "Page 2 of 7" and stop offering a next page at the end.
+ */
+async function renderPage(request: PdfThumbRenderRequest): Promise<{ png: Uint8Array; pages: number }> {
   // No standard-font or CMap data bundled — this is a small preview image, not a
   // faithful render, and a PDF using only the 14 standard fonts (the common case for an
   // exported document) still renders legibly without them. Worth revisiting if a
@@ -52,7 +62,9 @@ async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Arr
 
   try {
     const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(1);
+    // Out of range throws, and that is the intended answer: the caller gets the 422 that
+    // means "this file could not be drawn for you", not a silently substituted page 1.
+    const page = await pdf.getPage(request.page ?? 1);
     try {
       const unscaled = page.getViewport({ scale: 1 });
       const scale = fitScale(unscaled.width, unscaled.height, request.maxWidth, request.maxHeight, {
@@ -71,7 +83,7 @@ async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Arr
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
       if (blob === null) throw new Error("canvas.toBlob produced no image");
 
-      return new Uint8Array(await blob.arrayBuffer());
+      return { png: new Uint8Array(await blob.arrayBuffer()), pages: pdf.numPages };
     } finally {
       page.cleanup();
     }
@@ -84,9 +96,9 @@ async function renderFirstPage(request: PdfThumbRenderRequest): Promise<Uint8Arr
 }
 
 window.emqnoteThumb.onRender((request) => {
-  void renderFirstPage(request)
-    .then((png) => {
-      window.emqnoteThumb.sendResult({ id: request.id, ok: true, png });
+  void renderPage(request)
+    .then(({ png, pages }) => {
+      window.emqnoteThumb.sendResult({ id: request.id, ok: true, png, pages });
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);

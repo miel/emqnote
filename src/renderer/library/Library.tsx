@@ -21,7 +21,7 @@ import {
   type SortKey,
   type VaultFileEvent,
 } from "../../shared/vault-types.js";
-import { buildEditorMenu } from "../editor/editor-menu.js";
+import { buildEditorMenu, insertMenuItems } from "../editor/editor-menu.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
 import { Help } from "../Help.js";
@@ -220,11 +220,18 @@ export function Library(): React.ReactElement {
     null,
   );
   /**
-   * The reader toolbar's "⋯" overflow menu — Rename/Move/Duplicate/Reveal/Delete on the
+   * The reader toolbar's "Actions" overflow menu — Rename/Move/Duplicate/Reveal/Delete on the
    * open note, opened at the button's own rect rather than a click point. Always acts on
    * `open`, so unlike `noteMenu` it carries no note of its own to act on.
    */
   const [readerMenu, setReaderMenu] = useState<{ x: number; y: number } | null>(null);
+  /**
+   * The reader toolbar's "Insert" menu — image, file, note link, table, from
+   * `insertMenuItems`. Its own state rather than a flag on `readerMenu`: the two open
+   * from different buttons at different rects and hold different things, and the only
+   * thing they share is being menus.
+   */
+  const [insertMenu, setInsertMenu] = useState<{ x: number; y: number } | null>(null);
   /** The note panel's right-click formatting menu, in the reader — `Capture.tsx` has its own copy. */
   const [editorMenu, setEditorMenu] = useState<{
     x: number;
@@ -1425,21 +1432,6 @@ export function Library(): React.ReactElement {
             <>
               <header className="reader-header">
                 <div className="reader-titles">
-                  {/* Only for a note a `[[…]]` link led to, and only while that note is
-                      the one on screen — see `backTo`. Above the title rather than beside
-                      it: the title is already competing with the ⋯ menu for the header's
-                      one `nowrap` row, and this is a way out of the note rather than
-                      something about it. */}
-                  {backTo !== null && (
-                    <button
-                      type="button"
-                      className="reader-back"
-                      title={app.t("library.backTo").replace("{title}", backTo.title)}
-                      onClick={goBack}
-                    >
-                      ← {backTo.title}
-                    </button>
-                  )}
                   {editingTitle !== null ? (
                     <input
                       ref={titleInput}
@@ -1489,47 +1481,31 @@ export function Library(): React.ReactElement {
                       ? app.t(dirty ? "library.saving" : "library.saved")
                       : app.t("library.openInCapture")}
                   </span>
+                  {/* 🖼 🔗 ▦ 📎 used to be four always-on icon buttons here, and four
+                      glyphs nobody can read at a glance is exactly the clutter the ⋯
+                      menu below was made to end for the five actions before them. One
+                      named menu instead, built from `insertMenuItems` so the toolbar and
+                      the note panel's right-click menu cannot come to disagree. */}
                   <button
                     type="button"
                     disabled={!open.editable}
-                    title={app.t("shortcut.insertImage")}
-                    onClick={() => void pickAndInsertImage()}
+                    title={app.t("library.insert")}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setInsertMenu({ x: rect.left, y: rect.bottom });
+                    }}
                   >
-                    🖼
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("shortcut.insertNoteLink")}
-                    onClick={() => openNotePicker("")}
-                  >
-                    🔗
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("shortcut.insertTable")}
-                    onClick={() =>
-                      setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 })
-                    }
-                  >
-                    ▦
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("shortcut.insertFile")}
-                    onClick={() => void pickAndInsertFile()}
-                  >
-                    📎
+                    {app.t("library.insert")}
                   </button>
                   {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
                       buttons here, squeezing the title in the `nowrap` header next to
                       them — collapsed into one menu button, opened at its own rect the
                       same way a right-click opens `noteMenu` below. This is a button
-                      opening a menu, not a right-click, so `--click-button="⋯>Rename"`
-                      has to be able to reach it — see the CLAUDE.md context-menu
-                      constraint's note on why that keeps `--click-button` working here. */}
+                      opening a menu, not a right-click, so
+                      `--click-button="Actions>Rename"` has to be able to reach it — see
+                      the CLAUDE.md context-menu constraint's note on why that keeps
+                      `--click-button` working here. The label was "⋯" until a glyph
+                      beside a second glyph-labelled menu stopped saying anything. */}
                   <button
                     type="button"
                     title={app.t("library.moreActions")}
@@ -1538,7 +1514,7 @@ export function Library(): React.ReactElement {
                       setReaderMenu({ x: rect.left, y: rect.bottom });
                     }}
                   >
-                    ⋯
+                    {app.t("library.actions")}
                   </button>
                 </div>
               </header>
@@ -1575,7 +1551,32 @@ export function Library(): React.ReactElement {
                   t={app.t}
                 />
               </div>
-  
+
+              {/* Only for a note a `[[…]]` link led to, and only while that note is the
+                  one on screen — see `backTo`. Below the note rather than above the
+                  title: the header is one `nowrap` row already competing between the
+                  title and the two menus, and a second line in it made the whole strip
+                  grow and shrink as links were followed. A strip of its own at the foot
+                  of the pane costs the note nothing when there is no way back to offer,
+                  since it is not rendered at all then.
+
+                  Outside `.reader-body`, deliberately: that div is what `reader-locked`
+                  makes unclickable while the capture window has the note claimed, and
+                  leaving the note you are reading is exactly the thing that must keep
+                  working while somebody else is typing into it. */}
+              {backTo !== null && (
+                <div className="reader-footer">
+                  <button
+                    type="button"
+                    className="reader-back"
+                    title={app.t("library.backTo").replace("{title}", backTo.title)}
+                    onClick={goBack}
+                  >
+                    ← {backTo.title}
+                  </button>
+                </div>
+              )}
+
               {link !== null && (
                 <LinkPrompt
                   initialHref={link.href}
@@ -1667,6 +1668,27 @@ export function Library(): React.ReactElement {
               onSelect: () => setDialog({ kind: "delete", title: open.title }),
             },
           ]}
+        />
+      )}
+
+      {insertMenu !== null && (
+        <ContextMenu
+          x={insertMenu.x}
+          y={insertMenu.y}
+          onClose={() => setInsertMenu(null)}
+          items={insertMenuItems(app.isMac, app.t, {
+            // Never reached from this menu — `insertMenuItems` draws no command items —
+            // but `EditorMenuActions` is one shape and the note panel's menu needs it.
+            run: (command) => editor.current?.runCommand(command),
+            insertImage: () => void pickAndInsertImage(),
+            insertFile: () => void pickAndInsertFile(),
+            insertNoteLink: () => openNotePicker(""),
+            // At the caret, not at the button: the grid is about to put a table where
+            // the text is, and opening it up in the toolbar would point at the wrong
+            // place. The menu it was chosen from has closed by then.
+            insertTable: () =>
+              setTableGrid(editor.current?.caretPoint() ?? { x: 200, y: 200 }),
+          })}
         />
       )}
 

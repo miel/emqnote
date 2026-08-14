@@ -742,6 +742,18 @@ body {
   display: block;
 }
 
+/* The "Fit" toggle's other half: the whole page inside the window rather than the full
+   width of the column. A tall A4 page at column width is two or three screens of scrolling
+   to get past, which is fine for reading it and tiresome for a note that merely carries
+   one — so this is the state that lets a page be *seen* without becoming the note.
+   `margin: auto` keeps it centred once it is narrower than the column. */
+.editor-content .wiki-embed-pdf[data-fit="page"] .wiki-embed-pdf-page {
+  width: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+}
+
 /* The filename and the way into the full viewer (B40). Below the page rather than above it:
    the page is what the note is showing, and a bar over the top of it would be a caption
    arguing with its own picture. */
@@ -763,7 +775,9 @@ body {
   white-space: nowrap;
 }
 
-.editor-content .wiki-embed-pdf-open {
+.editor-content .wiki-embed-pdf-open,
+.editor-content .wiki-embed-pdf-nav,
+.editor-content .wiki-embed-pdf-fit {
   flex: 0 0 auto;
   font: inherit;
   padding: 0 4px;
@@ -771,6 +785,31 @@ body {
   background: none;
   border: 0;
   cursor: pointer;
+}
+
+/* Turning a page is the one control here that can be unavailable — page 1 has no previous
+   and the last page no next — and a disabled arrow has to look it, or the bar reads as
+   broken on every first page. A single-page document hides both instead; see
+   `redrawControls`. */
+.editor-content .wiki-embed-pdf-nav:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Between the arrows and the filename, and the only thing on this bar that must not move
+   as the number in it grows: a counter that shifted from "Page 9 of 12" to "Page 10 of 12"
+   would drag the whole bar sideways under the pointer. */
+.editor-content .wiki-embed-pdf-counter {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Pressed reads as a mode that is *on*, not as a button waiting to be clicked — this is
+   the one control on the bar that keeps a state. */
+.editor-content .wiki-embed-pdf-fit[aria-pressed="true"] {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* A PDF that opens fine and still cannot be drawn (a 422) — the same complaint, and so the
@@ -1110,6 +1149,15 @@ body {
 .help-button:hover {
   border-color: var(--border);
   color: var(--text);
+}
+
+/* The status bar's Insert menu, where 🖼 📎 🔗 ▦ used to sit. A word rather than a glyph,
+   so it needs the border to be visible at rest — a bare word in this row would read as
+   one more piece of status text like the filename and the dismiss hint beside it, and
+   nothing would say it can be clicked. */
+.insert-button {
+  border-color: var(--border);
+  white-space: nowrap;
 }
 
 /* The capture window's disk-change notice — no buttons, on purpose. See

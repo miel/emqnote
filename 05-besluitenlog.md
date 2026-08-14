@@ -1400,6 +1400,54 @@ als `[[Bijlagen/foto.png|de foto]]` op schijf — met de afbeelding daadwerkelij
 
 ---
 
+## B46 — De ingesloten pagina bladert zelf, maar blijft dezelfde tekening
+
+**Genomen** op 13 augustus 2026, drie dagen na B43 en uit hetzelfde gebruik: één pagina van
+een offerte van drie is geen offerte. B43 zei met zoveel woorden "dít blijft één pagina", en
+dat was toen de juiste grens — het alternatief dat toen voorlag was een echte lezer in de
+notitie, met pdf.js in de editorbundel, en die grens staat nog steeds.
+
+**Wat er is bijgekomen is een getal, geen pijplijn.** De balk onder de pagina heeft nu
+vorige/volgende, "Pagina 2 van 7", een Fit-knop en dezelfde ⧉ als eerst. Bladeren is exact
+hetzelfde verzoek met één cijfer erbij — `?size=page&page=3` — door dezelfde
+`emqnote-thumb`-handler, dezelfde doorloopbeveiliging, dezelfde 404/422-splitsing, dezelfde
+verborgen tekenwindow van B36 met zijn ene sleuf. Er zit nog steeds geen pdf.js in het
+opnamevenster, en dat is de reden dat dit mocht: was de prijs een tweede tekenpad geweest,
+dan was het antwoord nee gebleven.
+
+**Pagina 1 wordt niet gespeld.** `?size=page` zonder cijfer betekent de eerste, in de URL én
+in de cachesleutel. Dat is geen netheid: een veranderde sleutel maakt elke al getekende
+eerste pagina in `userData` wees, en elk van die pagina's is een pdf.js-tekening die dan
+opnieuw moet.
+
+**Het aantal pagina's komt over IPC, niet als antwoordheader.** Bij het tekenen is het
+gratis — pdf.js heeft het bestand net gelezen — maar het moet de tekening overleven, want na
+een herstart is pagina 1 een cachetreffer zonder tekening om het aan te vragen. Het staat
+daarom als `<sleutel van pagina 1>.pages` naast de PNG, met dezelfde
+verouderingsregel (`mtime`+`size` zitten in de sleutel) en dezelfde opruiming. Het *vervoer*
+is `IPC.pdfPageCount` en met opzet geen header op het `emqnote-thumb`-antwoord, waar het
+anders vanzelf meeliftte: deze app heeft al twee keer een CORS-val op een eigen schema
+uitgeleverd (B36 op `emqnote-thumb`, B40 op `emqnote-attachment`), allebei onzichtbaar voor
+elke test en fataal in het echte venster, en een eigen responseheader is de volgende sport
+van diezelfde ladder. Eén extra rondje IPC per embed, naast het rondje dat B39 er al voor
+maakt.
+
+**Eén tekening, ook als er twee tegelijk om vragen.** De embed vraagt de pagina en het aantal
+naast elkaar, en drie NodeViews van dezelfde PDF vroegen het al eerder tegelijk;
+`ensureThumbnail` houdt nu bij wat er onderweg is en laat ze op dezelfde tekening wachten.
+Zonder dat betaalde elke vrager zijn eigen pdf.js-ontleding van hetzelfde bestand.
+
+**Fit is een tweede maat op het scherm, niet een derde tekening.** De PNG is en blijft
+`PAGE_SIZE`; de knop wisselt tussen de breedte van de kolom (zoals B43) en de hele pagina
+binnen 70vh. Zoomen, tekst selecteren en de weg naar de systeemviewer blijven in het venster
+van B40 — daar is de ⧉ voor, en daarom is die knop gebleven waar hij stond.
+
+Bevestigd onder `Xvfb` tegen dezelfde PDF van drie pagina's van `pdflatex`: "Pagina 1 van 3"
+bij het openen, drie **werkelijk verschillende beelden** geteld (elk in een canvas
+uitgerekend, niet alleen een `src` die veranderde — de les van B38), terugbladeren dat exact
+hetzelfde beeld oplevert als de eerste keer, de volgende-knop die op de laatste pagina
+uitgaat, en Fit die de pagina van 836 naar 513 pixels hoogte brengt.
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

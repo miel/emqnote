@@ -172,6 +172,7 @@ function buildFake(): Fake {
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
     checkAttachments: async () => [],
+    pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
     fetchRemoteImage: async () => null,
@@ -247,7 +248,7 @@ describe("internal note links in the library (B35)", () => {
 
   async function moveIt(): Promise<void> {
     await openTheNote();
-    const menu = buttonLabelled(container, "⋯");
+    const menu = buttonLabelled(container, "Actions");
     await act(async () => {
       menu.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -437,6 +438,23 @@ describe("internal note links in the library (B35)", () => {
     it("does not appear for a note opened from the list", async () => {
       await openTheNote();
       expect(backButton()).toBeNull();
+    });
+
+    /**
+     * It used to live in `.reader-titles`, which meant the header grew by a line every
+     * time a link was followed and shrank again on the way back — a strip changing height
+     * under the note being read. The footer placement is the fix, and the header being
+     * *empty* of it is the half a regression would undo silently.
+     */
+    it("sits at the foot of the pane, not in the header", async () => {
+      await openTheNote();
+      await followLinkTo(LINKED_PATH, "Doel");
+
+      expect(container.querySelector(".reader-header .reader-back")).toBeNull();
+      expect(container.querySelector(".reader-footer .reader-back")).not.toBeNull();
+      // Outside `.reader-body` too: that is what `reader-locked` makes unclickable while
+      // the capture window holds the note, and leaving a note must survive that.
+      expect(container.querySelector(".reader-body .reader-back")).toBeNull();
     });
 
     it("disappears again when another note is opened any other way", async () => {

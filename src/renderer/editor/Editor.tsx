@@ -207,7 +207,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       // `wikiEmbed` can be a picture; `wikiLink` needs no different a look, only a
       // click that opens whatever it names in the system viewer.
       nodeViews: {
-        wikiEmbed: attachmentNodeView,
+        // Wrapped rather than passed by name, for the translator the PDF bar's page
+        // controls need — the same `handlers.current` indirection the table toolbar's
+        // `t` goes through, so a locale change reaches it without recreating the view.
+        wikiEmbed: (node, view, getPos) =>
+          attachmentNodeView(node, view, getPos, handlers.current.t),
         wikiLink: wikiLinkNodeView,
         // A remote `![alt](https://…)`, which the CSP will never draw: shown as a
         // label rather than as a broken-image glyph. See `attachment-view.ts`.

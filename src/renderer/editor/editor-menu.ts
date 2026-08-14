@@ -90,6 +90,30 @@ export function buildEditorMenu(
       shortcut: formatFirstKey("task", isMac),
       onSelect: () => actions.run(toggleTask),
     },
+    ...insertMenuItems(isMac, t, actions),
+    ...tableItems(state, t, actions),
+  ];
+}
+
+/**
+ * The four things that can be put *into* a note: a picture, a file, a link to another
+ * note, a table.
+ *
+ * Shared between this menu and the toolbar's own "Insert" button, which replaced the four
+ * icon buttons (🖼 🔗 ▦ 📎) that used to sit in the reader header and the capture window's
+ * status bar. One list, so the two routes cannot come to offer different things or spell
+ * them differently — the same reason `Library.tsx` and `Capture.tsx` both build their
+ * right-click menu from `buildEditorMenu` rather than each listing the items.
+ *
+ * Not a group with a separator: `buildEditorMenu` places it after one it already draws,
+ * and the toolbar menu is nothing but these four.
+ */
+export function insertMenuItems(
+  isMac: boolean,
+  t: (key: string) => string,
+  actions: EditorMenuActions,
+): MenuItem[] {
+  return [
     {
       label: t("menu.insertImage"),
       shortcut: formatFirstKey("insertImage", isMac),
@@ -110,7 +134,6 @@ export function buildEditorMenu(
       shortcut: formatFirstKey("insertTable", isMac),
       onSelect: actions.insertTable,
     },
-    ...tableItems(state, t, actions),
   ];
 }
 

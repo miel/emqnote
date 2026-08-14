@@ -8,12 +8,14 @@
  */
 
 /**
- * What one render takes. Generic over the request, not fixed to the bytes: since B43 a
- * request also carries which size is wanted, and the scheduling — one at a time, timed
- * out, idle after a while — has nothing to say about what is in it. `Uint8Array` stays
- * the default so the plain "here are some bytes" reading still holds.
+ * What one render takes, and what it answers with. Generic over both, not fixed to bytes
+ * in and a `Buffer` out: since B43 a request also carries which size is wanted, and since
+ * the inline embed could turn pages a result also carries how many pages there are. The
+ * scheduling — one at a time, timed out, idle after a while — has nothing to say about
+ * what is in either. The defaults keep the plain "here are some bytes, here is a PNG"
+ * reading for anything that needs no more than that.
  */
-export type RenderFn<T = Uint8Array> = (request: T) => Promise<Buffer>;
+export type RenderFn<T = Uint8Array, R = Buffer> = (request: T) => Promise<R>;
 
 export interface PdfThumbQueueOptions {
   /** Per-render ceiling. A render that takes longer than this is treated as failed. */
@@ -36,7 +38,7 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
  * window — this module knows nothing about windows, only about when one would no longer
  * be worth keeping open.
  */
-export class PdfThumbQueue<T = Uint8Array> {
+export class PdfThumbQueue<T = Uint8Array, R = Buffer> {
   private readonly renderTimeoutMs: number;
   private readonly idleTimeoutMs: number;
   private readonly setTimer: (fn: () => void, ms: number) => ReturnType<typeof globalThis.setTimeout>;
@@ -47,7 +49,7 @@ export class PdfThumbQueue<T = Uint8Array> {
   private idleHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   constructor(
-    private readonly render: RenderFn<T>,
+    private readonly render: RenderFn<T, R>,
     private readonly onIdle: () => void,
     options: PdfThumbQueueOptions = {},
   ) {
@@ -63,7 +65,7 @@ export class PdfThumbQueue<T = Uint8Array> {
    * Cancels the idle timer the moment something is asked for, and restarts it once this
    * request (successful or not) has settled and nothing else is waiting.
    */
-  request(payload: T): Promise<Buffer> {
+  request(payload: T): Promise<R> {
     this.cancelIdle();
 
     const started = this.tail.then(() => this.runOne(payload));
@@ -83,7 +85,7 @@ export class PdfThumbQueue<T = Uint8Array> {
     return started;
   }
 
-  private async runOne(payload: T): Promise<Buffer> {
+  private async runOne(payload: T): Promise<R> {
     let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = this.setTimer(() => {
