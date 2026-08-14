@@ -494,6 +494,21 @@ body {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
+/* A selected rectangle of cells (B49). The selection itself is `visible: false`, so the
+   browser paints nothing at all over these — this fill is the entire affordance, which is
+   why it is a fill and not the caret cell's thin outline: a rectangle has to read as one
+   region rather than as a grid of separately outlined cells.
+
+   `table tr` in the selector is not padding. The header rule above
+   (`.editor-content table tr:first-child td`) is one class and one pseudo-class deep, so a
+   plain `.editor-content td.table-cell-selected` *loses* to it on specificity and a
+   selected header row would go on looking exactly like an unselected one — the first row
+   being the one a column selection always includes. Same family as the bug B48's own note
+   describes, and cheaper to prevent than to find. */
+.editor-content table tr td.table-cell-selected {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 /* The row/column/alignment buttons above whichever table the caret is in — a widget
    decoration from `table-toolbar.ts`, so it sits in the document flow just before the
    table and scrolls with it, and never reaches a file.
@@ -908,10 +923,17 @@ body {
   transition: background-color 200ms ease;
 }
 
-/* A remote `![alt](https://…)`, drawn as a label rather than as a picture — the CSP
-   allows no remote image source, and a broken-image glyph reads as a bug. Same chip
-   shape as `.wiki-embed`, in the muted colour, because it names something that is not
-   in the vault. See `attachment-view.ts`'s `externalImageView`. */
+/* A remote `![alt](https://…)`. The chip is what is drawn first and what stays when the
+   picture cannot be had — main refused the address, the setting is off, or nothing has
+   been cached yet and the machine is offline (B50). A broken-image glyph reads as a bug;
+   a chip reads as a picture that is elsewhere, which is the truth. Same shape as
+   `.wiki-embed`, in the muted colour, because it names something that is not in the
+   vault. See `attachment-view.ts`'s `externalImageView`.
+
+   When the picture does arrive, this very span becomes a `.wiki-embed-image-box` and
+   holds it — a NodeView cannot swap the element ProseMirror mounted, and an inline
+   decoration (`paste-images.ts`'s `image-pending`) lands on exactly that element, so a
+   wrapper would have moved the marker off the thing it marks. */
 .editor-content .external-image {
   color: var(--muted);
   background: var(--surface);
@@ -1010,6 +1032,31 @@ body {
   height: 1px;
   margin: 4px 6px;
   background: var(--border);
+}
+
+/* The `/` menu (B51). Deliberately the same surface as the right-click menu it is a second
+   route to — one vocabulary for one list of commands — with three differences it needs of
+   its own.
+
+   The `z-index` is the one that matters, and it is the bug `test/styles-overlay.test.ts`
+   was written for, met from a new direction: this panel is appended to `document.body` by
+   a ProseMirror plugin rather than rendered inside an `.overlay`, and `position: fixed` at
+   `z-index: auto` creates no stacking context — so a positioned element that happens to
+   come later would paint straight over it. It sits at the overlay's own level; that guard's
+   own test reads every other `z-index` in both files and would catch one that outranked it.
+
+   It also scrolls (fifteen items is taller than a short window) and it is never wider than
+   a menu needs to be. */
+.slash-menu {
+  z-index: 20;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.slash-menu-empty {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .context-menu-item {

@@ -15,7 +15,9 @@ import { remoteImages } from "./paste-images.js";
 import { trailingParagraph, withTrailingParagraph } from "./trailing-paragraph.js";
 import { duplicateEmbedLinks } from "./duplicate-embed.js";
 import { tableDecorations } from "./table-align.js";
+import { cellDragging } from "./table-drag.js";
 import { tableToolbar } from "./table-toolbar.js";
+import { slashMenu } from "./slash-menu.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -186,10 +188,15 @@ export function createEditorState(
       // Obsidian's `[[x.pdf]]` beside its own `![[x.pdf]]`: the chip is hidden, the file
       // keeps both (B48).
       duplicateEmbedLinks(),
-      // Column alignment and the caret's own cell — neither reachable from a stylesheet.
+      // Column alignment, the caret's own cell and a selected rectangle — none of the
+      // three reachable from a stylesheet.
       tableDecorations(),
+      // Dragging across cells, and Shift+click to extend (B49).
+      cellDragging(),
       // The row/column/alignment buttons, shown above whichever table the caret is in.
       tableToolbar(context),
+      // `/` at the start of a line opens the insert menu, and typing filters it (B51).
+      slashMenu(context),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

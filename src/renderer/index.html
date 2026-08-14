@@ -2,9 +2,16 @@
 <html lang="nl">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      `emqnote-remote:` is B50's, and it is deliberately *not* `https:`: the renderer never
+      reaches the network. Main fetches a picture a note names by its address, once,
+      through the same allowlist a pasted image goes through, and serves it from a cache
+      in userData — so the CSP still names no remote host and a note read once still reads
+      offline.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' blob: emqnote-attachment: emqnote-thumb:; connect-src 'self' emqnote-thumb:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' blob: emqnote-attachment: emqnote-thumb: emqnote-remote:; connect-src 'self' emqnote-thumb:"
     />
     <title>emqnote</title>
   </head>

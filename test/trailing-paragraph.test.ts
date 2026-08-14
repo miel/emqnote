@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { Selection } from "prosemirror-state";
+import { NodeSelection, Selection } from "prosemirror-state";
 import { schema } from "../src/markdown/schema.js";
 import { serializeBody } from "../src/markdown/index.js";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import { insertTable } from "../src/renderer/editor/table-commands.js";
 import { withTrailingParagraph } from "../src/renderer/editor/trailing-paragraph.js";
-import { docFromMarkdown } from "./helpers/editing.js";
+import { insertHorizontalRule } from "../src/renderer/editor/commands.js";
+import { docFromMarkdown, markdownOf, run, stateAt, type } from "./helpers/editing.js";
 
 /**
  * There is always a line below the last block (B42), and it never reaches the file.
@@ -119,5 +120,37 @@ describe("trailingParagraph", () => {
   it("leaves a document that needs no line below it alone", () => {
     const doc = docFromMarkdown("Just prose.\n");
     expect(withTrailingParagraph(doc)).toBe(doc);
+  });
+});
+
+/**
+ * The divider (14 August 2026), and the caret it leaves behind.
+ *
+ * It lives in this file because the line below a rule is `trailingParagraph`'s invariant —
+ * and because the bug worth guarding here is exactly that the caret was *on the rule*
+ * rather than on that line. `replaceSelectionWith` leaves a `NodeSelection` on a selectable
+ * leaf, so the next character typed replaced the divider that had just been inserted. Only
+ * running it found that; every unit test passed and the rule appeared correctly.
+ */
+describe("inserting a divider", () => {
+  it("leaves the caret on a line below it, not on the rule", () => {
+    const after = run(stateAt("Boven.\n", "Boven."), insertHorizontalRule);
+
+    expect(after.selection instanceof NodeSelection).toBe(false);
+    expect(after.selection.$from.parent.type).toBe(schema.nodes.paragraph);
+    expect(after.selection.empty).toBe(true);
+  });
+
+  it("survives the very next thing typed", () => {
+    const after = type(run(stateAt("Boven.\n", "Boven."), insertHorizontalRule), "Onder.");
+
+    expect(markdownOf(after)).toBe("Boven.\n\n---\n\nOnder.\n");
+  });
+
+  it("still puts a line below it when it ends the note", () => {
+    const after = run(stateAt("Boven.\n", "Boven."), insertHorizontalRule);
+    const last = after.doc.child(after.doc.childCount - 1);
+
+    expect(last.type).toBe(schema.nodes.paragraph);
   });
 });

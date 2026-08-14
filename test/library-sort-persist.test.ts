@@ -89,8 +89,10 @@ function buildFake(): Fake {
       // The persisted value, deliberately not "modified" — the default `useState` in
       // `Library.tsx` starts on — so seeding from the wrong place would go unnoticed.
       librarySort: "title",
+      loadRemoteImages: true,
     }),
     setLocale: async () => {},
+    setLoadRemoteImages: async () => {},
     setHotkey: async () => true,
     setPaneWidths: () => {},
     setSort,

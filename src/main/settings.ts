@@ -33,6 +33,16 @@ export interface Settings {
    * `Library.tsx`'s own `useState` used to hardcode.
    */
   librarySort: SortKey;
+  /**
+   * Whether a picture a note names by its web address is fetched and drawn (B50).
+   *
+   * On by default: a vault written elsewhere is full of `![…](https://…)`, and a column of
+   * grey chips is not what those notes say. Off is a real position to hold, though —
+   * opening such a note means main requests that address, which the host can see — so it
+   * is a setting rather than a decision made for everybody. Enforced in main, in the
+   * protocol handler, never by the renderer choosing not to ask.
+   */
+  loadRemoteImages: boolean;
 }
 
 export { DEFAULT_HOTKEY };
@@ -47,6 +57,7 @@ function defaults(): Settings {
     updateLastCheckedAt: null,
     libraryPaneWidths: null,
     librarySort: "modified",
+    loadRemoteImages: true,
   };
 }
 

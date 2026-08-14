@@ -19,7 +19,7 @@ import {
   insertAttachment,
 } from "./insert-attachment.js";
 import { insertNoteLinkOverPrefix } from "./insert-link.js";
-import { insertTable } from "./table-commands.js";
+import { clearCells, insertTable } from "./table-commands.js";
 import { handleListItemPaste } from "./paste-list-item.js";
 import { handleLinkClick } from "./link-click.js";
 import { isContextMenuKey } from "../library/roving.js";
@@ -107,6 +107,11 @@ interface Props {
    * back to English, which is what a test mounting this component bare gets.
    */
   t?: (key: string) => string;
+  /**
+   * Whether a picture a note names by its web address may be drawn (B50). The window
+   * reads it from the bootstrap; main decides again for every request either way.
+   */
+  loadRemoteImages?: boolean;
   /** Shown while the document is empty, via CSS. */
   placeholder?: string;
 }
@@ -129,6 +134,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onTableRequested,
     onContextMenu,
     t,
+    loadRemoteImages,
     placeholder,
   },
   ref,
@@ -159,6 +165,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onTableRequested,
     onContextMenu,
     t,
+    loadRemoteImages,
   });
   handlers.current = {
     onChange,
@@ -169,6 +176,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onTableRequested,
     onContextMenu,
     t,
+    loadRemoteImages,
   };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
@@ -213,9 +221,9 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         wikiEmbed: (node, view, getPos) =>
           attachmentNodeView(node, view, getPos, handlers.current.t),
         wikiLink: wikiLinkNodeView,
-        // A remote `![alt](https://…)`, which the CSP will never draw: shown as a
-        // label rather than as a broken-image glyph. See `attachment-view.ts`.
-        image: externalImageView,
+        // A remote `![alt](https://…)`: the chip, and the picture itself once main has
+        // fetched and cached it (B50). See `attachment-view.ts`.
+        image: (node) => externalImageView(node, handlers.current.loadRemoteImages !== false),
       },
       // Pictures inside a pasted web page. The half that needs no network runs here,
       // synchronously, before the slice lands; the download half is the `remoteImages`
@@ -233,6 +241,19 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       handlePaste: (view, event, slice) =>
         handleAttachmentPaste(view, event) || handleListItemPaste(view, event, slice),
       handleDrop: handleAttachmentDrop,
+      // Typing over a selected rectangle of cells empties it first, then lets the
+      // character land normally (B49). Without this the keystroke reaches an `isolating`
+      // boundary it cannot replace across and simply disappears, which reads as a
+      // selection you are not allowed to type over.
+      //
+      // The insertion is done here rather than handed back to ProseMirror: the `from`/`to`
+      // it was called with belong to the document *before* the cells were emptied, and
+      // letting it insert at those would write into whatever moved into that range.
+      handleTextInput: (editorView, _from, _to, text) => {
+        if (!clearCells()(editorView.state, editorView.dispatch)) return false;
+        editorView.dispatch(editorView.state.tr.insertText(text));
+        return true;
+      },
       // Mod+click opens a link in the system browser; a plain click still just places
       // the caret, so the link's own text stays editable — see `link-click.ts` (B33).
       handleClick: handleLinkClick,

@@ -36,15 +36,41 @@ function renderBlock(node: PMNode, indent: string, lines: string[]): void {
     return;
   }
 
+  if (name === "table") {
+    separate(lines);
+    renderTable(node, indent, lines);
+    return;
+  }
+
   if (node.isTextblock) {
     separate(lines);
     pushText(node, indent, indent, lines);
     return;
   }
 
-  // Blockquotes, tables and anything else that holds blocks: no marker of its own, so
-  // its children are written where it stands.
+  // Blockquotes and anything else that holds blocks: no marker of its own, so its
+  // children are written where it stands.
   renderFragment(node.content, indent, lines);
+}
+
+/**
+ * A table, as pipes.
+ *
+ * A table used to fall through to the branch above and come out as one line per *cell*,
+ * which is a column of words with nothing left to say it was a table. That was always
+ * wrong and became visible when a rectangle of cells could be copied on its own (B49) —
+ * the plain-text flavour is the one a mail, a ticket or a chat box gets.
+ *
+ * No delimiter row: this is not markdown (see the note at the top of this file), and a row
+ * of dashes in a chat window is noise. A cell's own soft breaks become spaces for the same
+ * reason — a line break inside one cell would break the row it sits in.
+ */
+function renderTable(table: PMNode, indent: string, lines: string[]): void {
+  table.forEach((row) => {
+    const cells: string[] = [];
+    row.forEach((cell) => cells.push(cell.textBetween(0, cell.content.size, " ", " ").trim()));
+    lines.push(`${indent}| ${cells.join(" | ")} |`);
+  });
 }
 
 function renderList(list: PMNode, indent: string, lines: string[]): void {

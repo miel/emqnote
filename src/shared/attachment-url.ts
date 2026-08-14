@@ -1,5 +1,5 @@
 /**
- * The two custom protocol URLs, composed in one place and read back in another.
+ * The custom protocol URLs, composed in one place and read back in another.
  *
  * `emqnote-attachment://` and `emqnote-thumb://` are both registered `standard: true`
  * (`index.ts`), which is what makes them fetchable and nameable from a CSP at all — and
@@ -27,6 +27,13 @@
  * trailing slash is added, behind one fixed host. `attachmentNameFromUrl` still reads the
  * old host form too: nothing on disk holds one of these URLs, but clipboard HTML copied
  * inside the app before an update does, and `paste-images.ts` parses exactly that.
+ *
+ * B50 made it three schemes, and `emqnote-remote://` is the one that could not have used
+ * the host form at all: what it carries is a whole `https://…` address, complete with its
+ * own slashes, its own case and often its own query string. Everything the measurement
+ * above found is the reason it works in the path and nowhere else — and the query cut in
+ * `attachmentNameFromUrl` is why the address's own `?` has to arrive percent-encoded, as
+ * `encodeURIComponent` leaves it.
  */
 
 /**

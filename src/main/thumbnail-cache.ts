@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
+import { cacheEntries, pruneByRecency } from "./cache-prune.js";
 
 /**
  * The naming, gating and pruning rules for the PDF/Office first-page thumbnail cache
@@ -127,62 +128,21 @@ export function pageCountKey(realPath: string, mtimeMs: number, size: number): s
  * nothing extra.
  */
 export function pruneThumbnails(cacheDir: string, maxCount: number, maxBytes = Infinity): void {
-  if (!existsSync(cacheDir)) return;
-
-  let entries: string[];
-  try {
-    entries = readdirSync(cacheDir);
-  } catch {
-    return;
-  }
-  const names = entries.filter((name) => name.endsWith(".png"));
-  if (names.length <= maxCount && maxBytes === Infinity) return;
-
-  const files = names
-    .map((name) => {
-      const path = join(cacheDir, name);
-      try {
-        const stats = statSync(path);
-        return { path, mtime: stats.mtimeMs, size: stats.size };
-      } catch {
-        return null;
-      }
-    })
-    .filter((entry): entry is { path: string; mtime: number; size: number } => entry !== null)
-    .sort((a, b) => b.mtime - a.mtime);
-
-  // Newest first, keeping whatever fits inside *both* caps; everything past the first one
-  // to be exceeded goes. A single file larger than the whole budget is kept if it is the
-  // newest — deleting the render that was just made would mean rendering it again on the
-  // very next draw, forever.
-  let bytes = 0;
-  let keep = 0;
-  for (const file of files) {
-    if (keep >= maxCount) break;
-    if (keep > 0 && bytes + file.size > maxBytes) break;
-    bytes += file.size;
-    keep += 1;
-  }
-
-  for (const { path } of files.slice(keep)) {
-    try {
-      unlinkSync(path);
-    } catch {
-      // Already gone, or a transient lock on Windows/OneDrive — the next prune retries.
-    }
-  }
+  // Newest first, keeping whatever fits inside *both* caps — see `cache-prune.ts`, which
+  // is where that loop lives now that B50's remote-image cache is bounded the same way.
+  const kept = pruneByRecency(cacheDir, (name) => name.endsWith(".png"), maxCount, maxBytes);
 
   // The page-count sidecars (`pageCountKey`) follow their PNG rather than being counted
   // against either cap: each is a handful of bytes, and one that outlived its page would
   // be a number nothing can check — the PNG's key is the only thing that ties it to a
   // file and an mtime. Kept exactly while the page-1 render it was written beside is.
-  const surviving = new Set(files.slice(0, keep).map(({ path }) => basename(path, ".png")));
-  for (const name of entries) {
-    if (!name.endsWith(".pages") || surviving.has(basename(name, ".pages"))) continue;
+  const surviving = new Set(kept.map(({ name }) => basename(name, ".png")));
+  for (const entry of cacheEntries(cacheDir, (name) => name.endsWith(".pages"))) {
+    if (surviving.has(basename(entry.name, ".pages"))) continue;
     try {
-      unlinkSync(join(cacheDir, name));
+      unlinkSync(entry.path);
     } catch {
-      // Same as above.
+      // Already gone, or a transient lock on Windows/OneDrive — the next prune retries.
     }
   }
 }

@@ -1,6 +1,8 @@
 import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { schema } from "../../markdown/schema.js";
+import { cellsInRect } from "./table-geometry.js";
+import { isCellSelection } from "./table-selection.js";
 import { findTable, type ColumnAlign } from "./table-commands.js";
 
 /**
@@ -17,7 +19,8 @@ import { findTable, type ColumnAlign } from "./table-commands.js";
  *
  * The active-cell outline is here rather than in its own plugin because it is the same
  * walk over the same nodes, and a second plugin doing it again on every selection change
- * would be the more expensive of the two options for no gain.
+ * would be the more expensive of the two options for no gain. B49's selected *rectangle*
+ * joined it for the same reason, and replaces that outline rather than drawing over it.
  */
 export function tableDecorations(): Plugin {
   const tableType = schema.nodes.table!;
@@ -58,6 +61,22 @@ export function tableDecorations(): Plugin {
           // A table cannot contain a table, so there is nothing below this worth walking.
           return false;
         });
+
+        // A selected rectangle (B49) is drawn instead of the single-cell outline, never
+        // beside it: two highlights over one table read as two different things being
+        // selected. `visible = false` on the selection is the other half — the browser
+        // draws nothing of its own, so this is all there is to see.
+        if (isCellSelection(state.selection)) {
+          for (const cell of cellsInRect(state.selection.rect())) {
+            decorations.push(
+              Decoration.node(cell.pos, cell.pos + cell.node.nodeSize, {
+                class: "table-cell-selected",
+              }),
+            );
+          }
+
+          return decorations.length === 0 ? null : DecorationSet.create(state.doc, decorations);
+        }
 
         const context = findTable(state);
         if (context !== null) {

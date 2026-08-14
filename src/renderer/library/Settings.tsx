@@ -6,6 +6,8 @@ import { trapTab } from "./focus-trap.js";
 interface Props {
   locale: Locale;
   hotkey: string;
+  /** Whether a picture named by a web address is fetched and drawn (B50). */
+  loadRemoteImages: boolean;
   vaultPath: string | null;
   t: (key: string) => string;
   onChanged: () => void;
@@ -65,6 +67,7 @@ function shorten(path: string): string {
 export function Settings({
   locale,
   hotkey,
+  loadRemoteImages,
   vaultPath,
   t,
   onChanged,
@@ -73,6 +76,7 @@ export function Settings({
   onOpenOrphanedAttachments,
 }: Props): React.ReactElement {
   const [recording, setRecording] = useState(false);
+  const [remoteImages, setRemoteImages] = useState(loadRemoteImages);
   const [current, setCurrent] = useState(hotkey);
   const [rejected, setRejected] = useState(false);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
@@ -158,6 +162,25 @@ export function Settings({
         </div>
 
         {rejected && <p className="settings-warning">{t("settings.hotkeyTaken")}</p>}
+
+        {/* B50. Held here as its own state rather than read back from the bootstrap on
+            every render: the round trip that refreshes that happens on `onChanged`, and a
+            checkbox that snapped back to its old value for a frame while it landed would
+            read as the switch not having taken. */}
+        <label className="settings-row">
+          <span>{t("settings.remoteImages")}</span>
+          <input
+            type="checkbox"
+            checked={remoteImages}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setRemoteImages(next);
+              void window.emqnote.setLoadRemoteImages(next).then(() => onChanged());
+            }}
+          />
+        </label>
+
+        <p className="settings-note">{t("settings.remoteImagesWhy")}</p>
 
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is

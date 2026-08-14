@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   openLibrary: () => ipcRenderer.send(IPC.libraryOpen),
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
+  setLoadRemoteImages: (load: boolean) => ipcRenderer.invoke(IPC.setLoadRemoteImages, load),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),

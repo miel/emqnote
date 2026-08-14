@@ -72,3 +72,22 @@ describe("copying anything else", () => {
     expect(copy("- Zie \\[1] hierboven\n")).toBe("- Zie [1] hierboven");
   });
 });
+
+describe("copying a table", () => {
+  it("writes it as pipes, one line per row", () => {
+    // One line per *cell* is what fell out before a rectangle of cells could be copied
+    // (B49), and it left nothing on the clipboard saying it had ever been a table.
+    expect(copy("| a | b |\n| --- | --- |\n| c | d |\n")).toBe("| a | b |\n| c | d |");
+  });
+
+  it("leaves out the delimiter row", () => {
+    // Plain text, not markdown — the same reason a heading loses its hashes above. A row
+    // of dashes in a chat window is noise.
+    expect(copy("| a |\n| :--- |\n| b |\n")).toContain("| a |");
+    expect(copy("| a |\n| :--- |\n| b |\n")).not.toContain("---");
+  });
+
+  it("flattens a soft break inside a cell, so a row stays one line", () => {
+    expect(copy("| a<br>b | c |\n| --- | --- |\n| d | e |\n")).toBe("| a b | c |\n| d | e |");
+  });
+});

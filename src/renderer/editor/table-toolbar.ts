@@ -9,10 +9,10 @@ import {
   addRow,
   deleteColumn,
   deleteRow,
-  findTable,
   setColumnAlign,
   type ColumnAlign,
 } from "./table-commands.js";
+import { selectedRect } from "./table-selection.js";
 
 /**
  * The row and column operations, in front of you rather than behind a right-click.
@@ -119,7 +119,12 @@ const TOOLS: Tool[] = [
  * pixel from "delete column" is how a table gets thrown away by accident.
  */
 
-function render(view: EditorView, t: (key: string) => string, active: ColumnAlign): HTMLElement {
+function render(
+  view: EditorView,
+  t: (key: string) => string,
+  /** `undefined` when the selection spans columns that do not agree — none of the four. */
+  active: ColumnAlign | undefined,
+): HTMLElement {
   const bar = document.createElement("div");
   bar.className = "table-toolbar";
   bar.contentEditable = "false";
@@ -168,14 +173,22 @@ export function tableToolbar(context: CommandContext): Plugin {
   return new Plugin({
     props: {
       decorations(state) {
-        const table = findTable(state);
-        if (table === null) return null;
+        const rect = selectedRect(state);
+        if (rect === null) return null;
 
-        const align = (table.node.attrs.align as ColumnAlign[] | undefined) ?? [];
-        const active = align[table.cell] ?? null;
+        const align = (rect.node.attrs.align as ColumnAlign[] | undefined) ?? [];
+        // What the alignment buttons report is the alignment of *every* column the
+        // selection covers — a rectangle spanning a left-aligned and a centred column is
+        // not "left", and lighting one of the four there would be a lie about half of it.
+        const first = align[rect.left] ?? null;
+        let same = true;
+        for (let column = rect.left; column <= rect.right; column += 1) {
+          if ((align[column] ?? null) !== first) same = false;
+        }
+        const active = same ? first : undefined;
 
         return DecorationSet.create(state.doc, [
-          Decoration.widget(table.pos, (view) => render(view, t, active), {
+          Decoration.widget(rect.pos, (view) => render(view, t, active), {
             side: -1,
             // A control, not content: its events are its own and the selection has no
             // business landing inside it.
@@ -183,7 +196,7 @@ export function tableToolbar(context: CommandContext): Plugin {
             ignoreSelection: true,
             // The active column's alignment is part of the reuse key, or moving the caret
             // between two differently aligned columns would leave the old button pressed.
-            key: `table-toolbar-${table.pos}-${String(active)}`,
+            key: `table-toolbar-${rect.pos}-${String(active)}`,
           }),
         ]);
       },

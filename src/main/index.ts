@@ -111,6 +111,7 @@ import { shutdownPdfThumb } from "./pdf-thumb.js";
 import { attachmentRoute } from "./attachment-route.js";
 import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
+import { serveRemoteImage } from "./remote-images.js";
 import { isOpenableUrl } from "./remote-image.js";
 import { FOLDER_ERROR } from "../shared/vault-types.js";
 import type {
@@ -162,6 +163,17 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: "emqnote-thumb",
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+  },
+  {
+    // B50: a picture a note names by `https://…`, fetched by main and served out of a
+    // cache in `userData`. Same privileges as its two neighbours but **no `corsEnabled`**,
+    // and that omission is deliberate: nothing `fetch()`es this one — `externalImageView`
+    // loads it as an `<img>`, which never needed the privilege. If a renderer is ever made
+    // to `fetch()` it, this is the line to change first, because both times that has been
+    // missed the feature was silently dead in the real app while every test passed (B36 on
+    // `emqnote-thumb`, B40 on `emqnote-attachment`).
+    scheme: "emqnote-remote",
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
 ]);
 
@@ -433,6 +445,7 @@ async function main(): Promise<void> {
   installMinimalMenu();
   registerAttachmentProtocol();
   registerThumbnailProtocol();
+  registerRemoteImageProtocol();
   registerIpc();
   createCaptureWindow();
 
@@ -601,6 +614,51 @@ function registerAttachmentProtocol(): void {
     if (resolved === null) return new Response(null, { status: 404 });
 
     return net.fetch(pathToFileURL(resolved).toString());
+  });
+}
+
+/**
+ * `<userData>/remote-images` — a derived cache outside the vault, beside `thumbnails` (B9).
+ *
+ * Named here rather than in `remote-images.ts` so that module never imports Electron and
+ * every refusal it makes can be exercised by a test, the discipline `vault-io.ts` and
+ * `remote-image.ts` already follow.
+ */
+function remoteImageCacheDir(): string {
+  return join(app.getPath("userData"), "remote-images");
+}
+
+/**
+ * Serves a picture a note names by its web address, as `emqnote-remote://vault/<url>` (B50).
+ *
+ * The URL travels in the *path*, `encodeURIComponent`d, for the reason `attachment-url.ts`
+ * measured for B38: a `standard:` scheme's host is lowercased by Chromium and cannot hold a
+ * `%2F` at all, so a `https://Example.com/A/B.png` could not even be expressed as one.
+ *
+ * Two refusals share the 404, and that is on purpose — a chip is what the note draws for
+ * either. **The setting is one of them**: `loadRemoteImages` is enforced here, in main, and
+ * not by the renderer deciding whether to ask. Everything the renderer might be talked into
+ * is decided again on this side, which is the same rule `remote-image.ts` opens with.
+ */
+function registerRemoteImageProtocol(): void {
+  protocol.handle("emqnote-remote", async (request) => {
+    if (!loadSettings().loadRemoteImages) return new Response(null, { status: 404 });
+
+    const url = attachmentNameFromUrl(request.url, "emqnote-remote");
+    const file = await serveRemoteImage(remoteImageCacheDir(), url);
+    if (file === null) return new Response(null, { status: 404 });
+
+    // **`no-store`, and it is what makes the setting mean anything.** Without it Chromium
+    // caches the response per URL in the renderer, so reopening a note it had already
+    // drawn painted the picture again without this handler being called at all — the
+    // switch turned off and the pictures stayed, which is the one way a privacy setting
+    // must not fail. Measured in the running app; nothing under `test/` could have seen
+    // it. It costs a read of a local file per draw, which is what the attachment scheme
+    // beside it has always cost.
+    const response = await net.fetch(pathToFileURL(file).toString());
+    const headers = new Headers(response.headers);
+    headers.set("cache-control", "no-store");
+    return new Response(response.body, { status: response.status, headers });
   });
 }
 
@@ -856,7 +914,16 @@ function registerAppIpc(): void {
       vaultPath: settings.vaultPath,
       libraryPaneWidths: settings.libraryPaneWidths,
       librarySort: settings.librarySort,
+      loadRemoteImages: settings.loadRemoteImages,
     };
+  });
+
+  // B50. Nothing to invalidate and nothing to reload: the next request over
+  // `emqnote-remote://` reads the setting again, and a note already on screen keeps what
+  // it drew until it is opened afresh — which is honest, and cheaper than reaching into
+  // two windows to redraw every picture in them.
+  ipcMain.handle(IPC.setLoadRemoteImages, (_event, load: boolean) => {
+    saveSettings({ loadRemoteImages: load });
   });
 
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {

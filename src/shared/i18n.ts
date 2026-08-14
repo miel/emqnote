@@ -91,6 +91,7 @@ const DUTCH: Record<string, string> = {
   "menu.insertNoteLink": "Link naar notitie…",
   "menu.insertTable": "Tabel…",
   "menu.insertRule": "Scheidingslijn",
+  "menu.quote": "Citaat",
   "menu.tableRowAbove": "Rij hierboven invoegen",
   "menu.tableRowBelow": "Rij hieronder invoegen",
   "menu.tableColumnLeft": "Kolom links invoegen",
@@ -105,6 +106,10 @@ const DUTCH: Record<string, string> = {
 
   // De knoppenbalk boven de tabel waar de cursor in staat. Kort, want er staan er tien
   // naast elkaar; de volledige zin uit `menu.table*` hierboven staat in de tooltip.
+  // Het /-menu (B51).
+  "slash.nothing": "Niets gevonden",
+  "slash.label": "Invoegmenu",
+
   "table.toolbar": "Tabelbewerkingen",
   "table.rowAbove": "Rij ↑",
   "table.rowBelow": "Rij ↓",
@@ -250,6 +255,9 @@ const DUTCH: Record<string, string> = {
   "settings.hotkeyHint": "Klik en druk de toetsencombinatie in.",
   "settings.close": "Sluiten",
   "settings.hotkeyTaken": "Die combinatie is al bezet.",
+  "settings.remoteImages": "Afbeeldingen van het web laden",
+  "settings.remoteImagesWhy":
+    "Een notitie kan naar een afbeelding op internet verwijzen. emqnote haalt die \u00e9\u00e9n keer op en bewaart hem lokaal, zodat de notitie ook zonder internet klopt.",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -386,6 +394,7 @@ const ENGLISH: Record<string, string> = {
   "menu.insertNoteLink": "Link to note…",
   "menu.insertTable": "Table…",
   "menu.insertRule": "Divider",
+  "menu.quote": "Quote",
   "menu.tableRowAbove": "Insert row above",
   "menu.tableRowBelow": "Insert row below",
   "menu.tableColumnLeft": "Insert column left",
@@ -401,6 +410,9 @@ const ENGLISH: Record<string, string> = {
   // The toolbar above whichever table the caret is in. Short, because ten of them sit in
   // a row; the full sentence from `menu.table*` above is the tooltip. "Auto" is the
   // fourth alignment state — a plain `---`, which is not the same as left.
+  "slash.nothing": "Nothing matches",
+  "slash.label": "Insert menu",
+
   "table.toolbar": "Table operations",
   "table.rowAbove": "Row ↑",
   "table.rowBelow": "Row ↓",
@@ -534,6 +546,9 @@ const ENGLISH: Record<string, string> = {
   "settings.hotkeyHint": "Click, then press the key combination.",
   "settings.close": "Close",
   "settings.hotkeyTaken": "That combination is already taken.",
+  "settings.remoteImages": "Load images from the web",
+  "settings.remoteImagesWhy":
+    "A note can point at a picture on the internet. emqnote fetches it once and keeps a local copy, so the note still reads offline.",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

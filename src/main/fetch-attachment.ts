@@ -132,13 +132,15 @@ async function fetchFollowing(url: string, signal: AbortSignal): Promise<Respons
   return null;
 }
 
-/** Bytes accepted, named and written — the last step both paths share. */
-async function store(
-  vault: string,
-  url: string,
-  declaredType: string | null,
-  bytes: Uint8Array,
-): Promise<string | null> {
+/**
+ * Bytes that have passed every check, with the extension they turned out to deserve — or
+ * null for any refusal at all.
+ *
+ * Priority for the extension: what the bytes are, then what the server called them, then
+ * `.png`. The URL's own suffix is never consulted — a path ending `.png` that sniffs as
+ * JPEG would otherwise produce a file whose name lies about its contents.
+ */
+function accept(declaredType: string | null, bytes: Uint8Array): FetchedImage | null {
   if (bytes.length > MAX_IMAGE_BYTES) return null;
   // An allowed declared type is required, so a `data:` URL that names no type at all
   // (`text/plain` by RFC) is refused here rather than sniffed into acceptance.
@@ -147,36 +149,38 @@ async function store(
   const sniffed = sniffImageType(bytes);
   if (!typesAgree(declaredType, sniffed)) return null;
 
-  // Priority: what the bytes are, then what the server called them, then `.png`. The
-  // URL's own suffix is never consulted — a path ending `.png` that sniffs as JPEG
-  // would otherwise produce a file whose name lies about its contents.
   const extension =
     extensionForContentType(sniffed) ?? extensionForContentType(declaredType) ?? ".png";
 
-  return saveAttachment(vault, bytes, `${originalNameForUrl(url)}${extension}`);
+  return { bytes, extension };
+}
+
+/** What came back off the network, once every rule in `remote-image.ts` has said yes. */
+export interface FetchedImage {
+  bytes: Uint8Array;
+  /** `.png`, `.jpg`, … — decided by the sniff, never by the URL. */
+  extension: string;
 }
 
 /**
- * Downloads a pasted image into `_attachments/` and answers the name it landed under,
- * or `null` for every refusal there is — a scheme that is not allowed, a redirect that
- * leaves the allowlist, a type that is not an image, bytes that do not match what the
- * server said they were, anything over the cap, a timeout, or a network error.
+ * An image from the web, checked but not stored anywhere.
  *
- * Never throws: the renderer treats `null` as "leave the remote `<img>` where it is",
- * which is an honest fallback, and an exception crossing IPC would only turn a failed
- * picture into a failed paste.
+ * The half B50 needed: a remote image drawn *in* a note is cached outside the vault
+ * (`remote-cache.ts`), while a pasted one becomes a file in `_attachments/` — two
+ * destinations, one download, and above all **one set of checks**. Every rule that stands
+ * between a URL in a note and `file:///etc/passwd` or `http://169.254.169.254/…` is
+ * applied here, once: the scheme allowlist, the per-hop redirect re-check, `credentials:
+ * "omit"`, the timeout, both byte caps, the content-type allowlist and the magic-byte
+ * sniff. A second copy of that for the second caller is precisely the thing not to write.
+ *
+ * Never throws — every refusal is `null`.
  */
-export async function fetchRemoteImage(vault: string, url: string): Promise<string | null> {
+export async function fetchImageBytes(url: string): Promise<FetchedImage | null> {
   if (!isFetchableUrl(url)) return null;
 
   if (url.slice(0, 5).toLowerCase() === "data:") {
     const parsed = parseDataUrl(url);
-    if (parsed === null) return null;
-    try {
-      return await store(vault, url, parsed.contentType, parsed.bytes);
-    } catch {
-      return null;
-    }
+    return parsed === null ? null : accept(parsed.contentType, parsed.bytes);
   }
 
   return withSlot(async () => {
@@ -196,11 +200,38 @@ export async function fetchRemoteImage(vault: string, url: string): Promise<stri
       const bytes = await readCapped(response);
       if (bytes === null) return null;
 
-      return await store(vault, url, declared, bytes);
+      return accept(declared, bytes);
     } catch {
       return null;
     } finally {
       clearTimeout(timer);
     }
   });
+}
+
+/**
+ * Downloads a pasted image into `_attachments/` and answers the name it landed under,
+ * or `null` for every refusal there is — a scheme that is not allowed, a redirect that
+ * leaves the allowlist, a type that is not an image, bytes that do not match what the
+ * server said they were, anything over the cap, a timeout, or a network error.
+ *
+ * Never throws: the renderer treats `null` as "leave the remote `<img>` where it is",
+ * which is an honest fallback, and an exception crossing IPC would only turn a failed
+ * picture into a failed paste.
+ */
+export async function fetchRemoteImage(vault: string, url: string): Promise<string | null> {
+  const fetched = await fetchImageBytes(url);
+  if (fetched === null) return null;
+
+  try {
+    // The name comes from the URL's path and the extension from the bytes — never both
+    // from the same place. `originalNameForUrl` is where that split is written down.
+    return await saveAttachment(
+      vault,
+      fetched.bytes,
+      `${originalNameForUrl(url)}${fetched.extension}`,
+    );
+  } catch {
+    return null;
+  }
 }
