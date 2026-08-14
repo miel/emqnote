@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 920 tests
+npm test               # vitest run — 1216 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -163,6 +163,26 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **A pasted picture is downloaded into `_attachments/`, never left pointing at the web.** ProseMirror's stock HTML paste produces an `image` node holding the remote address, which serializes to `![alt](https://…)` — a note that is empty offline, empty on the other machine, and blocked by the CSP even online. `paste-images.ts` is the two halves this takes: `transformPastedImages` runs inside `transformPasted` and turns an `emqnote-attachment://` image into a `wikiEmbed` on the spot (an in-app copy, never re-downloaded), and the `remoteImages()` plugin asks main for the rest and swaps in the `wikiEmbed` when the file lands. In-flight images are tracked as a `DecorationSet`, not as positions: a download takes seconds, and `DecorationSet.map` moves the marker with the text while the user types — and collapses it away if the image is deleted or undone, so a late resolution finds nothing and does nothing. The side effect lives in the plugin's `view.update`, never in `appendTransaction`, which runs inside the dispatch cycle. **Everything the renderer might be talked into is decided again in main**, which is the point: `remote-image.ts` (Electron-free, tested directly) holds the scheme allowlist — `https:`, `http:`, `data:`, and `file:` conspicuously not — the content-type allowlist, the magic-byte sniff and the naming; `fetch-attachment.ts` does the I/O with `redirect: "manual"` and **re-checks the allowlist on every `Location` header**, which is the single check standing between a pasted URL and `file:///etc/passwd` or `http://169.254.169.254/…`. Also `credentials: "omit"`, a 10 s timeout, a 20 MB cap checked against `Content-Length` *and* while streaming, and three downloads at a time. Two asymmetries are deliberate and easy to "fix" by mistake: **SVG is refused on this path though the picker still allows one** (the user chose the picker's file; nobody chose what a pasted page's server returns, and `openAttachment` hands attachments to a viewer where script in an SVG runs), and the extension comes from the sniff, then the header, then `.png` — **never from the URL path**, so a `.png` address whose bytes are JPEG cannot produce a lying filename. A refusal answers `null`, the remote `image` node stays put, and `externalImageView` draws it as a label rather than a broken-image glyph — which also fixes the same glyph for notes written in Obsidian that already carried remote image markdown.
 
+**A picture a note names by its web address is fetched by main, cached outside the vault, and
+never fetched by the renderer** (B50). A vault written elsewhere is full of
+`![Name](https://…)`, and every one of them used to draw as a grey chip. The CSP is still
+closed to `https:` — what changed is *who* asks: `emqnote-remote://vault/<url>` carries the
+whole address in the path (B38's measurement is why it cannot be a host: case and `%2F`), the
+handler runs it through the very same `fetchImageBytes` a pasted image goes through, and the
+bytes land in `<userData>/remote-images` (B9 — not `_attachments/`, which would mean opening a
+note wrote into the vault, B10 from the wrong side). A note read once reads offline
+afterwards. Four things are load-bearing. **The scheme has no `corsEnabled`** because nothing
+`fetch()`es it — an `<img>` loads it — and that is the privilege whose absence has twice
+killed a shipped feature (B36, B40), so it is the first line to change if a renderer ever
+does. **The chip is drawn first and stays on any refusal**, so a blocked address, an empty
+cache offline, or the setting being off all end in the state this NodeView always had.
+**`loadRemoteImages` is enforced in main**, in the handler — but the renderer holds a copy and
+stops asking when it is off, because Chromium answers a URL it has already drawn out of its
+own image cache without consulting the handler at all (measured: the switch went off and the
+pictures stayed). And **a `data:` address goes the same way** rather than straight into an
+`<img>`: the capture window's CSP allows no `data:` in `img-src`, so the short cut would draw
+in one window and not the other.
+
 **One list stays one list.** Two lists of the same kind cannot sit against each other in a
 file: the serializer alternates the bullet character to keep them apart, so `- one` is
 followed by `* two`, which reads back as two lists and draws with a gap down the middle.
@@ -295,6 +315,26 @@ panel's right-click menu all get it from one list. **No shortcut and no `---` in
 the Insert menu opens from a plain button so `--click-button` reaches it, and a `---`
 autoformat would be a markdown spelling, which `state.ts`'s `autoformat` refuses on principle.
 
+**Typing `/` at the start of a line opens the insert menu, and typing on filters it** (B51).
+`slash-menu.ts` is a plugin drawing **plain DOM**, not a React overlay, and that is the
+decision: the caret has to stay in the note while the list narrows, which is exactly what a
+modal picker with its own input takes away (`NotePicker` is right for searching a vault and
+wrong for reading what is already being typed). It also means the plugin goes into
+`createEditorState` once and appears in both windows, since everything it needs is already on
+`CommandContext`. Four things are easy to break. **It opens only on a `/` that is the whole of
+an empty textblock**, and never inside a table cell, where a heading, a list and a rule are
+all impossible — noticed in `apply` rather than by an input rule, so nothing has to reach out
+of ProseMirror's own dispatch. **The `/` stays in the document** while the menu is up, as
+`[[` does (B41), so Escape leaves precisely what was typed. **The prefix is deleted before the
+item runs**, because four items open a picker of their own and insert later. And the rows
+carry `.context-menu-label` with visible text, which is what keeps `--click-button` able to
+reach them. `slashMenuItems` is built on `insertMenuItems` verbatim, so the toolbar's Insert
+button, the right-click menu and this cannot drift; the mark toggles are deliberately absent,
+since a mark on an empty line only arms the next thing typed. **`insertHorizontalRule` puts
+the caret on the line below the rule** — `replaceSelectionWith` leaves a `NodeSelection` on a
+selectable leaf, so before this the next character typed replaced the divider that had just
+been made; only running it found that.
+
 **Renaming a folder repairs the links into it, without asking** (B44). `renameFolder`'s own
 comment used to say nothing inside needed rewriting because wikilinks carried bare names —
 true when written, false since B35, and the sentence is what kept the breakage invisible. The
@@ -416,6 +456,28 @@ prescribes). `trailing-paragraph.ts` keeps an empty paragraph after a trailing t
 block, HTML block or rule so there is always somewhere to type; it never reaches a file
 because `withoutTrailingBlanks` already strips one on write, which is what makes the
 invariant free.
+
+**A rectangle of cells is selectable, and one function answers what an operation is about**
+(B49). `table-selection.ts` is a hand-rolled `Selection` subclass — refused from
+`prosemirror-tables` for exactly B42's reason, since its `CellSelection` arrives with the
+`TableMap`, the `tableRole`s and the `colspan`/`rowspan` this schema cannot hold. Three
+things carry it. **`selectedRect(state)` is the single question every command reads**: a
+caret makes a one-cell rectangle and a selection makes a bigger one, so B42's dozen commands
+gained the whole feature without a second code path — and "Row ↓" adds as many rows as are
+selected, which is the only reading where a rectangle does not mean less than a caret.
+**`visible = false`**, so the browser paints nothing over it and `table-align.ts`'s
+decoration is the entire affordance — which is also why that fill has to out-rank the
+header-row background on specificity (`test/styles-table.test.ts` guards it; same family as
+B48's bug). And **`createSelectionBetween` is what makes the drag work at all**: the button
+is still down, so Chromium goes on extending its own text selection and `prosemirror-view`
+reads it back over the `CellSelection` on every `selectionchange` — measured in the running
+app, where a slow drag ended with nothing selected. Backspace/Delete clear the cells one
+replace at a time (a single step across an `isolating` boundary is refused, which is the
+original bug), and typing over a rectangle clears it first in `handleTextInput` — the
+insertion is done there rather than handed back, because the `from`/`to` ProseMirror passed
+belong to the document before the cells were emptied. Merged cells stay impossible (B6), and
+pasting a rectangle *into* a rectangle is deliberately not built. `table-geometry.ts` holds
+the matrix arithmetic both files need, so neither has to import the other.
 
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
 
@@ -642,6 +704,42 @@ missing `corsEnabled`.
 driveable and `--click-button` cannot enter a native menu, which is why `vault-menu.ts` exists
 to be tested apart from it. And, the limitation every batch since the disk-change work has
 named, all ten in the *capture* window specifically. Both are `TEST-PROTOCOL.md` items.
+
+**Three cornerstone features landed on 14 August 2026**, on top of `v0.7.4`. All three carry
+decisions: **B49** — a rectangle of table cells is selectable, with a hand-rolled `Selection`
+— **B50** — a picture named by a web address is fetched by main and cached outside the vault
+— and **B51** — `/` at the start of a line opens the insert menu and typing filters it. A
+fourth, smaller thing came out of the third: the divider inserted by that menu (or by any
+other route) no longer disappears when you type the next word.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a three-note vault and a
+local HTTP server standing in for the web: a drag from cell `a` to cell `e` selecting exactly
+`a,b,d,e` and **no other cell**, with the header cell genuinely painted (`getComputedStyle`,
+not merely a class in the DOM) and the browser's own selection kept out of the way; Backspace
+clearing those four and nothing else; undo restoring them; "Del row" removing both spanned
+rows; "Centre" writing `:---:` for both spanned columns, with the file coming back
+**byte-identical from `npm run canonical`**. A `![Naam](http://…)` drawing a real picture
+(`naturalWidth` 120 — the B38 lesson), the bytes landing in `<userData>/remote-images`, the
+same note still drawing **with the server stopped**, a `file:///etc/passwd` and a
+`http://169.254.169.254/…` staying chips with nothing written, and the Settings switch turning
+the picture into a chip and back. And the `/` menu opening under the caret at `z-index` 20
+with `elementFromPoint` confirming it paints on top, filtering to the six headings on `/head`
+while the caret stayed in the note, the arrows moving the highlight, Enter making a real `<h1>`
+with no stray `/head` left behind, `/divid` making an `<hr>` that **survived the next word
+typed**, Escape leaving `/quo` exactly where it was, and a `/` mid-sentence opening nothing.
+
+Two things that batch is worth remembering for, both found by running it and neither visible
+in any test. **A drag needs `createSelectionBetween`**: the pointer is still down, so Chromium
+extends its own text selection over the cells and `prosemirror-view` reads it back over the
+`CellSelection` on every `selectionchange` — a slow drag ended with nothing selected at all.
+**A privacy switch has to be honoured on both sides**: main refused the request correctly with
+`loadRemoteImages` off, and Chromium drew the picture anyway out of its own image cache,
+`no-store` and all, for any URL it had already loaded that session.
+
+**Not confirmed live**, the limitation every batch since the disk-change work has named: all
+three in the *capture* window specifically. Also unseen by a person: how a dragged rectangle
+feels on a real display, and whether the `/` panel's sixteen rows crowd a short window. Both
+are `TEST-PROTOCOL.md` items.
 
 ## The documents
 

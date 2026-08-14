@@ -1536,6 +1536,115 @@ gewoon getekend worden. Beide klassenamen op één selector nu.
 
 ---
 
+## B49 — Een rechthoek cellen is selecteerbaar, met een eigen `Selection`
+
+**Genomen** op 14 augustus 2026, uit dagelijks gebruik: een tabel was alleen cel voor cel te
+bewerken. Slepen over cellen léék te werken — de browser tekende zijn eigen selectie — en
+daarna deed Backspace niets en werkte de knoppenbalk op één cel van de rechthoek. `tableCell`
+is `isolating`, dus de ene vervangstap die zo'n `TextSelection` nodig heeft wordt geweigerd:
+de toets verdween in het niets.
+
+**Weer met de hand, om precies de reden van B42.** `prosemirror-tables` heeft hier ook een
+`CellSelection` klaarliggen, maar die komt met zijn `TableMap`, zijn `tableRole`s, zijn eigen
+kopnode en `colspan`/`rowspan` op elke cel — en dit schema *is* het bestandsformaat, waar GFM
+geen samengevoegde cel kan opschrijven. Wat nodig is, is een rechthoek over een matrix, en
+dat is `table-selection.ts` geworden: `visible = false` (de browser tekent er niets overheen,
+de decoratie in `table-align.ts` is alles wat je ziet), één bereik per cel, `map` die netjes
+terugvalt op een cursor als de cellen weg zijn, en `content()` die de rechthoek als een echte
+tabel op het klembord zet.
+
+**Eén rechthoek voert álle bestaande opdrachten.** `selectedRect` beantwoordt de vraag "waar
+gaat dit over" voor een cursor (één cel) en voor een selectie (de hele rechthoek), en elk
+commando uit B42 leest dat. Daardoor betekent "rij weg" *de rijen die je aanwijst* zonder een
+tweede pad, en "rij eronder" voegt er evenveel toe als je er hebt geselecteerd — het gedrag
+van Word, en de enige lezing waarin een rechthoek niet minder betekent dan een cursor.
+
+**Wat het draaien vond en het lezen niet, twee keer.** De eerste versie zette wel een
+`CellSelection`, maar de knop was nog ingedrukt: Chromium breidde zijn eigen tekstselectie uit
+over de cellen, `prosemirror-view` las die bij elke `selectionchange` terug en zette er een
+`TextSelection` overheen. Traag slepen eindigde met niets geselecteerd, snel slepen met de
+rechthoek die de race won. `createSelectionBetween` is het antwoord — tijdens het slepen is de
+selectie van deze plugin — en geen enkele test onder `test/` had het kunnen zien. De tweede:
+de opmaakregel voor de kopregel (`table tr:first-child td`) is één klasse én één pseudoklasse
+diep, dus een vulling op `td.table-cell-selected` verliest daarvan op specificiteit — en de
+kopregel is nu juist de rij die bij een kolomselectie altijd meedoet. Dezelfde familie als de
+fout die B48 beschrijft.
+
+**Samenvoegen blijft onmogelijk, en dat is geen tekortkoming maar B6.** GFM kan het niet
+opschrijven, dus de editor mag het niet kunnen maken. Het plakken van een gekopieerde
+rechthoek *in* een andere rechthoek is bewust niet gebouwd: een gekopieerde rechthoek plakt
+als tabel, wat is wat `content()` maakt.
+
+---
+
+## B50 — Een afbeelding van het web wordt door main opgehaald en lokaal bewaard
+
+**Genomen** op 14 augustus 2026. Een notitie die elders is geschreven staat vol
+`![Naam](https://…)`, en die tekenden hier geen van alle: de CSP laat in beide vensters geen
+enkele externe afbeeldingsbron toe. Dat was met opzet zo, en het argument dat erbij stond
+klopt nog steeds — een notitie die bij elke opening bij een willekeurige host langsgaat is een
+tracking pixel met extra stappen, en hij is leeg zodra de machine offline is of de andere
+machine hem opent.
+
+**Het bezwaar gold nooit de afbeelding, maar wie hem ophaalt.** Dus: **main** haalt hem op,
+één keer, door precies de keten die een geplakte afbeelding al doorloopt (`remote-image.ts`'s
+schema-lijst, de hercontrole bij elke `Location`, `credentials: "omit"`, de time-out, beide
+byte-plafonds, de magische bytes), bewaart de bytes in `userData` (B9, dus buiten de vault —
+in `_attachments/` zetten zou betekenen dat het openen van een notitie een bestand in de vault
+schrijft, en dat is B10 van de verkeerde kant) en dient ze uit over `emqnote-remote://`. De
+renderer raakt het netwerk niet aan, de CSP noemt nog steeds geen enkele host, en een notitie
+die één keer gelezen is leest daarna ook zonder internet.
+
+**De schakelaar staat in Settings en staat aan.** Uit is een verdedigbare positie — het openen
+van zo'n notitie laat main dat adres opvragen, en de host ziet dat — maar een kolom grijze
+chips is niet wat die notities zeggen. Main beslist, in de protocolafhandelaar, niet de
+renderer.
+
+**Wat het draaien vond en het lezen niet:** met de schakelaar uit tekende een al eerder
+geopende notitie zijn plaatjes gewoon opnieuw. Chromium beantwoordt een URL die hij al eens
+getekend heeft uit zijn eigen afbeeldingscache, zónder de afhandelaar te raadplegen —
+`no-store` erbij hielp niet genoeg. De renderer heeft daarom zijn eigen kopie van de
+instelling en vraagt niets meer als het antwoord nee is; main blijft de autoriteit, dit is
+alleen wat voorkomt dat de vraag een tweede keer wordt gesteld.
+
+**Geen `corsEnabled` op dit schema**, en dat is bewust: niets `fetch()`t het — het is een
+`<img>`. Als dat ooit verandert is dat de eerste regel om aan te passen, want juist die
+weglating heeft twee keer eerder een functie stilletjes doodgelegd (B36, B40).
+
+---
+
+## B51 — `/` aan het begin van een regel opent het invoegmenu
+
+**Genomen** op 14 augustus 2026. Alles wat je in een notitie kunt zetten zat achter een knop,
+een rechtermuisklik of een toetscombinatie. `/` is wat iedereen die uit Notion of Obsidian
+komt als eerste probeert, en het is de enige route die niets kost terwijl beide handen
+typen.
+
+**Filteren gebeurt in de notitie zelf.** Het menu hangt onder de cursor en je typt gewoon
+door; wat achter de `/` staat filtert de lijst. Dat is de reden dat het géén React-overlay met
+een eigen invoerveld is zoals de notitiekiezer (B41): dat neemt de cursor weg, en dat is precies
+wat hier niet mag. Een gewone DOM-plugin dus, zoals `table-toolbar.ts` zijn balk tekent — en
+daardoor staat het in beide vensters zonder dat een van de twee er iets voor hoeft te weten.
+
+**Alleen als de `/` het enige op de regel is.** Een `/` in een zin is een schuine streep — een
+datum, een pad, "en/of" — en een menu dat daaroverheen opengaat staat in de weg. In een
+tabelcel gaat het ook niet open: daar past geen kop, geen lijst en geen scheidingslijn, en een
+menu waarvan elk item weigert is erger dan geen menu.
+
+**De `/` blijft staan zolang het menu open is**, net als `[[` (B41): Escape laat precies staan
+wat je typte en er valt niets ongedaan te maken. Bij het kiezen wordt het voorvoegsel
+weggehaald **vóór** het item wordt uitgevoerd — vier items openen een eigen kiezer en voegen
+pas later in, en achteraf verwijderen zou ofwel de verkeerde tekens opeten ofwel om dezelfde
+positie vechten.
+
+**Wat het draaien vond:** de scheidingslijn — nu het makkelijkst bereikbare item van het menu
+— werd door het eerstvolgende getypte teken meteen weer opgeslokt.
+`replaceSelectionWith` laat een `NodeSelection` op de regel staan, want die is selecteerbaar.
+`insertHorizontalRule` zet de cursor sindsdien op de regel eronder. Dat was al zo sinds de
+scheidingslijn bestaat (14 augustus 2026, eerder die dag) en niemand had het gezien.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1550,3 +1659,5 @@ gewoon getekend worden. Beide klassenamen op één selector nu.
 | ~~Levert `nativeImage.createThumbnailFromPath` op macOS en Windows echt een PDF-eerste-pagina op?~~ | Vervallen — B36 stelt die vraag niet meer: pdf.js tekent de pagina, en dat is op 7 augustus 2026 onder `Xvfb` werkend gezien, op precies dezelfde Chromium die de verpakte app meelevert. Wat een mens nog moet nakijken staat in `TEST-PROTOCOL.md` §4.5 |
 | Verschijnt de eigen, knopvrije melding van het opnamevenster echt bij een externe wijziging? | Nu — het pad in de bibliotheek is op 7 augustus 2026 uitputtend bevestigd onder `Xvfb` (schoon/vuil/verwijderd, en geen valse balk bij eigen schrijfacties); het opnamevenster zelf nog niet, zie `TEST-PROTOCOL.md`, B31 |
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |
+| Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
+| Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |

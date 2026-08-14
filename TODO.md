@@ -170,7 +170,22 @@ because they are unreachable. (Also no longer blocked on Node: an `nvm`
 install of Node 24 on 2 August 2026 fixed both the jsdom-based tests and
 `better-sqlite3`, which segfaulted under the sandbox's previous Node 18 —
 see `00-PLAN.md`.) `npm test`, `npm run typecheck` and `npm run build` all
-pass — 438 tests, the full suite.
+pass — 1216 tests, the full suite.
+
+- [ ] **The three cornerstone features of 14 August 2026 in the *capture* window**
+      (B49 cell selection, B50 remote images, B51 the `/` menu). All three are
+      confirmed in the library under `Xvfb` and driven over CDP — the drag, the
+      clearing, the toolbar over a rectangle, the picture drawn from cache with the
+      network down, the switch turning it back into a chip, the menu filtering as you
+      type. The capture window still has no harness, the same gap every batch since
+      the disk-change work has named. `TEST-PROTOCOL.md` §19u.
+- [ ] **How a dragged rectangle and a sixteen-row `/` panel feel on a real display.**
+      Neither is something a script can judge: whether the rectangle keeps up with
+      the pointer, and whether the panel flips above the caret gracefully in a short
+      window. `TEST-PROTOCOL.md` §19b and §19t.
+- [ ] **What a remote host actually sees when a note with a web picture is opened.**
+      From inside the app it is one request per picture, once, and nothing on a
+      second open — but that is the app's account of itself. `TEST-PROTOCOL.md` §19m.
 
 - [ ] Rename a folder while a note inside it is **open and dirty**. Confirm no
       duplicate old folder appears, the note keeps its caret and undo history,

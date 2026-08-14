@@ -630,6 +630,38 @@ picture, a multi-page PDF and a `.docx` in it, and a note that ends in a table.
 
 ---
 
+## 19. The three cornerstone features (B49, B50, B51)
+
+Everything below has been driven under `Xvfb` in the **library** window except where it says
+otherwise. What a person is here for is the capture window, the feel of a drag, and a machine
+with a real network on it.
+
+| # | Do this | Expect |
+|---|---|---|
+| 19a | Drag across a 2×2 block of cells in a table | Exactly those four cells are tinted, including the header row. Nothing outside the rectangle |
+| 19b | Judge that drag on a real display — NEVER JUDGED | Does the rectangle follow the pointer without lag or flicker? Does the browser's own blue text selection ever flash over it? |
+| 19c | Press Backspace with that rectangle up | Those four cells empty. The table keeps its shape, and nothing outside the rectangle changes |
+| 19d | Type a letter with a rectangle up | The cells empty and the letter lands in the top-left one of them |
+| 19e | Shift+click a cell three rows down | The rectangle extends to it. Shift+arrow does the same, one cell at a time |
+| 19f | With a rectangle spanning two rows, press "Row ↓" | **Two** rows are added, not one — a rectangle means what it covers |
+| 19g | With a rectangle spanning two columns, press "Centre" | Both columns are centred. Save and `npm run canonical`: `:---:` twice, byte-identical |
+| 19h | Select a rectangle and copy it, then paste into Word or a mail | A real table of just those cells. Paste into a plain-text box: `\| a \| b \|` rows |
+| 19i | Open a note holding `![Naam](https://…)` on a machine with a network | The picture is drawn, not a grey chip |
+| 19j | Pull the network out and reopen that note | Still drawn — the bytes are in `<userData>/remote-images` |
+| 19k | Settings → uncheck **Load images from the web**, reopen the note | A chip with the alt text. Check it again: the picture is back |
+| 19l | Open a note holding `![x](file:///etc/passwd)` and one naming an internal address | Chips, both. `<userData>/remote-images` gains nothing — check the folder |
+| 19m | Watch what a real host sees — NEVER VERIFIED | With the setting on, opening such a note is one request per picture, once. Nothing on a second open |
+| 19n | Type `/` on an empty line | A menu under the caret: six headings, paragraph, the three list kinds, quote, then the five insert items |
+| 19o | Keep typing `head` | It narrows to the headings. The caret is still in the note and `/head` is still visible in it |
+| 19p | Press Enter on Heading 1 | The line becomes a heading and the `/head` is gone. Type on: the words land in the heading |
+| 19q | Type `/` then Escape | The menu closes and the `/` stays exactly where you typed it |
+| 19r | Type `/divid`, Enter, then type a word | The rule stays and the word goes below it. Before this the word replaced the rule |
+| 19s | Type a date like `12/8` mid-sentence, and a `/` in a table cell | No menu, either time |
+| 19t | Judge the panel at a short window height — NEVER JUDGED | Sixteen rows is taller than some windows. It should flip above the caret and scroll rather than run off the screen |
+| 19u | Do 19a–19s in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h/18x |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -638,12 +670,13 @@ what happened, and what you expected. For a rendering
 problem, a screenshot. For anything involving files, the actual bytes — `cat` the `.md`,
 do not describe it.
 
-If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q
-or §18x fails,
+If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
+§18x or §19u fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i and §18x are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x and §19u are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
-genuinely cannot answer. §15b and §16b are a different kind of unwatched: they are judgements
-about how something feels or reads, which no script can make. §4.5 is no longer one of them — since B36 the rendering itself has been seen
+genuinely cannot answer. §15b, §16b, §19b and §19t are a different kind of unwatched: they are judgements
+about how something feels or reads, which no script can make. §19m is a third kind: what a
+remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.
