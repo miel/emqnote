@@ -4,6 +4,7 @@ import type {
   ConflictPair,
   DiffLine,
   Facets,
+  FileSummary,
   FolderNode,
   LinkCandidateSummary,
   LinkingNoteSummary,
@@ -61,6 +62,12 @@ export const IPC = {
   libraryOpen: "library:open",
   libraryTree: "library:tree",
   libraryNotes: "library:notes",
+  /**
+   * The files in a folder that are not notes — pictures, PDFs, documents (B47). Only a
+   * folder selection has an answer; a tag or a search does not, so the renderer asks for
+   * this beside `libraryNotes` rather than as part of it.
+   */
+  libraryFolderFiles: "library:folder-files",
   /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
@@ -118,8 +125,6 @@ export const IPC = {
 
   /** `_attachments/` files no note refers to any more — §6.5. */
   libraryOrphanedAttachments: "library:orphaned-attachments",
-  /** A data URL for one attachment, for the cleanup screen's thumbnail — null if it is not an image. */
-  libraryAttachmentPreview: "library:attachment-preview",
   libraryTrashAttachment: "library:trash-attachment",
 
   /** Which notes link to one, so a move or a rename can offer to bring them along (B35). */
@@ -274,6 +279,8 @@ export interface LibraryApi {
   tree: () => Promise<FolderNode>;
   /** A folder, a tag or a person — whatever the left panel currently has selected. */
   notes: (selection: Selection) => Promise<NoteSummary[]>;
+  /** The non-note files in one folder, for the list's second section (B47). */
+  folderFiles: (folder: string) => Promise<FileSummary[]>;
   /**
    * `type:meeting attendee:"Jan de Vries" tag:klantx after:2026-01-01` plus free text —
    * `search-query.ts` parses it, `vault-scan.ts`'s `searchNotes` runs it. An empty or
@@ -378,9 +385,13 @@ export interface LibraryApi {
   /** No `"merge"` branch here — that choice touches no file, so the renderer never calls this for it. */
   resolveConflict: (pair: ConflictPair, choice: ConflictChoice) => Promise<void>;
 
+  /**
+   * Vault-relative paths of the `_attachments/` files nothing names any more. The screen
+   * draws each one straight off `emqnote-attachment://` (B28) — there used to be a second
+   * call per file that base64'd the whole thing through IPC, which is what B28 refused for
+   * a note's own pictures and what made this screen load all-or-nothing.
+   */
   orphanedAttachments: () => Promise<string[]>;
-  /** `null` when the file is not a browser-renderable image type, or could not be read. */
-  attachmentPreview: (path: string) => Promise<string | null>;
   trashAttachment: (path: string) => Promise<string>;
 
   /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */

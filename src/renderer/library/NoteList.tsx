@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   folderOf,
   TRASH_FOLDER,
+  type FileSummary,
   type NoteSummary,
   type Selection,
   type SortKey,
@@ -12,7 +13,15 @@ import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
 interface Props {
   notes: NoteSummary[];
+  /**
+   * The non-note files in the folder being browsed (B47) — empty for a tag, a person or a
+   * search, none of which has an answer to "which files are here".
+   */
+  files: FileSummary[];
   selected: string | null;
+  /** The file row that is selected, if the selection is a file rather than a note. */
+  selectedFile: string | null;
+  onSelectFile: (path: string) => void;
   /** What produced this list. A filter draws from everywhere, a folder from one place. */
   showing: Selection;
   /** A search query is currently narrowing the list — results can come from anywhere, same as a tag or a person. */
@@ -53,7 +62,10 @@ const SORTS: SortKey[] = ["modified", "created", "title"];
 
 export function NoteList({
   notes,
+  files,
   selected,
+  selectedFile,
+  onSelectFile,
   showing,
   searching,
   searchQuery,
@@ -214,6 +226,65 @@ export function NoteList({
           </li>
         ))}
       </ul>
+
+      {files.length > 0 && (
+        <>
+          {/* A second section rather than rows mixed in among the notes. Everything the
+              note rows carry — sort, drag to a folder, the right-click menu with Move,
+              Rename, Duplicate and Delete — is about notes, and a `.png` that answered
+              some of those and not others would be worse than one that plainly is not a
+              note. */}
+          <div className="files-header">
+            <span className="notes-count">
+              {`${files.length} ${t(files.length === 1 ? "library.file" : "library.files")}`}
+            </span>
+          </div>
+          <ul className="files-list" role="listbox">
+            {files.map((file) => (
+              <li
+                key={file.path}
+                className={`note file-row${selectedFile === file.path ? " note-on" : ""}`}
+                role="option"
+                aria-selected={selectedFile === file.path}
+                // A tab stop only when there are no notes above to be one — which is the
+                // case this exists for: an imported vault's `99 - Attachments` folder,
+                // where the file list is the whole of the pane.
+                tabIndex={notes.length === 0 && files[0]?.path === file.path ? 0 : -1}
+                onClick={() => onSelectFile(file.path)}
+                onKeyDown={(event) => {
+                  const container = (event.currentTarget as HTMLElement).closest(".files-list");
+                  const next = roveArrowKey(event, container, ".file-row", event.currentTarget);
+                  if (next !== null) {
+                    event.preventDefault();
+                    next.focus();
+                    return;
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onSelectFile(file.path);
+                  }
+                }}
+              >
+                <div className="note-top">
+                  <span className="note-title">{file.name}</span>
+                  <span className="note-when">{formatListTime(locale, file.modified)}</span>
+                </div>
+                <div className="note-excerpt">
+                  {file.extension.slice(1).toUpperCase()} · {formatSize(file.size)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
+}
+
+/** Round numbers, because nobody reading a note list wants a byte count. */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) return `${Math.round(kilobytes)} kB`;
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 }

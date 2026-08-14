@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
 import {
   cleanTagInput,
@@ -30,6 +30,7 @@ import {
   TRASH_FOLDER,
   type ConflictChoice,
   type ConflictPair,
+  type FileSummary,
   type FolderNode,
   type NoteSummary,
   type OpenedNote,
@@ -216,6 +217,57 @@ export function readNotesIn(vault: string, folder: string): NoteSummary[] {
   }
 
   return notes;
+}
+
+/**
+ * The files in a folder that are not notes — pictures, PDFs, documents (B47).
+ *
+ * A vault imported from Obsidian keeps its attachments in an ordinary folder beside the
+ * notes (`99 - Attachments`, usually), and that folder was browsable and completely
+ * empty: `readNotesIn` drops everything `isNoteFile` refuses, so the tree showed the
+ * folder with a `0` badge and clicking it said "No notes". Everything needed to *show*
+ * those files already existed — `resolveAttachment` resolves any vault-relative path
+ * (B38), `emqnote-attachment://` serves it and `emqnote-thumb://` draws a PDF page — and
+ * the only missing piece was something to list them.
+ *
+ * A separate call and a separate type, deliberately, rather than widening `NoteSummary`:
+ * sorting, search, drag, move, duplicate, tasks and the conflict check all take a
+ * `NoteSummary`, and not one of them means anything for a `.png`. `_attachments` stays
+ * hidden and unlistable — it is the app's own folder and has its own screen.
+ */
+export function readFilesIn(vault: string, folder: string): FileSummary[] {
+  const absolute = folder === "" ? vault : join(vault, folder);
+
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(absolute, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files: FileSummary[] = [];
+
+  for (const entry of entries) {
+    // A note is the other list's business, and a dotfile is nobody's — `.DS_Store` beside
+    // a folder of holiday pictures is not a thing to offer someone.
+    if (!entry.isFile() || isNoteFile(entry.name) || isHidden(entry.name)) continue;
+
+    const file = join(absolute, entry.name);
+    try {
+      const stats = statSync(file);
+      files.push({
+        path: toPosix(relative(vault, file)),
+        name: entry.name,
+        extension: extname(entry.name).toLowerCase(),
+        modified: stats.mtime.toISOString(),
+        size: stats.size,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return files.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 /**

@@ -33,6 +33,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
   const library: LibraryApi = {
     tree: async () => tree,
     notes: async () => [],
+    folderFiles: async () => [],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,
@@ -58,7 +59,6 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     conflictDiff: async () => [],
     resolveConflict: async () => {},
     orphanedAttachments: async () => [],
-    attachmentPreview: async () => null,
     trashAttachment: async () => "",
     tasks,
     linkingNotes: async () => [],

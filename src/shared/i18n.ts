@@ -137,6 +137,8 @@ const DUTCH: Record<string, string> = {
   "library.notes": "notities",
   "library.note": "notitie",
   "library.noNotes": "Geen notities",
+  "library.file": "bestand",
+  "library.files": "bestanden",
   "library.sort.modified": "Gewijzigd",
   "library.sort.created": "Gemaakt",
   "library.sort.title": "Titel",
@@ -159,6 +161,10 @@ const DUTCH: Record<string, string> = {
   "library.tasks": "Taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
+  // Het bestandsvoorbeeld naast de notitielijst (B47).
+  "library.openFile": "Openen",
+  "library.noPreview": "Geen voorbeeld voor dit bestandstype. Open het in het systeem.",
+  "library.previewFailed": "Dit bestand kon niet getoond worden.",
   "library.delete": "Verwijderen",
   /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
    *  Its `title`; `library.actions` is what is written on it. */
@@ -272,6 +278,7 @@ const DUTCH: Record<string, string> = {
   // Orphaned attachments
   "orphans.title": "Verweesde bijlagen",
   "orphans.loading": "Bezig met zoeken…",
+  "orphans.failed": "Zoeken is niet gelukt. Sluit dit scherm en probeer het opnieuw.",
   "orphans.empty": "Geen verweesde bijlagen gevonden.",
   "orphans.settingsHint": "Bestanden in _attachments/ waar geen notitie meer naar verwijst.",
 
@@ -425,6 +432,8 @@ const ENGLISH: Record<string, string> = {
   "library.notes": "notes",
   "library.note": "note",
   "library.noNotes": "No notes",
+  "library.file": "file",
+  "library.files": "files",
   "library.sort.modified": "Modified",
   "library.sort.created": "Created",
   "library.sort.title": "Title",
@@ -448,6 +457,10 @@ const ENGLISH: Record<string, string> = {
   "library.tasks": "Tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
+  // The file preview beside the note list (B47).
+  "library.openFile": "Open",
+  "library.noPreview": "No preview for this file type. Open it in the system viewer.",
+  "library.previewFailed": "This file could not be shown.",
   "library.delete": "Delete",
   "library.moreActions": "More actions",
   "library.actions": "Actions",
@@ -549,6 +562,7 @@ const ENGLISH: Record<string, string> = {
   // Orphaned attachments
   "orphans.title": "Orphaned attachments",
   "orphans.loading": "Looking…",
+  "orphans.failed": "The search did not finish. Close this and try again.",
   "orphans.empty": "No orphaned attachments found.",
   "orphans.settingsHint": "Files in _attachments/ that no note points to any more.",
 

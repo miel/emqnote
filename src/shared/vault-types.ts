@@ -83,6 +83,23 @@ export interface NoteSummary {
   excerpt: string;
 }
 
+/**
+ * A file in a folder that is not a note (B47).
+ *
+ * Vault-relative path with forward slashes, exactly as `NoteSummary.path` is and for the
+ * same reason: it is what `resolveAttachment` resolves and what `attachmentUrl` puts in a
+ * `emqnote-attachment://` URL, so the renderer can draw one without asking anything
+ * further.
+ */
+export interface FileSummary {
+  path: string;
+  name: string;
+  /** Lowercased, with the dot — `".png"`. Empty for a file with no extension at all. */
+  extension: string;
+  modified: string;
+  size: number;
+}
+
 export interface OpenedNote {
   path: string;
   title: string;

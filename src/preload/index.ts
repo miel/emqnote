@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   library: {
     tree: () => ipcRenderer.invoke(IPC.libraryTree),
     notes: (selection: Selection) => ipcRenderer.invoke(IPC.libraryNotes, selection),
+    folderFiles: (folder: string) => ipcRenderer.invoke(IPC.libraryFolderFiles, folder),
     search: (query: string) => ipcRenderer.invoke(IPC.librarySearch, query),
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
@@ -119,7 +120,6 @@ contextBridge.exposeInMainWorld("emqnote", {
       ipcRenderer.invoke(IPC.libraryResolveConflict, pair, choice),
 
     orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
-    attachmentPreview: (path: string) => ipcRenderer.invoke(IPC.libraryAttachmentPreview, path),
     trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
 
     tasks: (scope: string, openOnly: boolean) =>

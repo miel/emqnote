@@ -1,7 +1,10 @@
-import { readdirSync, readFileSync, type Dirent } from "node:fs";
-import { extname, join, relative, sep } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { collectWikiTargets, parseNote } from "../markdown/index.js";
+import { TRASH_FOLDER } from "../shared/vault-types.js";
 import { ATTACHMENTS } from "./vault.js";
+import { isHidden } from "./vault-io.js";
 import { isNoteFile } from "./note-files.js";
 
 /**
@@ -21,99 +24,114 @@ import { isNoteFile } from "./note-files.js";
  * deliberately differs from `index-scan.ts`'s `collectFiles`, which excludes the trash
  * because a *deleted* note must not resurface under its tags; a reference is a
  * different question from a listing, and trash answers it differently.
+ *
+ * **The reference set comes from the index when there is one** (14 August 2026). This
+ * used to walk the whole vault and `readFileSync` + `parseNote` every note in it,
+ * synchronously, inside the `ipcMain.handle` — so the main process stopped for the whole
+ * scan, and on a OneDrive Files On-Demand vault each of those reads could block on a
+ * network hydration with nothing on screen but "Looking…". `note_links` already holds
+ * exactly this set for every live note (B45 put `![[…]]` embeds in it beside the links),
+ * so the caller passes it in and only the trash still has to be read. The walk survives
+ * as the fallback for a vault with no index open yet, and is `fs/promises` now either
+ * way — a scan the user is watching may take a while, but it must not take the app with
+ * it.
  */
 
-function collectAllFiles(root: string): string[] {
+/**
+ * Every file under `root`, skipping the folders the app owns.
+ *
+ * `keepHidden` is for the `_attachments` listing itself: that root *is* one of those
+ * folders, and a subfolder inside it that happens to share a name with another would
+ * otherwise go unlisted and so never be reported as orphaned.
+ */
+async function collectFiles(root: string, keepHidden = false): Promise<string[]> {
   const files: string[] = [];
 
-  const walk = (absolute: string, depth: number): void => {
+  const walk = async (absolute: string, depth: number): Promise<void> => {
     if (depth > 12) return;
 
     let entries: Dirent[];
     try {
-      entries = readdirSync(absolute, { withFileTypes: true });
+      entries = await readdir(absolute, { withFileTypes: true });
     } catch {
       return;
     }
 
     for (const entry of entries) {
       const path = join(absolute, entry.name);
-      if (entry.isDirectory()) walk(path, depth + 1);
-      else if (entry.isFile()) files.push(path);
+      if (entry.isDirectory()) {
+        // `.git`, `.emqnote`, `_templates`, `_incoming`: the old walk descended into all
+        // of them to depth 12 and read every note it found. Only `_attachments` was
+        // filtered, and only afterwards.
+        if (!keepHidden && isHidden(entry.name)) continue;
+        await walk(path, depth + 1);
+      } else if (entry.isFile()) {
+        files.push(path);
+      }
     }
   };
 
-  walk(root, 0);
+  await walk(root, 0);
   return files;
 }
 
-function collectNoteFiles(vault: string): string[] {
-  return collectAllFiles(vault).filter(
-    (file) => isNoteFile(file) && !relative(vault, file).split(sep).includes(ATTACHMENTS),
-  );
-}
+/**
+ * The `[[…]]` and `![[…]]` targets of every note under `root`.
+ *
+ * `_trash` needs no exemption from `isHidden`: it is deliberately not in
+ * `HIDDEN_FOLDERS` (see `vault-io.ts`'s comment on why), because it holds real notes that
+ * have to stay reachable. So the whole-vault walk reaches the trash while still skipping
+ * `_templates`, `_incoming`, `_attachments` and every dot-folder — which the old walk did
+ * not, and which is why a template naming a picture used to count as a reference to it.
+ */
+async function targetsUnder(root: string): Promise<string[]> {
+  const targets: string[] = [];
 
-function referencedNames(vault: string): Set<string> {
-  const referenced = new Set<string>();
+  for (const file of await collectFiles(root)) {
+    if (!isNoteFile(file)) continue;
 
-  for (const file of collectNoteFiles(vault)) {
     let raw: string;
     try {
-      raw = readFileSync(file, "utf8");
+      raw = await readFile(file, "utf8");
     } catch {
       continue;
     }
 
-    for (const target of collectWikiTargets(parseNote(raw).doc)) {
-      referenced.add(target);
-    }
+    targets.push(...collectWikiTargets(parseNote(raw).doc));
   }
 
-  return referenced;
+  return targets;
 }
 
 /**
  * Every file under `_attachments/` that no note's `![[…]]`/`[[…]]` names — vault-
  * relative paths, so the caller can show or open them without resolving anything
  * further.
+ *
+ * `indexed` is every target the index knows, which is every target of every note outside
+ * the trash. Leave it out and the whole vault is read instead, which is what happens
+ * before the first scan has finished.
  */
-export function findOrphanedAttachments(vault: string): string[] {
-  const attachmentsDir = join(vault, ATTACHMENTS);
-  const attachmentFiles = collectAllFiles(attachmentsDir);
-  const referenced = referencedNames(vault);
+export async function findOrphanedAttachments(
+  vault: string,
+  indexed?: Iterable<string>,
+): Promise<string[]> {
+  const referenced = new Set<string>(indexed ?? []);
+
+  if (indexed === undefined) {
+    for (const target of await targetsUnder(vault)) referenced.add(target);
+  } else {
+    // The one thing the index cannot answer: `index-scan.ts` leaves the trash out on
+    // purpose, and this question counts a trashed note as a reference on purpose. Both
+    // are right, so the trash is read here and nowhere else.
+    for (const target of await targetsUnder(join(vault, TRASH_FOLDER))) {
+      referenced.add(target);
+    }
+  }
+
+  const attachmentFiles = await collectFiles(join(vault, ATTACHMENTS), true);
 
   return attachmentFiles
     .filter((file) => !referenced.has(file.split(sep).pop()!))
     .map((file) => relative(vault, file).split(sep).join("/"));
-}
-
-const IMAGE_MIME_TYPES: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-};
-
-/**
- * The cleanup screen's "miniatuur" (§6.5) for one file, as a data URL the renderer can
- * drop straight into an `<img>` — no thumbnail is actually generated. That is a
- * deliberate scope cut, not an oversight: real resizing (`sharp`) was only ever
- * anticipated for the phase-4 paste pipeline's inline images, and this screen is opened
- * by hand, occasionally, for however many files happen to be orphaned — nowhere near
- * the budget that would make sending a full-size image over IPC worth optimising away.
- * `null` for anything that is not a browser-renderable image type, or that could not be
- * read — the caller shows a generic file entry instead of a preview either way.
- */
-export function attachmentPreview(vault: string, attachmentPath: string): string | null {
-  const mimeType = IMAGE_MIME_TYPES[extname(attachmentPath).toLowerCase()];
-  if (mimeType === undefined) return null;
-
-  try {
-    const data = readFileSync(join(vault, attachmentPath));
-    return `data:${mimeType};base64,${data.toString("base64")}`;
-  } catch {
-    return null;
-  }
 }

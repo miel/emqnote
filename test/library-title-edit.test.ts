@@ -84,6 +84,7 @@ function buildFake(initial: OpenedNote): Fake {
   const library: LibraryApi = {
     tree: async () => tree,
     notes: async () => [noteSummary(initial.path, initial.title)],
+    folderFiles: async () => [],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
@@ -109,7 +110,6 @@ function buildFake(initial: OpenedNote): Fake {
     conflictDiff: async () => [],
     resolveConflict: async () => {},
     orphanedAttachments: async () => [],
-    attachmentPreview: async () => null,
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},

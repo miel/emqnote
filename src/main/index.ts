@@ -57,6 +57,7 @@ import {
   renameFolder,
   moveNote,
   openNote,
+  readFilesIn,
   readFolderTree,
   renameNote,
   resolveConflict,
@@ -77,6 +78,7 @@ import {
   linkingNotes,
   linkingNotesUnder,
   notesMatching,
+  referencedTargets,
   resolveNoteLink,
   searchNotes,
   setScanRunner,
@@ -91,7 +93,7 @@ import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./i
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
-import { attachmentPreview, findOrphanedAttachments } from "./orphaned-attachments.js";
+import { findOrphanedAttachments } from "./orphaned-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import {
   attachmentNameFromUrl,
@@ -1164,6 +1166,18 @@ function registerLibraryIpc(): void {
       : readFolderTree(vault, writer.uncommittedNewPath() ?? undefined);
   });
 
+  /**
+   * The non-note files in one folder (B47).
+   *
+   * Straight from disk, like `readNotesIn` and for the same reason (`vault-scan.ts`'s own
+   * comment: browsing one folder must not wait on a scan) — and doubly so here, since the
+   * index holds only notes and never could answer this.
+   */
+  ipcMain.handle(IPC.libraryFolderFiles, (_event, folder: string) => {
+    const vault = vaultPath();
+    return vault === null ? [] : readFilesIn(vault, folder);
+  });
+
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {
     const vault = vaultPath();
     // `indexDb` is only ever null in the sliver of startup before `main` opens it, and
@@ -1214,14 +1228,25 @@ function registerLibraryIpc(): void {
     },
   );
 
-  ipcMain.handle(IPC.libraryOrphanedAttachments, () => {
+  /**
+   * The cleanup screen's list.
+   *
+   * The reference set comes out of the index rather than out of every note on disk —
+   * `note_links` has held exactly it since B45 — which is what stopped this stalling at
+   * "Looking…" on a Files On-Demand vault. `ensureScanned` first, so a cold index is
+   * built once, with the progress bar the library already shows, instead of by a second
+   * walk nobody can see; `allLinks` is `null`-safe by being skipped entirely, in which
+   * case the scan falls back to reading the notes itself.
+   */
+  ipcMain.handle(IPC.libraryOrphanedAttachments, async () => {
     const vault = vaultPath();
-    return vault === null ? [] : findOrphanedAttachments(vault);
-  });
+    if (vault === null) return [];
 
-  ipcMain.handle(IPC.libraryAttachmentPreview, (_event, path: string) => {
-    const vault = vaultPath();
-    return vault === null ? null : attachmentPreview(vault, path);
+    const referenced = indexDb === null ? null : await referencedTargets(vault, indexDb);
+    // `null` means the index could not answer, not that nothing is referenced — the scan
+    // reads the notes itself in that case rather than offering to delete every attachment
+    // in the vault.
+    return findOrphanedAttachments(vault, referenced ?? undefined);
   });
 
   ipcMain.handle(IPC.libraryTrashAttachment, (_event, path: string) => {

@@ -111,6 +111,7 @@ function buildFake(): CaptureApi {
   const library: LibraryApi = {
     tree: async () => tree,
     notes: async () => [],
+    folderFiles: async () => [],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => openedNote(),
@@ -136,7 +137,6 @@ function buildFake(): CaptureApi {
     conflictDiff: async () => [],
     resolveConflict: async () => {},
     orphanedAttachments: async () => [],
-    attachmentPreview: async () => null,
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
