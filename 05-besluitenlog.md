@@ -1696,6 +1696,48 @@ het notitiepaneel op iets dat het zijpaneel niet toont, en is er geen rij om wee
 
 ---
 
+## B53 — Geen iPad-client; de vluchtweg ís het antwoord
+
+**Genomen** op 15 augustus 2026. Onderweg lezen en taken afvinken gebeurt in Obsidian mobile
+op dezelfde vault. Er komt geen eigen iPad-app. De hele afweging staat uitgeschreven in
+`06-ipad.md`; hieronder alleen wat er is besloten en waarom.
+
+**Waarom.** B7 kocht dit geval al, met zoveel woorden: standaardgereedschap dat de vault
+correct opent, "als er iets **onderweg** gelezen moet worden". Het gevraagde bereik — lezen
+en taken — is precies dat geval. En het sluit juist het onderdeel uit dat het bouwen van
+deze app rechtvaardigde: een alinea, een tabel of een geneste gemengde lijst onder een
+opsommingsteken, waar Obsidian faalt en waar `schema.ts`' `paragraph block*` voor bestaat.
+De iPad zou de helft van het probleem oplossen die de vluchtweg al dekt, en de helft
+overslaan waarvoor dit project bestaat.
+
+**Op grond van die redenering, niet van een proef.** `06-ipad.md` §7 noemt twee stappen die
+de eerlijke manier zouden zijn om §3 te toetsen — tien minuten MDM-controle op het toestel,
+en twee weken Obsidian mobile op de echte vault. **Geen van beide is uitgevoerd**, en dat
+hoort hier te staan: dit is een beredeneerd besluit, geen gemeten. Wie het ooit wil
+omdraaien begint daar, niet bij fase iii. Dezelfde soort labeling als bij de PDF-miniatuur
+op zakelijke OneDrive, waar het vermoeden uitdrukkelijk als vermoeden is opgeschreven.
+
+**Wat is afgevallen.** Een Capacitor-schil om de bestaande renderer (technisch de beste
+route — `src/markdown/` en `src/shared/` importeren Electron noch `node:` en gaan gratis
+mee, dus B6 blijft per constructie overeind — maar 6–9 weken, $99 per jaar en een tweede
+onderhoudsdoel voorgoed), en een native SwiftUI-herbouw, die een **tweede serializer in
+Swift** vergt. Dat laatste is wat B6 verbiedt, en het is geen theoretisch bezwaar: die zou
+`MARK_NESTING_ORDER`, de tag-uitzondering van B19, de `- [ ]`-afhandeling die GFM zelf niet
+terugleest en het wisselende opsommingsteken dat twee lijsten uit elkaar houdt moeten
+naspelen — en blijven naspelen, op het platform waar de rondgang het lastigst te inspecteren
+is. Stuk voor stuk dingen die hier één keer echt debuggen hebben gekost.
+
+**Prijs.** De beste mobiele client voor deze vault is andermans app. Twee mentale modellen.
+Het kopblok, de mappen zonder underscore en het takenoverzicht bestaan onderweg niet.
+
+**Wat dit niet is.** Geen uitspraak over opname onderweg. Dat is route D in `06-ipad.md` —
+een Shortcut die een correct gevormde `.md` in de Inbox schrijft, ongeveer een uur werk — en
+als het werk van de iPad ooit "even iets vastleggen" wordt in plaats van lezen, is dát het
+eerste om te proberen, niet een app. Dat zou een nieuw besluit zijn, niet dit besluit
+teruggedraaid.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

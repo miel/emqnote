@@ -1,11 +1,17 @@
 # emqnote — an iPad version, considered
 
 *Written 10 August 2026, at `v0.6.0`, against an undecided question.*
+*Decided 15 August 2026: **no**. See §8, and B53 in `05-besluitenlog.md`.*
 
 This document exists to be argued with, not implemented. It sets out what an iPad version
 would cost, what it would be worth, and which of four routes is the one to take if the
-answer is yes. It ends with a decision entry drafted both ways, so that whichever way this
-goes, `05-besluitenlog.md` can be updated in one paste.
+answer is yes.
+
+**The answer was no**, on §3's argument. It is kept as written — the analysis is what makes
+the decision reviewable, and a document rewritten to agree with its own conclusion is worth
+nothing to whoever reopens the question. Only §7 and §8 have been brought up to date; §1–§6
+stand as they were on 10 August 2026, including the recommendation in §6 that was not
+followed and the cost estimates that were never tested against reality.
 
 **Nothing here has been built.** No code, no branch, no dependency.
 
@@ -303,37 +309,62 @@ and any writing of markdown outside `src/markdown/` (that is B6, and it is bindi
 
 ---
 
-## 7. Recommendation
+## 7. Recommendation, and what was decided
 
-**Do phase i today. Then do phase ii. Do not write code before both are done.**
+The recommendation, as written on 10 August 2026, was:
 
-Phase i can end the question outright and costs ten minutes. Phase ii is the only honest
-way to find out whether §3's argument holds, and its output — a written list of what
-actually failed while reading notes on an iPad for two weeks — is worth more than any
-estimate in this document. If that list is short, the answer is route A and this file
-becomes a B38 that says so. If it is long and specific, phases iii–v have a real
-justification and a real requirements list, which is a much better position to start
-from than this one.
+> **Do phase i today. Then do phase ii. Do not write code before both are done.**
+>
+> Phase i can end the question outright and costs ten minutes. Phase ii is the only honest
+> way to find out whether §3's argument holds, and its output — a written list of what
+> actually failed while reading notes on an iPad for two weeks — is worth more than any
+> estimate in this document. If that list is short, the answer is route A and this file
+> becomes a decision entry that says so. If it is long and specific, phases iii–v have a
+> real justification and a real requirements list, which is a much better position to start
+> from than this one.
+>
+> The one thing worth avoiding is starting at phase iii.
 
-The one thing worth avoiding is starting at phase iii.
+**What happened, on 15 August 2026: route A, on §3's argument, without running either
+phase.** That is the honest description and it belongs here rather than being tidied away.
+The scope named in §1 is the scope B7 already bought, and it excludes the one thing this app
+exists to do — so the two phases would have been a way of checking an argument that was
+already sufficient to decide against six to nine weeks of work. What they cost was cheap;
+what they would have bought was a better-founded *no*, not a different answer.
+
+The consequence is worth naming, because it is the one thing to pick up first if this is
+ever reopened: **nobody has established that Obsidian mobile is actually pleasant to read
+this vault in**, and §3 says in so many words that it might not be — the underscore folders
+showing as first-class, the frontmatter rendering as a property table, no HeaderBlock, a
+task list that knows nothing about `type:`. If that turns out to be true in daily use, the
+thing that changed is §3's premise, not §5's costs, and phase ii is still where to start.
 
 ---
 
-## 8. Draft decision entry
+## 8. The decision
 
-To be added to `05-besluitenlog.md` once decided. Written both ways; delete the wrong one.
+**Taken 15 August 2026: no.** The entry below is what went into `05-besluitenlog.md`, as
+**B53** — the draft in this section was numbered B38 when it was written, a number the log
+took two days later for something else entirely (an attachment is found anywhere in the
+vault) and has since passed fourteen more times.
 
-### If no
+The "if yes" draft that stood beside it has been deleted rather than kept for symmetry: an
+undecided document needs both, a decided one needs the one that was taken, and route B's
+case survives in §4 and §6 for anyone reopening this.
 
-> ## B38 — Geen iPad-client; de vluchtweg ís het antwoord
+> ## B53 — Geen iPad-client; de vluchtweg ís het antwoord
 >
-> **Genomen.** Onderweg lezen en taken afvinken gebeurt in Obsidian mobile op dezelfde
-> vault. Er komt geen eigen iPad-app.
+> **Genomen** op 15 augustus 2026. Onderweg lezen en taken afvinken gebeurt in Obsidian
+> mobile op dezelfde vault. Er komt geen eigen iPad-app.
 >
 > **Waarom.** B7 kocht dit geval al, met zoveel woorden: standaardgereedschap dat de vault
 > correct opent, "als er iets onderweg gelezen moet worden". Het gevraagde bereik — lezen
 > en taken — is precies dat geval, en sluit juist het onderdeel uit dat het bouwen van
 > deze app rechtvaardigde: gemengde geneste outlines, waar Obsidian faalt.
+>
+> **Op grond van die redenering, niet van een proef.** Fase i en fase ii zijn niet
+> uitgevoerd. Dit is een beredeneerd besluit, geen gemeten; wie het wil omdraaien begint
+> daar.
 >
 > **Wat is afgevallen.** Een Capacitor-schil om de bestaande renderer (technisch de beste
 > route, 6–9 weken plus $99/jaar plus een tweede onderhoudsdoel), en een native
@@ -343,21 +374,6 @@ To be added to `05-besluitenlog.md` once decided. Written both ways; delete the 
 > modellen. Het kopblok, de mappen zonder underscore en het takenoverzicht bestaan
 > onderweg niet.
 
-### If yes
-
-> ## B38 — Een iPad-client, als schil om dezelfde renderer
->
-> **Genomen.** Een Capacitor-app die `src/markdown/` en `src/shared/` ongewijzigd meeneemt
-> en een deelverzameling van de IPC-kanalen in Swift implementeert. Bereik: lezen, zoeken
-> en taken. Geen opnamevenster, geen sneltoets, geen latentiebudget.
->
-> **Waarom.** B6 blijft per constructie overeind: dezelfde serializer draait, dus er is
-> fysiek geen tweede pad naar markdown, en het corpus bewaakt de iPad-uitvoer omdat het
-> dezelfde uitvoer is. De renderer praat al uitsluitend tegen `window.emqnote`, dus de naad
-> ligt er.
->
-> **Wat is afgevallen.** Een native SwiftUI-herbouw — een tweede serializer, precies wat
-> B6 verbiedt, op het platform waar de rondgang het lastigst te inspecteren is.
->
-> **Prijs.** $99/jaar, een tweede onderhoudsdoel voorgoed, geen `chokidar`, geen
-> `better-sqlite3`, en elke leesactie een netwerkronde via de File Provider.
+The log's own entry carries two paragraphs this draft did not: the full argument against a
+Swift serializer, and a note that capture on iPad (route D) is a separate question this
+decision does not answer.
