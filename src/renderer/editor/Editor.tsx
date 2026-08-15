@@ -22,6 +22,7 @@ import { insertNoteLinkOverPrefix } from "./insert-link.js";
 import { clearCells, insertTable } from "./table-commands.js";
 import { handleListItemPaste } from "./paste-list-item.js";
 import { handleLinkClick } from "./link-click.js";
+import { handleTagClick } from "./tag-click.js";
 import { isContextMenuKey } from "../library/roving.js";
 
 /** How long a task clicked in the Tasks view stays highlighted before fading on its own. */
@@ -254,9 +255,14 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         editorView.dispatch(editorView.state.tr.insertText(text));
         return true;
       },
-      // Mod+click opens a link in the system browser; a plain click still just places
-      // the caret, so the link's own text stays editable — see `link-click.ts` (B33).
-      handleClick: handleLinkClick,
+      // Mod+click opens a link in the system browser (B33) or a `#tag` in the library
+      // (B52); a plain click still just places the caret in both cases, so the link's
+      // own text and the tag's own text stay editable. Links are asked first: a tag
+      // cannot live inside a link's destination — `findTags` masks those out — so the
+      // two can never both answer, and the order only says which owns the overlap if
+      // that ever stops being true.
+      handleClick: (editorView, pos, event) =>
+        handleLinkClick(editorView, pos, event) || handleTagClick(editorView, pos, event),
       // The `text/plain` flavour of a copy. The default flattens a list to its text and
       // drops every bullet, number and box on the way out — see `clipboard-text.ts`.
       clipboardTextSerializer: clipboardText,

@@ -773,6 +773,34 @@ export function Library(): React.ReactElement {
     [openNote, rememberOrigin],
   );
 
+  /**
+   * A `#tag` in a note body was Mod+clicked, here or in the capture window (B52).
+   *
+   * Only a selection change: the effect keyed on `selectionKey` reloads the note list,
+   * `notesMatching` already folds tag case, and `FilterSection` unfolds itself when its
+   * own kind is what is selected — so the Tags list ends up open with the row lit
+   * whichever route the selection arrived by, not just this one. `loadFacets` is what
+   * gives that list something to show: nothing has necessarily asked for the facets yet,
+   * since the sections are collapsed and lazy on purpose.
+   *
+   * The search box is cleared for the reason `openTasks` clears it: a live query wins
+   * over the selection outright in `loadNotes`, so leaving one there would swallow the
+   * filter and leave the tree lit on a tag whose notes are not the ones on screen. Read
+   * off the ref rather than the state, since this callback is registered once.
+   */
+  useEffect(
+    () =>
+      window.emqnote.library.onOpenTag(({ name }) => {
+        setSelection({ kind: "tag", name });
+        if (searchQueryRef.current !== "") {
+          if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+          setSearchQuery("");
+        }
+        void loadFacets();
+      }),
+    [loadFacets],
+  );
+
   // Whatever the bar was showing no longer applies once the reader is empty — cleared
   // here rather than only inside `openNote`, since `open` can also become `null` from
   // `trash()`, `clearTrash()` and `deleteFolderAt()`, none of which call `openNote`.

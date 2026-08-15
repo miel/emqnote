@@ -94,6 +94,7 @@ function buildFake(): CaptureApi {
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
+    onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -137,6 +138,7 @@ function buildFake(): CaptureApi {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
+    openTag: async () => {},
     library,
   };
 }

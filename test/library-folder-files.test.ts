@@ -105,6 +105,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
+    onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -148,6 +149,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     pdfPageCount: async () => 7,
     linkCandidates: async () => [],
     openExternal: async () => {},
+    openTag: async () => {},
     library,
   };
 

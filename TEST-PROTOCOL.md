@@ -685,6 +685,31 @@ otherwise. Note §19t is answered by 20a: the panel does scroll now.
 
 ---
 
+## 21. Menus, tag clicks and folder folding (15 August 2026)
+
+Everything below has been driven under `Xvfb` — **including the capture window**, which turns
+out to be perfectly reachable over CDP; what it lacks is a unit-test harness, not a way in.
+What is left for a person is the half a script cannot judge: how it looks and how it feels.
+
+| # | Do this | Expect |
+|---|---|---|
+| 21a | Right-click a folder, a note and the note body; open the reader's **Actions** and **Insert** menus | The page behind the menu keeps its own colours. It used to go grey behind every one of these |
+| 21b | Insert a table from the toolbar and look at the size grid | Same: no veil behind the popover |
+| 21c | Open **Move to…**, the note picker, Settings, Help and a conflict dialog | These *do* dim, unchanged. A modal is meant to take the window over; a menu is not |
+| 21d | Judge 21a against a real display — NEVER JUDGED | Does an undimmed menu still read as being in front of the page, or does it get lost in it? The shadow and the border are now the whole of what separates them |
+| 21e | Plain-click in the middle of a `#tag` in a note body | The caret lands inside the tag, and nothing opens. Type to fix a letter of it |
+| 21f | Mod+click that tag (Cmd on macOS, Ctrl elsewhere) | The library comes up, the **Tags** list unfolds, that tag's row is lit, and the note list holds every note carrying it, across folders |
+| 21g | Hold the modifier and hover a tag | The pointer turns, the same as over a weblink. That is the only sign the tag can be clicked |
+| 21h | Mod+click a tag written with capitals — `#KlantX` where the list says `klantx` | The `klantx` row lights and every casing is listed. Two spellings are one tag |
+| 21i | Mod+click a tag that is rare enough not to be in the Tags list | It appears at the top of the list anyway. The list must never filter by something it does not show |
+| 21j | Type a note in the **capture window**, put a `#tag` in it and Mod+click that | Same as 21f, and the note you are typing is untouched. Verified over CDP; look at it once by hand |
+| 21k | Quit the library window entirely, then do 21j | The library is created already filtered — not created blank and filtered a second later, and not created blank |
+| 21l | Double-click a folder that has subfolders | It unfolds; double-click again and it folds. The single click that selects it still happens first |
+| 21m | Double-click a folder with no subfolders | Nothing happens, and nothing appears |
+| 21n | Judge 21l against a real display — NEVER JUDGED | Does the select-then-fold sequence read as one gesture, or does the selection flicker on the way? |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

@@ -218,6 +218,15 @@ function Branch({
         tabIndex={activePath === node.path ? 0 : -1}
         onFocus={() => onActivate(node.path)}
         onClick={() => onSelect({ kind: "folder", path: node.path })}
+        // Folding from the whole row, not only from the 16px twisty. A leaf does nothing,
+        // deliberately: the twisty is hidden there, so there is nothing on screen a
+        // double-click could be aimed at, and toggling an invisible state would be a
+        // gesture with no result. `NoteList.tsx` already opens a note this way, so the
+        // gesture means "act on this row" in both panels. The two `onClick`s that fire
+        // first only re-select a folder that the first of them just selected.
+        onDoubleClick={() => {
+          if (hasChildren) setOpen((value) => !value);
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           onOpenMenu(node.path, event.clientX, event.clientY);
@@ -289,6 +298,11 @@ function Branch({
             event.stopPropagation();
             if (hasChildren) setOpen(!open);
           }}
+          // `dblclick` is its own event and bubbles even though the two `click`s that
+          // preceded it were stopped here — without this, a double-click on the twisty
+          // itself would toggle twice from the clicks and then a third time from the
+          // row, ending in the state the user was trying to leave.
+          onDoubleClick={(event) => event.stopPropagation()}
         >
           {hasChildren ? (open ? "▾" : "▸") : ""}
         </button>

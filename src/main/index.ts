@@ -1100,6 +1100,35 @@ function registerAppIpc(): void {
     return resolved.kind === "unique" ? "note" : "ambiguous";
   });
 
+  /**
+   * Mod+click on a `#tag` in a note body (B52).
+   *
+   * The same shape as `openWikiLink` above and deliberately so: the click can be made in
+   * either window, and the library is the only window with a note list to filter — so
+   * both go through main rather than the library shortcutting its own clicks, which is
+   * how one gesture ends up with two behaviours.
+   *
+   * Nothing is resolved here. A tag is a name; `notesMatching` folds case where the list
+   * is actually built, and asking the index about it first would only be a second place
+   * for that rule to live. A vault that is not open still raises the window, which then
+   * shows what it always shows without one.
+   *
+   * The `isLoading` deferral is not optional: the first Mod+click from the capture window
+   * is very often the call that *creates* the library window, and an event sent before
+   * `did-finish-load` arrives at nothing listening.
+   */
+  ipcMain.handle(IPC.openTag, (_event, name: string): void => {
+    if (typeof name !== "string" || name === "") return;
+
+    showLibraryWindow();
+    const library = getLibraryWindow();
+    if (library === null || library.isDestroyed()) return;
+
+    const send = (): void => library.webContents.send(IPC.libraryOpenTag, { name });
+    if (library.webContents.isLoading()) library.webContents.once("did-finish-load", send);
+    else send();
+  });
+
   // Which `[[…]]` targets name no file — what marks a chip or an embed as pointing at a
   // missing attachment. The same `resolveAttachment` the click and both protocol handlers
   // use, so the marker can never disagree with what happens when the chip is clicked.
