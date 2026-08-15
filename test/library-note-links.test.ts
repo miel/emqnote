@@ -138,6 +138,7 @@ function buildFake(): Fake {
         openLinkHandler = null;
       };
     },
+    onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -178,6 +179,7 @@ function buildFake(): Fake {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
+    openTag: async () => {},
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},

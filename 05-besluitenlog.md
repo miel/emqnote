@@ -1657,6 +1657,45 @@ scheidingslijn bestaat (14 augustus 2026, eerder die dag) en niemand had het gez
 
 ---
 
+## B52 — Een `#tag` in de tekst opent op Mod+klik
+
+**Genomen** op 15 augustus 2026. Een tag in de body telde al overal mee — `summarise()` voegt
+`extractTags(body)` bij de frontmatter-tags, dus hij stond al in de Tags-lijst en antwoordde al
+op `tag:` in de zoekbalk. Alleen het gebaar ontbrak: hij was gekleurd en verder niets. Mod+klik
+opent nu de bibliotheek met die tag als filter.
+
+**Mod+klik, geen gewone klik**, precies om B33's reden. Een tag is gewone, bewerkbare tekst
+(B19) en dat blijft hij: de gewone klik moet de cursor blijven zetten, anders is een typefout
+ín een tag niet meer te verbeteren met het enige gebaar waar iedereen naar grijpt. Obsidian doet
+het anders, maar Obsidian heeft een leesmodus om het in te doen en dit venster is er één.
+Er komt ook geen pil of achtergrond bij: dat belooft een gewone klik die iets doet, en dat is
+nu juist de klik die niets mag doen. `.link-mod-hover` — al aanwezig voor de weblink — wijst
+het aan zolang de toets ingedrukt is, en dat is de hele affordance.
+
+**Geen mark en geen node.** B19 staat overeind: de tag blijft een decoratie naast het document,
+en niets hiervan raakt de serializer of de round trip. Wél verhuist de naam mee in de *spec* van
+die decoratie, zodat `tagAt` de klik uit dezelfde verzameling beantwoordt die de kleur tekent —
+één vraag, één antwoord, dezelfde reden waarom `resolveAttachment` in B39 de marker en de klik
+tegelijk bedient. Een `#` in code doet daardoor gratis niet mee.
+
+**De klik gaat via main, ook als hij in de bibliotheek zelf gemaakt is**, net als
+`IPC.openWikiLink`. De verleiding is om de bibliotheek zijn eigen klik te laten afhandelen en
+alleen het opnamevenster om te leiden — dat is precies hoe één gebaar twee gedragingen krijgt.
+Main lost hier niets op: een tag is een naam, en het vouwen van hoofdletters gebeurt waar de
+lijst gebouwd wordt (`foldTag`). Wat main wél doet is het venster wekken, inclusief de
+`isLoading()`-uitgestelde verzending die B35 al nodig had: de eerste Mod+klik vanuit het
+opnamevenster is heel vaak juist de aanroep die de bibliotheek *maakt*.
+
+**De Tags-lijst vouwt zichzelf open**, in `FilterSection` en niet bij de aanroeper. Zo landt
+elke route naar een tag-selectie hetzelfde, ook een toekomstige. Twee dingen die alleen bij het
+draaien zichtbaar zijn en er anders uitzien als "het filter werkte niet": de rij wordt
+hoofdletter-ongevoelig vergeleken (`#KlantX` in een notitie en `klantx` in de lijst zijn één tag
+voor `notesMatching` en twee strings voor `selectionKey`), en een tag die buiten de vijftig
+getoonde rijen of buiten het filtervakje valt wordt er alsnog bovenaan bij gezet — anders filtert
+het notitiepaneel op iets dat het zijpaneel niet toont, en is er geen rij om weer uit te komen.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

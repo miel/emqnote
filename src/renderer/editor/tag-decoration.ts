@@ -1,4 +1,4 @@
-import { Plugin, PluginKey } from "prosemirror-state";
+import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
@@ -27,7 +27,13 @@ function build(doc: PMNode): DecorationSet {
     if (node.marks.some((mark) => mark.type === schema.marks.code)) return true;
 
     for (const tag of findTags(node.text ?? "")) {
-      decorations.push(Decoration.inline(pos + tag.start, pos + tag.end, { class: "tag" }));
+      // The name travels in the decoration's *spec*, which is beside the document like
+      // the decoration itself and never enters it. That is what lets `tagAt` answer a
+      // click without walking the document a second time — and so what stops the click
+      // and the colour from ever disagreeing about where a tag begins and ends.
+      decorations.push(
+        Decoration.inline(pos + tag.start, pos + tag.end, { class: "tag" }, { tagName: tag.name }),
+      );
     }
 
     return true;
@@ -56,4 +62,28 @@ export function tagHighlight(): Plugin {
       decorations: (state) => key.getState(state),
     },
   });
+}
+
+/**
+ * The tag at a document position, or null.
+ *
+ * Asked of the plugin's own decoration set rather than of the document, so the two
+ * exclusions `build` already makes — a `#` inside a code block, a `#` under the `code`
+ * mark — hold here for free and cannot drift apart from what is coloured on screen.
+ *
+ * `find(pos, pos)` accepts a hit on either boundary, deliberately. The trailing edge of
+ * a short tag is exactly where a pointer aimed at it lands, which is the bug `linkRangeAt`
+ * had to be fixed for; being generous by half a character costs nothing here, where the
+ * gesture already carries a modifier.
+ */
+export function tagAt(state: EditorState, pos: number): string | null {
+  const set = key.getState(state);
+  if (set === undefined) return null;
+
+  for (const decoration of set.find(pos, pos)) {
+    const name = (decoration.spec as { tagName?: unknown }).tagName;
+    if (typeof name === "string") return name;
+  }
+
+  return null;
 }

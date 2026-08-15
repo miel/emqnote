@@ -307,6 +307,20 @@ on `.wiki-link-duplicated` alone ties `.wiki-link-preview`'s `display: inline-fl
 specificity and loses on source order, so the one kind of chip this pair is ever written for —
 a `.pdf`, which has a thumbnail — went on being drawn. Both class names on one selector.
 
+**An overlay that means not to dim says so with two class names, not one** (15 August 2026).
+The same trap as B48, sprung a second time and shipped for months. `.overlay` carries the
+`rgba(0, 0, 0, 0.35)` veil every modal wants; `ContextMenu.tsx` and `TableGrid.tsx` render
+`class="overlay context-menu-overlay"` / `class="overlay overlay-bare"` to opt out of it, and
+at one class each those tie `.overlay` on specificity and lose on source order — `.overlay`
+sits several hundred lines below both in `styles.css`, having moved there from `library.css`
+for B41 while the comments beside them went on naming the old file. Every right-click menu,
+every Actions and Insert dropdown and the table size grid therefore dimmed the whole window,
+in both windows, exactly contrary to the sentence written above the rule. They are
+`.overlay.context-menu-overlay` and `.overlay.overlay-bare` now, which wins whatever the
+order; `test/styles-overlay.test.ts` pins both the doubled form and the absence of the bare
+one. Nothing under `test/` could have caught it before that: jsdom has no cascade to lose in,
+which is what this and B48 and B36's trailing slash all have in common.
+
 **A dividing line can be inserted** (14 August 2026). `horizontalRule` has been in the schema,
 the parser, the serializer and `.editor-content hr` since the dialect was written; nothing
 could *make* one, which imported notes made visible by arriving full of them. It is the fifth
@@ -403,6 +417,25 @@ ProseMirror fell through to selecting the node (Mod is also its `selectNodeModif
 link opened only on the second or third try further left. `linkRangeAt` asks `nodeBefore` as
 well as `nodeAfter` now, which fixes Ctrl+K at the end of a link along with it. A bare URL
 ending a paragraph — the common Obsidian shape — was unopenable outright.
+
+**A `#tag` in the body opens the library on Mod+click, and the answer comes out of the
+decoration set** (B52). The gesture is B33's for B33's reason: a tag is ordinary editable text
+(B19) and stays that way, so a plain click has to go on placing the caret or a typo inside a
+tag becomes unfixable by the one gesture everybody reaches for — which is also why the tag
+still gets no pill and no background, and why `.link-mod-hover` covering `.tag` is the whole
+affordance. `tag-decoration.ts` carries the name in each `Decoration`'s **spec** and exports
+`tagAt`, so the click is answered from the very set that draws the colour: a `#` in code is
+excluded once, not twice, and the two can never disagree about where a tag begins. `handleClick`
+in `Editor.tsx` asks the link first and the tag second. Three things on the other side are
+load-bearing. **`IPC.openTag` goes through main even for a click in the library's own reader**,
+copying `openWikiLink` including its `isLoading()` / `did-finish-load` deferral — the first
+Mod+click from the capture window is very often the call that creates the library window, and
+letting that window shortcut its own clicks is how one gesture grows two behaviours. **Main
+resolves nothing**: a tag is a name, and `foldTag` already decides what matches where the list
+is built. And **`FilterSection` unfolds itself** when a selection of its own kind arrives,
+matches a tag through `foldTag` (or `#KlantX` filters correctly while lighting no row) and
+keeps the selected facet on the list even when `SHOWN` or the filter box would cut it — a note
+list filtered by something the side panel does not show has no row to click to get back out of.
 
 **The chip drawn for `![](https://…)` opens its address on a plain click.** Not every
 `![…](…)` in a vault points at a picture: `![](https://www.youtube.com/watch?v=…)` is a video
@@ -790,6 +823,41 @@ batch since the disk-change work has named. Also unseen by a person: whether the
 scrolls smoothly on a real display, and whether an italic quote reads well in the font a real
 machine uses. Both are `TEST-PROTOCOL.md` items (§20).
 
+**Three more items from daily use landed on 15 August 2026**, on top of `v0.8.1`. One carries
+a decision: **B52** — a `#tag` in the body opens the library on Mod+click, with the Tags list
+unfolded and that tag filtering the note list. The other two: double-clicking a folder row
+folds and unfolds it, where only the 16px twisty and the arrow keys could before; and the
+menus stopped dimming the window behind them.
+
+That last one was reported as a taste question — "make the dimming more subtle" — and turned
+out to be a shipped CSS bug of B48's exact family, with the intended behaviour already written
+in a comment above the rule that was losing. It is worth taking as the general lesson rather
+than as one fix: **a report about how something looks may be a defeated rule, not a value to
+tune**, and the way to tell is to read what the stylesheet says it meant to do.
+
+Confirmed in the real app under `Xvfb`, driven over CDP: a right-click menu's overlay
+computing `rgba(0, 0, 0, 0)` while keeping its `z-index: 20` and staying the element on top
+at a sampled point, with **Move to…'s overlay still computing `rgba(0, 0, 0, 0.35)`** in the
+same session; a plain click on `#klantx` landing the caret **inside the tag at offset 3** and
+moving nothing else, then a Ctrl+click **on the same pixel** unfolding the Tags list, lighting
+`#klantx` and cutting the note list to the two notes carrying it across two folders;
+`#KlantX` clicked in another note lighting the `#klantx` facet row and listing all three
+(the fold); and a folder row double-clicked unfolding to reveal its child, double-clicked
+again folding it, with a leaf row gaining no `aria-expanded` and changing nothing.
+
+**And, for the first time since the disk-change work, the capture window itself was driven**
+— `Input.dispatchMouseEvent` and `Input.dispatchKeyEvent` over CDP reach it perfectly well;
+what it has never had is a *unit-test* harness, which is a narrower statement than the one
+every batch since has been making. A tag typed into a new note there, Ctrl+clicked, raised the
+library with the filter applied and left the capture window's own text untouched — and with
+the library window genuinely closed first (only `index.html` left), the same click **created**
+it and it came up already filtered, which is the `isLoading()` / `did-finish-load` deferral
+B35 introduced doing its job.
+
+**Not seen by a person**: whether an undimmed menu still reads as being in front of the page
+on a real display, and how the double-click feels against the click that selects the folder
+first. Both are `TEST-PROTOCOL.md` items (§21).
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -801,7 +869,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B51, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B52, with what was rejected and why |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.

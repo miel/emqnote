@@ -110,6 +110,7 @@ function buildFake(): Fake {
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
+    onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -153,6 +154,7 @@ function buildFake(): Fake {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
+    openTag: async () => {},
     library,
   };
 

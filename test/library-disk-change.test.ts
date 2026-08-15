@@ -104,6 +104,7 @@ function buildFake(initial: OpenedNote): Fake {
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
+    onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
   };
@@ -145,6 +146,7 @@ function buildFake(initial: OpenedNote): Fake {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     openExternal: async () => {},
+    openTag: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;
       return () => {

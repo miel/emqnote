@@ -31,7 +31,8 @@ const css = [
 ].join("\n");
 
 function rule(selector: string): string {
-  const match = css.match(new RegExp(`\\${selector} \\{[^}]*\\}`));
+  const escaped = selector.replaceAll(".", String.raw`\.`);
+  const match = css.match(new RegExp(`${escaped} \\{[^}]*\\}`));
   expect(match, `no rule found for ${selector}`).not.toBeNull();
   return match![0];
 }
@@ -58,4 +59,31 @@ describe("the stylesheets: dialog overlays stack above the grid", () => {
 
     for (const value of others) expect(overlayZ).toBeGreaterThan(value);
   });
+});
+
+/**
+ * The other half of the same cascade question, and a shipped bug of its own.
+ *
+ * Two overlays deliberately carry no dimming: the right-click menu's click catcher and
+ * the table size grid's. Both are rendered as `class="overlay …"` plus their own class,
+ * so at one class each they tie `.overlay` on specificity (0,1,0) and lose on source
+ * order — `.overlay` sits several hundred lines below both of them in the same file.
+ * Every context menu, every Actions/Insert dropdown and the table grid therefore dimmed
+ * the whole window, in both windows, while the comment beside the rule said they did
+ * not. Same family as B48's `.wiki-link-duplicated`, and jsdom cannot see either: there
+ * is no cascade under `test/` to lose in.
+ */
+describe("the stylesheets: the undimmed overlays out-rank the dimmed one", () => {
+  for (const selector of [".overlay.context-menu-overlay", ".overlay.overlay-bare"]) {
+    const own = selector.slice(".overlay".length);
+
+    it(`writes ${selector} with both class names`, () => {
+      expect(rule(selector)).toMatch(/background:\s*transparent;/);
+    });
+
+    it(`never writes ${own} on its own, which would lose to .overlay`, () => {
+      // A bare `.foo {` — start of a line, nothing but the class before the brace.
+      expect(css).not.toMatch(new RegExp(`^\\${own} \\{`, "m"));
+    });
+  }
 });

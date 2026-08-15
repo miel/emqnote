@@ -131,6 +131,8 @@ export const IPC = {
   libraryLinkingNotes: "library:linking-notes",
   /** main → library renderer: a `[[…]]` link was clicked and names a note. One candidate opens it; several raise the picker. */
   libraryOpenLink: "library:open-link",
+  /** main → library renderer: a `#tag` was clicked, here or in the capture window (B52). */
+  libraryOpenTag: "library:open-tag",
 
   /** The aggregated Tasks view: every task item under a folder scope. */
   libraryTasks: "library:tasks",
@@ -212,6 +214,16 @@ export const IPC = {
    * main — the renderer reports where the click landed, not what may be opened.
    */
   openExternal: "app:open-external",
+  /**
+   * Mod+click on a `#tag` in the body of a note (B52): raise the library and put that
+   * tag's filter on the note list.
+   *
+   * On the top level, beside `openWikiLink`, and for the same reason — the click can be
+   * made in either window and the answer is always the library. Main carries no
+   * resolution work here: a tag is a name, and every comparison against it is folded
+   * (`foldTag`) where the list is actually built.
+   */
+  openTag: "app:open-tag",
   /**
    * Downloads a picture that arrived with a pasted web page into `_attachments/`. Sits
    * beside `saveAttachment` for the same reason: a paste happens in both windows.
@@ -340,6 +352,12 @@ export interface LibraryApi {
    * open; several mean the target is ambiguous and the picker decides.
    */
   onOpenLink: (handler: (event: WikiLinkOpen) => void) => () => void;
+  /**
+   * A `#tag` was clicked, in this window's reader or in the capture window (B52). The
+   * name arrives exactly as it was written in the note; matching it against the facet
+   * list and against the index is case-insensitive on both sides.
+   */
+  onOpenTag: (handler: (event: { name: string }) => void) => () => void;
   /**
    * Copies a note beside itself with `-copy` appended to the title. `locked` when the
    * capture window has the *source* claimed — its edits may not have crossed the 800 ms
@@ -504,6 +522,12 @@ export interface CaptureApi {
    * there is nothing for this side to do differently either way.
    */
   openExternal: (href: string) => Promise<void>;
+  /**
+   * Mod+click on a `#tag` in a note body (B52). Raises the library and filters its note
+   * list by that tag; resolves either way, since a vault that is not open has nothing to
+   * show and nothing for this side to do about it.
+   */
+  openTag: (name: string) => Promise<void>;
   /**
    * Downloads a picture that came in with a pasted web page and answers the name it
    * landed under in `_attachments/`, or `null` for every refusal — a scheme that is not

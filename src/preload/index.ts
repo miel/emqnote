@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   pdfPageCount: (target: string) => ipcRenderer.invoke(IPC.pdfPageCount, target),
   linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),
   openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
+  openTag: (name: string) => ipcRenderer.invoke(IPC.openTag, name),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),
 
   onVaultFileChanged: (handler: (event: VaultFileEvent) => void) =>
@@ -86,6 +87,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     linkingNotes: (path: string) => ipcRenderer.invoke(IPC.libraryLinkingNotes, path),
     onOpenLink: (handler: (event: WikiLinkOpen) => void) =>
       subscribe<WikiLinkOpen>(IPC.libraryOpenLink, handler),
+    onOpenTag: (handler: (event: { name: string }) => void) =>
+      subscribe<{ name: string }>(IPC.libraryOpenTag, handler),
     duplicateNote: (path: string) => ipcRenderer.invoke(IPC.libraryDuplicateNote, path),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
     emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),
