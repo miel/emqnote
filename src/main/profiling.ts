@@ -5,8 +5,9 @@ import type { ProfilingAggregate, ProfilingEvent, ProfilingReport, ProfilingSumm
 const LIMIT = 5_000;
 const SAMPLE_MS = 30_000;
 const DETAIL_MS = 50;
-const histogram = monitorEventLoopDelay({ resolution: 20 });
-histogram.enable();
+// Creating the histogram at import time wakes every Vitest worker (and every app
+// process) every 20 ms even though profiling is opt-in. Start it with recording instead.
+let histogram: ReturnType<typeof monitorEventLoopDelay> | null = null;
 
 type AggregateInternal = { count: number; failures: number; totalMs: number; values: number[] };
 let enabled = false;
@@ -26,9 +27,10 @@ function percentile(values: number[], fraction: number): number {
 }
 function round(value: number): number { return Number(value.toFixed(2)); }
 function loopDelay(): { p50: number; p95: number; max: number } {
+  if (histogram === null) return { p50: 0, p95: 0, max: 0 };
   // nanoseconds; an idle process reports 0 until its first interval.
   const ms = (value: number) => Number.isFinite(value) ? round(value / 1e6) : 0;
-  return { p50: ms(histogram.percentile(50)), p95: ms(histogram.percentile(95)), max: ms(histogram.max) };
+  return { p50: ms(histogram.percentile(50)), p95: ms(histogram.max > 0 ? histogram.percentile(95) : 0), max: ms(histogram.max) };
 }
 function add(event: ProfilingEvent): void {
   if (events.length === LIMIT) { events.shift(); droppedEvents += 1; }
@@ -56,15 +58,21 @@ function sample(): void {
   const memory = process.memoryUsage();
   samples.push({ at: new Date().toISOString(), cpuPercent: round(elapsed ? (cpuMs / elapsed) * 100 / Math.max(1, cpus().length) : 0), rssBytes: memory.rss, heapUsedBytes: memory.heapUsed, eventLoopDelay: loopDelay() });
   if (samples.length > 1_000) samples.shift();
-  histogram.reset();
+  histogram?.reset();
 }
 setInterval(sample, SAMPLE_MS).unref();
 
 export function setProfilingEnabled(value: boolean): void {
   if (value === enabled) return;
   enabled = value;
-  if (value) { enabledAt = Date.now(); previousCpu = process.cpuUsage(); previousSampleAt = process.hrtime.bigint(); }
-  else if (enabledAt !== null) { activeDurationMs += Date.now() - enabledAt; enabledAt = null; }
+  if (value) {
+    histogram ??= monitorEventLoopDelay({ resolution: 20 });
+    histogram.enable();
+    enabledAt = Date.now(); previousCpu = process.cpuUsage(); previousSampleAt = process.hrtime.bigint();
+  } else if (enabledAt !== null) {
+    activeDurationMs += Date.now() - enabledAt; enabledAt = null;
+    histogram?.disable();
+  }
 }
 export function profilingEnabled(): boolean { return enabled; }
 export function clearProfiling(): void { events = []; aggregates = new Map(); samples = []; droppedEvents = 0; activeDurationMs = 0; if (enabled) enabledAt = Date.now(); }
