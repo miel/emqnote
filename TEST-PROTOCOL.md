@@ -712,6 +712,39 @@ What is left for a person is the half a script cannot judge: how it looks and ho
 
 ---
 
+## 22. Fourteen items from daily use (16 August 2026)
+
+Most of this has been driven under `Xvfb` and is listed here only for the half a script
+cannot reach. **Three items are Windows-only and have never run on Windows at all** — 22a,
+22b and 22c — and one of those, Ctrl+Tab, is a fix for a cause that was never found: the
+chord was measured arriving and working normally on Linux, so what is being tested here is
+whether claiming it earlier is enough. If 22b still fails, say so plainly; the next step is
+then a different diagnosis, not a bigger hammer.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 22a | **Windows.** Open the library and look at the top of the window | No menu strip above the folder tree. Press Alt: the "Edit" bar appears, and disappears again. If it is gone for good instead, the roles were dropped rather than hidden — report that |  |
+| 22b | **Windows.** Click into a note's body, then press Ctrl+Tab, twice more, then Ctrl+Shift+Tab | Focus walks editor → tree → notes → editor, and back the other way. **This is the item most likely still to fail**; if it does, note whether Tab alone still moves tree → notes |  |
+| 22c | **Windows or macOS, a machine that has never run emqnote.** Install and launch it | A dialog naming a full path — `…\OneDrive - <tenant>\emqnote` — with **Use this folder** and **Choose another folder…**. Nothing is created until you answer. On a machine with two business OneDrives you get the tenant question first, unchanged |  |
+| 22d | 22c, then pick **Choose another folder…** and cancel out of the picker | Nothing is created, and nothing is remembered. Relaunching asks again |  |
+| 22e | Select a tag under **Tags**, then click the Tags heading | It collapses, and stays collapsed. Click a `#tag` in a note body with Mod held: it opens again, with that tag lit |  |
+| 22f | Drag a note onto **Trash** — judge the feel — NEVER JUDGED | It goes, with no dialog. Does that read as right, or does it feel too easy for a delete? The undo is Restore, one right-click away; if it does not feel like enough, say so — that is a decision (B54) and it can be revisited |  |
+| 22g | Right-click a note in the trash, choose **Restore**, press Enter without typing | It lands in `00 Inbox`. Check the file is really there |  |
+| 22h | Right-click a *folder* in the trash → **Restore** → pick its old parent | The folder and everything in it moves back. Open a note that linked into it: the link still opens |  |
+| 22i | Stand on a folder inside the trash and look at the folder toolbar | It reads **Restore** / **Delete permanently**, not the usual three |  |
+| 22j | **Delete permanently** on a trashed note, then confirm | The dialog names the note and says it cannot be undone. Afterwards the file is gone from disk — check in Explorer/Finder, not just in the app |  |
+| 22k | Right-click the Vault row and the Trash row | The entries that do not apply are visibly greyer than the ones that do. Judge it on a real display — NEVER JUDGED |  |
+| 22l | Right-click a folder → **Reveal** | Explorer/Finder opens with that folder selected |  |
+| 22m | Open the sidebar's **Orphaned attachments** row | It sits between Keyboard shortcuts and Trash, and the files appear in the note-list panel with their type and size — no dialog. Click one: it previews in the reader |  |
+| 22n | Right-click a file in that list → **Copy link**, then paste into a note | A picture pastes as an embed and draws; a `.docx` pastes as a chip that opens it |  |
+| 22o | Right-click a file in an ordinary folder like `99 - Attachments` | Copy link and Reveal, and **no Delete** — that one is only offered where a file is known to be unreferenced |  |
+| 22p | Put an `.avif` in the vault and embed it in a note | It draws. Also try inserting one through the image button: `.avif` is in the picker's filter now |  |
+| 22q | Open a note with an embedded PDF and click **⧉ Open in system viewer** | Preview/Acrobat opens it — *not* emqnote's own PDF window. Then click a plain `[[file.pdf]]` chip: that one still opens emqnote's viewer |  |
+| 22r | Drag the library window as narrow as it goes and look at the date field | The date is cut off with an ellipsis inside its own box, never painted over the field beside it. Hover it: the tooltip carries the full date and then the hint |  |
+| 22s | All fourteen, in the **capture window** — NEVER TESTED THERE | The same limitation every batch names. The date field and the ⧉ are the two that live in that window too |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -721,12 +754,16 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u or §20m fails,
+§18x, §19u, §20m or §22s fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u and §20m are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m and §22s are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
-genuinely cannot answer. §15b, §16b, §19b, §19t, §20b and §20g are a different kind of unwatched: they are judgements
-about how something feels or reads, which no script can make. §19m is a third kind: what a
+genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
+judgements about how something feels or reads, which no script can make. **§22a, §22b and §22c
+are a fourth kind, new to this batch: a whole platform.** They are the first items here that
+have never run on the machine they are about — this sandbox is Linux, and all three are
+Windows behaviours. §22b is the sharpest of them, because the bug it fixes did not reproduce
+here at all. §19m is a third kind: what a
 remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

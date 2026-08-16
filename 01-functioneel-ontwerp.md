@@ -118,11 +118,15 @@ de hele vault dat erbij hoort, met per notitie de map waar hij staat — want zo
 een lijst titels uit vijf verschillende mappen niet te lezen. De prullenbak telt niet
 mee: een weggegooide notitie hoort niet via zijn tag terug te komen.
 
-Verwijderen blijft verplaatsen naar die prullenbak, nooit meer dan dat. Selecteer je hem
-wél, dan staat op de plek van *Nieuwe notitie* de knop **Prullenbak legen** — de enige
-plek in de app waar werkelijk iets definitief verdwijnt, en dus met een bevestiging die
-zegt om hoeveel notities het gaat en dat het niet terug te draaien is. Automatisch
-opruimen gebeurt niet (B24).
+Verwijderen blijft verplaatsen naar die prullenbak, nooit meer dan dat — je kunt een
+notitie er ook heen slepen, zonder tussenvraag, omdat er sinds B54 een weg terug is.
+Selecteer je de prullenbak wél, dan staat op de plek van *Nieuwe notitie* de knop
+**Prullenbak legen**, met een bevestiging die zegt om hoeveel notities het gaat en dat het
+niet terug te draaien is. Rechtsklik op iets dat erin staat en je krijgt de twee dingen die
+daar betekenis hebben: **Terugzetten**, dat vraagt waarheen met de Inbox bovenaan, en
+**Definitief verwijderen** voor dat ene ding. Dat zijn samen met Prullenbak legen de enige
+plekken in de app waar werkelijk iets verdwijnt, met dezelfde bevestiging ervoor.
+Automatisch opruimen gebeurt niet (B24, B54).
 
 De lijsten worden pas opgebouwd wanneer je er een openklapt. Dat scheelt het doorlezen
 van de hele vault bij elke keer dat het bibliotheekvenster opengaat, en het houdt de
@@ -156,7 +160,8 @@ je notities naar de projectmappen — vaak meerdere niveaus diep, per klant en p
 
 Verplaatsen gaat via een "verplaats naar…"-actie met fuzzy zoeken over de hele
 mappenboom: je typt `alph rap` en krijgt `10 Projects/Klant X/Project Alpha/Rapportage`.
-Slepen in de boom kan ook.
+Slepen in de boom kan ook, de prullenbak inbegrepen. Eruit slepen niet: terugzetten is een
+handeling met een naam, geen bijproduct van de verkeerde rij beetgepakt hebben.
 
 Verplaatsen mag nooit iets breken. Omdat verwijzingen naar bijlagen wikilinks zijn
 (`![[bestand.png]]`), die vault-breed op naam worden opgelost, blijven afbeeldingen

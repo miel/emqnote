@@ -1738,6 +1738,114 @@ teruggedraaid.
 
 ---
 
+## B54 — De prullenbak is omkeerbaar, en één ding eruit kan echt weg
+
+**Genomen** op 16 augustus 2026. Een notitie kan de prullenbak in gesleept worden, alles
+wat erin zit kan terug, en één notitie of map kan er definitief uit verwijderd worden.
+Drie meldingen uit dagelijks gebruik die samen één ding zijn: de prullenbak was een plek
+waar dingen alleen *heen* konden.
+
+**Het slepen krijgt geen bevestiging**, en dat draait `drag.ts`' eigen redenering om. Die
+zei: Verwijderen vraagt eerst, dus het ene gebaar zónder bevestiging mag niet het gebaar
+zijn dat iets vernietigt. Dat argument stond overeind zolang er geen weg terug was — en
+die is er nu. Wat een sleep doet is een `renameSync` naar `_trash`, precies wat Verwijderen
+doet, en Terugzetten is de handeling met een naam die het ongedaan maakt. Een dialoog voor
+elke sleep zou het trage pad zijn naar de enige map waar niets verloren gaat.
+
+**Naar buiten slepen blijft geweigerd.** Dat is dezelfde zin als hierboven, andersom
+gelezen: terugzetten is een bewuste handeling, geen bijproduct van de verkeerde rij
+beetgepakt hebben. Alleen de prullenbak zelf is een bestemming, niet een map erbínnen —
+Verwijderen legt alles plat neer, dus een diepere drop zou niets betekenen.
+
+**Terugzetten vraagt waarheen, met de Inbox bovenaan.** De prullenbak is plat en er wordt
+nergens bijgehouden waar iets vandaan kwam. Dat bijhouden zou kunnen — een JSON-bestand in
+`userData`, B9 staat het toe — maar het is staat die stil verkeerd kan staan: een map die
+buiten de app is verplaatst, een index die is herbouwd, en het "terug" wijst naar een plek
+die er niet meer is. De kiezer is `MoveDialog`, die er al was, met één nieuwe eigenschap
+(`preferred`) die de Inbox bovenaan zet zolang er niets getypt is. Zo is Enter meteen het
+goede antwoord voor het gewone geval, en blijft het antwoord zichtbaar in plaats van
+geraden.
+
+**`deleteFromTrash` mag naast `emptyTrash` staan zonder B24 uit te vegen.** B24 zegt: er is
+precies één plek in de app die iets voorgoed weggooit, en die vraagt eerst. Dat blijft de
+strekking — het zijn er nu twee, met dezelfde wacht ervoor: `realpathSync` aan beide kanten,
+en een weigering voor alles wat niet ín `<vault>/_trash` uitkomt. Ook het doelpad wordt
+opgelost, wat `emptyTrash` niet hoeft: die werkt op `readdirSync`'s eigen ingangen, deze op
+een pad dat over IPC binnenkwam. Een symlink *in* de prullenbak is net zo goed een uitweg
+als een gesymlinkte prullenbak.
+
+**Een map verplaatsen bestond nog niet**, en terugzetten is precies dat: een naam wijzigen
+verandert nooit onder welke ouder een map hangt. `moveFolder` herhaalt `trashFolder`'s
+weigeringen regel voor regel, zodat de renderer één verzameling blijft ontcijferen, met
+drie verschillen die de hele handeling zijn: de *bron* mág in `_trash` zitten, de
+*bestemming* niet (dat is `trashFolder`, en twee routes naar één handeling is hoe ze uit
+elkaar gaan lopen), en een map kan niet in zichzelf. Een naambotsing wordt hier níet
+geweigerd zoals bij `renameFolder`: daar had iemand de naam getypt en verwachtte hij dat
+die genomen werd, hier houdt de map de naam die hij al had.
+
+**De links worden gerepareerd, met één eerlijke beperking.** De handler is die van
+`IPC.libraryRenameFolder` — dezelfde volgorde, dezelfde `linkingNotesUnder`/`targetsUnder`
+vóór de verplaatsing en dezelfde twee schrijfrondes erna, nu uit één gedeelde functie zodat
+B44 en B45 niet in twee kopieën uiteen kunnen lopen. Wat een link met het *oude* pad
+(van vóór de prullenbak) betreft: die geneest vanzelf als de map teruggaat naar zijn
+oorspronkelijke ouder, en blijft stuk als hij ergens anders heen gaat. Weggooien herschrijft
+namelijk met opzet niets — "die notities zitten in de prullenbak" — dus er is niets
+vastgelegd om tegen te repareren.
+
+**Beide handelingen hebben een route buiten het rechtermuisknopmenu.** De regel uit
+`CLAUDE.md` is niet decoratief: `--click-button` kan zo'n menu niet openen, dus wat er
+alleen achter zit, bestaat voor de zelftest niet. Bij een map wisselen de drie
+werkbalkknoppen om naar Terugzetten en Definitief verwijderen zodra je in de prullenbak
+staat — net zoals `NoteList` daar + Nieuwe notitie voor Prullenbak legen wisselt, om
+precies dezelfde reden: die drie knoppen zijn daar toch alle drie uitgeschakeld. Bij een
+notitie doet het Acties-menu in de lezer hetzelfde, en dát menu hangt aan een gewone knop.
+
+---
+
+## B55 — Verweesde bijlagen zijn een plek, geen dialoogvenster
+
+**Genomen** op 16 augustus 2026. Het scherm dat bijlagen toont waar geen notitie meer naar
+verwijst is een rij in de zijbalk tussen Sneltoetsen en Prullenbak, en de uitkomst is
+B47's bestandslijst in het notitiepaneel.
+
+**Heen en weer, en dit is de derde stand.** Het begon in de voettekst van de boom, verhuisde
+op 6 augustus 2026 naar een rij in Instellingen met het argument dat het een incidentele
+handeling is en geen dagelijkse bestemming, en staat nu weer in de voettekst — maar als iets
+anders dan de eerste keer. Toen was het een knop die een modaal venster opende met een eigen
+raster, eigen voorbeelden en een eigen verwijderknop. Nu is het een `Selection`, net als
+Taken: het notitiepaneel is de bestandslijst die B47 al tekent, de lezer is B47's
+voorbeeldweergave, en verwijderen zit in het rijmenu van B54's batch. Er is dus niet iets
+teruggedraaid maar iets weggehaald — een heel scherm dat hetzelfde deed als twee panelen die
+er al stonden.
+
+**De laad- en fouttoestand gaan mee, en dat is geen detail.** Dit is de enige bestandslijst
+die een *zoekactie over de hele index* is in plaats van één `readdir`, en het scherm dat
+hiervoor stond bleef op "Zoeken…" hangen om vier verschillende redenen tegelijk — waaronder
+het volledig ontbreken van een `.catch`. Die toestanden zijn nu regels in het paneel, en de
+herhaalpoging is de rij nog eens aanklikken.
+
+---
+
+## B56 — De ⧉ boven een ingesloten pdf-pagina gaat naar het systeem
+
+**Genomen** op 16 augustus 2026. "Er is geen behoefte meer om pdf's in het losse venster te
+openen" — de knoppenbalk boven een ingesloten pagina opent voortaan de systeemviewer, en
+heet ook zo.
+
+**B40's venster blijft bestaan**, bereikbaar via een gewone `[[bestand.pdf]]`-verwijzing en
+via Openen in de bestandslijst. Wat verdwenen is, is de *reden* om er vanuit een notitie
+heen te gaan: B43 tekende de eerste pagina en B46 gaf hem bladzijden, een Passend-keuze en
+een paginavak. Wat het losse venster nog extra doet is zoomen, tekst selecteren en printen —
+en dat is precies wat de systeemviewer ook doet, beter. De ⧉ wees dus naar de tussenstap.
+
+**Het is niet alleen een etiket.** De knop riep `openWikiLink`, en die stuurt een `.pdf` per
+definitie naar B40's venster (`attachment-route.ts`). Alleen het opschrift wijzigen zou een
+knop opleveren die iets anders zegt dan hij doet — het soort verschil dat een half jaar later
+als bug wordt gemeld. Er is een eigen kanaal bij gekomen dat via `resolveAttachment` gaat, met
+dezelfde wacht tegen paden buiten de vault als al het andere dat een bijlage aanwijst (B28).
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1754,3 +1862,5 @@ teruggedraaid.
 | ~~Blijft het bij twee notitietypen?~~ | Ja, maar als etiket — beantwoord op 28 juli 2026, B20 |
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
+| **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
+| Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |
