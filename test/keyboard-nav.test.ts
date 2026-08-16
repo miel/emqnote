@@ -15,6 +15,16 @@ import type { FolderNode, NoteSummary, OpenedNote, Selection } from "../src/shar
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+/**
+ * The pane cycle's own handler, as the window registers it.
+ *
+ * Ctrl-Tab is claimed in main (`library-window.ts`'s `before-input-event`) and forwarded
+ * over `IPC.libraryCyclePanes`, so a `keydown` carrying the chord is no longer a thing
+ * that happens — dispatching one here would test a route the app does not have. Firing
+ * this is the renderer's half of the real one.
+ */
+let cyclePanes: ((event: { backward: boolean }) => void) | null = null;
+
 const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -86,6 +96,12 @@ function buildFake(): CaptureApi {
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: (handler) => {
+      cyclePanes = handler;
+      return () => {
+        cyclePanes = null;
+      };
+    },
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},
@@ -154,6 +170,13 @@ async function flush(rounds = 12): Promise<void> {
       await Promise.resolve();
     });
   }
+}
+
+/** One step around the ring, as main asks for it. `backward` is Shift. */
+function cycle(backward: boolean): void {
+  act(() => {
+    cyclePanes?.({ backward });
+  });
 }
 
 function keydown(
@@ -279,9 +302,7 @@ describe("keyboard navigation across the library's panes", () => {
     editorContent.focus();
     expect(document.activeElement).toBe(editorContent);
 
-    // Ctrl-Tab, not Cmd-Tab: `cyclePanes`'s binding is spelled literally, not with `Mod`,
-    // even though this fake reports the `darwin` platform.
-    keydown(editorContent, "Tab", { ctrlKey: true });
+    cycle(false);
 
     const activeTreeRow = treeRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeTreeRow);
@@ -290,14 +311,16 @@ describe("keyboard navigation across the library's panes", () => {
   it("Ctrl-Tab enters the tree from a cold click that lands on no pane at all", async () => {
     await mount();
     // The ordinary state after clicking anywhere that isn't a row — `paneOf` recognises
-    // only a tree row, a note row, a task row or `.editor-content`, so focus sitting on
-    // `document.body` (nothing having been focused at all, here) used to make the
-    // unconditional `preventDefault()` swallow the chord with nowhere to send it.
+    // only a tree row, a note row, a task row or `.editor-content`, so focus sits on
+    // `document.body` (nothing having been focused at all, here) and there is no pane to
+    // step *from*. The chord enters the first one rather than doing nothing, which is the
+    // one case where it and a plain Tab deliberately differ: a plain Tab has a browser
+    // default worth keeping there, and the chord has none.
     expect(document.activeElement === document.body || document.activeElement === null).toBe(
       true,
     );
 
-    keydown(document.body, "Tab", { ctrlKey: true });
+    cycle(false);
 
     const activeTreeRow = treeRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeTreeRow);
@@ -319,7 +342,7 @@ describe("keyboard navigation across the library's panes", () => {
     searchInput.focus();
     expect(document.activeElement).toBe(searchInput);
 
-    keydown(searchInput, "Tab", { ctrlKey: true, shiftKey: true });
+    cycle(true);
     await flush();
 
     expect(document.activeElement?.className).toContain("editor-content");

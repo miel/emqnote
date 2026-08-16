@@ -132,6 +132,7 @@ function buildFake(): CaptureApi {
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},

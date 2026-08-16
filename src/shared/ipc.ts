@@ -104,6 +104,15 @@ export const IPC = {
   libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
+  /**
+   * main → library renderer: move focus one pane around the ring (`cyclePanes`).
+   *
+   * The chord is claimed in `library-window.ts`'s `before-input-event` rather than by a
+   * `keydown` listener in the window, so this carries the *intent* and not the key: main
+   * has already decided the event was Ctrl-Tab and called `preventDefault()`, and the
+   * renderer never sees it. `backward` is Shift.
+   */
+  libraryCyclePanes: "library:cycle-panes",
   /** main → library renderer: how far the startup index scan has got. */
   libraryScanProgress: "library:scan-progress",
   /**
@@ -445,6 +454,8 @@ export interface LibraryApi {
    */
   newNote: (folder?: string) => void;
   onRefresh: (handler: () => void) => () => void;
+  /** Ctrl-Tab/Ctrl-Shift-Tab, forwarded by main — see `IPC.libraryCyclePanes`. */
+  onCyclePanes: (handler: (event: { backward: boolean }) => void) => () => void;
   /** How far the startup index scan has got, or null when nothing is scanning. */
   scanState: () => Promise<ScanProgress | null>;
   onScanProgress: (handler: (progress: ScanProgress | null) => void) => () => void;

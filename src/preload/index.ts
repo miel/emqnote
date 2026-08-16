@@ -108,6 +108,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
     newNote: (folder?: string) => ipcRenderer.send(IPC.captureNew, folder),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
+    onCyclePanes: (handler: (event: { backward: boolean }) => void) =>
+      subscribe<{ backward: boolean }>(IPC.libraryCyclePanes, handler),
     scanState: () => ipcRenderer.invoke(IPC.libraryScanState),
     onScanProgress: (handler: (progress: ScanProgress | null) => void) =>
       subscribe<ScanProgress | null>(IPC.libraryScanProgress, handler),

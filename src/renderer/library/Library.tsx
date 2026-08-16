@@ -540,6 +540,19 @@ export function Library(): React.ReactElement {
    * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
    * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
    * `keydown` listener sees it here.
+   *
+   * **Ctrl-Tab does not arrive as a `keydown` at all any more: main claims it** in
+   * `library-window.ts`'s `before-input-event` and forwards it over
+   * `IPC.libraryCyclePanes`, which is why the ring below is a function rather than a
+   * branch of the key handler. That is a fix for a Windows report — the chord does nothing
+   * there — whose cause was never found: it was measured arriving perfectly well on Linux,
+   * and `keyMatches` spells `Ctrl` literally so it cannot be reading the platform wrong.
+   * `before-input-event` is simply the earliest point in the window that anything can be
+   * claimed from, ahead of every native accelerator and of the renderer both, so it is the
+   * one place a fix can stand without knowing what it is standing against. It is
+   * deliberately *not* a second route beside the keyboard one: main calls
+   * `preventDefault()`, so the `keydown` never fires, and a branch here that could only
+   * run when the forward had already failed would be a second answer to one gesture.
    */
   useEffect(() => {
     // Deliberately narrower than "anywhere inside the pane": a roving row is where a
@@ -568,39 +581,26 @@ export function Library(): React.ReactElement {
       root.querySelector<HTMLElement>(selector)?.focus();
     };
 
-    const onKeyDown = (event: KeyboardEvent): void => {
+    /**
+     * One step around the ring, from wherever focus is now. `true` when it moved.
+     *
+     * Answers for the plain-Tab case and for the forwarded chord alike, which is the
+     * whole reason it is a function: the two differ only in where the intent came from,
+     * and a second copy of this ternary is how they would come to differ in more.
+     */
+    const cycle = (backward: boolean): boolean => {
       const current = paneOf(document.activeElement);
 
-      if (event.key === "Escape" && current === "editor") {
-        event.preventDefault();
-        focusPane("notes");
-        return;
-      }
-
-      // Both bindings share `key === "Tab"` with the plain Tab case below (Ctrl-Tab and
-      // Ctrl-Shift-Tab are still "Tab" plus modifiers), so `cycling` has to be checked
-      // with `matches`, not by comparing `event.key` alone.
-      const cycling = matches(shortcut("cyclePanes"), event, app.isMac);
-      if (!cycling && event.key !== "Tab") return;
-      // Ctrl-Tab/Ctrl-Shift-Tab is also the browser's own "next/previous tab" gesture;
-      // claim it unconditionally so that never fires instead of the pane switch, even
-      // when there is no pane to move to below.
-      if (cycling) event.preventDefault();
       if (current === null) {
         // Focus sits on `document.body` (or some other control `paneOf` does not
         // recognise) after an ordinary click that lands nowhere in particular — the
-        // usual state, not an edge case. A plain Tab has a sensible browser default
-        // there and is left alone; Ctrl-Tab/Ctrl-Shift-Tab has no pane to "complete the
-        // loop" from, so it enters the first one instead of doing nothing.
-        if (cycling) focusPane(event.shiftKey ? "editor" : "tree");
-        return;
+        // usual state, not an edge case. There is no pane to "complete the loop" from,
+        // so enter the first one instead of doing nothing.
+        focusPane(backward ? "editor" : "tree");
+        return true;
       }
-      // ProseMirror's own keymap consumes a *plain* Tab/Shift-Tab inside the editor (see
-      // the comment above), so only `cycling` — never a bare Tab — ever reaches here from
-      // that pane, which is what lets it complete the loop back to the tree.
-      if (current === "editor" && event.key === "Tab" && !cycling) return;
 
-      const forward = !event.shiftKey;
+      const forward = !backward;
       const next: "tree" | "notes" | "editor" | null =
         current === "tree"
           ? forward
@@ -614,13 +614,45 @@ export function Library(): React.ReactElement {
               ? "tree"
               : "notes";
 
-      if (next === null) return;
-      event.preventDefault();
+      if (next === null) return false;
       focusPane(next);
+      return true;
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const current = paneOf(document.activeElement);
+
+      if (event.key === "Escape" && current === "editor") {
+        event.preventDefault();
+        focusPane("notes");
+        return;
+      }
+
+      // Plain Tab only: main claims Ctrl-Tab before this listener can see it (see the
+      // comment above the effect), so anything arriving here with Control held is not
+      // the pane cycle and is none of this handler's business.
+      if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
+      // ProseMirror's own keymap consumes a plain Tab inside the editor, so a bare Tab
+      // never reaches here from that pane — which is precisely why the chord exists and
+      // why it has to be claimed somewhere the editor's keymap is not.
+      if (current === "editor") return;
+      // Focus on nothing this recognises — after a click on the background, say. A plain
+      // Tab has a sensible browser default there and keeps it; only the chord enters a
+      // pane from nowhere, because it has no default worth preserving.
+      if (current === null) return;
+
+      if (cycle(event.shiftKey)) event.preventDefault();
     };
 
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const stopForward = window.emqnote.library.onCyclePanes(({ backward }) => {
+      cycle(backward);
+    });
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      stopForward();
+    };
   }, [app.isMac]);
 
   /**
@@ -2044,23 +2076,49 @@ export function Library(): React.ReactElement {
           x={readerMenu.x}
           y={readerMenu.y}
           onClose={() => setReaderMenu(null)}
-          items={[
-            {
-              label: app.t("library.rename"),
-              onSelect: () => setEditingTitle(open.title),
-            },
-            { label: app.t("library.move"), onSelect: () => setMoving(true) },
-            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
-            {
-              label: app.t("library.reveal"),
-              onSelect: () => window.emqnote.library.revealNote(open.path),
-            },
-            {
-              label: app.t("library.delete"),
-              danger: true,
-              onSelect: () => setDialog({ kind: "delete", title: open.title }),
-            },
-          ]}
+          items={
+            // The same two entries the note list's menu shows for a trashed note, and
+            // this is where they become *reachable*: the note list's copy opens only on
+            // right-click or `Mod-Shift-M`, and `--click-button` can drive neither, while
+            // this menu hangs off a plain "Actions" button — so `"Actions>Restore"` is a
+            // real route and CLAUDE.md's rule that nothing lives exclusively behind a
+            // right-click menu keeps holding. Read off the open note's own path rather
+            // than the selection, which may be standing somewhere else entirely.
+            isInTrash(folderOf(open.path))
+              ? [
+                  {
+                    label: app.t("library.restore"),
+                    onSelect: () => setRestoring({ kind: "note", path: open.path }),
+                  },
+                  {
+                    label: app.t("library.deletePermanently"),
+                    danger: true,
+                    onSelect: () =>
+                      setDialog({
+                        kind: "deletePermanently",
+                        path: open.path,
+                        label: open.title,
+                      }),
+                  },
+                ]
+              : [
+                  {
+                    label: app.t("library.rename"),
+                    onSelect: () => setEditingTitle(open.title),
+                  },
+                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
+                  {
+                    label: app.t("library.reveal"),
+                    onSelect: () => window.emqnote.library.revealNote(open.path),
+                  },
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => setDialog({ kind: "delete", title: open.title }),
+                  },
+                ]
+          }
         />
       )}
 

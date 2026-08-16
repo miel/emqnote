@@ -2,6 +2,8 @@ import { app, BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { IPC } from "../shared/ipc.js";
+import { matches, shortcut } from "../shared/shortcuts.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -72,6 +74,39 @@ export function showLibraryWindow(): void {
 
   created.webContents.on("console-message", (_event, _level, message) => {
     console.error(`[library renderer] ${message}`);
+  });
+
+  /**
+   * Ctrl-Tab / Ctrl-Shift-Tab, claimed before anything else in the window can have it.
+   *
+   * The renderer used to listen for this itself, and on Windows it did nothing at all —
+   * reported, and never explained. It was *measured* arriving normally on Linux, and the
+   * binding spells `Ctrl` literally (`shortcuts.ts`), so it is not the comparison reading
+   * the platform wrong. `before-input-event` is the earliest point anything in this
+   * window can be claimed from: it runs ahead of every native accelerator and ahead of the
+   * page, so it is the one place a fix can stand without knowing what it is standing
+   * against. The Windows menu bar, removed in the same batch, is the other candidate and
+   * would also be covered from here.
+   *
+   * `matches` against the registry rather than comparing fields by hand: this is the same
+   * chord the help sheet prints, and two spellings of one binding is how they drift.
+   * `preventDefault` is what makes this a replacement rather than a second route — the
+   * `keydown` never fires, so `Library.tsx` has exactly one path into the ring.
+   */
+  created.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+
+    const cycling = matches(shortcut("cyclePanes"), {
+      key: input.key,
+      ctrlKey: input.control,
+      metaKey: input.meta,
+      shiftKey: input.shift,
+      altKey: input.alt,
+    }, process.platform === "darwin");
+
+    if (!cycling) return;
+    event.preventDefault();
+    created.webContents.send(IPC.libraryCyclePanes, { backward: input.shift });
   });
 
   created.on("closed", () => {

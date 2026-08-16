@@ -56,6 +56,7 @@ function buildFake(): Fake {
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},

@@ -54,6 +54,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},

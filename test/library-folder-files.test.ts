@@ -97,6 +97,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},

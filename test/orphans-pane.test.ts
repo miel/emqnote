@@ -86,6 +86,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},

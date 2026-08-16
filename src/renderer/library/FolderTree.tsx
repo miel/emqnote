@@ -509,28 +509,52 @@ export function FolderTree({
           "no option to create a new folder" was a fair complaint about a feature that
           existed only as a hidden gesture. */}
       <div className="tree-toolbar">
-        <button type="button" onClick={onNewFolder} disabled={!canCreateFolder}>
-          + {newLabel}
-        </button>
-        {/* Beside it rather than hidden behind a gesture, for the reason above — and
-            renaming had no gesture at all, hidden or otherwise. */}
-        <button
-          type="button"
-          onClick={() => onRenameFolder(lastFolder)}
-          disabled={!canRenameFolder}
-        >
-          {renameLabel}
-        </button>
-        {/* A folder never had a way out of the app's own trash discipline before this —
-            only Explorer/Finder, outside the app entirely. */}
-        <button
-          type="button"
-          className="danger"
-          onClick={() => onDeleteFolder(lastFolder)}
-          disabled={!canDeleteFolder}
-        >
-          {deleteLabel}
-        </button>
+        {/* Standing on a deleted folder, the three ordinary buttons are all disabled —
+            every one of them refuses a trashed path — so the toolbar said nothing where
+            the two things anyone wants to do with one belong. They swap, exactly as
+            `NoteList` swaps + New note for Clear trash in the same place for the same
+            reason. It is also what keeps Restore reachable at all: its other route is a
+            right-click menu, and `--click-button` cannot open one of those, which is the
+            rule CLAUDE.md draws around every action in this app. */}
+        {isInTrash(lastFolder) && lastFolder !== TRASH_FOLDER ? (
+          <>
+            <button type="button" onClick={() => onRestoreFolder(lastFolder)}>
+              {restoreLabel}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => onDeleteFolderPermanently(lastFolder)}
+            >
+              {deletePermanentlyLabel}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={onNewFolder} disabled={!canCreateFolder}>
+              + {newLabel}
+            </button>
+            {/* Beside it rather than hidden behind a gesture, for the reason above — and
+                renaming had no gesture at all, hidden or otherwise. */}
+            <button
+              type="button"
+              onClick={() => onRenameFolder(lastFolder)}
+              disabled={!canRenameFolder}
+            >
+              {renameLabel}
+            </button>
+            {/* A folder never had a way out of the app's own trash discipline before this
+                — only Explorer/Finder, outside the app entirely. */}
+            <button
+              type="button"
+              className="danger"
+              onClick={() => onDeleteFolder(lastFolder)}
+              disabled={!canDeleteFolder}
+            >
+              {deleteLabel}
+            </button>
+          </>
+        )}
       </div>
 
       <ul className="tree-branches" role="tree">
