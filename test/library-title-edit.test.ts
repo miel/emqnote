@@ -155,6 +155,8 @@ function buildFake(initial: OpenedNote): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
     reloadNote: async () => {},

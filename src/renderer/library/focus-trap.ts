@@ -1,7 +1,7 @@
 /**
  * Every modal's entire Tab handling, in one place rather than written out seven times.
  *
- * `Ask.tsx`, `MoveDialog.tsx`, `Settings.tsx`, `OrphanedAttachments.tsx`, `Help.tsx`,
+ * `Ask.tsx`, `MoveDialog.tsx`, `Settings.tsx`, `Help.tsx`,
  * `LinkPrompt.tsx` and `ContextMenu.tsx` each call this from their own container's
  * `onKeyDown`. Tab should only ever cycle among the focusable elements the dialog itself
  * contains — never escape to the page (or the editor) behind it — and Shift+Tab from the

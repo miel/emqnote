@@ -43,6 +43,7 @@ beforeEach(() => {
         checkAttachments: ReturnType<typeof vi.fn>;
         pdfPageCount: ReturnType<typeof vi.fn>;
         openExternal: ReturnType<typeof vi.fn>;
+        openInSystemViewer: ReturnType<typeof vi.fn>;
       };
     }
   ).emqnote = {
@@ -57,6 +58,10 @@ beforeEach(() => {
     pdfPageCount: vi.fn().mockResolvedValue(null),
     // `externalImageView`'s chip reaches this, and main decides the scheme again.
     openExternal: vi.fn().mockResolvedValue(undefined),
+    // The ⧉ on the embedded PDF's bar. Deliberately not `openWikiLink`, which would send
+    // a `.pdf` to B40's window — going round `attachmentRoute` is the whole of that
+    // button now.
+    openInSystemViewer: vi.fn().mockResolvedValue(undefined),
   };
   // A safe default so a test that does not care about the network path never makes a
   // real request in jsdom — overridden per test where the response actually matters.
@@ -533,10 +538,16 @@ describe("a PDF embedded with ![[…]]", () => {
     expect(box.querySelector(".wiki-embed-pdf-name")!.textContent).toBe(
       "2026-08-05-1030-notulen.pdf",
     );
-    expect(box.querySelector(".wiki-embed-pdf-open")).not.toBeNull();
+    const open = box.querySelector<HTMLButtonElement>(".wiki-embed-pdf-open");
+    expect(open).not.toBeNull();
+    // The words as well as the glyph, on both the tooltip and the face of the button —
+    // a lone ⧉ beside five other controls says nothing, and the *visible* text is what
+    // `--click-button` matches on.
+    expect(open!.title).toBe("Open in system viewer");
+    expect(open!.textContent).toContain("Open in system viewer");
   });
 
-  it("opens the viewer window from the bar, through the one channel a click already uses", async () => {
+  it("opens the system viewer from the bar, going round attachmentRoute on purpose", async () => {
     respondWithPage();
 
     const box = embed("2026-08-05-1030-jaarplan.pdf");
@@ -544,9 +555,20 @@ describe("a PDF embedded with ![[…]]", () => {
 
     (box.querySelector(".wiki-embed-pdf-open") as HTMLButtonElement).click();
 
-    const emqnote = (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
-      .emqnote;
-    expect(emqnote.openWikiLink).toHaveBeenCalledWith("2026-08-05-1030-jaarplan.pdf");
+    // Not `openWikiLink`: that asks `attachmentRoute`, whose whole job is to send a
+    // `.pdf` to B40's window. Somebody already reading the pages here wants printing and
+    // annotating next, and a third reader in between is a step nobody asked for. B40's
+    // window stays reachable from a plain `[[file.pdf]]` chip and from the file list.
+    const emqnote = (
+      window as unknown as {
+        emqnote: {
+          openWikiLink: ReturnType<typeof vi.fn>;
+          openInSystemViewer: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).emqnote;
+    expect(emqnote.openInSystemViewer).toHaveBeenCalledWith("2026-08-05-1030-jaarplan.pdf");
+    expect(emqnote.openWikiLink).not.toHaveBeenCalled();
   });
 
   it("falls back to a marked chip when the file is gone", async () => {
@@ -793,7 +815,7 @@ describe("a PDF embedded with ![[…]]", () => {
       expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
     });
 
-    it("still opens the viewer window, which is where zoom and the system viewer live", async () => {
+    it("still has its way out, now straight to the OS viewer rather than B40's window", async () => {
       respondWithPage();
 
       const box = embed("2026-08-13-1000-venster.pdf");
@@ -801,9 +823,10 @@ describe("a PDF embedded with ![[…]]", () => {
 
       (box.querySelector(".wiki-embed-pdf-open") as HTMLButtonElement).click();
 
-      const emqnote = (window as unknown as { emqnote: { openWikiLink: ReturnType<typeof vi.fn> } })
-        .emqnote;
-      expect(emqnote.openWikiLink).toHaveBeenCalledWith("2026-08-13-1000-venster.pdf");
+      const emqnote = (
+        window as unknown as { emqnote: { openInSystemViewer: ReturnType<typeof vi.fn> } }
+      ).emqnote;
+      expect(emqnote.openInSystemViewer).toHaveBeenCalledWith("2026-08-13-1000-venster.pdf");
     });
 
     it("falls back to the marked chip when a later page cannot be drawn", async () => {

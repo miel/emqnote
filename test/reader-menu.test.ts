@@ -156,6 +156,8 @@ function buildFake(): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 

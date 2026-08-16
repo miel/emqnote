@@ -14,7 +14,7 @@ interface Props {
   onMerge: (path: string) => void;
 }
 
-/** The last segment of a vault-relative path — same trick as `OrphanedAttachments.tsx`. */
+/** The last segment of a vault-relative path — same trick as `FilePreview.tsx`. */
 function basename(path: string): string {
   return path.split("/").pop() ?? path;
 }

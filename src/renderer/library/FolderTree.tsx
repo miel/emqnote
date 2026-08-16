@@ -49,6 +49,10 @@ interface Props {
   onOpenTasks: () => void;
   /** Whether the Tasks view is what is currently showing, for the same highlight the Trash branch gets. */
   tasksSelected: boolean;
+  /** Selects the orphaned-attachment pane — §6.5's cleanup, back in the sidebar where it started. */
+  onOpenOrphans: () => void;
+  /** Whether that pane is what is showing, highlighted exactly as Tasks and Trash are. */
+  orphansSelected: boolean;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   newFolderLabel: string;
@@ -67,6 +71,7 @@ interface Props {
   helpLabel: string;
   settingsLabel: string;
   tasksLabel: string;
+  orphansLabel: string;
   trashLabel: string;
   tagsLabel: string;
   peopleLabel: string;
@@ -118,6 +123,24 @@ const tasksGlyph = (
       fill="none"
       stroke="currentColor"
       strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * A paperclip, drawn for the same reason `trashGlyph` is: 📎 comes out of the colour emoji
+ * font on macOS whatever the variation selector says, and this row sits in a column with
+ * `#`, `◍` and two hairline SVGs.
+ */
+const orphansGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M10.9 6.4v4.4a3 3 0 0 1-6 0V5.2a2 2 0 0 1 4 0v5.4a1 1 0 0 1-2 0V6.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -358,6 +381,8 @@ export function FolderTree({
   onOpenHelp,
   onOpenTasks,
   tasksSelected,
+  onOpenOrphans,
+  orphansSelected,
   isMac,
   newFolderLabel,
   renameFolderLabel,
@@ -369,6 +394,7 @@ export function FolderTree({
   helpLabel,
   settingsLabel,
   tasksLabel,
+  orphansLabel,
   trashLabel,
   tagsLabel,
   peopleLabel,
@@ -538,6 +564,21 @@ export function FolderTree({
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">?</span>
           <span className="branch-name">{helpLabel}</span>
+        </div>
+
+        {/* §6.5's cleanup, back where it started and this time as a real destination
+            rather than a modal: a `Selection` like Tasks, drawing B47's file list in the
+            note pane and B47's preview in the reader. It sits between Help and Trash
+            because that is where it was asked for, and because the two rows either side
+            of it are the other two things down here that are not a filter. */}
+        <div
+          className={`branch tree-settings${orphansSelected ? " branch-on" : ""}`}
+          style={{ paddingLeft: "8px" }}
+          onClick={onOpenOrphans}
+        >
+          <span className="twisty twisty-empty" />
+          <span className="filter-glyph">{orphansGlyph}</span>
+          <span className="branch-name">{orphansLabel}</span>
         </div>
 
         {trash !== null && (

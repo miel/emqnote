@@ -30,6 +30,11 @@ const IMAGE_EXTENSIONS = new Set([
   ".webp",
   ".svg",
   ".bmp",
+  // Chromium paints AVIF in an `<img>` like any of the others, so nothing but this line
+  // was ever missing: the paste and drop path decides on the MIME type
+  // (`insert-attachment.ts`) and already accepted one, and a vault written elsewhere is
+  // increasingly full of them.
+  ".avif",
 ]);
 
 /** Whether a stored attachment's name is one the browser can paint as an `<img>`. */
@@ -290,17 +295,21 @@ function pdfPageView(target: string, t?: (key: string) => string): NodeView {
   const spacer = document.createElement("span");
   spacer.className = "wiki-embed-pdf-spacer";
 
-  // `openWikiLink` routes a `.pdf` through `attachmentRoute` to the viewer window (B40),
-  // which is where zooming, selecting text and the way out to the OS viewer live. The
-  // page turning below is the reading this bar can do without a second window; that
-  // button is still the way to the one that can do the rest. It carries its words as well
-  // as its glyph now, exactly as the window's own does — a lone ⧉ beside five other
-  // controls said nothing.
-  const open = control("wiki-embed-pdf-open", "⧉", say("pdf.openViewer"));
-  open.append(document.createTextNode(` ${say("pdf.openViewer")}`));
+  // Straight to the OS's own viewer, not through `openWikiLink` — which asks
+  // `attachmentRoute`, whose whole job is to send a `.pdf` to B40's window, and this
+  // button now deliberately goes round it. Somebody already reading the pages here wants
+  // printing and annotating next, and a third reader in between is a step nobody asked
+  // for. **Only the ⧉ inside a note changed**: a plain `[[file.pdf]]` chip and the file
+  // list's Open button still raise B40's window, so both ways to read one survive.
+  //
+  // It carries its words as well as its glyph, exactly as the window's own does — a lone
+  // ⧉ beside five other controls said nothing, and the visible text is also what
+  // `--click-button` matches on.
+  const open = control("wiki-embed-pdf-open", "⧉", say("pdf.openSystem"));
+  open.append(document.createTextNode(` ${say("pdf.openSystem")}`));
   open.addEventListener("click", (event) => {
     event.preventDefault();
-    void window.emqnote.openWikiLink(target);
+    void window.emqnote.openInSystemViewer(target);
   });
 
   bar.append(previous, next, counter, fit, label, spacer, open);

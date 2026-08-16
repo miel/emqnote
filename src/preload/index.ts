@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
   pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
   openWikiLink: (target: string) => ipcRenderer.invoke(IPC.openWikiLink, target),
+  openInSystemViewer: (target: string) => ipcRenderer.invoke(IPC.openInSystemViewer, target),
+  copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
   checkAttachments: (targets: string[]) => ipcRenderer.invoke(IPC.checkAttachments, targets),
   pdfPageCount: (target: string) => ipcRenderer.invoke(IPC.pdfPageCount, target),
   linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),

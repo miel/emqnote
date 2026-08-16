@@ -420,6 +420,10 @@ async function notesFor(vault: string, db: IndexDb, selection: Selection): Promi
   // it shows task rows, not notes, and a "tasks" selection never reaches `notesMatching`
   // from the renderer. This exists only so the union stays exhaustive here.
   if (selection.kind === "tasks") return [];
+  // Same again for the orphaned-attachment pane: it lists files, not notes, and is
+  // answered by `IPC.libraryOrphanedAttachments`. The renderer never asks this one about
+  // it either; the branch is here so the union stays exhaustive.
+  if (selection.kind === "orphans") return [];
 
   await ensureScanned(vault, db);
   if (!available) return [];

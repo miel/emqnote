@@ -40,7 +40,10 @@ import { NotePicker } from "./NotePicker.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { FilePreview } from "./FilePreview.js";
-import { OrphanedAttachments } from "./OrphanedAttachments.js";
+// The one question "how is a link to this file spelled" is answered — the same function
+// `insert-attachment.ts` asks before writing one, so the file list's Copy link and the
+// editor's own insertion cannot drift into two spellings of one thing.
+import { isEmbeddableAttachment } from "../editor/attachment-view.js";
 import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
 import { Settings } from "./Settings.js";
 import { Splitter } from "./Splitter.js";
@@ -150,6 +153,12 @@ export function Library(): React.ReactElement {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** The non-note files in the folder being browsed, and which one the reader is showing (B47). */
   const [files, setFiles] = useState<FileSummary[]>([]);
+  /**
+   * Whether that list is settled. Only the orphaned-attachment pane is ever anything but
+   * `"ready"`: a folder's files come back from one `readdir`, while the orphans are a
+   * question put to the whole index.
+   */
+  const [filesState, setFilesState] = useState<"ready" | "loading" | "failed">("ready");
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   /**
@@ -211,7 +220,6 @@ export function Library(): React.ReactElement {
   const cancelingTitle = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
   /**
    * The note picker (B41). `prefix` is what the user typed to open it — `"[["` from the
@@ -222,6 +230,15 @@ export function Library(): React.ReactElement {
   const [tableGrid, setTableGrid] = useState<{ x: number; y: number } | null>(null);
   /** The note-list row context menu — Open/Move/Rename/Reveal/Delete on whatever row was right-clicked. */
   const [noteMenu, setNoteMenu] = useState<{ note: NoteSummary; x: number; y: number } | null>(
+    null,
+  );
+  /**
+   * The same for a file row (B47's list) — Copy link, Reveal, and Delete in the orphans
+   * pane only. Its own state beside `noteMenu` rather than a widened one: the two act on
+   * different types and share only three of nine items, and folding them together is how
+   * a file row ends up offering half a note's menu — precisely what B47 refuses.
+   */
+  const [fileMenu, setFileMenu] = useState<{ file: FileSummary; x: number; y: number } | null>(
     null,
   );
   /**
@@ -344,6 +361,31 @@ export function Library(): React.ReactElement {
   const loadNotes = useCallback(async (target: Selection) => {
     const query = searchQueryRef.current;
     const searching = query.trim() !== "";
+
+    // The orphaned-attachment pane is files and nothing else, and it is the one file list
+    // that is a *search* rather than a `readdir` — over the whole index, so it can take
+    // long enough to need saying so, and it can fail. Both states are the bug this pane's
+    // predecessor shipped with: there was no `.catch` at all, so a rejected `invoke` left
+    // "Looking…" on screen for the rest of the session with nothing to explain it.
+    if (!searching && target.kind === "orphans") {
+      setNotes([]);
+      setFiles([]);
+      setFilesState("loading");
+      try {
+        const found = await window.emqnote.library.orphanedAttachments();
+        // Only if the pane is still the one that asked. A slow scan finishing after the
+        // tree has moved on would otherwise drop a folder's own list on the floor.
+        if (selectionRef.current.kind !== "orphans") return;
+        setFiles(found);
+        setFilesState("ready");
+      } catch {
+        if (selectionRef.current.kind !== "orphans") return;
+        setFilesState("failed");
+      }
+      return;
+    }
+
+    setFilesState("ready");
     setNotes(
       searching
         ? await window.emqnote.library.search(query)
@@ -1280,6 +1322,31 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * The orphaned-attachment pane. Clears the search box for exactly `openTasks`' reason:
+   * a live query wins over the selection outright in `loadNotes`, so a half-typed one
+   * would leave the footer row lit with search results beside it. Carries no scope of its
+   * own — the question is about `_attachments/`, which is the one folder the tree cannot
+   * browse, so there is nothing to scope it to.
+   */
+  const openOrphans = (): void => {
+    if (searchQuery !== "") {
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+      // Written through the ref as well as the state, because the reload below runs in
+      // this same tick and `loadNotes` reads the ref to decide whether a query wins.
+      searchQueryRef.current = "";
+      setSearchQuery("");
+    }
+
+    // Picking the row while its pane is already showing is the retry route for the
+    // failure state, and it needs saying out loud: `selectionKey` answers `"orphans"`
+    // whatever object is set, so the effect that loads a selection never fires for it.
+    // Nothing else in the sidebar needs this — every other row either carries state that
+    // changes the key or is a folder you can only be standing on one of.
+    if (selectionRef.current.kind === "orphans") void loadNotes({ kind: "orphans" });
+    else setSelection({ kind: "orphans" });
+  };
+
+  /**
    * Flips one task item. The actual write happens in the main process, through
    * `toggleTask` in `vault-io.ts` — this only relays the call and turns `locked` into the
    * same kind of message `moveNoteTo` shows for the same reason: the capture window has
@@ -1411,6 +1478,8 @@ export function Library(): React.ReactElement {
           onOpenHelp={() => setHelpOpen(true)}
           onOpenTasks={openTasks}
           tasksSelected={selection.kind === "tasks"}
+          onOpenOrphans={openOrphans}
+          orphansSelected={selection.kind === "orphans"}
           isMac={app.isMac}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
@@ -1422,6 +1491,7 @@ export function Library(): React.ReactElement {
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           tasksLabel={app.t("library.tasks")}
+          orphansLabel={app.t("orphans.title")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
           peopleLabel={app.t("library.people")}
@@ -1454,6 +1524,7 @@ export function Library(): React.ReactElement {
           <NoteList
             notes={sorted}
             files={files}
+            filesState={filesState}
             selected={open?.path ?? null}
             selectedFile={openFile}
             // A file and a note are one selection between them: the reader shows one
@@ -1487,6 +1558,7 @@ export function Library(): React.ReactElement {
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
+            onFileContextMenu={(file, x, y) => setFileMenu({ file, x, y })}
             isMac={app.isMac}
             locale={app.locale}
             t={app.t}
@@ -1727,6 +1799,56 @@ export function Library(): React.ReactElement {
         />
       )}
 
+      {fileMenu !== null && (
+        <ContextMenu
+          x={fileMenu.x}
+          y={fileMenu.y}
+          onClose={() => setFileMenu(null)}
+          items={[
+            {
+              // The same spelling `insert-attachment.ts` writes, decided by the same
+              // `isEmbeddableAttachment` — a picture or a PDF is `![[…]]` and draws in the
+              // note, everything else is `[[…]]` and is a chip that opens. Copying and
+              // inserting must not be able to disagree about what a link to one file
+              // looks like, which is why the question is asked in one place.
+              label: app.t("library.copyLink"),
+              onSelect: () =>
+                void window.emqnote.copyText(
+                  isEmbeddableAttachment(fileMenu.file.name)
+                    ? `![[${fileMenu.file.path}]]`
+                    : `[[${fileMenu.file.path}]]`,
+                ),
+            },
+            {
+              label: app.t("library.reveal"),
+              onSelect: () => window.emqnote.library.revealNote(fileMenu.file.path),
+            },
+            // Delete is offered in the orphaned-attachment pane and nowhere else. A
+            // permanently visible, permanently disabled Delete on every picture in a
+            // folder is noise, and B47's own reasoning is that a file row answering half
+            // a note's menu reads worse than one that plainly is not a note — this is the
+            // one pane where throwing the file away is the whole point of being there.
+            ...(selection.kind === "orphans"
+              ? [
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => {
+                      void window.emqnote.library
+                        .trashAttachment(fileMenu.file.path)
+                        .then(() => {
+                          // The reader is showing the file that just went into the trash.
+                          if (openFile === fileMenu.file.path) setOpenFile(null);
+                          void loadNotes(selectionRef.current);
+                        });
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
+
       {readerMenu !== null && open !== null && (
         <ContextMenu
           x={readerMenu.x}
@@ -1895,13 +2017,6 @@ export function Library(): React.ReactElement {
           // reach disk first — and into the vault it was typed in, not the new one.
           onBeforeSwitch={flushPendingSave}
           onClose={() => setSettingsOpen(false)}
-          // Settings closes first, then Orphaned Attachments opens — sequenced rather
-          // than both flags flipped at once, so the two modals are never stacked on top
-          // of each other even for the one render in between.
-          onOpenOrphanedAttachments={() => {
-            setSettingsOpen(false);
-            setOrphanedAttachmentsOpen(true);
-          }}
         />
       )}
 
@@ -1913,10 +2028,6 @@ export function Library(): React.ReactElement {
           t={app.t}
           onClose={() => setHelpOpen(false)}
         />
-      )}
-
-      {orphanedAttachmentsOpen && (
-        <OrphanedAttachments t={app.t} onClose={() => setOrphanedAttachmentsOpen(false)} />
       )}
     </div>
   );

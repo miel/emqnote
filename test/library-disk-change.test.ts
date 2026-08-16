@@ -147,6 +147,8 @@ function buildFake(initial: OpenedNote): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;
       return () => {

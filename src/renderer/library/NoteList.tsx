@@ -18,6 +18,16 @@ interface Props {
    * search, none of which has an answer to "which files are here".
    */
   files: FileSummary[];
+  /**
+   * Whether that list is still being worked out, or could not be.
+   *
+   * Only the orphaned-attachment pane is ever anything but `"ready"`: a folder's files are
+   * one `readdir` answered before the pane renders, while the orphans are a search over
+   * the whole index. Those two states are not decoration — the modal this pane replaced
+   * had exactly one state, and a rejected `invoke` left it saying "Looking…" for the rest
+   * of the session with nothing on screen to say why.
+   */
+  filesState: "ready" | "loading" | "failed";
   selected: string | null;
   /** The file row that is selected, if the selection is a file rather than a note. */
   selectedFile: string | null;
@@ -52,6 +62,12 @@ interface Props {
    * `openNote` to resolve first.
    */
   onContextMenu: (note: NoteSummary, x: number, y: number) => void;
+  /**
+   * The same gesture on a file row — Copy link, Reveal, and Delete in the orphans pane
+   * only. The whole `FileSummary` is handed over rather than its path, because the link
+   * spelling the menu copies depends on the file's own name.
+   */
+  onFileContextMenu: (file: FileSummary, x: number, y: number) => void;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   locale: Locale;
@@ -63,6 +79,7 @@ const SORTS: SortKey[] = ["modified", "created", "title"];
 export function NoteList({
   notes,
   files,
+  filesState,
   selected,
   selectedFile,
   onSelectFile,
@@ -78,10 +95,16 @@ export function NoteList({
   onClearTrash,
   onDragNote,
   onContextMenu,
+  onFileContextMenu,
   isMac,
   locale,
   t,
 }: Props): React.ReactElement {
+  // The orphaned-attachment pane is a file list and nothing else. There are no notes in it
+  // to count, sort or create — "+ New note" would file one into whatever folder the tree
+  // last stood on, which is a button doing something unrelated to what it sits next to —
+  // so the whole note half of this pane is left out rather than drawn empty.
+  const orphans = showing.kind === "orphans";
   // Trash is not a folder you add notes to — Clear trash replaces + New note there, the
   // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
   // `canRenameFolder`/`canCreateFolder`).
@@ -112,120 +135,132 @@ export function NoteList({
         />
       </div>
 
-      <div className="notes-header">
-        <span className="notes-count">
-          {notes.length === 0
-            ? t("library.noNotes")
-            : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
-        </span>
-        <div className="notes-sort">
-          {SORTS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={sort === key ? "sort-on" : ""}
-              onClick={() => onSort(key)}
-            >
-              {t(`library.sort.${key}`)}
+      {!orphans && (
+        <div className="notes-header">
+          <span className="notes-count">
+            {notes.length === 0
+              ? t("library.noNotes")
+              : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
+          </span>
+          <div className="notes-sort">
+            {SORTS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={sort === key ? "sort-on" : ""}
+                onClick={() => onSort(key)}
+              >
+                {t(`library.sort.${key}`)}
+              </button>
+            ))}
+          </div>
+          {inTrash ? (
+            <button type="button" className="new-note danger" onClick={onClearTrash}>
+              {t("library.clearTrash")}
             </button>
-          ))}
+          ) : (
+            <button type="button" className="new-note" onClick={onNewNote}>
+              + {t("library.newNote")}
+            </button>
+          )}
         </div>
-        {inTrash ? (
-          <button type="button" className="new-note danger" onClick={onClearTrash}>
-            {t("library.clearTrash")}
-          </button>
-        ) : (
-          <button type="button" className="new-note" onClick={onNewNote}>
-            + {t("library.newNote")}
-          </button>
-        )}
-      </div>
+      )}
 
-      <ul className="notes-list" role="listbox">
-        {notes.map((note) => (
-          <li
-            key={note.path}
-            className={
-              `note${selected === note.path ? " note-on" : ""}` +
-              `${dragging === note.path ? " note-dragging" : ""}`
-            }
-            role="option"
-            aria-selected={selected === note.path}
-            tabIndex={active === note.path ? 0 : -1}
-            onFocus={() => setActivePath(note.path)}
-            onClick={() => onSelect(note.path)}
-            onDoubleClick={() => onOpenInCapture(note.path)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              onSelect(note.path);
-              onContextMenu(note, event.clientX, event.clientY);
-            }}
-            onKeyDown={(event) => {
-              const container = (event.currentTarget as HTMLElement).closest(".notes-list");
-              const next = roveArrowKey(event, container, ".note", event.currentTarget);
-              if (next !== null) {
-                event.preventDefault();
-                next.focus();
-                return;
+      {orphans && filesState === "loading" && (
+        <p className="orphans-note">{t("orphans.loading")}</p>
+      )}
+      {orphans && filesState === "failed" && <p className="orphans-note">{t("orphans.failed")}</p>}
+      {orphans && filesState === "ready" && files.length === 0 && (
+        <p className="orphans-note">{t("orphans.empty")}</p>
+      )}
+
+      {!orphans && (
+        <ul className="notes-list" role="listbox">
+          {notes.map((note) => (
+            <li
+              key={note.path}
+              className={
+                `note${selected === note.path ? " note-on" : ""}` +
+                `${dragging === note.path ? " note-dragging" : ""}`
               }
-              if (event.key === "Enter") {
+              role="option"
+              aria-selected={selected === note.path}
+              tabIndex={active === note.path ? 0 : -1}
+              onFocus={() => setActivePath(note.path)}
+              onClick={() => onSelect(note.path)}
+              onDoubleClick={() => onOpenInCapture(note.path)}
+              onContextMenu={(event) => {
                 event.preventDefault();
                 onSelect(note.path);
-                return;
-              }
-              if (isContextMenuKey(event, isMac)) {
-                event.preventDefault();
-                onSelect(note.path);
-                const rect = event.currentTarget.getBoundingClientRect();
-                onContextMenu(note, rect.left, rect.bottom);
-              }
-            }}
-            // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
-            // dialog stays the way to reach a folder four levels deep without hunting
-            // for it; this is the one for a folder already in front of you.
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
-              event.dataTransfer.effectAllowed = "move";
-              onDragNote(note.path);
-              setDragging(note.path);
-            }}
-            onDragEnd={() => {
-              onDragNote(null);
-              setDragging(null);
-            }}
-          >
-            <div className="note-top">
-              <span className="note-title">{note.title}</span>
-              <span className="note-when">
-                {formatListTime(locale, sort === "created" ? note.created : note.modified)}
-              </span>
-            </div>
-            <div className="note-excerpt">{note.excerpt}</div>
-            {/* Under a tag, a person or a search the notes come from all over the
-                vault, and a list of titles with no idea where they live is hard to
-                read. */}
-            {(showing.kind !== "folder" || searching) && (
-              <div className="note-folder">{folderOf(note.path)}</div>
-            )}
-            {note.tags.length > 0 && (
-              <div className="note-tags">
-                {note.tags.map((tag) => (
-                  <span key={tag} className="note-tag">
-                    #{tag}
-                  </span>
-                ))}
+                onContextMenu(note, event.clientX, event.clientY);
+              }}
+              onKeyDown={(event) => {
+                const container = (event.currentTarget as HTMLElement).closest(".notes-list");
+                const next = roveArrowKey(event, container, ".note", event.currentTarget);
+                if (next !== null) {
+                  event.preventDefault();
+                  next.focus();
+                  return;
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onSelect(note.path);
+                  return;
+                }
+                if (isContextMenuKey(event, isMac)) {
+                  event.preventDefault();
+                  onSelect(note.path);
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  onContextMenu(note, rect.left, rect.bottom);
+                }
+              }}
+              // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
+              // dialog stays the way to reach a folder four levels deep without hunting
+              // for it; this is the one for a folder already in front of you.
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
+                event.dataTransfer.effectAllowed = "move";
+                onDragNote(note.path);
+                setDragging(note.path);
+              }}
+              onDragEnd={() => {
+                onDragNote(null);
+                setDragging(null);
+              }}
+            >
+              <div className="note-top">
+                <span className="note-title">{note.title}</span>
+                <span className="note-when">
+                  {formatListTime(locale, sort === "created" ? note.created : note.modified)}
+                </span>
               </div>
-            )}
-            {/* No longer gated on the kind: any note can carry people now (B20), and a
-                quick note with names on it that the list refused to show was the kind of
-                thing that makes you doubt whether the field saved at all. */}
-            {note.attendees.length > 0 && (
-              <div className="note-attendees">{note.attendees.join(", ")}</div>
-            )}
-          </li>
-        ))}
-      </ul>
+              <div className="note-excerpt">{note.excerpt}</div>
+              {/* Under a tag, a person or a search the notes come from all over the
+                  vault, and a list of titles with no idea where they live is hard to
+                  read. */}
+              {(showing.kind !== "folder" || searching) && (
+                <div className="note-folder">{folderOf(note.path)}</div>
+              )}
+              {note.tags.length > 0 && (
+                <div className="note-tags">
+                  {note.tags.map((tag) => (
+                    <span key={tag} className="note-tag">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* No longer gated on the kind: any note can carry people now (B20), and a
+                  quick note with names on it that the list refused to show was the kind of
+                  thing that makes you doubt whether the field saved at all. */}
+              {note.attendees.length > 0 && (
+                <div className="note-attendees">{note.attendees.join(", ")}</div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {files.length > 0 && (
         <>
@@ -257,6 +292,14 @@ export function NoteList({
                 // where the file list is the whole of the pane.
                 tabIndex={notes.length === 0 && files[0]?.path === file.path ? 0 : -1}
                 onClick={() => onSelectFile(file.path)}
+                // The row is selected first, exactly as a right-click on a note row does:
+                // the reader is what says which file the menu is about, and a menu acting
+                // on something other than what is on screen is the one shape to avoid.
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onSelectFile(file.path);
+                  onFileContextMenu(file, event.clientX, event.clientY);
+                }}
                 onKeyDown={(event) => {
                   const container = (event.currentTarget as HTMLElement).closest(".files-list");
                   const next = roveArrowKey(event, container, ".file-row", event.currentTarget);
@@ -268,6 +311,15 @@ export function NoteList({
                   if (event.key === "Enter") {
                     event.preventDefault();
                     onSelectFile(file.path);
+                    return;
+                  }
+                  // The keyboard route to the same menu, at the row's own position — the
+                  // note rows' arrangement, and the reason `roving.ts` exists.
+                  if (isContextMenuKey(event, isMac)) {
+                    event.preventDefault();
+                    onSelectFile(file.path);
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onFileContextMenu(file, rect.left, rect.bottom);
                   }
                 }}
               >

@@ -150,6 +150,8 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 
