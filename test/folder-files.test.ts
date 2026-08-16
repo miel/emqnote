@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readFilesIn, readNotesIn } from "../src/main/vault-io.js";
+import { readFilesIn, readNotesIn, summariseFile } from "../src/main/vault-io.js";
 
 /**
  * The files in a folder that are not notes (B47).
@@ -97,5 +97,34 @@ describe("readFilesIn", () => {
 
   it("answers an empty list for a folder that is not there", () => {
     expect(readFilesIn(vault, "Weg")).toEqual([]);
+  });
+});
+
+/**
+ * The per-file half of `readFilesIn`, split out because the orphaned-attachment pane
+ * draws the very same rows from a different question: `findOrphanedAttachments` answers
+ * with paths rather than a `readdir`, and the two lists must not describe one file two
+ * different ways.
+ */
+describe("summariseFile", () => {
+  it("describes one file exactly as readFilesIn describes it", () => {
+    write("99 - Attachments/2026/foto.PNG", "twelve bytes");
+
+    const direct = summariseFile(vault, join(vault, "99 - Attachments/2026/foto.PNG"));
+    const [listed] = readFilesIn(vault, "99 - Attachments/2026");
+
+    expect(direct).toEqual(listed);
+    expect(direct).toMatchObject({
+      path: "99 - Attachments/2026/foto.PNG",
+      name: "foto.PNG",
+      extension: ".png",
+      size: 12,
+    });
+  });
+
+  it("answers null for a file that has gone, rather than throwing", () => {
+    // A real race on a synced vault: the scan names it, OneDrive removes it, the stat
+    // arrives late. The caller drops the row.
+    expect(summariseFile(vault, join(vault, "weg.png"))).toBeNull();
   });
 });

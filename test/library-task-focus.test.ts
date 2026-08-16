@@ -187,6 +187,8 @@ function buildFake(): CaptureApi {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 }

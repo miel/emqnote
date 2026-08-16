@@ -109,6 +109,8 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 

@@ -36,6 +36,11 @@ describe("isImageAttachment", () => {
     expect(isImageAttachment("foto.png")).toBe(true);
     expect(isImageAttachment("foto.JPG")).toBe(true);
     expect(isImageAttachment("foto.jpeg")).toBe(true);
+    // Chromium has painted AVIF in an `<img>` for years, and the paste/drop path decides
+    // on the MIME type and always accepted one — this list was the only thing missing, so
+    // a vault full of `.avif` drew nothing and every other route worked.
+    expect(isImageAttachment("foto.avif")).toBe(true);
+    expect(isImageAttachment("FOTO.AVIF")).toBe(true);
   });
 
   it("treats everything else, a PDF included, as not an image", () => {

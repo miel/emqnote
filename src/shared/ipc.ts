@@ -192,6 +192,29 @@ export const IPC = {
    */
   openWikiLink: "app:open-wiki-link",
   /**
+   * The ⧉ on an embedded PDF's bar: hand *this* file to the OS's own viewer, skipping
+   * `attachmentRoute` entirely.
+   *
+   * It takes a target where `pdf-view-ipc.ts`'s `PDF_VIEW_OPEN_EXTERNALLY` takes nothing,
+   * and the difference is not an oversight. That one is sent by the PDF viewer window,
+   * which shows one document at a time and whose content is the untrusted PDF itself — so
+   * main remembers what it told that window to show rather than letting the page name a
+   * path. A note, by contrast, can hold any number of embeds and main knows nothing about
+   * which one was clicked; the target has to arrive with the click, exactly as it does for
+   * `openWikiLink`. It is no wider a capability than that one either: the same
+   * `resolveAttachment` guard decides, so nothing outside the vault can be named.
+   */
+  openInSystemViewer: "app:open-in-system-viewer",
+  /**
+   * Puts plain text on the system clipboard — the file list's "Copy link" (B47's rows).
+   *
+   * Main-side because `navigator.clipboard` is not dependable in a sandboxed `file://`
+   * renderer: it needs a secure context and a permission this app never grants, and the
+   * failure is a silently rejected promise rather than anything on screen. Electron's own
+   * `clipboard.writeText` is one line and always works.
+   */
+  copyText: "app:copy-text",
+  /**
    * Which of these `[[…]]` targets name no file in the vault — what draws the "missing
    * attachment" marker on a chip or in place of a picture.
    *
@@ -437,12 +460,14 @@ export interface LibraryApi {
   resolveConflict: (pair: ConflictPair, choice: ConflictChoice) => Promise<void>;
 
   /**
-   * Vault-relative paths of the `_attachments/` files nothing names any more. The screen
-   * draws each one straight off `emqnote-attachment://` (B28) — there used to be a second
-   * call per file that base64'd the whole thing through IPC, which is what B28 refused for
-   * a note's own pictures and what made this screen load all-or-nothing.
+   * The `_attachments/` files nothing names any more, as the same `FileSummary` rows a
+   * folder's own files come back as — because they are drawn by the same file list (B47)
+   * now that this is a place in the sidebar rather than a modal of its own. Each row
+   * still draws straight off `emqnote-attachment://` (B28): there used to be a second
+   * call per file that base64'd the whole thing through IPC, which is what B28 refused
+   * for a note's own pictures and what made this screen load all-or-nothing.
    */
-  orphanedAttachments: () => Promise<string[]>;
+  orphanedAttachments: () => Promise<FileSummary[]>;
   trashAttachment: (path: string) => Promise<string>;
 
   /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */
@@ -517,6 +542,15 @@ export interface CaptureApi {
    * like a click that had not registered.
    */
   openWikiLink: (target: string) => Promise<WikiLinkOutcome>;
+  /**
+   * Hands one attachment to the OS's own viewer, whatever `attachmentRoute` would have
+   * said — the ⧉ on an embedded PDF's bar. Resolves either way: a target that resolves to
+   * nothing is a chip that already marks itself missing (B39), and there is nothing for
+   * this side to do about it a second time.
+   */
+  openInSystemViewer: (target: string) => Promise<void>;
+  /** Puts `text` on the system clipboard. Always resolves; there is no failure to report. */
+  copyText: (text: string) => Promise<void>;
   /**
    * Answers the subset of `targets` that name no file in the vault, so a chip or an
    * embed can say the attachment behind it is gone. An empty answer means "nothing is

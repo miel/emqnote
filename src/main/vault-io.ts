@@ -252,22 +252,38 @@ export function readFilesIn(vault: string, folder: string): FileSummary[] {
     // a folder of holiday pictures is not a thing to offer someone.
     if (!entry.isFile() || isNoteFile(entry.name) || isHidden(entry.name)) continue;
 
-    const file = join(absolute, entry.name);
-    try {
-      const stats = statSync(file);
-      files.push({
-        path: toPosix(relative(vault, file)),
-        name: entry.name,
-        extension: extname(entry.name).toLowerCase(),
-        modified: stats.mtime.toISOString(),
-        size: stats.size,
-      });
-    } catch {
-      continue;
-    }
+    const summary = summariseFile(vault, join(absolute, entry.name));
+    if (summary !== null) files.push(summary);
   }
 
   return files.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * One file, as the note list's file section wants it (B47).
+ *
+ * Split out of `readFilesIn` because the orphaned-attachment pane draws the very same
+ * rows from a completely different question: `findOrphanedAttachments` answers with paths
+ * rather than a `readdir`, and the two lists must not disagree about how a file is
+ * described — an orphan showing its size in bytes while a folder's file showed kB would
+ * be one list pretending to be another.
+ *
+ * `null` for a file that has gone between being named and being asked about, which on a
+ * OneDrive vault is a normal race rather than an error: the caller drops the row.
+ */
+export function summariseFile(vault: string, file: string): FileSummary | null {
+  try {
+    const stats = statSync(file);
+    return {
+      path: toPosix(relative(vault, file)),
+      name: basename(file),
+      extension: extname(file).toLowerCase(),
+      modified: stats.mtime.toISOString(),
+      size: stats.size,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

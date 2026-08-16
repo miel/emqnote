@@ -162,6 +162,8 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   globalShortcut,
   ipcMain,
@@ -67,6 +68,7 @@ import {
   rewriteTargetPrefix,
   rewriteWikiLinks,
   saveNote,
+  summariseFile,
   toggleTask,
   trashAttachment,
   trashFolder,
@@ -120,6 +122,7 @@ import { FOLDER_ERROR } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
   ConflictPair,
+  FileSummary,
   LinkCandidateSummary,
   SaveNoteRequest,
   ScanProgress,
@@ -1110,11 +1113,16 @@ function registerAppIpc(): void {
       properties: ["openFile"],
       filters:
         filter === "image"
-          ? [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"] }]
+          ? [
+              {
+                name: "Images",
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"],
+              },
+            ]
           : [
               {
                 name: "Images and PDFs",
-                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "pdf"],
               },
             ],
     };
@@ -1215,6 +1223,44 @@ function registerAppIpc(): void {
     }
 
     return resolved.kind === "unique" ? "note" : "ambiguous";
+  });
+
+  /**
+   * The ⧉ on an embedded PDF's bar: this file, in the OS's own viewer.
+   *
+   * Deliberately *not* `openWikiLink` with a flag — that one asks `attachmentRoute`, whose
+   * whole job is to send a `.pdf` to B40's window, and the point of this channel is to go
+   * round it. The two ways to read a PDF stay both reachable: a plain `[[file.pdf]]` chip
+   * and the file list's Open button still raise B40's window, while the ⧉ *inside a note*
+   * is now the way out to Preview or Acrobat for printing and annotating.
+   *
+   * It takes a target where `pdf-window.ts`'s `openExternally` takes none. That one is sent
+   * by the viewer window, which is showing untrusted PDF content and shows one document at
+   * a time, so main remembers the name itself rather than letting the page choose a path.
+   * Here the sender is a note that may hold a dozen embeds and main knows nothing about
+   * which was clicked — so the target arrives with the click, the same as `openWikiLink`,
+   * and is made safe the same way: `resolveAttachment` is what decides, and it refuses
+   * anything landing outside the vault after `realpathSync` (B28).
+   */
+  ipcMain.handle(IPC.openInSystemViewer, (_event, target: string): void => {
+    if (typeof target !== "string" || target === "") return;
+
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return;
+
+    const resolved = resolveAttachment(vault, target);
+    if (resolved !== null) void shell.openPath(resolved);
+  });
+
+  /**
+   * "Copy link" on a file row (B47), and anything else that needs the clipboard from a
+   * renderer. `clipboard.writeText` rather than `navigator.clipboard`, which needs a
+   * secure context a sandboxed `file://` page does not have — its failure is a rejected
+   * promise nobody sees, which is the worst possible shape for a copy.
+   */
+  ipcMain.handle(IPC.copyText, (_event, text: string): void => {
+    if (typeof text !== "string") return;
+    clipboard.writeText(text);
   });
 
   /**
@@ -1459,7 +1505,17 @@ function registerLibraryIpc(): void {
     // `null` means the index could not answer, not that nothing is referenced — the scan
     // reads the notes itself in that case rather than offering to delete every attachment
     // in the vault.
-    return findOrphanedAttachments(vault, referenced ?? undefined);
+    const orphans = await findOrphanedAttachments(vault, referenced ?? undefined);
+
+    // Answered as `FileSummary` rows rather than bare paths, because the pane that shows
+    // them is B47's file list: the same rows a folder's own files draw, so a name, a type
+    // and a size come with each. `summariseFile` is the very function `readFilesIn` uses,
+    // which is what stops the two lists describing one file two different ways. A file
+    // that vanished between the scan naming it and this stat — a real race on a synced
+    // vault — drops out rather than becoming a row that cannot be drawn.
+    return orphans
+      .map((path) => summariseFile(vault, join(vault, path)))
+      .filter((file): file is FileSummary => file !== null);
   });
 
   ipcMain.handle(IPC.libraryTrashAttachment, (_event, path: string) => {

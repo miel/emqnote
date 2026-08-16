@@ -24,6 +24,13 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 
 const GIF = new Uint8Array([...Buffer.from("GIF89a"), 1, 0, 1, 0, 0, 0]);
 const WEBP = new Uint8Array([...Buffer.from("RIFF"), 26, 0, 0, 0, ...Buffer.from("WEBP")]);
 const BMP = new Uint8Array([...Buffer.from("BM"), 70, 0, 0, 0, 0, 0, 0, 0, 54, 0]);
+// ISO base media format: a four-byte box length whose value is not fixed (0x20 here, as
+// a real file's would be), then `ftyp`, then the brand. The leading bytes are junk on
+// purpose — they are what stops this being recognisable by a prefix match.
+const AVIF = new Uint8Array([0, 0, 0, 0x20, ...Buffer.from("ftyp"), ...Buffer.from("avif")]);
+const AVIS = new Uint8Array([0, 0, 0, 0x18, ...Buffer.from("ftyp"), ...Buffer.from("avis")]);
+/** The same container, holding neither — an `.mp4` opens exactly like this. */
+const ISOM = new Uint8Array([0, 0, 0, 0x18, ...Buffer.from("ftyp"), ...Buffer.from("isom")]);
 
 describe("isFetchableUrl", () => {
   it("allows https and http — an intranet image host is a real case here", () => {
@@ -125,6 +132,7 @@ describe("extensionForContentType", () => {
     expect(extensionForContentType("image/gif")).toBe(".gif");
     expect(extensionForContentType("image/webp")).toBe(".webp");
     expect(extensionForContentType("image/bmp")).toBe(".bmp");
+    expect(extensionForContentType("image/avif")).toBe(".avif");
   });
 
   it("ignores parameters and case, as a real header carries both", () => {
@@ -153,6 +161,24 @@ describe("sniffImageType", () => {
     expect(sniffImageType(GIF)).toBe("image/gif");
     expect(sniffImageType(WEBP)).toBe("image/webp");
     expect(sniffImageType(BMP)).toBe("image/bmp");
+  });
+
+  it("recognises AVIF from its brand, not from the front of the file", () => {
+    // The first four bytes are a box length and carry no signature at all, so this is
+    // the one format here that a prefix match cannot find.
+    expect(sniffImageType(AVIF)).toBe("image/avif");
+    expect(sniffImageType(AVIS)).toBe("image/avif");
+    // Same container, different brand. An `.mp4` must not become an "image".
+    expect(sniffImageType(ISOM)).toBeNull();
+    expect(sniffImageType(AVIF.slice(0, 10))).toBeNull();
+  });
+
+  it("agrees with a declared image/avif, which is the half that makes the pair work", () => {
+    // Adding either the type or the sniff on its own refuses every AVIF: `typesAgree`
+    // needs both, and `fetch-attachment.ts` refuses on a disagreement.
+    expect(typesAgree("image/avif", sniffImageType(AVIF))).toBe(true);
+    expect(typesAgree("image/avif", sniffImageType(PNG))).toBe(false);
+    expect(typesAgree("image/png", sniffImageType(AVIF))).toBe(false);
   });
 
   it("answers null for anything else, an SVG and a truncated file included", () => {

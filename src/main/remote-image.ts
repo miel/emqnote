@@ -103,6 +103,10 @@ const ALLOWED_TYPES = new Map([
   ["image/gif", ".gif"],
   ["image/webp", ".webp"],
   ["image/bmp", ".bmp"],
+  // Paired with `sniffImageType`'s AVIF branch below, and neither half means anything
+  // without the other: `typesAgree` refuses unless the declared type and the sniff say
+  // the same thing, so a type added here alone would refuse every file it names.
+  ["image/avif", ".avif"],
 ]);
 
 /** `image/jpg` is not a real media type, but plenty of servers send it. */
@@ -149,6 +153,21 @@ export function sniffImageType(bytes: Uint8Array): string | null {
     return "image/webp";
   }
   if (startsWith(bytes, ASCII("BM"))) return "image/bmp";
+  // AVIF has no magic number at the very front: it is ISO base media format, so the file
+  // opens with a four-byte box length whose value is not fixed, then `ftyp` at offset 4
+  // and the brand at offset 8. `avis` is the same container holding an image *sequence*
+  // — Chromium draws one in an `<img>` exactly as it draws a still, so refusing it would
+  // only mean the animated half of one format silently failed where the still half
+  // worked. Nothing below offset 4 is looked at, which is why this cannot use
+  // `startsWith`.
+  if (
+    bytes.length >= 12 &&
+    ASCII("ftyp").every((byte, index) => bytes[4 + index] === byte) &&
+    (ASCII("avif").every((byte, index) => bytes[8 + index] === byte) ||
+      ASCII("avis").every((byte, index) => bytes[8 + index] === byte))
+  ) {
+    return "image/avif";
+  }
   return null;
 }
 

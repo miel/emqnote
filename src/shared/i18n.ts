@@ -123,15 +123,18 @@ const DUTCH: Record<string, string> = {
   "table.alignDefault": "Auto",
 
   // De balk boven een ingesloten pdf-pagina (B43/B46), sinds 14 augustus 2026 in de vorm
-  // van de werkbalk van het pdf-venster zelf. Bladeren gebeurt in de notitie; ⧉ opent nog
-  // steeds dat venster (B40), waar zoomen en de systeemviewer zitten.
+  // van de werkbalk van het pdf-venster zelf. Bladeren gebeurt in de notitie; ⧉ ging
+  // eerst naar het pdf-venster (B40) en gaat nu rechtstreeks naar de systeemviewer —
+  // wie een pdf in de notitie leest, wil daarvandaan naar afdrukken en annoteren, niet
+  // naar een derde lezer. Het venster van B40 blijft bereikbaar via een gewone
+  // `[[bestand.pdf]]`-chip en via Openen in de bestandenlijst.
   "pdf.previousPage": "Vorige pagina",
   "pdf.nextPage": "Volgende pagina",
   "pdf.pageNumber": "Paginanummer",
   "pdf.fit": "Passend maken",
   "pdf.fitPage": "Hele pagina",
   "pdf.fitWidth": "Kolombreedte",
-  "pdf.openViewer": "Openen in pdf-venster",
+  "pdf.openSystem": "Openen in systeemviewer",
 
   // Link prompt
   "link.new": "Link",
@@ -161,6 +164,9 @@ const DUTCH: Record<string, string> = {
   "library.renameLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij hernoemd worden.",
   "library.duplicate": "Dupliceren",
+  // Het menu van een bestandsrij (B47). Kopieert `![[pad]]` of `[[pad]]` — dezelfde
+  // spelling die het invoegen zelf schrijft, zodat de twee niet uiteen kunnen lopen.
+  "library.copyLink": "Link kopiëren",
   "library.duplicateLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij gedupliceerd worden.",
   "library.tasks": "Taken",
@@ -294,12 +300,16 @@ const DUTCH: Record<string, string> = {
   "conflict.merge": "Samenvoegen in de editor",
   "conflict.close": "Sluiten",
 
-  // Orphaned attachments
+  // Verweesde bijlagen — sinds 16 augustus 2026 een plek in de zijbalk (tussen
+  // Sneltoetsen en Prullenbak) in plaats van een venster: de bestandenlijst van B47 in
+  // het notitiepaneel, de preview van B47 in de lezer, en Verwijderen in het menu van de
+  // rij. `orphans.title` is dus ook het label van die rij. De twee toestanden hieronder
+  // zijn geen versiering: dit is de enige bestandenlijst die een zoekopdracht is en dus
+  // kan mislukken, en precies daarop liep het oude venster vast op "Bezig met zoeken…".
   "orphans.title": "Verweesde bijlagen",
   "orphans.loading": "Bezig met zoeken…",
-  "orphans.failed": "Zoeken is niet gelukt. Sluit dit scherm en probeer het opnieuw.",
+  "orphans.failed": "Zoeken is niet gelukt. Kies de rij opnieuw om het nog eens te proberen.",
   "orphans.empty": "Geen verweesde bijlagen gevonden.",
-  "orphans.settingsHint": "Bestanden in _attachments/ waar geen notitie meer naar verwijst.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
@@ -436,8 +446,11 @@ const ENGLISH: Record<string, string> = {
   "table.alignRight": "Right",
   "table.alignDefault": "Auto",
 
-  // The bar under an embedded PDF page (B43). Pages are turned in the note itself; ⧉
-  // still opens the PDF window (B40), which is where zoom and the system viewer live.
+  // The bar above an embedded PDF page (B43/B46). Pages are turned in the note itself;
+  // ⧉ used to raise B40's PDF window and now goes straight to the OS's own viewer —
+  // somebody reading a PDF inside a note wants printing and annotating from there, not a
+  // third reader in between. B40's window is still reached by a plain `[[file.pdf]]`
+  // chip and by the file list's Open button, so neither way to read one was lost.
   "pdf.previousPage": "Previous page",
   "pdf.nextPage": "Next page",
   // The total is one round trip behind the picture, so the box beside it reads "/ –"
@@ -446,7 +459,7 @@ const ENGLISH: Record<string, string> = {
   "pdf.fit": "Fit",
   "pdf.fitPage": "Fit page",
   "pdf.fitWidth": "Fit width",
-  "pdf.openViewer": "Open in the PDF window",
+  "pdf.openSystem": "Open in system viewer",
 
   "link.new": "Link",
   "link.edit": "Edit link",
@@ -475,6 +488,9 @@ const ENGLISH: Record<string, string> = {
   "library.renameLocked":
     "This note is open in the note window. Close it there first, then it can be renamed.",
   "library.duplicate": "Duplicate",
+  // A file row's menu (B47). Copies `![[path]]` or `[[path]]` — the very spelling
+  // insertion writes, so a copied link and an inserted one cannot disagree.
+  "library.copyLink": "Copy link",
   "library.duplicateLocked":
     "This note is open in the note window. Close it there first, then it can be duplicated.",
   "library.tasks": "Tasks",
@@ -596,12 +612,16 @@ const ENGLISH: Record<string, string> = {
   "conflict.merge": "Merge in the editor",
   "conflict.close": "Close",
 
-  // Orphaned attachments
+  // Orphaned attachments — a place in the sidebar since 16 August 2026 (between Keyboard
+  // shortcuts and Trash) rather than a modal: B47's file list in the note pane, B47's
+  // preview in the reader, and Delete in the row's own menu. So `orphans.title` is the
+  // label on that row as well as the name of the thing. The two states below are not
+  // decoration: this is the one file list that is a *search* and so can fail, which is
+  // exactly what the old screen used to hang on at "Looking…".
   "orphans.title": "Orphaned attachments",
   "orphans.loading": "Looking…",
-  "orphans.failed": "The search did not finish. Close this and try again.",
+  "orphans.failed": "The search did not finish. Pick the row again to retry.",
   "orphans.empty": "No orphaned attachments found.",
-  "orphans.settingsHint": "Files in _attachments/ that no note points to any more.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",
