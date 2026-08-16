@@ -28,6 +28,14 @@ import {
 // exactly how it behaves: `SETTLE_MS` was enough on Linux for months and then failed a
 // release on macOS, whose fsevents backend reports later and less evenly under load.
 const STABILITY_MS = 20;
+/**
+ * On Windows this app watches by polling (B57), so a test that waits for the watcher to
+ * notice a write waits out a whole poll — two seconds each at the production interval,
+ * which put this file at 23 seconds and its four-second waits right on the edge. That is
+ * a property of the *interval*, not of the code under test, so the interval is turned
+ * down here exactly as `stabilityThreshold` already is. Ignored off Windows.
+ */
+const WATCH_INTERVAL_MS = 20;
 const SETTLE_MS = 150;
 const WAIT_TIMEOUT_MS = 4000;
 const POLL_MS = 10;
@@ -88,16 +96,21 @@ async function waitFor(check: () => void): Promise<void> {
  * mirror image of this race for months — fsevents reporting a file written *before*
  * watching as a live event — with exactly this wait, for exactly this reason.
  *
- * Paid on darwin alone, because this is a property of that one backend: inotify and
- * `ReadDirectoryChangesW` both deliver from the moment the watch is added, so the other
- * two platforms would be buying nothing with the time.
+ * Paid on darwin alone, because this is a property of that one backend: inotify delivers
+ * from the moment the watch is added, and Windows does not use a backend at all any more
+ * — it polls (B57), where the wait is a whole interval rather than a gap and
+ * `WATCH_INTERVAL_MS` is what answers it.
  *
  * Two of the tests here assert that something is *not* indexed. Those cannot fail from a
  * missed event — they pass, for the wrong reason — so they go through this too, or they
  * quietly stop testing anything on the one platform where the gap is real.
  */
 async function startWatching(options: WatchOptions = {}): Promise<VaultWatcher> {
-  const started = watchVault(vault, db, { stabilityThreshold: STABILITY_MS, ...options });
+  const started = watchVault(vault, db, {
+    stabilityThreshold: STABILITY_MS,
+    watchInterval: WATCH_INTERVAL_MS,
+    ...options,
+  });
   await started.ready();
   if (process.platform === "darwin") await settle();
   return started;
@@ -134,7 +147,10 @@ describe("the vault watcher", () => {
     // is a real race there, not a Linux-only inotify quirk this settle time papers
     // over. Caught by the release CI's macOS runner, not by anything that runs here.
     await settle();
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
+    watcher = watchVault(vault, db, {
+      stabilityThreshold: STABILITY_MS,
+      watchInterval: WATCH_INTERVAL_MS,
+    });
 
     await settle();
 
@@ -208,7 +224,10 @@ describe("the vault watcher", () => {
   });
 
   it("stops reacting once closed", async () => {
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
+    watcher = watchVault(vault, db, {
+      stabilityThreshold: STABILITY_MS,
+      watchInterval: WATCH_INTERVAL_MS,
+    });
     await watcher.close();
     watcher = null;
 
@@ -308,6 +327,16 @@ describe("how the vault is watched, per platform", () => {
       usePolling: true,
       interval: POLL_INTERVAL_MS,
       binaryInterval: POLL_INTERVAL_MS,
+    });
+  });
+
+  it("takes an interval, which is what keeps this suite off the production one", () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+
+    expect(pollingOptions(20)).toEqual({
+      usePolling: true,
+      interval: 20,
+      binaryInterval: 20,
     });
   });
 

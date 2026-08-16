@@ -61,13 +61,13 @@ export const POLL_INTERVAL_MS = 2000;
  * `awaitWriteFinish` applies in either mode, so the reason it is set — OneDrive writing
  * a synced file over several passes — is unaffected.
  */
-export function pollingOptions(): { usePolling?: true; interval?: number; binaryInterval?: number } {
+export function pollingOptions(interval: number = POLL_INTERVAL_MS): {
+  usePolling?: true;
+  interval?: number;
+  binaryInterval?: number;
+} {
   if (process.platform !== "win32") return {};
-  return {
-    usePolling: true,
-    interval: POLL_INTERVAL_MS,
-    binaryInterval: POLL_INTERVAL_MS,
-  };
+  return { usePolling: true, interval, binaryInterval: interval };
 }
 
 export interface WatchOptions {
@@ -77,6 +77,15 @@ export interface WatchOptions {
    * seconds.
    */
   stabilityThreshold?: number;
+  /**
+   * Overrides `POLL_INTERVAL_MS`, and exists for the same reason `stabilityThreshold`
+   * does — on Windows, where this app watches by polling (see `pollingOptions`), a test
+   * that writes a file and waits for the watcher to notice waits out a *whole poll*. At
+   * the production interval that is two seconds per assertion, which is how the suite
+   * came to spend 23 seconds in one file and then fail a release by running a four-second
+   * wait right up against it. Ignored off Windows, where nothing polls.
+   */
+  watchInterval?: number;
   /**
    * Called after every reindex or removal (single note or whole subtree), so the caller
    * can refresh whatever is on screen and, separately, decide whether to tell an open
@@ -193,7 +202,7 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
     awaitWriteFinish: { stabilityThreshold, pollInterval: 20 },
     // Windows only — see `pollingOptions` for why an app that watches natively there
     // stops OneDrive from doing its job.
-    ...pollingOptions(),
+    ...pollingOptions(options.watchInterval),
   });
 
   watcher.on("add", reindex);

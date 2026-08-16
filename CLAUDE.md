@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1335 tests
+npm test               # vitest run — 1336 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -704,8 +704,13 @@ crawl has finished, which on darwin is not the moment the fsevents stream begins
 a file written into that gap produces **no event at all**, and an event that was never sent
 cannot be waited out — which is why raising the timeouts, twice, never settled it, and why it
 went on failing a release every few dozen runs on the macOS runner and nowhere else. The
-helper pays one settle after `ready()`, on darwin only, since inotify and
-`ReadDirectoryChangesW` deliver from the moment the watch is added. The two tests there that
+helper pays one settle after `ready()`, on darwin only — inotify delivers from the moment
+the watch is added, and Windows no longer uses a backend at all: it polls (B57), where the
+wait is a whole interval rather than a gap. That interval is `WatchOptions.watchInterval`,
+turned down in the tests exactly as `stabilityThreshold` already is: at the production two
+seconds every waiting assertion in that file waits out a poll, which put it at 23 seconds
+on the Windows runner and ran its four-second waits right up against the edge — a release
+failed on that, one release after the one that introduced the polling. The two tests there that
 assert something is *not* indexed go through it too: a missed event makes those pass for the
 wrong reason, which is worse than failing.
 
