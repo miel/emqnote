@@ -464,9 +464,10 @@ export interface CaptureApi {
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
   setLoadRemoteImages: (load: boolean) => Promise<void>;
-  setProfilingEnabled: (enabled: boolean) => Promise<void>;
+  /** Present in the real preload; optional keeps older test/embedded bridges compatible. */
+  setProfilingEnabled?: (enabled: boolean) => Promise<void>;
   /** Narrow, content-free renderer timing channel. */
-  profileRenderer: (event: RendererProfilingEvent) => void;
+  profileRenderer?: (event: RendererProfilingEvent) => void;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */

@@ -193,7 +193,9 @@ export function Settings({
             onChange={(event) => {
               const next = event.target.checked;
               setProfiling(next);
-              void window.emqnote.setProfilingEnabled(next).then(() => onChanged());
+              // Older preload bridges (and renderer test doubles) predate profiling.
+              // The shipped preload always supplies this method.
+              void window.emqnote.setProfilingEnabled?.(next)?.then(() => onChanged());
             }}
           />
         </label>
