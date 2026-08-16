@@ -1,7 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 
 /**
- * Every `![[…]]`/`[[…]]` target a document points at — what `orphaned-attachments.ts`
+ * Every `![[…]]`/`[[…]]` target a document points at — what `unlinked-attachments.ts`
  * needs to tell a referenced file from an abandoned one. `wikiEmbed` and `wikiLink` are
  * collected together and undistinguished on purpose: §6.4 of `02-technisch-ontwerp.md`
  * routes an image through `wikiEmbed` but a non-image attachment (a PDF) through the

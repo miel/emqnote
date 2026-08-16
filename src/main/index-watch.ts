@@ -27,6 +27,49 @@ import { isNoteFile } from "./note-files.js";
  * `add` for every one of those files on startup would just double the same work.
  */
 
+/**
+ * How often the Windows poller looks. Slower than a native watch notices, and well
+ * inside `04-bouwplan.md`'s "within 5 seconds of the OneDrive sync landing" — that
+ * criterion is what sets the ceiling here, not comfort.
+ */
+export const POLL_INTERVAL_MS = 2000;
+
+/**
+ * On Windows the vault is watched by polling, and that is a trade made on purpose.
+ *
+ * chokidar's native handler calls `fs.watch` on every directory it watches, recursively.
+ * On Windows that is an open `FILE_LIST_DIRECTORY` kernel handle on every folder in the
+ * vault, held for as long as the app is resident — and this app is resident all day by
+ * design (B2/B3). Two things follow, and both were reported from real use:
+ *
+ * - OneDrive could not update a folder renamed on the other machine, because this app
+ *   was holding it. An app that blocks the sync tool its own vault lives on is worse
+ *   than an app that polls.
+ * - Permanently deleting a folder out of the trash failed. A handle follows the file
+ *   object, not the path, so `trashFolder`'s rename carried the watcher's handles into
+ *   `_trash` along with the folder — ignored by `isIgnoredPath` or not — and Windows
+ *   refuses to remove a directory anything still has open. Files were never affected,
+ *   because chokidar opens no handle on a file; that asymmetry is exactly what the two
+ *   reports described.
+ *
+ * With `usePolling` chokidar uses `fs.watchFile` stat polling and `readdir` sweeps
+ * instead, which hold nothing open. The cost is a periodic stat sweep of the vault for
+ * as long as the app runs, which is a real cost on a large vault and is accepted: it is
+ * paid on a background thread's schedule, while the alternative is paid by the sync.
+ *
+ * macOS keeps native watching, where a watch descriptor blocks nothing.
+ * `awaitWriteFinish` applies in either mode, so the reason it is set — OneDrive writing
+ * a synced file over several passes — is unaffected.
+ */
+export function pollingOptions(): { usePolling?: true; interval?: number; binaryInterval?: number } {
+  if (process.platform !== "win32") return {};
+  return {
+    usePolling: true,
+    interval: POLL_INTERVAL_MS,
+    binaryInterval: POLL_INTERVAL_MS,
+  };
+}
+
 export interface WatchOptions {
   /**
    * Overrides the 300 ms production default — only so tests are not stuck waiting
@@ -148,6 +191,9 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
     ignoreInitial: true,
     ignored: (path: string) => isIgnoredPath(vault, path),
     awaitWriteFinish: { stabilityThreshold, pollInterval: 20 },
+    // Windows only — see `pollingOptions` for why an app that watches natively there
+    // stops OneDrive from doing its job.
+    ...pollingOptions(),
   });
 
   watcher.on("add", reindex);

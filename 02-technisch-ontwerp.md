@@ -285,11 +285,18 @@ anders dan geplakte HTML die uit een `.eml` komt in plaats van uit het klembord.
   garandeert unieke namen.
 - Niet-afbeeldingen → `[[bestand.pdf]]` als klikbare link die het systeemprogramma opent
 
-### 6.5 Verweesde bijlagen
+### 6.5 Niet-gekoppelde bijlagen
 
 Een opruimactie (handmatig, nooit automatisch) zoekt bestanden in `_attachments/` waar
 geen enkele notitie naar verwijst, en toont ze met een miniatuur. Verwijderen is altijd
 een expliciete keuze van de gebruiker.
+
+Sinds B55 is dit geen apart venster maar een plek in de zijbalk, en sinds 16 augustus 2026
+heet het *niet-gekoppeld* in plaats van *verweesd*: het oude woord noemde het lot van het
+bestand in een beeld, het nieuwe noemt wat er werkelijk ontbreekt — een verwijzing. Een
+verwijzing telt in beide spellingen, `![[foto.png]]` en `![[_attachments/…/foto.png]]`; alleen
+op de kale bestandsnaam vergelijken zette een plaatje waar een notitie naar wees toch in de
+lijst.
 
 ## 7. Index en zoeken
 

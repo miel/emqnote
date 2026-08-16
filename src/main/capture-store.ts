@@ -5,7 +5,7 @@ import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markd
 import type { CapturePayload } from "../shared/ipc.js";
 import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
-import { rememberOwnWrite } from "./own-writes.js";
+import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import { saveNote } from "./vault-io.js";
 import { INBOX } from "./vault.js";
 
@@ -330,6 +330,11 @@ export async function renameSessionFile(
 
   const target = uniquePath(directory, candidateName);
   await rename(session.path, target);
+  // The bytes did not change, so neither should the watcher's answer about who wrote
+  // them: `own-writes.ts` is keyed by path, and without this the `add` at the new name
+  // reads as an external edit — of the note this very window has open, which is the one
+  // place that turns straight into a notice on screen.
+  renameOwnWrite(session.path, target);
   session.path = target;
   session.pathTitle = title;
   return target;

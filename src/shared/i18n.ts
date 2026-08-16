@@ -183,6 +183,15 @@ const DUTCH: Record<string, string> = {
   "library.deletePermanently": "Permanent verwijderen",
   "library.deletePermanentlyLocked":
     "Dit staat open in het invoervenster. Sluit het daar eerst, dan kan het verwijderd worden.",
+  /** Niet dit programma maar het besturingssysteem weigert: op Windows houdt OneDrive,
+   *  de Verkenner of een virusscanner een map soms even vast. Er is al een seconde lang
+   *  opnieuw geprobeerd (`REMOVE_OPTIONS`) voordat dit op het scherm komt. */
+  "library.deletePermanentlyFailed":
+    "Dit kon niet verwijderd worden: iets anders op deze computer heeft het nog open. Probeer het zo nog eens.",
+  "library.clearTrashFailed":
+    "Een deel van de prullenbak kon niet verwijderd worden: iets anders op deze computer heeft het nog open. Probeer het zo nog eens.",
+  "library.clearTrashLocked":
+    "Er staat iets uit de prullenbak open in het invoervenster. Sluit het daar eerst.",
   /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
    *  Its `title`; `library.actions` is what is written on it. */
   "library.moreActions": "Meer acties",
@@ -300,16 +309,19 @@ const DUTCH: Record<string, string> = {
   "conflict.merge": "Samenvoegen in de editor",
   "conflict.close": "Sluiten",
 
-  // Verweesde bijlagen — sinds 16 augustus 2026 een plek in de zijbalk (tussen
+  // Niet-gekoppelde bijlagen — sinds 16 augustus 2026 een plek in de zijbalk (tussen
   // Sneltoetsen en Prullenbak) in plaats van een venster: de bestandenlijst van B47 in
   // het notitiepaneel, de preview van B47 in de lezer, en Verwijderen in het menu van de
-  // rij. `orphans.title` is dus ook het label van die rij. De twee toestanden hieronder
+  // rij. `unlinked.title` is dus ook het label van die rij. De twee toestanden hieronder
   // zijn geen versiering: dit is de enige bestandenlijst die een zoekopdracht is en dus
   // kan mislukken, en precies daarop liep het oude venster vast op "Bezig met zoeken…".
-  "orphans.title": "Verweesde bijlagen",
-  "orphans.loading": "Bezig met zoeken…",
-  "orphans.failed": "Zoeken is niet gelukt. Kies de rij opnieuw om het nog eens te proberen.",
-  "orphans.empty": "Geen verweesde bijlagen gevonden.",
+  //
+  // "Verweesd" heette het tot 16 augustus 2026. Het zei wat er met het bestand aan de
+  // hand was in een beeld, waar de lijst juist zegt wat er *niet* is: een verwijzing.
+  "unlinked.title": "Niet-gekoppelde bijlagen",
+  "unlinked.loading": "Bezig met zoeken…",
+  "unlinked.failed": "Zoeken is niet gelukt. Kies de rij opnieuw om het nog eens te proberen.",
+  "unlinked.empty": "Geen niet-gekoppelde bijlagen gevonden.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
@@ -507,6 +519,15 @@ const ENGLISH: Record<string, string> = {
   "library.deletePermanently": "Delete permanently",
   "library.deletePermanentlyLocked":
     "This is open in the note window. Close it there first, then it can be deleted.",
+  /** Not this app refusing but the operating system: on Windows OneDrive, Explorer or a
+   *  virus scanner can hold a folder for a moment. A second of retries has already been
+   *  spent (`REMOVE_OPTIONS`) by the time this reaches the screen. */
+  "library.deletePermanentlyFailed":
+    "This could not be removed: something else on this machine still has it open. Try again in a moment.",
+  "library.clearTrashFailed":
+    "Part of the trash could not be removed: something else on this machine still has it open. Try again in a moment.",
+  "library.clearTrashLocked":
+    "Something in the trash is open in the note window. Close it there first.",
   "library.moreActions": "More actions",
   "library.actions": "Actions",
   "library.insert": "Insert",
@@ -612,16 +633,19 @@ const ENGLISH: Record<string, string> = {
   "conflict.merge": "Merge in the editor",
   "conflict.close": "Close",
 
-  // Orphaned attachments — a place in the sidebar since 16 August 2026 (between Keyboard
+  // Unlinked attachments — a place in the sidebar since 16 August 2026 (between Keyboard
   // shortcuts and Trash) rather than a modal: B47's file list in the note pane, B47's
-  // preview in the reader, and Delete in the row's own menu. So `orphans.title` is the
+  // preview in the reader, and Delete in the row's own menu. So `unlinked.title` is the
   // label on that row as well as the name of the thing. The two states below are not
   // decoration: this is the one file list that is a *search* and so can fail, which is
   // exactly what the old screen used to hang on at "Looking…".
-  "orphans.title": "Orphaned attachments",
-  "orphans.loading": "Looking…",
-  "orphans.failed": "The search did not finish. Pick the row again to retry.",
-  "orphans.empty": "No orphaned attachments found.",
+  //
+  // "Orphaned" until 16 August 2026. It named the file's predicament in a metaphor, where
+  // what the list actually says is what is *missing*: a link to it.
+  "unlinked.title": "Unlinked attachments",
+  "unlinked.loading": "Looking…",
+  "unlinked.failed": "The search did not finish. Pick the row again to retry.",
+  "unlinked.empty": "No unlinked attachments found.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",

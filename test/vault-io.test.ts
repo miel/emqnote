@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -709,9 +710,9 @@ describe("emptying the trash", () => {
     mkdirSync(join(vault, TRASH_FOLDER, "Oud", "Nested"), { recursive: true });
     writeFileSync(join(vault, TRASH_FOLDER, "Oud", "Nested", "foto.png"), "binary");
 
-    const count = emptyTrash(vault);
+    const emptied = emptyTrash(vault);
 
-    expect(count).toBe(2);
+    expect(emptied).toEqual({ removed: 2, failed: 0 });
     expect(readdirSync(join(vault, TRASH_FOLDER))).toEqual([]);
     // The vault itself, and everything outside _trash, is untouched.
     expect(
@@ -722,12 +723,36 @@ describe("emptying the trash", () => {
 
   it("does nothing and answers 0 when _trash does not exist yet", () => {
     expect(existsSync(join(vault, TRASH_FOLDER))).toBe(false);
-    expect(emptyTrash(vault)).toBe(0);
+    expect(emptyTrash(vault)).toEqual({ removed: 0, failed: 0 });
   });
 
   it("does nothing and answers 0 when _trash is already empty", () => {
     mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
-    expect(emptyTrash(vault)).toBe(0);
+    expect(emptyTrash(vault)).toEqual({ removed: 0, failed: 0 });
+  });
+
+  it("counts what would not go instead of stopping at it", () => {
+    // Stand-in for the Windows case this exists for: a folder something else on the
+    // machine has open, which `rmSync` refuses whatever the retry budget. Here it is a
+    // read-only parent directory, which is the portable way to make one entry
+    // unremovable while its neighbour is fine — the point being that the neighbour still
+    // goes. Skipped on Windows, where `chmod` does not mean this, and as root, where
+    // permissions are not enforced at all; the real Windows case is a manual test.
+    if (process.platform === "win32") return;
+    if (typeof process.getuid === "function" && process.getuid() === 0) return;
+
+    mkdirSync(join(vault, TRASH_FOLDER, "Vast", "Binnenin"), { recursive: true });
+    writeFileSync(join(vault, TRASH_FOLDER, "Vast", "Binnenin", "vast.md"), "vast");
+    writeFileSync(join(vault, TRASH_FOLDER, "Los.md"), "los");
+    chmodSync(join(vault, TRASH_FOLDER, "Vast"), 0o500);
+
+    const emptied = emptyTrash(vault);
+
+    expect(emptied).toEqual({ removed: 1, failed: 1 });
+    expect(existsSync(join(vault, TRASH_FOLDER, "Los.md"))).toBe(false);
+    expect(existsSync(join(vault, TRASH_FOLDER, "Vast"))).toBe(true);
+
+    chmodSync(join(vault, TRASH_FOLDER, "Vast"), 0o700);
   });
 
   it("refuses to follow a _trash that is a symlink outside the vault", () => {

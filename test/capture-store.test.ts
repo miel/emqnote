@@ -20,6 +20,7 @@ import {
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
+import { wasOwnWrite } from "../src/main/own-writes.js";
 import { paragraphs, payload } from "./helpers/doc.js";
 
 let vault: string;
@@ -471,5 +472,22 @@ describe("renaming a session's file to match a changed subject", () => {
     expect(renamed).not.toBeNull();
     expect(dirname(renamed!)).toBe(join(vault, "01 Projecten", "Alpha"));
     expect(basename(renamed!)).toContain("Tweede titel");
+  });
+
+  it("carries the own-write hash over to the new name", async () => {
+    // Without this the watcher's `add` at the new name is a file nothing remembers
+    // writing, so main tells the capture window its own note changed outside the app —
+    // and it stays said, since the bytes are unchanged and no further write ever
+    // registers a hash for the new path.
+    const session = beginSession();
+    session.payload = payload(paragraphs("Eerste titel"));
+    await writeSession(session, vault);
+
+    session.payload = payload(paragraphs("Tweede titel"));
+    await writeSession(session, vault);
+    const renamed = await renameSessionFile(session, vault);
+
+    expect(renamed).not.toBeNull();
+    expect(wasOwnWrite(renamed!, readFileSync(renamed!, "utf8"))).toBe(true);
   });
 });

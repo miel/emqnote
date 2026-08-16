@@ -144,7 +144,7 @@ export const IPC = {
   libraryResolveConflict: "library:resolve-conflict",
 
   /** `_attachments/` files no note refers to any more — §6.5. */
-  libraryOrphanedAttachments: "library:orphaned-attachments",
+  libraryUnlinkedAttachments: "library:unlinked-attachments",
   libraryTrashAttachment: "library:trash-attachment",
 
   /** Which notes link to one, so a move or a rename can offer to bring them along (B35). */
@@ -408,8 +408,14 @@ export interface LibraryApi {
    */
   duplicateNote: (path: string) => Promise<{ path: string; locked?: boolean }>;
   trashNote: (path: string) => Promise<boolean>;
-  /** Permanently deletes everything in `_trash`. Answers how many entries were removed. */
-  emptyTrash: () => Promise<number>;
+  /**
+   * Permanently deletes everything in `_trash`. Answers how many entries went and how
+   * many would not: something else on the machine holding one folder must not take the
+   * rest of the trash with it, and it must not pass in silence either — before this it
+   * threw on the first failure and the rejection died in a `void` call, which read as
+   * the button doing nothing at all.
+   */
+  emptyTrash: () => Promise<{ removed: number; failed: number; locked?: boolean }>;
   createFolder: (parent: string, name: string) => Promise<string>;
   /**
    * Renames a folder in place and answers with its new path. Rejects rather than
@@ -440,7 +446,14 @@ export interface LibraryApi {
    * that note — or a note inside that folder — claimed: its session pins the path it will
    * write to next, so the file would come straight back on the next debounced write.
    */
-  deleteFromTrash: (path: string) => Promise<{ deleted: boolean; locked?: boolean }>;
+  /**
+   * `locked` is the capture window having it claimed; `failed` is the filesystem
+   * refusing, which on Windows is a folder something else has open — and is why this
+   * answers rather than rejecting.
+   */
+  deleteFromTrash: (
+    path: string,
+  ) => Promise<{ deleted: boolean; locked?: boolean; failed?: boolean }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;
@@ -478,7 +491,7 @@ export interface LibraryApi {
    * call per file that base64'd the whole thing through IPC, which is what B28 refused
    * for a note's own pictures and what made this screen load all-or-nothing.
    */
-  orphanedAttachments: () => Promise<FileSummary[]>;
+  unlinkedAttachments: () => Promise<FileSummary[]>;
   trashAttachment: (path: string) => Promise<string>;
 
   /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */

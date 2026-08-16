@@ -130,7 +130,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     resolveConflict: (pair: ConflictPair, choice: ConflictChoice) =>
       ipcRenderer.invoke(IPC.libraryResolveConflict, pair, choice),
 
-    orphanedAttachments: () => ipcRenderer.invoke(IPC.libraryOrphanedAttachments),
+    unlinkedAttachments: () => ipcRenderer.invoke(IPC.libraryUnlinkedAttachments),
     trashAttachment: (path: string) => ipcRenderer.invoke(IPC.libraryTrashAttachment, path),
 
     tasks: (scope: string, openOnly: boolean) =>

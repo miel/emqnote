@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { rememberOwnWrite, wasOwnWrite } from "../src/main/own-writes.js";
+import { rememberOwnWrite, renameOwnWrite, wasOwnWrite } from "../src/main/own-writes.js";
 
 /**
  * `own-writes.ts` is what lets the watcher tell its own echo of a debounced autosave
@@ -78,6 +78,57 @@ describe("own-writes", () => {
 
       rememberOwnWrite("/vault/own-writes-case.md", "hello");
       expect(wasOwnWrite("/vault/OWN-WRITES-CASE.md", "hello")).toBe(false);
+    });
+  });
+
+  describe("across a rename", () => {
+    it("answers for the new path and no longer for the old one", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnWrite(from, "hello");
+
+      renameOwnWrite(from, to);
+
+      expect(wasOwnWrite(to, "hello")).toBe(true);
+      // Nothing is at the old path any more, so nothing there can be this app's write.
+      expect(wasOwnWrite(from, "hello")).toBe(false);
+    });
+
+    it("does nothing when the old path was never written by this app", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnWrite(to, "already here");
+
+      renameOwnWrite(from, to);
+
+      // An unrelated rename must not wipe what the destination already had — the file
+      // that was there is gone, but only a rename this app actually knows about says so.
+      expect(wasOwnWrite(to, "already here")).toBe(true);
+    });
+
+    it("replaces what the destination remembered when there is something to move", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnWrite(from, "the survivor");
+      rememberOwnWrite(to, "about to be overwritten");
+
+      renameOwnWrite(from, to);
+
+      expect(wasOwnWrite(to, "the survivor")).toBe(true);
+      expect(wasOwnWrite(to, "about to be overwritten")).toBe(false);
+    });
+
+    it("folds case on Windows on both sides of the move", () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, "platform", { value: "win32" });
+      try {
+        rememberOwnWrite("C:\\Vault\\Before.md", "hello");
+        renameOwnWrite("C:\\VAULT\\BEFORE.md", "C:\\Vault\\After.md");
+
+        expect(wasOwnWrite("C:\\vault\\after.md", "hello")).toBe(true);
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
     });
   });
 

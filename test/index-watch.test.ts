@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeIndex, getNote, openIndex, type IndexDb } from "../src/main/index-db.js";
-import { watchVault, type VaultWatcher } from "../src/main/index-watch.js";
+import {
+  POLL_INTERVAL_MS,
+  pollingOptions,
+  watchVault,
+  type VaultWatcher,
+} from "../src/main/index-watch.js";
 
 // Real chokidar against a real temp directory: a tiny stability threshold instead of
 // the 300 ms production default keeps this within the suite's ~2 second budget.
@@ -261,5 +266,44 @@ describe("the vault watcher", () => {
         own: false,
       });
     });
+  });
+});
+
+/**
+ * Windows is the one platform where this app watching the vault stops something else
+ * from working on it: chokidar's native handler holds an open directory handle per
+ * folder, which blocked OneDrive from replacing a folder renamed on the other machine
+ * and made permanently deleting a folder out of the trash fail. Polling holds nothing
+ * open. Asserted against the option rather than against a running watcher, because the
+ * behaviour that matters is a Windows kernel property this suite cannot reproduce
+ * anywhere else — see `pollingOptions`' own comment.
+ */
+describe("how the vault is watched, per platform", () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+  });
+
+  it("polls on Windows", () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+
+    expect(pollingOptions()).toEqual({
+      usePolling: true,
+      interval: POLL_INTERVAL_MS,
+      binaryInterval: POLL_INTERVAL_MS,
+    });
+  });
+
+  it("watches natively everywhere else", () => {
+    for (const platform of ["darwin", "linux"]) {
+      Object.defineProperty(process, "platform", { value: platform });
+      expect(pollingOptions()).toEqual({});
+    }
+  });
+
+  it("stays inside the five seconds `04-bouwplan.md` allows a synced change", () => {
+    // One poll plus one stability wait is what a change costs before it is indexed.
+    expect(POLL_INTERVAL_MS + 300).toBeLessThan(5000);
   });
 });

@@ -17,7 +17,7 @@ import {
   resolveAttachment,
   saveAttachment,
 } from "../src/main/attachments.js";
-import { findOrphanedAttachments } from "../src/main/orphaned-attachments.js";
+import { findUnlinkedAttachments } from "../src/main/unlinked-attachments.js";
 
 /**
  * The store nothing had ever written to before this: naming, collision handling and
@@ -268,8 +268,8 @@ describe("resolveAttachment, for a target carrying a path", () => {
 });
 
 describe("a saved attachment nothing references yet", () => {
-  it("is found by findOrphanedAttachments", async () => {
+  it("is found by findUnlinkedAttachments", async () => {
     const name = await saveAttachment(vault, new TextEncoder().encode("binary"), "foto.png");
-    expect(await findOrphanedAttachments(vault)).toEqual([`_attachments/${name}`]);
+    expect(await findUnlinkedAttachments(vault)).toEqual([`_attachments/${name}`]);
   });
 });

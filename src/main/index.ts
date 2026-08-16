@@ -98,7 +98,7 @@ import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./i
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
-import { findOrphanedAttachments } from "./orphaned-attachments.js";
+import { findUnlinkedAttachments } from "./unlinked-attachments.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import {
   attachmentNameFromUrl,
@@ -118,7 +118,7 @@ import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import { serveRemoteImage } from "./remote-images.js";
 import { isOpenableUrl } from "./remote-image.js";
-import { FOLDER_ERROR } from "../shared/vault-types.js";
+import { FOLDER_ERROR, TRASH_FOLDER } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -1497,7 +1497,7 @@ function registerLibraryIpc(): void {
    * walk nobody can see; `allLinks` is `null`-safe by being skipped entirely, in which
    * case the scan falls back to reading the notes itself.
    */
-  ipcMain.handle(IPC.libraryOrphanedAttachments, async () => {
+  ipcMain.handle(IPC.libraryUnlinkedAttachments, async () => {
     const vault = vaultPath();
     if (vault === null) return [];
 
@@ -1505,7 +1505,7 @@ function registerLibraryIpc(): void {
     // `null` means the index could not answer, not that nothing is referenced — the scan
     // reads the notes itself in that case rather than offering to delete every attachment
     // in the vault.
-    const orphans = await findOrphanedAttachments(vault, referenced ?? undefined);
+    const unlinked = await findUnlinkedAttachments(vault, referenced ?? undefined);
 
     // Answered as `FileSummary` rows rather than bare paths, because the pane that shows
     // them is B47's file list: the same rows a folder's own files draw, so a name, a type
@@ -1513,7 +1513,7 @@ function registerLibraryIpc(): void {
     // which is what stops the two lists describing one file two different ways. A file
     // that vanished between the scan naming it and this stat — a real race on a synced
     // vault — drops out rather than becoming a row that cannot be drawn.
-    return orphans
+    return unlinked
       .map((path) => summariseFile(vault, join(vault, path)))
       .filter((file): file is FileSummary => file !== null);
   });
@@ -1696,12 +1696,28 @@ function registerLibraryIpc(): void {
     return true;
   });
 
+  /**
+   * The lock guard is `IPC.libraryDeleteFromTrash`'s, which this used to be missing
+   * altogether: emptying the trash can reach a note the capture window has claimed just
+   * as naming one can, and there the file simply comes back on the next debounced write
+   * — `writeAtomic`'s own `mkdirSync` recreating the trash folder around it.
+   *
+   * `emptyTrash` counts what would not go rather than throwing on it, so one folder
+   * something else holds open does not keep the rest of the trash. The count comes back
+   * either way and the renderer says so.
+   */
   ipcMain.handle(IPC.libraryEmptyTrash, (_event) => {
     const vault = vaultPath();
-    if (vault === null) return 0;
-    const count = emptyTrash(vault);
+    if (vault === null) return { removed: 0, failed: 0 };
+
+    const active = writer.activePath();
+    if (active !== null && active.startsWith(`${TRASH_FOLDER}/`)) {
+      return { removed: 0, failed: 0, locked: true };
+    }
+
+    const emptied = emptyTrash(vault);
     notifyLibrary();
-    return count;
+    return emptied;
   });
 
   ipcMain.handle(IPC.libraryCreateFolder, (_event, parent: string, name: string) => {
@@ -1775,7 +1791,22 @@ function registerLibraryIpc(): void {
       return { deleted: false, locked: true };
     }
 
-    deleteFromTrash(vault, path);
+    try {
+      deleteFromTrash(vault, path);
+    } catch (error) {
+      // Something else on the machine has it — on Windows that is a folder, never a
+      // file, and it is the whole of the reported bug: this threw, the rejection died in
+      // the renderer's `void` call, the dialog closed and the folder was still there.
+      // `REMOVE_OPTIONS` has already spent a second retrying by the time this runs.
+      //
+      // Logged as well as answered, because the other way in here is `deleteFromTrash`'s
+      // own guard refusing a path that is not inside the trash at all — a different
+      // thing entirely, and one the message on screen deliberately does not try to say.
+      console.warn(`Could not delete ${path} from the trash:`, error);
+      notifyLibrary();
+      return { deleted: false, failed: true };
+    }
+
     notifyLibrary();
     return { deleted: true };
   });

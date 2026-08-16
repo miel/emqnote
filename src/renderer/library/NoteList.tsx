@@ -21,8 +21,8 @@ interface Props {
   /**
    * Whether that list is still being worked out, or could not be.
    *
-   * Only the orphaned-attachment pane is ever anything but `"ready"`: a folder's files are
-   * one `readdir` answered before the pane renders, while the orphans are a search over
+   * Only the unlinked-attachment pane is ever anything but `"ready"`: a folder's files are
+   * one `readdir` answered before the pane renders, while the unlinked ones are a search over
    * the whole index. Those two states are not decoration — the modal this pane replaced
    * had exactly one state, and a rejected `invoke` left it saying "Looking…" for the rest
    * of the session with nothing on screen to say why.
@@ -63,7 +63,7 @@ interface Props {
    */
   onContextMenu: (note: NoteSummary, x: number, y: number) => void;
   /**
-   * The same gesture on a file row — Copy link, Reveal, and Delete in the orphans pane
+   * The same gesture on a file row — Copy link, Reveal, and Delete in the unlinked pane
    * only. The whole `FileSummary` is handed over rather than its path, because the link
    * spelling the menu copies depends on the file's own name.
    */
@@ -100,11 +100,11 @@ export function NoteList({
   locale,
   t,
 }: Props): React.ReactElement {
-  // The orphaned-attachment pane is a file list and nothing else. There are no notes in it
+  // The unlinked-attachment pane is a file list and nothing else. There are no notes in it
   // to count, sort or create — "+ New note" would file one into whatever folder the tree
   // last stood on, which is a button doing something unrelated to what it sits next to —
   // so the whole note half of this pane is left out rather than drawn empty.
-  const orphans = showing.kind === "orphans";
+  const unlinked = showing.kind === "unlinked";
   // Trash is not a folder you add notes to — Clear trash replaces + New note there, the
   // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
   // `canRenameFolder`/`canCreateFolder`).
@@ -135,7 +135,7 @@ export function NoteList({
         />
       </div>
 
-      {!orphans && (
+      {!unlinked && (
         <div className="notes-header">
           <span className="notes-count">
             {notes.length === 0
@@ -166,15 +166,15 @@ export function NoteList({
         </div>
       )}
 
-      {orphans && filesState === "loading" && (
-        <p className="orphans-note">{t("orphans.loading")}</p>
+      {unlinked && filesState === "loading" && (
+        <p className="unlinked-note">{t("unlinked.loading")}</p>
       )}
-      {orphans && filesState === "failed" && <p className="orphans-note">{t("orphans.failed")}</p>}
-      {orphans && filesState === "ready" && files.length === 0 && (
-        <p className="orphans-note">{t("orphans.empty")}</p>
+      {unlinked && filesState === "failed" && <p className="unlinked-note">{t("unlinked.failed")}</p>}
+      {unlinked && filesState === "ready" && files.length === 0 && (
+        <p className="unlinked-note">{t("unlinked.empty")}</p>
       )}
 
-      {!orphans && (
+      {!unlinked && (
         <ul className="notes-list" role="listbox">
           {notes.map((note) => (
             <li

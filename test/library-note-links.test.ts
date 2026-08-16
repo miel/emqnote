@@ -113,7 +113,7 @@ function buildFake(): Fake {
     renameNote,
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
-    emptyTrash: async () => 0,
+    emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
@@ -132,7 +132,7 @@ function buildFake(): Fake {
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
-    orphanedAttachments: async () => [],
+    unlinkedAttachments: async () => [],
     trashAttachment: async () => "",
     linkingNotes,
     onOpenLink: (handler) => {

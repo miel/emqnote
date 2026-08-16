@@ -6,7 +6,7 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FileSummary, FolderNode } from "../src/shared/vault-types.js";
 
 /**
- * §6.5's orphaned attachments as a place in the sidebar rather than a modal.
+ * §6.5's unlinked attachments as a place in the sidebar rather than a modal.
  *
  * This file used to check the opposite. Bug 7 (6 August 2026) moved the entry point off
  * the folder tree's footer into a row inside Settings, arguing it was an occasional
@@ -43,10 +43,12 @@ const ORPHANS: FileSummary[] = [
 
 interface Fake {
   emqnote: CaptureApi;
-  orphanedAttachments: ReturnType<typeof vi.fn>;
+  unlinkedAttachments: ReturnType<typeof vi.fn>;
   trashAttachment: ReturnType<typeof vi.fn>;
   revealNote: ReturnType<typeof vi.fn>;
   copyText: ReturnType<typeof vi.fn>;
+  /** Fires `library:refresh`, which main sends twice for every debounced autosave. */
+  refresh: () => void;
 }
 
 function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): Fake {
@@ -57,7 +59,8 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     children: [{ path: "00 Inbox", name: "00 Inbox", noteCount: 0, children: [] }],
   };
 
-  const orphanedAttachments = vi.fn(answer);
+  const unlinkedAttachments = vi.fn(answer);
+  let refreshListener: (() => void) | null = null;
   const trashAttachment = vi.fn(async () => "_trash/afbeelding-1.png");
   const revealNote = vi.fn();
   const copyText = vi.fn(async () => {});
@@ -74,7 +77,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
-    emptyTrash: async () => 0,
+    emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
@@ -85,7 +88,12 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     noteEditable: async () => true,
     openInCapture: async () => true,
     newNote: () => {},
-    onRefresh: () => () => {},
+    onRefresh: (listener) => {
+      refreshListener = listener;
+      return () => {
+        refreshListener = null;
+      };
+    },
     onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
@@ -93,7 +101,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
-    orphanedAttachments,
+    unlinkedAttachments,
     trashAttachment,
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
@@ -147,7 +155,14 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     library,
   };
 
-  return { emqnote, orphanedAttachments, trashAttachment, revealNote, copyText };
+  return {
+    emqnote,
+    unlinkedAttachments,
+    trashAttachment,
+    revealNote,
+    copyText,
+    refresh: () => refreshListener?.(),
+  };
 }
 
 async function flush(rounds = 12): Promise<void> {
@@ -159,7 +174,7 @@ async function flush(rounds = 12): Promise<void> {
   }
 }
 
-describe("the orphaned-attachments pane", () => {
+describe("the unlinked-attachments pane", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
@@ -194,10 +209,10 @@ describe("the orphaned-attachments pane", () => {
   }
 
   /** The footer row, found by its own label exactly as `--click-button` would find it. */
-  function orphansRow(): HTMLElement {
+  function unlinkedRow(): HTMLElement {
     const row = Array.from(container.querySelectorAll<HTMLElement>(".branch")).find(
       (candidate) =>
-        candidate.querySelector(".branch-name")?.textContent === "Orphaned attachments",
+        candidate.querySelector(".branch-name")?.textContent === "Unlinked attachments",
     );
     expect(row).toBeDefined();
     return row!;
@@ -225,17 +240,17 @@ describe("the orphaned-attachments pane", () => {
     await flush();
   }
 
-  it("lists the orphans as file rows once the row is picked", async () => {
+  it("lists the unlinked files as file rows once the row is picked", async () => {
     const fake = buildFake();
     await mount(fake);
 
     // Not asked until it is asked for: the scan reads the whole index, and a library
     // opening on a folder has no business paying for it.
-    expect(fake.orphanedAttachments).not.toHaveBeenCalled();
+    expect(fake.unlinkedAttachments).not.toHaveBeenCalled();
 
-    await click(orphansRow());
+    await click(unlinkedRow());
 
-    expect(fake.orphanedAttachments).toHaveBeenCalledTimes(1);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(1);
     expect(fileRows().map((row) => row.querySelector(".note-title")!.textContent)).toEqual([
       "afbeelding-1.png",
       "contract.docx",
@@ -256,7 +271,7 @@ describe("the orphaned-attachments pane", () => {
         }),
     );
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
 
     expect(container.textContent).toContain("Looking…");
 
@@ -269,12 +284,50 @@ describe("the orphaned-attachments pane", () => {
     expect(fileRows()).toHaveLength(2);
   });
 
+  it("keeps the rows on screen while a refresh re-scans", async () => {
+    // The reported flicker. Main sends `library:refresh` twice for every debounced
+    // autosave — once from the writer, once from the watcher seeing that same write — so
+    // typing in the capture window re-ran this scan twice a second, and each run blanked
+    // the list to "Looking…" before asking.
+    let release: (files: FileSummary[]) => void = () => {};
+    let first = true;
+    const fake = buildFake(() => {
+      if (first) {
+        first = false;
+        return Promise.resolve(ORPHANS);
+      }
+      return new Promise<FileSummary[]>((resolve) => {
+        release = resolve;
+      });
+    });
+    await mount(fake);
+    await click(unlinkedRow());
+    expect(fileRows()).toHaveLength(2);
+
+    await act(async () => {
+      fake.refresh();
+    });
+    await flush();
+
+    // Mid-scan: the rows that are already right are still the rows on screen.
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain("Looking…");
+    expect(fileRows()).toHaveLength(2);
+
+    await act(async () => {
+      release([ORPHANS[0]!]);
+    });
+    await flush();
+
+    expect(fileRows()).toHaveLength(1);
+  });
+
   it("says so when the scan fails, rather than looking forever", async () => {
     // The exact bug the modal shipped with: no `.catch`, so a rejected `invoke` left the
     // one loading state set for the rest of the session.
     const fake = buildFake(() => Promise.reject(new Error("no index")));
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
 
     expect(container.textContent).toContain("The search did not finish");
     expect(container.textContent).not.toContain("Looking…");
@@ -288,15 +341,15 @@ describe("the orphaned-attachments pane", () => {
       return ORPHANS;
     });
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
     expect(container.textContent).toContain("The search did not finish");
 
     // Worth its own test because it does not come for free: `selectionKey` answers
-    // `"orphans"` whatever object is set, so the effect keyed on it never fires a second
+    // `"unlinked"` whatever object is set, so the effect keyed on it never fires a second
     // time and the reload has to be asked for by hand.
-    await click(orphansRow());
+    await click(unlinkedRow());
 
-    expect(fake.orphanedAttachments).toHaveBeenCalledTimes(2);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(2);
     expect(fileRows()).toHaveLength(2);
     expect(container.textContent).not.toContain("The search did not finish");
   });
@@ -304,15 +357,15 @@ describe("the orphaned-attachments pane", () => {
   it("says when there are none, which is the good outcome", async () => {
     const fake = buildFake(async () => []);
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
 
-    expect(container.textContent).toContain("No orphaned attachments found.");
+    expect(container.textContent).toContain("No unlinked attachments found.");
   });
 
   it("offers Copy link, Reveal and Delete on a row, in that order", async () => {
     const fake = buildFake();
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
     await openRowMenu(fileRows()[0]!);
 
     expect(menuLabels()).toEqual(["Copy link", "Reveal", "Delete"]);
@@ -321,7 +374,7 @@ describe("the orphaned-attachments pane", () => {
   it("copies the spelling insertion writes — `![[…]]` for a picture, `[[…]]` otherwise", async () => {
     const fake = buildFake();
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
 
     await openRowMenu(fileRows()[0]!);
     await click(container.querySelectorAll(".context-menu .context-menu-item")[0]!);
@@ -339,7 +392,7 @@ describe("the orphaned-attachments pane", () => {
   it("reveals the file the row names", async () => {
     const fake = buildFake();
     await mount(fake);
-    await click(orphansRow());
+    await click(unlinkedRow());
     await openRowMenu(fileRows()[0]!);
     await click(container.querySelectorAll(".context-menu .context-menu-item")[1]!);
 
@@ -349,8 +402,8 @@ describe("the orphaned-attachments pane", () => {
   it("deletes through the existing trashAttachment and asks the list again", async () => {
     const fake = buildFake();
     await mount(fake);
-    await click(orphansRow());
-    fake.orphanedAttachments.mockClear();
+    await click(unlinkedRow());
+    fake.unlinkedAttachments.mockClear();
 
     await openRowMenu(fileRows()[0]!);
     await click(container.querySelectorAll(".context-menu .context-menu-item")[2]!);
@@ -358,7 +411,7 @@ describe("the orphaned-attachments pane", () => {
     expect(fake.trashAttachment).toHaveBeenCalledWith("_attachments/2026/07/afbeelding-1.png");
     // The list is a search, not a local array to splice: re-asking is what keeps it
     // honest when the same file was referenced by a note in between.
-    expect(fake.orphanedAttachments).toHaveBeenCalledTimes(1);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(1);
   });
 
   it("offers no Delete on a file row outside this pane", async () => {
