@@ -8,6 +8,7 @@ import {
   pollingOptions,
   watchVault,
   type VaultWatcher,
+  type WatchOptions,
 } from "../src/main/index-watch.js";
 
 // Real chokidar against a real temp directory: a tiny stability threshold instead of
@@ -75,6 +76,33 @@ async function waitFor(check: () => void): Promise<void> {
   }
 }
 
+/**
+ * Starts a watcher and does not come back until it is genuinely listening.
+ *
+ * `ready()` resolves when chokidar's initial crawl has finished, which on macOS is **not**
+ * the moment the fsevents stream starts delivering. A file written into that gap produces
+ * no event at all — and an event that was never sent is not something polling can wait
+ * out, which is why raising the timeouts (twice: `afae2d3`, `89df2fd`) never settled this
+ * and why it went on failing releases, once every few dozen runs, on the macOS runner
+ * only. "does not index what already existed before watching started" has guarded the
+ * mirror image of this race for months — fsevents reporting a file written *before*
+ * watching as a live event — with exactly this wait, for exactly this reason.
+ *
+ * Paid on darwin alone, because this is a property of that one backend: inotify and
+ * `ReadDirectoryChangesW` both deliver from the moment the watch is added, so the other
+ * two platforms would be buying nothing with the time.
+ *
+ * Two of the tests here assert that something is *not* indexed. Those cannot fail from a
+ * missed event — they pass, for the wrong reason — so they go through this too, or they
+ * quietly stop testing anything on the one platform where the gap is real.
+ */
+async function startWatching(options: WatchOptions = {}): Promise<VaultWatcher> {
+  const started = watchVault(vault, db, { stabilityThreshold: STABILITY_MS, ...options });
+  await started.ready();
+  if (process.platform === "darwin") await settle();
+  return started;
+}
+
 beforeEach(() => {
   vault = mkdtempSync(join(tmpdir(), "emqnote-watch-"));
   mkdirSync(join(vault, "00 Inbox"), { recursive: true });
@@ -90,8 +118,7 @@ afterEach(async () => {
 
 describe("the vault watcher", () => {
   it("indexes a file added after watching starts", async () => {
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await watcher.ready();
+    watcher = await startWatching();
     writeFileSync(join(vault, "00 Inbox", "Nieuw.md"), noteContents("Nieuw"));
 
     await waitFor(() => {
@@ -117,12 +144,11 @@ describe("the vault watcher", () => {
   it("re-indexes a file that changed", async () => {
     const path = join(vault, "00 Inbox", "Notitie.md");
     writeFileSync(path, noteContents("Notitie", "oud"));
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    // `ready()`, not a wait for the note to appear: this file was written *before*
-    // watching started, so `ignoreInitial` means it is deliberately never indexed —
-    // that is the point of the test above. All there is to wait for here is the
-    // watcher being up, which `ready()` answers exactly rather than approximately.
-    await watcher.ready();
+    // `startWatching`, not a wait for the note to appear: this file was written
+    // *before* watching started, so `ignoreInitial` means it is deliberately never
+    // indexed — that is the point of the test above. All there is to wait for here is
+    // the watcher really listening, which is exactly what that helper answers.
+    watcher = await startWatching();
 
     writeFileSync(path, noteContents("Notitie", "nieuw"));
 
@@ -133,8 +159,7 @@ describe("the vault watcher", () => {
 
   it("removes a note from the index once its file is deleted", async () => {
     const path = join(vault, "00 Inbox", "Weg.md");
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await watcher.ready();
+    watcher = await startWatching();
 
     writeFileSync(path, noteContents("Weg"));
     await waitFor(() => {
@@ -150,8 +175,7 @@ describe("the vault watcher", () => {
 
   it("ignores a note written inside the trash folder", async () => {
     mkdirSync(join(vault, "_trash"), { recursive: true });
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await watcher.ready();
+    watcher = await startWatching();
 
     writeFileSync(join(vault, "_trash", "Weggegooid.md"), noteContents("Weggegooid"));
     await settle();
@@ -160,8 +184,7 @@ describe("the vault watcher", () => {
   });
 
   it("ignores a non-markdown file", async () => {
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await watcher.ready();
+    watcher = await startWatching();
 
     writeFileSync(join(vault, "00 Inbox", "toevallig.txt"), "geen notitie");
     await settle();
@@ -171,13 +194,11 @@ describe("the vault watcher", () => {
 
   it("calls onChange after indexing", async () => {
     let calls = 0;
-    watcher = watchVault(vault, db, {
-      stabilityThreshold: STABILITY_MS,
+    watcher = await startWatching({
       onChange: () => {
         calls += 1;
       },
     });
-    await watcher.ready();
 
     writeFileSync(join(vault, "00 Inbox", "Signaal.md"), noteContents("Signaal"));
 
@@ -198,8 +219,7 @@ describe("the vault watcher", () => {
   });
 
   it("prunes an entire subtree when a folder is deleted outside the app", async () => {
-    watcher = watchVault(vault, db, { stabilityThreshold: STABILITY_MS });
-    await watcher.ready();
+    watcher = await startWatching();
 
     mkdirSync(join(vault, "00 Inbox", "Sub"), { recursive: true });
     writeFileSync(join(vault, "00 Inbox", "Top.md"), noteContents("Top"));
@@ -219,12 +239,10 @@ describe("the vault watcher", () => {
 
   it("marks an own write as such, while still indexing it correctly regardless", async () => {
     const events: { path: string; kind: string; own: boolean }[] = [];
-    watcher = watchVault(vault, db, {
-      stabilityThreshold: STABILITY_MS,
+    watcher = await startWatching({
       isOwnWrite: (_path, contents) => contents.includes("van-de-app-zelf"),
       onChange: (event) => events.push(event),
     });
-    await watcher.ready();
 
     writeFileSync(
       join(vault, "00 Inbox", "EigenSchrijf.md"),
@@ -246,11 +264,9 @@ describe("the vault watcher", () => {
   it("reports a plain unlink as a 'removed' event with a vault-relative path", async () => {
     const path = join(vault, "00 Inbox", "WordtVerwijderd.md");
     const events: { path: string; kind: string; own: boolean }[] = [];
-    watcher = watchVault(vault, db, {
-      stabilityThreshold: STABILITY_MS,
+    watcher = await startWatching({
       onChange: (event) => events.push(event),
     });
-    await watcher.ready();
 
     writeFileSync(path, noteContents("WordtVerwijderd"));
     await waitFor(() => {

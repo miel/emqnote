@@ -643,6 +643,17 @@ B42's row, column and alignment commands were the exception that proved it: they
 
 The suite must stay under about two seconds so it can run on every change. `test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
 
+**Everything in that file starts its watcher through `startWatching`, and the reason is a
+macOS property rather than a slow runner.** chokidar's `ready()` resolves when its initial
+crawl has finished, which on darwin is not the moment the fsevents stream begins delivering:
+a file written into that gap produces **no event at all**, and an event that was never sent
+cannot be waited out — which is why raising the timeouts, twice, never settled it, and why it
+went on failing a release every few dozen runs on the macOS runner and nowhere else. The
+helper pays one settle after `ready()`, on darwin only, since inotify and
+`ReadDirectoryChangesW` deliver from the moment the watch is added. The two tests there that
+assert something is *not* indexed go through it too: a missed event makes those pass for the
+wrong reason, which is worse than failing.
+
 ## Where the project stands
 
 Phases 0–3 are done: byte-identical markdown round trip, resident shell, the editor, and the library window. Phase 3 and 4 of `04-bouwplan.md` were swapped in practice — the library window shipped first. **Pasting and images (the `mso-list` reconstruction) is deliberately deferred, not just unstarted.** Real `.eml` samples (2 August 2026) showed the flat `<p class=MsoListParagraph>` pattern §6.3 assumes doesn't appear in genuine Word-authored content (real `<ol>/<li>` already, `mso-list` just decorative on top) or in what's likely Outlook for Mac (new-Outlook/web-style HTML, no `mso-list` at all) — only classic desktop Outlook might still show it, and that's unavailable for about two weeks from 2 August 2026. See `TODO.md` for the full finding before resuming this.
