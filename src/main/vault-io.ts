@@ -38,7 +38,7 @@ import {
 } from "../shared/vault-types.js";
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
-import { rememberOwnWrite } from "./own-writes.js";
+import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
 
 /**
@@ -262,10 +262,10 @@ export function readFilesIn(vault: string, folder: string): FileSummary[] {
 /**
  * One file, as the note list's file section wants it (B47).
  *
- * Split out of `readFilesIn` because the orphaned-attachment pane draws the very same
- * rows from a completely different question: `findOrphanedAttachments` answers with paths
+ * Split out of `readFilesIn` because the unlinked-attachment pane draws the very same
+ * rows from a completely different question: `findUnlinkedAttachments` answers with paths
  * rather than a `readdir`, and the two lists must not disagree about how a file is
- * described — an orphan showing its size in bytes while a folder's file showed kB would
+ * described — an unlinked file showing its size in bytes while a folder's file showed kB would
  * be one list pretending to be another.
  *
  * `null` for a file that has gone between being named and being asked about, which on a
@@ -640,6 +640,7 @@ export function moveNote(vault: string, notePath: string, targetFolder: string):
 
   const to = uniquePath(targetDirectory, basename(notePath));
   renameSync(from, to);
+  renameOwnWrite(from, to);
 
   return toPosix(relative(vault, to));
 }
@@ -689,7 +690,13 @@ export function renameNote(vault: string, notePath: string, title: string): stri
   const to = uniquePath(dirname(from), fileName);
 
   writeAtomic(from, serializeNote(note));
-  if (to !== from) renameSync(from, to);
+  if (to !== from) {
+    renameSync(from, to);
+    // `writeAtomic` remembered these bytes under the *old* path a line ago. Without
+    // carrying that over, the watcher's `add` at the new name is an external change to a
+    // file this app wrote itself — see `own-writes.ts`'s `renameOwnWrite`.
+    renameOwnWrite(from, to);
+  }
 
   return toPosix(relative(vault, to));
 }
@@ -742,8 +749,42 @@ export function trashNote(vault: string, notePath: string): string {
 }
 
 /**
+ * How `rmSync` is called by the two functions below, and the only place either of them
+ * differs by platform.
+ *
+ * Node's default is `maxRetries: 0`, and its Windows backoff for EBUSY, EPERM, EMFILE,
+ * ENFILE and ENOTEMPTY only engages above zero — `force: true` suppresses ENOENT and
+ * nothing else. So one transient lock was an immediate hard failure, which is what
+ * "permanently deleting a folder does not work" meant: OneDrive, Explorer, an antivirus
+ * scanner or this app's own watcher (see `index-watch.ts`'s `pollingOptions`) can each
+ * hold a directory for a moment, and a folder is the only thing they hold — which is
+ * exactly why deleting a *file* out of the trash always worked.
+ *
+ * A second of retries, not more: past that it is not transient, and the caller has a
+ * message to show.
+ */
+const REMOVE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 10,
+  retryDelay: 100,
+} as const;
+
+/**
+ * What emptying the trash actually managed.
+ *
+ * `failed` is not an error code — it is a count, because one locked folder must not stop
+ * the entries beside it from going. The caller has something to say either way: how much
+ * went, and whether anything stayed.
+ */
+export interface TrashEmptied {
+  removed: number;
+  failed: number;
+}
+
+/**
  * Permanently deletes everything directly inside the vault's trash folder — files and
- * nested folders alike — and answers how many entries were removed.
+ * nested folders alike — and answers how many entries went and how many would not.
  *
  * The first permanent delete the app has ever performed, so it gets a guard that a
  * rename or a move has never needed: `path.resolve` only normalises text, it does not
@@ -752,9 +793,9 @@ export function trashNote(vault: string, notePath: string): string {
  * link actually pointed at. `realpathSync` is what actually asks the filesystem, so it
  * is what runs here, on both sides of the comparison, before anything is removed.
  */
-export function emptyTrash(vault: string): number {
+export function emptyTrash(vault: string): TrashEmptied {
   const trashDirectory = join(vault, TRASH);
-  if (!existsSync(trashDirectory)) return 0;
+  if (!existsSync(trashDirectory)) return { removed: 0, failed: 0 };
 
   const realTrash = realpathSync(trashDirectory);
   const realVault = realpathSync(vault);
@@ -763,10 +804,21 @@ export function emptyTrash(vault: string): number {
   }
 
   const entries = readdirSync(trashDirectory);
+  let removed = 0;
+  let failed = 0;
   for (const entry of entries) {
-    rmSync(join(trashDirectory, entry), { recursive: true, force: true });
+    try {
+      rmSync(join(trashDirectory, entry), REMOVE_OPTIONS);
+      removed += 1;
+    } catch {
+      // Held by something else — counted, not thrown. Stopping here would leave the rest
+      // of the trash behind on account of one folder, and the caller is going to say
+      // something about it either way. The guard above is the failure that still throws:
+      // that one means this was never the trash, which is not a thing to carry on past.
+      failed += 1;
+    }
   }
-  return entries.length;
+  return { removed, failed };
 }
 
 /**
@@ -803,7 +855,7 @@ export function deleteFromTrash(vault: string, path: string): void {
     throw new Error("refusing to delete a path outside the vault's own trash folder");
   }
 
-  rmSync(target, { recursive: true, force: true });
+  rmSync(target, REMOVE_OPTIONS);
 }
 
 /**

@@ -85,7 +85,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
-    emptyTrash: async () => 0,
+    emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
@@ -104,7 +104,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     conflicts: async () => [],
     conflictDiff: async () => [],
     resolveConflict: async () => {},
-    orphanedAttachments: async () => [],
+    unlinkedAttachments: async () => [],
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
@@ -234,7 +234,7 @@ describe("a folder's files in the library", () => {
   });
 
   it("draws a picture over the attachment protocol, not through IPC", async () => {
-    // B28's whole point, and the reason the orphan screen's base64 previews went away in
+    // B28's whole point, and the reason the unlinked-attachment screen's base64 previews went away in
     // the same batch: a note's pictures are served, never copied over the bridge.
     await mount(buildFake());
     await click(fileRows()[0]!);

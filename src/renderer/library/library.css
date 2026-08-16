@@ -1101,12 +1101,12 @@
   background: rgba(196, 43, 28, 0.14);
 }
 
-/* The orphaned-attachment pane's own line of prose — "Looking…", "the search did not
+/* The unlinked-attachment pane's own line of prose — "Looking…", "the search did not
  * finish", "none found". All that is left of the modal this used to be: the list itself
  * is B47's file list now, and the reader draws the preview, so the grid of tiles, the
  * panel and its buttons all went with the window. */
 
-.orphans-note {
+.unlinked-note {
   margin: 10px 12px;
   font-size: 12px;
   color: var(--muted);

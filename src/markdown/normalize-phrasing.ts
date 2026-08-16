@@ -25,6 +25,41 @@ const UNDERLINE_CLOSE = /^<\/u>$/i;
 /** `![[file.png]]`, `[[Note]]` or `[[Note|alias]]` */
 const WIKI = /(!)?\[\[([^\]|]+?)(?:\|([^\]]*?))?\]\]/;
 
+/** One `[[…]]` or `![[…]]` found in a string, taken apart. */
+export interface WikiSyntax {
+  /** Offset into the string that was searched, not into whatever was sliced off it. */
+  index: number;
+  length: number;
+  /** `![[…]]` rather than `[[…]]` — an attachment drawn in place, not a link to follow. */
+  embed: boolean;
+  target: string;
+  /** Always `null` for an embed: `![[…|…]]` has no meaning in the dialect. */
+  alias: string | null;
+}
+
+/**
+ * Finds the first `[[…]]` or `![[…]]` at or after `from`, or `null`.
+ *
+ * Exported because the editor's paste path needs to recognise exactly what this module
+ * recognises when it reads a file back off disk. Two spellings of one syntax is how a
+ * paste and a reopen come to disagree about the same characters — and they did: a pasted
+ * `![[foto.png]]` stayed literal text until the note was written and read again, which is
+ * the only reason it ever drew at all. The regex stays private; this is the seam.
+ */
+export function matchWikiSyntax(value: string, from = 0): WikiSyntax | null {
+  const match = WIKI.exec(from === 0 ? value : value.slice(from));
+  if (match === null) return null;
+
+  const [full, bang, target, alias] = match;
+  return {
+    index: from + match.index,
+    length: full.length,
+    embed: bang !== undefined,
+    target: target!.trim(),
+    alias: bang !== undefined || alias === undefined ? null : alias.trim(),
+  };
+}
+
 function isWhitespace(char: string | undefined): boolean {
   return char === undefined || /\s/.test(char);
 }
@@ -51,20 +86,15 @@ function tokenizeText(value: string): Token[] {
   while (index < value.length) {
     const rest = value.slice(index);
 
-    const wiki = WIKI.exec(rest);
-    if (wiki && wiki.index === 0) {
+    const wiki = matchWikiSyntax(rest);
+    if (wiki !== null && wiki.index === 0) {
       flush();
-      const [full, bang, target, alias] = wiki;
-      if (bang) {
-        tokens.push({ type: "wikiEmbed", target: target!.trim() });
+      if (wiki.embed) {
+        tokens.push({ type: "wikiEmbed", target: wiki.target });
       } else {
-        tokens.push({
-          type: "wikiLink",
-          target: target!.trim(),
-          alias: alias === undefined ? null : alias.trim(),
-        });
+        tokens.push({ type: "wikiLink", target: wiki.target, alias: wiki.alias });
       }
-      index += full.length;
+      index += wiki.length;
       continue;
     }
 

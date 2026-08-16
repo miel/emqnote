@@ -165,11 +165,23 @@ export function Library(): React.ReactElement {
   /** The non-note files in the folder being browsed, and which one the reader is showing (B47). */
   const [files, setFiles] = useState<FileSummary[]>([]);
   /**
-   * Whether that list is settled. Only the orphaned-attachment pane is ever anything but
-   * `"ready"`: a folder's files come back from one `readdir`, while the orphans are a
+   * Whether that list is settled. Only the unlinked-attachment pane is ever anything but
+   * `"ready"`: a folder's files come back from one `readdir`, while the unlinked ones are a
    * question put to the whole index.
    */
   const [filesState, setFilesState] = useState<"ready" | "loading" | "failed">("ready");
+  /**
+   * The last answer that pane got, kept so a refresh does not blank it.
+   *
+   * `library:refresh` arrives twice for every debounced autosave — once from the writer,
+   * once from the watcher observing that same write ~300 ms later — and every one of them
+   * re-runs this scan. That is right: a note that just started naming an attachment
+   * changes the answer. Clearing the rows and re-drawing "Looking…" each time was not,
+   * which is what "the list flickers while typing in the new-note window" was.
+   */
+  const unlinkedFiles = useRef<FileSummary[] | null>(null);
+  /** Only the newest scan may apply its answer; two can be in the air at once. */
+  const unlinkedScan = useRef(0);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   /**
@@ -250,7 +262,7 @@ export function Library(): React.ReactElement {
     null,
   );
   /**
-   * The same for a file row (B47's list) — Copy link, Reveal, and Delete in the orphans
+   * The same for a file row (B47's list) — Copy link, Reveal, and Delete in the unlinked
    * pane only. Its own state beside `noteMenu` rather than a widened one: the two act on
    * different types and share only three of nine items, and folding them together is how
    * a file row ends up offering half a note's menu — precisely what B47 refuses.
@@ -379,24 +391,45 @@ export function Library(): React.ReactElement {
     const query = searchQueryRef.current;
     const searching = query.trim() !== "";
 
-    // The orphaned-attachment pane is files and nothing else, and it is the one file list
+    // The unlinked-attachment pane is files and nothing else, and it is the one file list
     // that is a *search* rather than a `readdir` — over the whole index, so it can take
     // long enough to need saying so, and it can fail. Both states are the bug this pane's
     // predecessor shipped with: there was no `.catch` at all, so a rejected `invoke` left
     // "Looking…" on screen for the rest of the session with nothing to explain it.
-    if (!searching && target.kind === "orphans") {
+    if (!searching && target.kind === "unlinked") {
       setNotes([]);
-      setFiles([]);
-      setFilesState("loading");
+      const generation = (unlinkedScan.current += 1);
+
+      // "Looking…" is for the first answer, which really can take a while — not for every
+      // repaint. Once there is an answer it stays on screen while the next one is fetched:
+      // the rows are the same rows, and blanking them said otherwise twice a second.
+      const previous = unlinkedFiles.current;
+      if (previous === null) {
+        setFiles([]);
+        setFilesState("loading");
+      } else {
+        setFiles(previous);
+        setFilesState("ready");
+      }
+
       try {
-        const found = await window.emqnote.library.orphanedAttachments();
-        // Only if the pane is still the one that asked. A slow scan finishing after the
-        // tree has moved on would otherwise drop a folder's own list on the floor.
-        if (selectionRef.current.kind !== "orphans") return;
+        const found = await window.emqnote.library.unlinkedAttachments();
+        // Only the newest scan, and only if the pane is still the one that asked. A slow
+        // scan finishing after the tree has moved on would otherwise drop a folder's own
+        // list on the floor.
+        if (unlinkedScan.current !== generation) return;
+        if (selectionRef.current.kind !== "unlinked") return;
+        unlinkedFiles.current = found;
         setFiles(found);
         setFilesState("ready");
       } catch {
-        if (selectionRef.current.kind !== "orphans") return;
+        if (unlinkedScan.current !== generation) return;
+        if (selectionRef.current.kind !== "unlinked") return;
+        // A refresh that failed over rows that are already right is not worth throwing
+        // those rows away for — the next refresh is 800 ms of typing away. A *first*
+        // answer that fails has nothing to fall back on and must say so, which is the
+        // state this pane's predecessor shipped without and hung on.
+        if (unlinkedFiles.current !== null) return;
         setFilesState("failed");
       }
       return;
@@ -1411,6 +1444,16 @@ export function Library(): React.ReactElement {
       setDialog({ kind: "problem", message: app.t("library.deletePermanentlyLocked") });
       return;
     }
+    // Not a lock this app holds but one the operating system reports — a folder Windows
+    // will not remove because something else has it open. Main answers rather than
+    // rejecting, because a rejection here went nowhere: this is called as `void …`, so
+    // the dialog closed and the folder stayed, which is what "does not work" meant.
+    if (result.failed === true) {
+      setDialog({ kind: "problem", message: app.t("library.deletePermanentlyFailed") });
+      await loadTree();
+      await loadNotes(selectionRef.current);
+      return;
+    }
 
     const current = openRef.current;
     if (current !== null && (current.path === path || current.path.startsWith(`${path}/`))) {
@@ -1429,11 +1472,24 @@ export function Library(): React.ReactElement {
    * removes.
    */
   const clearTrash = async (): Promise<void> => {
-    await window.emqnote.library.emptyTrash();
+    const emptied = await window.emqnote.library.emptyTrash();
+    if (emptied.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.clearTrashLocked") });
+      return;
+    }
+
     setOpen(null);
     openRef.current = null;
     await loadTree();
     void loadNotes(selectionRef.current);
+
+    // Whatever went, went — one folder the operating system would not remove does not
+    // hold up the rest (`emptyTrash` counts it instead of throwing), but it does have to
+    // be said, or the trash quietly still has something in it after a confirmation that
+    // named a count.
+    if (emptied.failed > 0) {
+      setDialog({ kind: "problem", message: app.t("library.clearTrashFailed") });
+    }
   };
 
   /**
@@ -1480,13 +1536,13 @@ export function Library(): React.ReactElement {
   };
 
   /**
-   * The orphaned-attachment pane. Clears the search box for exactly `openTasks`' reason:
+   * The unlinked-attachment pane. Clears the search box for exactly `openTasks`' reason:
    * a live query wins over the selection outright in `loadNotes`, so a half-typed one
    * would leave the footer row lit with search results beside it. Carries no scope of its
    * own — the question is about `_attachments/`, which is the one folder the tree cannot
    * browse, so there is nothing to scope it to.
    */
-  const openOrphans = (): void => {
+  const openUnlinked = (): void => {
     if (searchQuery !== "") {
       if (searchTimer.current !== null) clearTimeout(searchTimer.current);
       // Written through the ref as well as the state, because the reload below runs in
@@ -1496,12 +1552,12 @@ export function Library(): React.ReactElement {
     }
 
     // Picking the row while its pane is already showing is the retry route for the
-    // failure state, and it needs saying out loud: `selectionKey` answers `"orphans"`
+    // failure state, and it needs saying out loud: `selectionKey` answers `"unlinked"`
     // whatever object is set, so the effect that loads a selection never fires for it.
     // Nothing else in the sidebar needs this — every other row either carries state that
     // changes the key or is a folder you can only be standing on one of.
-    if (selectionRef.current.kind === "orphans") void loadNotes({ kind: "orphans" });
-    else setSelection({ kind: "orphans" });
+    if (selectionRef.current.kind === "unlinked") void loadNotes({ kind: "unlinked" });
+    else setSelection({ kind: "unlinked" });
   };
 
   /**
@@ -1653,8 +1709,8 @@ export function Library(): React.ReactElement {
           onOpenHelp={() => setHelpOpen(true)}
           onOpenTasks={openTasks}
           tasksSelected={selection.kind === "tasks"}
-          onOpenOrphans={openOrphans}
-          orphansSelected={selection.kind === "orphans"}
+          onOpenUnlinked={openUnlinked}
+          unlinkedSelected={selection.kind === "unlinked"}
           isMac={app.isMac}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
@@ -1669,7 +1725,7 @@ export function Library(): React.ReactElement {
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           tasksLabel={app.t("library.tasks")}
-          orphansLabel={app.t("orphans.title")}
+          unlinkedLabel={app.t("unlinked.title")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
           peopleLabel={app.t("library.people")}
@@ -2045,12 +2101,12 @@ export function Library(): React.ReactElement {
               label: app.t("library.reveal"),
               onSelect: () => window.emqnote.library.revealNote(fileMenu.file.path),
             },
-            // Delete is offered in the orphaned-attachment pane and nowhere else. A
+            // Delete is offered in the unlinked-attachment pane and nowhere else. A
             // permanently visible, permanently disabled Delete on every picture in a
             // folder is noise, and B47's own reasoning is that a file row answering half
             // a note's menu reads worse than one that plainly is not a note — this is the
             // one pane where throwing the file away is the whole point of being there.
-            ...(selection.kind === "orphans"
+            ...(selection.kind === "unlinked"
               ? [
                   {
                     label: app.t("library.delete"),

@@ -5,9 +5,9 @@ import { FolderTree } from "../src/renderer/library/FolderTree.js";
 import type { FolderNode, Selection } from "../src/shared/vault-types.js";
 
 /**
- * The footer of the folder tree — Tags, People, Trash, Settings, Help, Tasks, Orphaned
+ * The footer of the folder tree — Tags, People, Trash, Settings, Help, Tasks, Unlinked
  * attachments — used to be laid out in that order. Bug 6 swaps Trash and Tasks; bug 7
- * moves Orphaned attachments into Settings entirely. Both are pure layout/prop changes,
+ * moves Unlinked attachments into Settings entirely. Both are pure layout/prop changes,
  * so `renderToStaticMarkup` is enough: no interaction is exercised here, just what ends
  * up in the tree and in what order.
  *
@@ -29,7 +29,7 @@ const SELECTION: Selection = { kind: "folder", path: "00 Inbox" };
 function renderFooter(
   tasksSelected = false,
   root: FolderNode = ROOT,
-  orphansSelected = false,
+  unlinkedSelected = false,
 ): string {
   return renderToStaticMarkup(
     createElement(FolderTree, {
@@ -56,8 +56,8 @@ function renderFooter(
       onOpenHelp: () => {},
       onOpenTasks: () => {},
       tasksSelected,
-      onOpenOrphans: () => {},
-      orphansSelected,
+      onOpenUnlinked: () => {},
+      unlinkedSelected,
       isMac: false,
       newFolderLabel: "New folder",
       renameFolderLabel: "Rename folder",
@@ -72,7 +72,7 @@ function renderFooter(
       helpLabel: "Help label",
       settingsLabel: "Settings label",
       tasksLabel: "Tasks label",
-      orphansLabel: "Orphans label",
+      unlinkedLabel: "Unlinked label",
       trashLabel: "Trash label",
       tagsLabel: "Tags label",
       peopleLabel: "People label",
@@ -84,18 +84,18 @@ function renderFooter(
 }
 
 describe("FolderTree footer order (bug 6)", () => {
-  it("puts Tasks before Settings, then Help, Orphaned attachments and Trash", () => {
+  it("puts Tasks before Settings, then Help, Unlinked attachments and Trash", () => {
     const html = renderFooter();
     const tasksAt = html.indexOf("Tasks label");
     const settingsAt = html.indexOf("Settings label");
     const helpAt = html.indexOf("Help label");
-    const orphansAt = html.indexOf("Orphans label");
+    const unlinkedAt = html.indexOf("Unlinked label");
     const trashAt = html.indexOf("Trash label");
 
     expect(tasksAt).toBeGreaterThan(-1);
     expect(settingsAt).toBeGreaterThan(-1);
     expect(helpAt).toBeGreaterThan(-1);
-    expect(orphansAt).toBeGreaterThan(-1);
+    expect(unlinkedAt).toBeGreaterThan(-1);
     expect(trashAt).toBeGreaterThan(-1);
 
     // Tags/People precede all five (unchanged) — checked via Tasks, the first of them,
@@ -104,12 +104,12 @@ describe("FolderTree footer order (bug 6)", () => {
     expect(html.indexOf("People label")).toBeLessThan(tasksAt);
 
     // The swap itself: Tasks now comes before Settings/Help, and Trash comes after.
-    // Orphaned attachments sits between Help and Trash — where it was asked for, and
+    // Unlinked attachments sits between Help and Trash — where it was asked for, and
     // beside the only two other rows down here that are not filters.
     expect(tasksAt).toBeLessThan(settingsAt);
     expect(settingsAt).toBeLessThan(helpAt);
-    expect(helpAt).toBeLessThan(orphansAt);
-    expect(orphansAt).toBeLessThan(trashAt);
+    expect(helpAt).toBeLessThan(unlinkedAt);
+    expect(unlinkedAt).toBeLessThan(trashAt);
   });
 
   it("still highlights the Tasks row when the Tasks view is selected", () => {
@@ -180,26 +180,26 @@ describe("only folders inside the trash are dimmed", () => {
 /**
  * The inverse of what this file used to assert, deliberately.
  *
- * Bug 7 (6 August 2026) moved orphaned attachments off this footer into a row inside
+ * Bug 7 (6 August 2026) moved unlinked attachments off this footer into a row inside
  * Settings, on the argument that it is an occasional action rather than an everyday
  * destination. It is back on 16 August 2026 as neither: a `Selection` of its own, whose
  * pane is B47's file list and whose reader is B47's preview — which makes it a place in
  * the vault, which is exactly what the sidebar is a list of.
  */
-describe("Orphaned attachments is a footer row again", () => {
+describe("Unlinked attachments is a footer row again", () => {
   it("renders a row carrying its label", () => {
-    expect(renderFooter()).toContain("Orphans label");
+    expect(renderFooter()).toContain("Unlinked label");
   });
 
   it("highlights that row when its pane is what is showing", () => {
     const html = renderFooter(false, ROOT, true);
-    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Orphans label"));
-    expect(html.slice(rowStart, html.indexOf("Orphans label"))).toContain("branch-on");
+    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Unlinked label"));
+    expect(html.slice(rowStart, html.indexOf("Unlinked label"))).toContain("branch-on");
   });
 
   it("leaves it unhighlighted otherwise", () => {
     const html = renderFooter();
-    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Orphans label"));
-    expect(html.slice(rowStart, html.indexOf("Orphans label"))).not.toContain("branch-on");
+    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Unlinked label"));
+    expect(html.slice(rowStart, html.indexOf("Unlinked label"))).not.toContain("branch-on");
   });
 });

@@ -59,10 +59,10 @@ interface Props {
   onOpenTasks: () => void;
   /** Whether the Tasks view is what is currently showing, for the same highlight the Trash branch gets. */
   tasksSelected: boolean;
-  /** Selects the orphaned-attachment pane — §6.5's cleanup, back in the sidebar where it started. */
-  onOpenOrphans: () => void;
+  /** Selects the unlinked-attachment pane — §6.5's cleanup, back in the sidebar where it started. */
+  onOpenUnlinked: () => void;
   /** Whether that pane is what is showing, highlighted exactly as Tasks and Trash are. */
-  orphansSelected: boolean;
+  unlinkedSelected: boolean;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   newFolderLabel: string;
@@ -84,7 +84,7 @@ interface Props {
   helpLabel: string;
   settingsLabel: string;
   tasksLabel: string;
-  orphansLabel: string;
+  unlinkedLabel: string;
   trashLabel: string;
   tagsLabel: string;
   peopleLabel: string;
@@ -147,7 +147,7 @@ const tasksGlyph = (
  * font on macOS whatever the variation selector says, and this row sits in a column with
  * `#`, `◍` and two hairline SVGs.
  */
-const orphansGlyph = (
+const unlinkedGlyph = (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
       d="M10.9 6.4v4.4a3 3 0 0 1-6 0V5.2a2 2 0 0 1 4 0v5.4a1 1 0 0 1-2 0V6.6"
@@ -401,8 +401,8 @@ export function FolderTree({
   onOpenHelp,
   onOpenTasks,
   tasksSelected,
-  onOpenOrphans,
-  orphansSelected,
+  onOpenUnlinked,
+  unlinkedSelected,
   isMac,
   newFolderLabel,
   renameFolderLabel,
@@ -417,7 +417,7 @@ export function FolderTree({
   helpLabel,
   settingsLabel,
   tasksLabel,
-  orphansLabel,
+  unlinkedLabel,
   trashLabel,
   tagsLabel,
   peopleLabel,
@@ -647,13 +647,13 @@ export function FolderTree({
             because that is where it was asked for, and because the two rows either side
             of it are the other two things down here that are not a filter. */}
         <div
-          className={`branch tree-settings${orphansSelected ? " branch-on" : ""}`}
+          className={`branch tree-settings${unlinkedSelected ? " branch-on" : ""}`}
           style={{ paddingLeft: "8px" }}
-          onClick={onOpenOrphans}
+          onClick={onOpenUnlinked}
         >
           <span className="twisty twisty-empty" />
-          <span className="filter-glyph">{orphansGlyph}</span>
-          <span className="branch-name">{orphansLabel}</span>
+          <span className="filter-glyph">{unlinkedGlyph}</span>
+          <span className="branch-name">{unlinkedLabel}</span>
         </div>
 
         {trash !== null && (

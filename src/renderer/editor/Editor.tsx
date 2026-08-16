@@ -11,6 +11,7 @@ import {
 } from "./attachment-view.js";
 import { clipboardText } from "./clipboard-text.js";
 import { transformPastedImages } from "./paste-images.js";
+import { transformPastedWikiSyntax } from "./paste-wiki.js";
 import { focusTaskAt } from "./focus-task.js";
 import { clearTaskHighlight } from "./task-highlight.js";
 import {
@@ -226,11 +227,13 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         // fetched and cached it (B50). See `attachment-view.ts`.
         image: (node) => externalImageView(node, handlers.current.loadRemoteImages !== false),
       },
-      // Pictures inside a pasted web page. The half that needs no network runs here,
-      // synchronously, before the slice lands; the download half is the `remoteImages`
-      // plugin in `state.ts`. Every other node in the slice is left exactly as
-      // ProseMirror parsed it — the Outlook `mso-list` work (§6.3) owns those.
-      transformPasted: transformPastedImages,
+      // Two passes, both synchronous and both before the slice lands. Pictures inside a
+      // pasted web page: the half that needs no network runs here, the download half is
+      // the `remoteImages` plugin in `state.ts`. Then `[[…]]`/`![[…]]` in pasted *text*,
+      // which is otherwise only recognised on the way back off disk — the app's own Copy
+      // link puts exactly that on the clipboard. Every other node in the slice is left
+      // exactly as ProseMirror parsed it — the Outlook `mso-list` work (§6.3) owns those.
+      transformPasted: (slice) => transformPastedWikiSyntax(transformPastedImages(slice)),
       // A screenshot pasted from the clipboard or a file dropped from Explorer/Finder —
       // see `insert-attachment.ts` for why a paste is image-only while a drop also
       // takes a PDF, and why both decline (return false) on anything else so the

@@ -176,13 +176,13 @@ export type Selection =
   | { kind: "tag"; name: string }
   | { kind: "person"; name: string }
   | { kind: "tasks"; scope: string; openOnly: boolean }
-  // §6.5's orphaned attachments: the files in `_attachments/` no note points at any more.
+  // §6.5's unlinked attachments: the files in `_attachments/` no note points at any more.
   // A place in the sidebar rather than a modal, for the same reason `tasks` is one — it
   // is a list of things in the vault, and every other such list is reached by selecting
   // it in the tree. It carries no state of its own: the question has exactly one answer
   // at any moment, and there is nothing to scope it to (`_attachments/` is the app's own
   // folder, which is why it is the one folder the tree cannot browse).
-  | { kind: "orphans" };
+  | { kind: "unlinked" };
 
 /** Stable string form, for React keys, highlight comparison and effect dependencies. */
 export function selectionKey(selection: Selection): string {
@@ -190,7 +190,7 @@ export function selectionKey(selection: Selection): string {
   if (selection.kind === "tasks") {
     return `tasks:${selection.scope}:${selection.openOnly ? "open" : "all"}`;
   }
-  if (selection.kind === "orphans") return "orphans";
+  if (selection.kind === "unlinked") return "unlinked";
   return `${selection.kind}:${selection.name}`;
 }
 

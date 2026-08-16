@@ -9,7 +9,7 @@ import { ATTACHMENTS } from "./vault.js";
  * Storing a file dropped, pasted or picked into `_attachments/`, and serving it back
  * out again — the base `02-technisch-ontwerp.md` §6.3/§6.4 described but nothing ever
  * built: the dialect has expressed `![[image.png]]` and `[[offerte.pdf]]` since day
- * one, seven corpus fixtures use them, and `orphaned-attachments.ts` exists to *clean
+ * one, seven corpus fixtures use them, and `unlinked-attachments.ts` exists to *clean
  * up* an attachment, but no code path has ever created one.
  *
  * Electron-free, so the naming and traversal rules can be tested directly — the same

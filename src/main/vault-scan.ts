@@ -335,7 +335,7 @@ export async function linkingNotesUnder(
 /**
  * Every `[[…]]` and `![[…]]` target in the vault, as spellings and nothing more.
  *
- * The orphaned-attachment scan's whole question: an attachment is referenced when some
+ * The unlinked-attachment scan's whole question: an attachment is referenced when some
  * note names it, and B45 put embeds in `note_links` beside the links. Before this that
  * scan rebuilt the set by reading and parsing every note in the vault on the main thread,
  * inside the IPC call, which is what left the screen saying "Looking…" for as long as
@@ -420,10 +420,10 @@ async function notesFor(vault: string, db: IndexDb, selection: Selection): Promi
   // it shows task rows, not notes, and a "tasks" selection never reaches `notesMatching`
   // from the renderer. This exists only so the union stays exhaustive here.
   if (selection.kind === "tasks") return [];
-  // Same again for the orphaned-attachment pane: it lists files, not notes, and is
-  // answered by `IPC.libraryOrphanedAttachments`. The renderer never asks this one about
+  // Same again for the unlinked-attachment pane: it lists files, not notes, and is
+  // answered by `IPC.libraryUnlinkedAttachments`. The renderer never asks this one about
   // it either; the branch is here so the union stays exhaustive.
-  if (selection.kind === "orphans") return [];
+  if (selection.kind === "unlinked") return [];
 
   await ensureScanned(vault, db);
   if (!available) return [];

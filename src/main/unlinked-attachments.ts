@@ -20,7 +20,7 @@ import { isNoteFile } from "./note-files.js";
  *
  * Every note counts as a reference, including one already in `_trash/` — a trashed
  * note can still be restored, and an attachment it needs would otherwise be reported
- * as orphaned and cleaned up out from under it. That is the one place this walk
+ * as unlinked and cleaned up out from under it. That is the one place this walk
  * deliberately differs from `index-scan.ts`'s `collectFiles`, which excludes the trash
  * because a *deleted* note must not resurface under its tags; a reference is a
  * different question from a listing, and trash answers it differently.
@@ -42,7 +42,7 @@ import { isNoteFile } from "./note-files.js";
  *
  * `keepHidden` is for the `_attachments` listing itself: that root *is* one of those
  * folders, and a subfolder inside it that happens to share a name with another would
- * otherwise go unlisted and so never be reported as orphaned.
+ * otherwise go unlisted and so never be reported as unlinked.
  */
 async function collectFiles(root: string, keepHidden = false): Promise<string[]> {
   const files: string[] = [];
@@ -112,7 +112,7 @@ async function targetsUnder(root: string): Promise<string[]> {
  * the trash. Leave it out and the whole vault is read instead, which is what happens
  * before the first scan has finished.
  */
-export async function findOrphanedAttachments(
+export async function findUnlinkedAttachments(
   vault: string,
   indexed?: Iterable<string>,
 ): Promise<string[]> {
@@ -131,7 +131,13 @@ export async function findOrphanedAttachments(
 
   const attachmentFiles = await collectFiles(join(vault, ATTACHMENTS), true);
 
+  // Both spellings count as a reference, because both are real: this app's own insertion
+  // writes a bare `![[foto.png]]`, while **Copy link** on a file row writes the path form
+  // `![[_attachments/2026/07/foto.png]]` (`isEmbeddableAttachment`'s own spelling), and a
+  // vault written elsewhere is full of the path form too (B38). Matching the name alone
+  // meant a picture linked with the app's own Copy link went on being listed here as
+  // unlinked — an offer to delete a file a note is drawing.
   return attachmentFiles
-    .filter((file) => !referenced.has(file.split(sep).pop()!))
-    .map((file) => relative(vault, file).split(sep).join("/"));
+    .map((file) => relative(vault, file).split(sep).join("/"))
+    .filter((path) => !referenced.has(path) && !referenced.has(path.split("/").pop()!));
 }

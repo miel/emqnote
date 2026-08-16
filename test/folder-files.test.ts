@@ -101,8 +101,8 @@ describe("readFilesIn", () => {
 });
 
 /**
- * The per-file half of `readFilesIn`, split out because the orphaned-attachment pane
- * draws the very same rows from a different question: `findOrphanedAttachments` answers
+ * The per-file half of `readFilesIn`, split out because the unlinked-attachment pane
+ * draws the very same rows from a different question: `findUnlinkedAttachments` answers
  * with paths rather than a `readdir`, and the two lists must not describe one file two
  * different ways.
  */

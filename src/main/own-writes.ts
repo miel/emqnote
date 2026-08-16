@@ -59,6 +59,38 @@ export function rememberOwnWrite(absolutePath: string, contents: string): void {
 }
 
 /**
+ * Moves what was remembered for one path to another, because a rename does not change
+ * the bytes and must not change the answer.
+ *
+ * The map is keyed by path, so before this a renamed file simply lost its identity: the
+ * watcher saw an `add` at a path nothing had ever been written to, answered `own: false`,
+ * and the capture window put "This note changed outside emqnote in the meantime." on
+ * screen for a rename this app had just performed itself. It stuck, too — the contents
+ * are unchanged, so the next debounced write is a no-op and no hash is ever registered
+ * for the new path.
+ *
+ * The entry is *moved* rather than re-remembered from the contents: neither rename site
+ * has the bytes in scope, and re-reading the file to hash it would be asking the disk a
+ * question this map already knows the answer to.
+ *
+ * A rename onto a path this app had also written to (`uniquePath` makes that rare but
+ * not impossible) simply overwrites the older entry, which is correct: the file that
+ * used to be there is gone.
+ */
+export function renameOwnWrite(from: string, to: string): void {
+  const fromKey = keyFor(from);
+  const stored = hashes.get(fromKey);
+  if (stored === undefined) return;
+
+  hashes.delete(fromKey);
+  const toKey = keyFor(to);
+  // Same delete-before-set as `rememberOwnWrite`, and for the same reason: the entry
+  // belongs at the newest end of the iteration order, not wherever the old key sat.
+  hashes.delete(toKey);
+  hashes.set(toKey, stored);
+}
+
+/**
  * Non-consuming on purpose: chokidar can fire `add` then `change` for a single logical
  * write on some platforms/filesystems, and both need to see the same answer, not just
  * the first to ask.
