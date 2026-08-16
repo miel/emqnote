@@ -40,6 +40,10 @@ function createWindow(): BrowserWindow {
     width: 900,
     height: 1000,
     show: false,
+    // Framed, so on Windows it would otherwise draw the application menu's "Edit" strip
+    // above the page — the same bug the library window has. See `library-window.ts`'s
+    // copy of this comment and `installMinimalMenu` for why the menu stays at all.
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(here, "../preload/pdfview.cjs"),
       // A PDF is untrusted input — B36's reasoning for the hidden render window applies

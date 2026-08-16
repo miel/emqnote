@@ -196,9 +196,19 @@ body {
   margin-bottom: 6px;
 }
 
+/* The date button in the When cell. `nowrap` is right — a date broken over two lines
+   would grow the header strip — but on its own it only stops the text wrapping, not the
+   text leaving the box: narrow the window and the timestamp painted straight out of its
+   field and across the one beside it. The cell itself shrinks correctly (`flex: 1;
+   min-width: 0` inside the grid's `minmax(0, 1fr)` track, see the note above), so all
+   that was missing is somewhere for the overflow to go. `.reader-path` in `library.css`
+   is the same three lines for the same reason. The full timestamp stays reachable
+   because the button carries it as its `title`. */
 .created {
   color: var(--muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }

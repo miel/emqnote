@@ -5,9 +5,24 @@ import type { Locale } from "../shared/i18n.js";
 import { DEFAULT_HOTKEY } from "../shared/ipc.js";
 import type { SortKey } from "../shared/vault-types.js";
 import { readLaunchOptions } from "./launch-options.js";
-import { defaultVaultPath } from "./vault.js";
 
 export interface Settings {
+  /**
+   * Where the notes live, or `null` for "nobody has chosen yet" — and `null` is the
+   * default on purpose.
+   *
+   * This used to be seeded with `defaultVaultPath()`, which answers `<OneDrive>/emqnote`
+   * whenever the machine has exactly one business OneDrive — the common one-tenant case.
+   * `prepareVault` only asks where the vault goes when it finds `null` here, so on those
+   * machines the folder was picked, created and filled without the question ever being
+   * put: the chooser existed and nobody was ever shown it, which is what "the vault
+   * location seems to be hardcoded" meant. A guess nobody was shown is worse than a
+   * question asked once, so the guess moved to where it belongs — `askForVault` composes
+   * it into the suggestion it offers, and accepting it is one click.
+   *
+   * Nobody already running loses their vault: theirs is a real path in their own
+   * `settings.json`, and the merge in `loadSettings` keeps it.
+   */
   vaultPath: string | null;
   hotkey: string;
   locale: Locale;
@@ -49,7 +64,7 @@ export { DEFAULT_HOTKEY };
 
 function defaults(): Settings {
   return {
-    vaultPath: defaultVaultPath(),
+    vaultPath: null,
     hotkey: DEFAULT_HOTKEY,
     locale: "en-US",
     openAtLogin: true,

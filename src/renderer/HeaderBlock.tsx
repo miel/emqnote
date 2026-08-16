@@ -187,7 +187,20 @@ export function HeaderBlock({
             <button
               type="button"
               className="created"
-              title={t("capture.changeTime")}
+              // Two lines, and the value comes first. `.created` truncates with an
+              // ellipsis now (`styles.css`) rather than painting out of its cell at a
+              // narrow window, and a truncated date you cannot read anywhere is a worse
+              // bug than the one that fixed — the tooltip is where it stays reachable.
+              // The action hint keeps its place underneath, since that is what the
+              // tooltip was for and a button still has to say what clicking it does.
+              // Composed rather than a new string: nothing here needs translating that
+              // is not already translated.
+              title={[
+                formatDateTime(locale, values.created),
+                t("capture.changeTime"),
+              ]
+                .filter((line) => line !== "")
+                .join("\n")}
               onClick={() => setEditingTime(true)}
             >
               {/* A note this app did not write has no `created:`, and `formatDateTime`
