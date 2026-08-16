@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1216 tests
+npm test               # vitest run — 1317 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -157,13 +157,28 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **Anything in the trash comes back out, and one thing at a time can be destroyed** (B54). `moveFolder` is what Restore needs that did not exist — a rename never changes which parent a folder hangs off — and it repeats `trashFolder`'s refusals with three differences that are the whole operation: the *source* may be inside `_trash`, the *destination* may not (that is `trashFolder`, and two routes to one act is how they drift), and a folder cannot move inside itself. A collision is survived rather than refused, unlike in `renameFolder`, because nobody typed this name. Its handler *is* `IPC.libraryRenameFolder`'s, extracted into one shared function so B44's and B45's two link-repair passes cannot come to differ between them. `deleteFromTrash` is `emptyTrash` at a smaller scale and sits directly beside it, sharing its guard exactly — `realpathSync` on both sides, and the target resolved as well as the folder, which `emptyTrash` never has to do because it works on `readdirSync`'s own entries while this one takes a path off IPC. **Those two are now the only code in the app that permanently deletes anything**, which is B24 restated rather than relaxed: same folder, same guard, same confirmation naming what goes. Restore and Delete permanently both keep a non-menu route — the folder toolbar swaps its three buttons for them in the trash, exactly as `NoteList` swaps *New note* for *Clear trash* there, and the reader's Actions menu does the same for a note — because `--click-button` cannot open a right-click menu, so anything living only behind one does not exist for the self-test.
 
-**Attachments are served over `emqnote-attachment://`, not as `data:` URLs** (B28). A note with three screenshots would otherwise push each one through IPC a third larger, on every render; the orphaned-attachments thumbnail keeps its `data:` URL because it is one file, once. `resolveAttachment` refuses anything that lands outside the vault after `realpathSync` — following the symlinks *is* the guard, the same reasoning as `emptyTrash`, which is also why its tests compare against the real path and not the one `mkdtemp` returned. Both windows carry `emqnote-attachment:` in `img-src`; the capture window had no `img-src` at all before.
+**Attachments are served over `emqnote-attachment://`, not as `data:` URLs** (B28). A note with three screenshots would otherwise push each one through IPC a third larger, on every render; the orphaned-attachments screen's thumbnail kept its `data:` URL because it was one file, once — that screen is B55's pane now and draws off the protocol like everything else. `resolveAttachment` refuses anything that lands outside the vault after `realpathSync` — following the symlinks *is* the guard, the same reasoning as `emptyTrash`, which is also why its tests compare against the real path and not the one `mkdtemp` returned. Both windows carry `emqnote-attachment:` in `img-src`; the capture window had no `img-src` at all before.
 
 **An attachment is found anywhere in the vault, and the protocol URL carries its name in the path** (B38). `resolveAttachment` tries `_attachments/` first and then the vault itself, so `![[99 - Attachments/foo.png]]` — the shape an Obsidian-written vault is full of — draws. **It never resolves a note file**, which is what keeps `IPC.openWikiLink`'s two halves apart: it asks this first and falls through to the index only on `null`, so without the exclusion `[[01 Projecten/Rules.md]]` would go to the OS viewer instead of the library. The URL shape is the other half and is not cosmetic: Chromium canonicalises the host of a `standard: true` scheme, which was **measured against a real Electron build, not reasoned about** — it lowercases the host (so every name this app did not itself write came back wrong, invisibly on macOS/Windows and fatally on Linux), and it refuses a `%2F` in one outright, `fetch` throwing "Failed to parse URL" before anything is sent. A path-form target therefore could not be *expressed*, whatever resolution was willing to find. `src/shared/attachment-url.ts` is the one place such a URL is composed and read back; the old host form is still parsed because clipboard HTML copied inside the app carries it, and `paste-images.ts` reads exactly that.
 
 **A note says when the file it names is gone** (B39). A missing picture drew the browser's broken-image glyph and a missing file drew an ordinary chip that did nothing when clicked — both read as the app being broken. The question is asked **at draw time, but only for a target that names a file** (an extension, and not a note's): looking a file up is one `statSync`, while looking a note up needs the whole index, and a link to a note not yet written is a normal thing to have — so a note link keeps B35's click-time answer, and `styles.css`'s note on `[data-link="missing"]` still describes that case correctly. Three things hold it up: one IPC per note rather than one per chip (`missing-attachments.ts` batches on a microtask, since `setDoc` builds every NodeView in one synchronous pass); **nothing is remembered between two openings**, because an attachment can appear — a OneDrive file finishing its download, a picture just pasted — where B36's thumbnail cache remembers for the opposite reason, a render failure being a property of the bytes; and an unanswerable question marks nothing, since the marker is an accusation. The marker is B36's own ⚠, deliberately not a second one. `imageView`'s `<img>` gained a plain inline wrapper so the chip can take the picture's place — a NodeView cannot swap the element ProseMirror mounted — which is why `.wiki-embed-image-box` is in the `.ProseMirror-selectednode` list.
 
 **Paste claims image files only.** `handlePaste` returns false for everything else so the existing text/HTML path is untouched. The Outlook `mso-list` reconstruction (§6.3) is deferred, not abandoned, and this must not preempt or complicate it. Inserting an attachment also deliberately does **not** write the `attachments:` frontmatter array: `saveNote` does not manage that field, and writing it would rewrite the header of every note that gains an image — B10 from the other side, the same objection that keeps body tags out of the frontmatter. **If that deferred work ever claims the paste itself, it must call `transformPastedImages(slice)` and dispatch with `.setMeta("paste", true)`, or the image pipeline below stops running.**
+
+**Pasted `[[…]]`/`![[…]]` text becomes the node it names, on the spot** (B58). Nothing
+claimed a plain-text paste before, so ProseMirror's stock parser put the characters in as
+characters, and they only turned into a picture or a chip on the way back *off disk*, where
+`normalize-phrasing.ts` reads the same syntax — which is why the app's own **Copy link**
+appeared to do nothing until the note was closed and opened again. `paste-wiki.ts` is a
+second `transformPasted` pass composed with the image one in `Editor.tsx`, so both windows
+get it from `createEditorState`. Two things hold it up. **The syntax is not written down
+twice**: `matchWikiSyntax` is the parser's own matcher, exported for exactly this, because
+two spellings of one syntax is how a paste and a reopen come to disagree about the same
+characters. And **this does not reopen the no-markdown-autoformat rule** — `**bold**` still
+pastes as five characters and two asterisks. The `[[…]]` family is the exception because it
+is the spelling this app itself puts on the clipboard, and because the literal text is not a
+plainer rendering of the same thing but a broken one. A code block is left alone, its
+contents being characters by definition.
 
 **A pasted picture is downloaded into `_attachments/`, never left pointing at the web.** ProseMirror's stock HTML paste produces an `image` node holding the remote address, which serializes to `![alt](https://…)` — a note that is empty offline, empty on the other machine, and blocked by the CSP even online. `paste-images.ts` is the two halves this takes: `transformPastedImages` runs inside `transformPasted` and turns an `emqnote-attachment://` image into a `wikiEmbed` on the spot (an in-app copy, never re-downloaded), and the `remoteImages()` plugin asks main for the rest and swaps in the `wikiEmbed` when the file lands. In-flight images are tracked as a `DecorationSet`, not as positions: a download takes seconds, and `DecorationSet.map` moves the marker with the text while the user types — and collapses it away if the image is deleted or undone, so a late resolution finds nothing and does nothing. The side effect lives in the plugin's `view.update`, never in `appendTransaction`, which runs inside the dispatch cycle. **Everything the renderer might be talked into is decided again in main**, which is the point: `remote-image.ts` (Electron-free, tested directly) holds the scheme allowlist — `https:`, `http:`, `data:`, and `file:` conspicuously not — the content-type allowlist, the magic-byte sniff and the naming; `fetch-attachment.ts` does the I/O with `redirect: "manual"` and **re-checks the allowlist on every `Location` header**, which is the single check standing between a pasted URL and `file:///etc/passwd` or `http://169.254.169.254/…`. Also `credentials: "omit"`, a 10 s timeout, a 20 MB cap checked against `Content-Length` *and* while streaming, and three downloads at a time. Two asymmetries are deliberate and easy to "fix" by mistake: **SVG is refused on this path though the picker still allows one** (the user chose the picker's file; nobody chose what a pasted page's server returns, and `openAttachment` hands attachments to a viewer where script in an SVG runs), and the extension comes from the sniff, then the header, then `.png` — **never from the URL path**, so a `.png` address whose bytes are JPEG cannot produce a lying filename. A refusal answers `null`, the remote `image` node stays put, and `externalImageView` draws it as a label rather than a broken-image glyph — which also fixes the same glyph for notes written in Obsidian that already carried remote image markdown.
 
@@ -408,23 +423,41 @@ A file row has a right-click menu of its own since 16 August 2026, and what is *
 the decision: **Copy link** (`![[path]]` when `isEmbeddableAttachment` says the app can draw
 it, `[[path]]` otherwise — the same function `insert-attachment.ts` spells an insertion with,
 so a copied link and an inserted one cannot disagree), **Reveal**, and **Delete only in the
-orphans pane**. Delete is absent elsewhere rather than present and disabled: a file a note
+unlinked pane**. Delete is absent elsewhere rather than present and disabled: a file a note
 still names is not a thing to offer to remove, and a permanently greyed row on every picture
 is noise. Copying goes through `IPC.copyText` in main rather than `navigator.clipboard`,
 which is not dependable in a sandboxed `file://` renderer.
 
-**Orphaned attachments are a place in the sidebar, not a modal** (B55). `{ kind: "orphans" }`
+**Unlinked attachments are a place in the sidebar, not a modal** (B55). `{ kind: "unlinked" }`
 is a `Selection` like `{ kind: "tasks" }`; the note pane is B47's file list, the reader is
-B47's preview, and `IPC.libraryOrphanedAttachments` answers `FileSummary[]` through the same
+B47's preview, and `IPC.libraryUnlinkedAttachments` answers `FileSummary[]` through the same
 `summariseFile` `readFilesIn` uses. That deleted a whole screen rather than moving one. It has
 been in three places now — tree footer, then a row inside Settings (6 August), now the footer
 again — and the third is not a revert: what came back is a destination, where what left was a
 button opening a grid with its own previews and its own delete. **Its loading and failure
 states are load-bearing**, because this is the one file list that is a search over the whole
 index rather than one `readdir`, and the screen it replaces hung on "Looking…" for four
-separate reasons at once.
+separate reasons at once. It was called *Orphaned* until 16 August 2026, in the strings and
+in the code alike (`unlinked-attachments.ts`, `unlinked.*` in `i18n.ts`): the old word named
+the file's predicament in a metaphor, the new one names what is actually missing.
 
-**The orphaned-attachment scan is answered from the index, and it has an error state.** It
+**That loading state is for the first answer, not for every refresh.** `library:refresh`
+arrives twice for every debounced autosave — once from the `CaptureWriter` callback, once
+from the watcher observing that same write ~300 ms later — and each one re-runs this scan,
+which is right: a note that just started naming an attachment changes the answer. Clearing
+the rows and re-drawing "Looking…" each time was not, and is what "the list flickers while
+typing in the new-note window" meant. `Library.tsx` keeps the last answer in `unlinkedFiles`
+and swaps the rows when the next one lands; `unlinkedScan` is a generation counter, since two
+scans can be in the air at once. A refresh that *fails* over rows that are already right
+keeps them — only a first answer with nothing to fall back on shows the failure line.
+
+**A reference counts in either spelling.** `findUnlinkedAttachments` compared the bare
+filename alone, so a picture linked as `![[_attachments/2026/07/foto.png]]` — which is exactly
+what a file row's own **Copy link** writes, and what a vault written in Obsidian is full of
+(B38) — went on being listed here as unlinked, an offer to delete a file a note is drawing.
+It matches the vault-relative path *and* the bare name now.
+
+**The unlinked-attachment scan is answered from the index, and it has an error state.** It
 stalled at "Looking…" for four separate reasons, and all four are worth not reintroducing:
 there was no `.catch` at all, so a rejected `invoke` left the one loading state set forever;
 it walked the whole vault and `readFileSync` + `parseNote`d every note synchronously inside
@@ -555,6 +588,44 @@ the matrix arithmetic both files need, so neither has to import the other.
 **Trash is the vault's own `_trash` folder**, not the system recycle bin: a OneDrive file in the Windows recycle bin is not synced, so it would be gone from the other machine with no way back. Deleting a note is still only a rename into it. Emptying it is a separate, explicit action — the trash folder's note list carries a **Clear trash** button where every other folder has *New note*, behind a confirmation that names the count and says it cannot be undone (B24). `emptyTrash` in `vault-io.ts` and `deleteFromTrash` beside it (B54) are the only code in the app that permanently deletes anything, and both check with `realpathSync` that the target really is inside `<vault>/_trash` before removing a byte — `resolve()` alone would happily follow a `_trash` that turned out to be a symlink. There is deliberately no age-based prune. Since B54 the trash is also a place things come *out* of: a note or a folder restores through the Move to… picker with the Inbox offered first, since the trash is flat and nothing records where anything came from.
 
 **The app's own writes are told apart from a real external change by content hash, never by a timer** (B31). `own-writes.ts` remembers `sha256(contents)` per resolved path (lowercased on `win32`, the usual reason) after every `writeAtomic`, so the watcher can suppress the notification for its own debounced autosave without suppressing the *indexing* — those are two different things, and only the notification is ever skipped. A TTL ("ignore writes for N ms after our own save") was rejected because it turns a correctness property into a timing property, and OneDrive's own re-materialisation schedule is the one clock this app cannot trust. The library gets every `vault:file-changed` event unconditionally and filters against its own `open` state, because main has no reliable view of what the reader currently shows; the capture window is filtered in main instead, against `writer.activePath()`, because that path genuinely is main's own state. A clean note reloads silently; a dirty one gets a **Reload** / **Keep mine** bar; a deletion gets **Close** / **Keep mine** and — deliberately, asymmetrically — never auto-closes even when clean, because closing yanks away a window someone may be looking at and a transient OneDrive hiccup must not be able to do that unasked. The capture window cannot know from main alone whether it has unsaved edits (main only sees what has already crossed the 300 ms debounce), so it keeps its own `dirtyRef` that deliberately over-reports rather than risk discarding a half-typed sentence. `unlinkDir` is handled too, via `deleteNotesUnder` (a `substr`-based prefix match, not `LIKE` or `GLOB`, both of whose metacharacters real folder names can legitimately contain) — before this, a folder deleted outside the app left every note under it still indexed.
+
+**That map is keyed by path, so every rename has to carry the entry over.** `renameOwnWrite`
+is what does it, and leaving it out of a rename is a silent bug with a loud symptom: the
+watcher sees an `add` at a path nothing was ever written to, answers `own: false`, and main
+tells the capture window that the note it has open changed outside the app. It sticks, too —
+the bytes are unchanged, so the next debounced write is a no-op and no hash is ever
+registered for the new path. That is exactly what "a message pops up even though the note was
+not edited outside emqnote" was: `renameSessionFile` renames the file on *commit*, and blur
+commits, so alt-tabbing away from a note whose subject had changed produced it every time.
+Called from `capture-store.ts`'s `renameSessionFile` and from `vault-io.ts`'s `renameNote`
+and `moveNote`. Confirmed in the running app both ways round — with the call disabled the
+reported sentence appears, with it there it does not.
+
+**On Windows the vault is watched by polling** (B57). chokidar's native handler opens an
+`fs.watch` handle on every *directory* it watches and none on a file, which on Windows is a
+kernel handle held for as long as the app is resident — and this app is resident all day by
+design. Two reports came out of that, both matching the asymmetry exactly: OneDrive could not
+replace a folder renamed on the other machine, and permanently deleting a folder out of the
+trash failed while deleting a file worked. A handle follows the file object rather than the
+path, so `trashFolder`'s rename carried the watcher's handles into `_trash` along with the
+folder, `_trash` being on the ignore list notwithstanding. `pollingOptions()` in
+`index-watch.ts` is the whole change and it is `win32`-only; macOS keeps native watching,
+where a watch descriptor blocks nothing. The cost is real and accepted — a stat sweep of the
+vault every two seconds, forever — because the alternative is an app that blocks the sync
+tool its own vault lives on. `awaitWriteFinish` still applies in polling mode, so the reason
+it is set (OneDrive writing a synced file over several passes) is unaffected.
+
+**Nothing this app deletes gets one attempt.** `vault-io.ts`'s `REMOVE_OPTIONS` gives
+`rmSync` `maxRetries: 10, retryDelay: 100`: Node's default is zero, and its Windows backoff
+for EBUSY/EPERM/ENOTEMPTY only engages above zero — `force: true` suppresses `ENOENT` and
+nothing else — so one transient lock was an immediate hard failure. And a failure has to
+arrive somewhere: both handlers answer (`{ deleted: false, failed: true }`,
+`{ removed, failed }`) rather than rejecting, because the renderer calls them as `void …`,
+so a rejection became an unhandled promise rejection, the dialog closed, and the folder was
+still there — which is what "does not work" looked like from the outside. `emptyTrash` counts
+what would not go instead of stopping at it: one locked folder must not keep the rest of the
+trash. `IPC.libraryEmptyTrash` also gained the `writer.activePath()` guard its sibling
+already had.
 
 **Every panel has a right-click menu, and every action behind one has a non-menu route too.** The folder tree, the note list and the note panel (both windows) each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the same reason `Ask.tsx` is a component and not `window.prompt`: nothing under `test/` can drive a native menu, it costs an IPC round trip per open, and `--click-button` (`library-window.ts`) has no way to reach into one. `--click-button` matching on `.branch`/`.branch-name` text is why nothing may move exclusively behind a menu. A roving `tabIndex` (`roving.ts`) keeps exactly one row per pane a Tab stop; Mod-Shift-M and the `ContextMenu` key open the menu at the focused row's own position, so the keyboard route and the mouse route land on the same component. `onRenameFolder`/`onDeleteFolder` take a `path` now, not the toolbar's `lastFolder` — a per-row menu has to act on the row that was actually right-clicked, and the toolbar keeps its old behaviour by passing `lastFolder` explicitly.
 
@@ -945,6 +1016,45 @@ a mocked-up one). And, the limitation every batch since the disk-change work has
 named, all fourteen in the *capture* window specifically. All are `TEST-PROTOCOL.md` items
 (§22).
 
+**Six more items from daily use landed on 16 August 2026**, and they are three pairs rather
+than six defects. **Two are one bug about a path losing its identity**: a pasted `![[…]]`
+stayed literal text until the file was written and read back, and the capture window's
+"changed outside emqnote" notice fired because `own-writes.ts` is keyed by path and no rename
+carried the entry over. **Two Windows reports have one cause**, chokidar holding an `fs.watch`
+handle on every folder and none on a file — which is precisely why deleting a file out of the
+trash worked and deleting a folder did not, and why OneDrive could not replace a folder
+renamed on the other machine. **Two are the unlinked-attachment pane**: its name, and its list
+blanking to "Looking…" on every `library:refresh`. Two carry decisions: **B57** — the watcher
+polls on Windows — and **B58** — pasted wiki syntax becomes a real node. *Orphaned* became
+*Unlinked* in the strings and in the code alike, since nothing is persisted under those names.
+
+One thing found by running it rather than by reading it, and outside the six: the pane
+compared the **bare filename** against the reference set, so a picture linked with the file
+row's own **Copy link** — which writes the path form `![[_attachments/…/foto.png]]` — went on
+being listed as unlinked, an offer to delete a file a note was drawing. It matches the
+vault-relative path as well now. Nobody reported it; the fixture vault built to test the
+paste is what showed it, because the paste and the pane disagreed about the same file.
+
+Confirmed in the real app under `Xvfb`, driven over CDP: the sidebar row reading **Unlinked
+attachments** and listing exactly the file nothing references; the list sampled every 10 ms
+across six refreshes landing on it (571 samples, **zero** of them showing "Looking…" and zero
+showing an empty list) while the rows stayed put; a plain-text paste of
+`![[_attachments/wees.png]]` drawing a real picture **immediately** at `naturalWidth` 120 —
+not merely an `<img>` in the DOM — with the saved file holding exactly the text that was
+pasted; a note whose subject changed, committed by *blurring the window* (which is what
+`flush()` does, and so the reported "after a certain time or after certain events"), renaming
+on disk with **no notice at all** — and, with `renameOwnWrite` disabled and the app rebuilt,
+the very sentence that was reported appearing on that same run; and a folder trashed and then
+permanently deleted, gone from disk, with a folder the filesystem refuses answering
+`{ deleted: false, failed: true }` and `emptyTrash` answering `{ removed: 0, failed: 1 }`
+instead of rejecting into nothing.
+
+**Not confirmed live**: the Windows half, which is the half both C-items are about — the
+folder lock is a Windows kernel property this sandbox cannot reproduce, and what a two-second
+stat sweep costs on a real business OneDrive vault can only be felt there. Both are
+`TEST-PROTOCOL.md` §23. And the paste in the *capture* window specifically, the limitation
+every batch since the disk-change work has named.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -956,7 +1066,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B56, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B58, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

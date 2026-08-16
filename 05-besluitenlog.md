@@ -1846,6 +1846,79 @@ dezelfde wacht tegen paden buiten de vault als al het andere dat een bijlage aan
 
 ---
 
+## B57 — Op Windows kijkt de wachter met polling, niet met `fs.watch`
+
+**Genomen** op 16 augustus 2026, na twee meldingen die één oorzaak bleken te hebben:
+permanent verwijderen van een *map* uit de prullenbak deed niets, en OneDrive kon een map
+die op de andere machine hernoemd was niet bijwerken. Bestanden hadden nergens last van.
+
+Die asymmetrie is de hele diagnose. chokidar's normale (native) handler roept `fs.watch`
+aan **per map**, recursief; op een bestand opent hij nooit iets. Op Windows is dat een open
+`FILE_LIST_DIRECTORY`-handle op elke gewone map in de vault, zolang de app draait — en die
+draait de hele dag, dat is B2/B3. Windows weigert een map te verwijderen waar nog iets op
+open staat, en de handle **verhuist mee**: `trashFolder` is een `rename`, en een handle
+volgt het bestandsobject en niet het pad, dus hij ging mee de prullenbak in, hoe nadrukkelijk
+`_trash` ook op de negeerlijst staat.
+
+**Wat er nu gebeurt**: op `win32` krijgt `watch()` er `usePolling: true` bij, met een
+interval van 2000 ms. chokidar gebruikt dan `fs.watchFile` (stat-polling) en `readdir`, en
+houdt niets open. macOS blijft native kijken; daar blokkeert een watch-descriptor niets.
+
+**Wat het kost, en waarom dat goedkoop is.** Polling betekent een periodieke stat-ronde over
+de vault, de hele dag. Dat is echt werk op een grote vault. Het alternatief is een app die de
+synchronisatie tegenhoudt van de map waarin hij zelf woont — en dan is een notitie die op de
+ene machine wordt gemaakt op de andere niet te vinden, wat de app in de kern kapot maakt.
+`04-bouwplan.md` vraagt dat een gesynchroniseerde wijziging binnen vijf seconden zichtbaar
+is: 2000 ms polling plus 300 ms `awaitWriteFinish` past daarin. `awaitWriteFinish` blijft
+staan en werkt in beide standen, dus de reden dat het er is (OneDrive schrijft een gesyncte
+file in meerdere passes) verandert niet.
+
+**Twee dingen die hier los van staan en toch nodig waren.** `rmSync` kreeg geen enkele
+poging opnieuw mee — Node's standaard is `maxRetries: 0`, en juist de Windows-terugval voor
+EBUSY/EPERM/ENOTEMPTY werkt alleen boven nul; `force: true` onderdrukt alleen ENOENT. Eén
+kortstondige klem (OneDrive, de Verkenner, een virusscanner) was dus meteen een harde
+fout. En die fout kwam nergens aan: de IPC-handler ving niets, de renderer riep de functie
+als `void …` aan, dus de melding werd een onafgehandelde promise-afwijzing, het venster ging
+dicht en de map stond er nog — precies wat "doet het niet" betekent. `emptyTrash` telt nu wat
+niet weg wilde in plaats van bij het eerste bezwaar te stoppen, en beide antwoorden komen als
+antwoord terug in plaats van als uitzondering.
+
+**Niet gekozen**: op Windows één `fs.watch(vault, { recursive: true })` gebruiken. Dat houdt
+maar één handle vast (op de vaultmap zelf) en kost niets aan polling, maar het betekent de
+`add`/`change`/`unlink`-vertaling én een eigen `awaitWriteFinish` met de hand bouwen op het
+pad dat de index juist houdt. Dat is nieuw werk op de plek waar een fout stil is; polling is
+één regel met een bekende prijs.
+
+---
+
+## B58 — Geplakte `[[…]]`-tekst wordt meteen een knooppunt
+
+**Genomen** op 16 augustus 2026. Wie **Kopieer link** op een bestand gebruikte en dat in een
+notitie plakte, zag letterlijke tekst: `![[_attachments/foto.png]]`. Het plaatje verscheen pas
+na het openen van een andere notitie en weer terug.
+
+Het bestand was al die tijd goed. De tekens overleven het opslaan ongeschonden, en
+`normalize-phrasing.ts` maakt er bij het *inlezen* een `wikiEmbed` van — vandaar dat het na
+een rondje langs de schijf wél stond. Wat ontbrak was de andere kant: niets in de editor
+claimde een platte-tekstplakking, dus ProseMirror's eigen parser zette er karakters neer.
+
+**Nu draait er een tweede `transformPasted`-pass** (`paste-wiki.ts`), naast die van de
+plaatjes, die elke `[[…]]` en `![[…]]` in geplakte tekst omzet in het knooppunt dat hij
+noemt — met de markeringen van de tekst die hij vervangt, en niet binnen een codeblok, waar
+tekens tekens horen te blijven.
+
+**Dit heropent het "geen markdown-autoformat"-besluit niet.** `state.ts`'s `autoformat`
+weigert markdown-spellingen uit principe, en `**vet**` plakt nog steeds als vijf tekens en
+twee sterretjes. De `[[…]]`-familie is de uitzondering om twee redenen: het is de spelling
+die deze app zélf op het klembord zet, en het is de enige waarbij de letterlijke tekst geen
+soberder weergave is maar een kapotte — een afbeelding die er niet staat.
+
+**De syntaxis staat niet twee keer opgeschreven.** `matchWikiSyntax` is de matcher van de
+parser, geëxporteerd juist hiervoor: twee spellingen van één syntaxis is precies hoe een
+plakking en een heropening het over dezelfde tekens oneens worden.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1863,4 +1936,5 @@ dezelfde wacht tegen paden buiten de vault als al het andere dat een bijlage aan
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
+| **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |

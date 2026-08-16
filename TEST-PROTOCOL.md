@@ -735,13 +735,40 @@ then a different diagnosis, not a bigger hammer.
 | 22j | **Delete permanently** on a trashed note, then confirm | The dialog names the note and says it cannot be undone. Afterwards the file is gone from disk — check in Explorer/Finder, not just in the app |  |
 | 22k | Right-click the Vault row and the Trash row | The entries that do not apply are visibly greyer than the ones that do. Judge it on a real display — NEVER JUDGED |  |
 | 22l | Right-click a folder → **Reveal** | Explorer/Finder opens with that folder selected |  |
-| 22m | Open the sidebar's **Orphaned attachments** row | It sits between Keyboard shortcuts and Trash, and the files appear in the note-list panel with their type and size — no dialog. Click one: it previews in the reader |  |
+| 22m | Open the sidebar's **Unlinked attachments** row (called *Orphaned attachments* until 16 August 2026) | It sits between Keyboard shortcuts and Trash, and the files appear in the note-list panel with their type and size — no dialog. Click one: it previews in the reader |  |
 | 22n | Right-click a file in that list → **Copy link**, then paste into a note | A picture pastes as an embed and draws; a `.docx` pastes as a chip that opens it |  |
 | 22o | Right-click a file in an ordinary folder like `99 - Attachments` | Copy link and Reveal, and **no Delete** — that one is only offered where a file is known to be unreferenced |  |
 | 22p | Put an `.avif` in the vault and embed it in a note | It draws. Also try inserting one through the image button: `.avif` is in the picker's filter now |  |
 | 22q | Open a note with an embedded PDF and click **⧉ Open in system viewer** | Preview/Acrobat opens it — *not* emqnote's own PDF window. Then click a plain `[[file.pdf]]` chip: that one still opens emqnote's viewer |  |
 | 22r | Drag the library window as narrow as it goes and look at the date field | The date is cut off with an ellipsis inside its own box, never painted over the field beside it. Hover it: the tooltip carries the full date and then the hint |  |
 | 22s | All fourteen, in the **capture window** — NEVER TESTED THERE | The same limitation every batch names. The date field and the ⧉ are the two that live in that window too |  |
+
+---
+
+## 23. Six items from daily use (16 August 2026)
+
+Four of the six were driven end to end under `Xvfb` and are listed here only for the half a
+script cannot reach. **The other two are Windows-only and have never run on Windows at all**
+— 23a and 23b. They are one cause: chokidar opened an `fs.watch` handle on every folder in
+the vault and none on any file, which is a Windows kernel property this sandbox cannot
+reproduce, so what was measured here is only that the *retry and the answer* work (a folder
+the filesystem refuses now reports rather than silently doing nothing).
+
+23c is the one to time rather than watch: polling has a price, and only a real vault on a
+real business OneDrive can say what it is.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 23a | **Windows.** Put a folder in the trash, then **Delete permanently** on it, and confirm | The folder is gone from disk — check in Explorer, not just in the app. If a dialog says something else has it open, say which app you had running; that message is new and means the filesystem refused, not that the app did nothing |  |
+| 23b | **Windows, two machines.** Rename a folder in the vault on the Mac, wait for OneDrive to sync, and watch the Windows machine with emqnote running | The folder is renamed there too, without quitting emqnote first. This is the whole of B57 — before it, the app held every folder open and OneDrive could not touch them |  |
+| 23c | **Windows.** Leave the app resident for a working day on the real vault and watch Task Manager — NEVER MEASURED | A stat sweep every two seconds is real work. If it shows up as steady CPU or as a laptop fan, say so: the interval is one constant, and the alternative designs are written down in B57 |  |
+| 23d | **Windows.** With the app running, make a change to a note on the other machine and wait | It appears within about five seconds, as before. Polling is slower to notice than a native watch; this is the criterion it has to keep meeting |  |
+| 23e | Right-click a file in **Unlinked attachments** → **Copy link**, paste it into a note | The picture draws **immediately** — no switching notes and back. Then reopen the note: the same picture, from the file this time |  |
+| 23f | With that pane open, type a paragraph in the New note window and watch the file list | The rows stay exactly where they are. No blink, no "Looking…". If it flickers even once, say so |  |
+| 23g | After 23e, open the pane again | The picture you just linked is **no longer listed**. It was, before this batch, because the pane only matched bare filenames and Copy link writes a path |  |
+| 23h | Open a note in the New note window, change the subject, click away to another app, then come back and keep typing | No "This note changed outside emqnote in the meantime." at any point. The file on disk has been renamed to the new subject — check the name |  |
+| 23i | Then edit that same file in a text editor and save | The notice *does* appear now (or the window quietly reloads if you had typed nothing). Suppressing a real one would be the way this fix could go wrong |  |
+| 23j | All six, in the **capture window** — the paste especially — NEVER TESTED THERE | The same limitation every batch names. 23h is about that window and was driven; the paste of a `[[…]]` link there was not |  |
 
 ---
 
@@ -754,16 +781,16 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m or §22s fails,
+§18x, §19u, §20m, §22s or §23j fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m and §22s are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make. **§22a, §22b and §22c
-are a fourth kind, new to this batch: a whole platform.** They are the first items here that
-have never run on the machine they are about — this sandbox is Linux, and all three are
-Windows behaviours. §22b is the sharpest of them, because the bug it fixes did not reproduce
-here at all. §19m is a third kind: what a
+judgements about how something feels or reads, which no script can make. **§22a, §22b, §22c and now §23a–§23d
+are a fourth kind: a whole platform.** They are the items that have never run on the machine
+they are about — this sandbox is Linux, and all of them are Windows behaviours. §22b is the
+sharpest of them, because the bug it fixes did not reproduce here at all; §23c is a different
+shape again, being a *cost* to measure rather than a behaviour to check. §19m is a third kind: what a
 remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.
