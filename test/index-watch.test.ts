@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeIndex, getNote, openIndex, type IndexDb } from "../src/main/index-db.js";
 import {
   POLL_INTERVAL_MS,
@@ -31,14 +31,32 @@ const STABILITY_MS = 20;
 /**
  * On Windows this app watches by polling (B57), so a test that waits for the watcher to
  * notice a write waits out a whole poll — two seconds each at the production interval,
- * which put this file at 23 seconds and its four-second waits right on the edge. That is
- * a property of the *interval*, not of the code under test, so the interval is turned
- * down here exactly as `stabilityThreshold` already is. Ignored off Windows.
+ * which put this file at 23 seconds on that runner. That is a property of the *interval*,
+ * not of the code under test, so it is turned down here exactly as `stabilityThreshold`
+ * already is. chokidar's own default rather than something smaller: at 20 ms it is
+ * `fs.watchFile` on every file and directory fifty times a second, which is a stat storm
+ * on a machine already running the rest of the suite beside it. Ignored off Windows.
  */
-const WATCH_INTERVAL_MS = 20;
+const WATCH_INTERVAL_MS = 100;
 const SETTLE_MS = 150;
-const WAIT_TIMEOUT_MS = 4000;
+/**
+ * How long a `waitFor` may go on waiting before it gives up and reports the real assertion.
+ *
+ * Generous on purpose, and it costs nothing: `waitFor` returns the moment the condition
+ * holds, so this ceiling is only ever reached by a genuine breakage or a runner having a
+ * bad minute. It used to be four seconds, chosen to fit under vitest's five-second default
+ * — and that is the wrong way round. This file does real filesystem timing on a shared CI
+ * machine, and it has now failed two releases while the *same tests on the same commit*
+ * passed in the build workflow minutes earlier. A wrong red is worse than a slow red, so
+ * the per-test timeout is raised to sit above this rather than this trimmed to fit under
+ * it.
+ */
+const WAIT_TIMEOUT_MS = 15000;
 const POLL_MS = 10;
+
+// Above `WAIT_TIMEOUT_MS`, so a timing-out `waitFor` reports the assertion that actually
+// failed instead of vitest reporting a bare "test timed out" over the top of it.
+vi.setConfig({ testTimeout: 20000 });
 
 let vault: string;
 let db: IndexDb;

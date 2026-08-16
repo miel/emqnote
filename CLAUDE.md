@@ -709,8 +709,17 @@ the watch is added, and Windows no longer uses a backend at all: it polls (B57),
 wait is a whole interval rather than a gap. That interval is `WatchOptions.watchInterval`,
 turned down in the tests exactly as `stabilityThreshold` already is: at the production two
 seconds every waiting assertion in that file waits out a poll, which put it at 23 seconds
-on the Windows runner and ran its four-second waits right up against the edge — a release
-failed on that, one release after the one that introduced the polling. The two tests there that
+on the Windows runner.
+
+**And that file's `waitFor` ceiling is deliberately generous rather than tight.** It was
+four seconds, picked to fit under vitest's five-second default, and that is the wrong way
+round — this is real filesystem timing on a shared CI machine, and it failed two releases
+in a row while *the same tests on the same commit* passed in the `build` workflow minutes
+earlier. `waitFor` returns the moment its condition holds, so a high ceiling costs nothing
+on the happy path and is only ever reached by a genuine breakage or a runner having a bad
+minute; the per-test timeout is raised above it (`vi.setConfig`) so a timeout still reports
+the assertion that failed rather than a bare "test timed out". A wrong red is worse than a
+slow red — especially in the file whose whole job is watching a filesystem. The two tests there that
 assert something is *not* indexed go through it too: a missed event makes those pass for the
 wrong reason, which is worse than failing.
 
