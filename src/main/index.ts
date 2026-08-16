@@ -29,6 +29,8 @@ import {
   showCaptureWindow,
 } from "./capture-window.js";
 import { completeMeasurement, LATENCY_BUDGET_MS } from "./latency.js";
+import { profile, profiledIpcHandler, recordProfiling, recordRendererProfiling, setProfilingEnabled } from "./profiling.js";
+import type { RendererProfilingEvent } from "../shared/profiling.js";
 import { notifyPainted, runSelfTest } from "./selftest.js";
 import { dumpClipboard } from "./clipboard-dump.js";
 import {
@@ -381,7 +383,7 @@ function sendScanProgress(progress: ScanProgress | null): void {
  * numbers cannot afford to pick up.
  */
 function beginStartupScan(vault: string, db: IndexDb): void {
-  void startScan(vault, db, (progress) => {
+  void profile("scan.startup", () => startScan(vault, db, (progress) => {
     const now = Date.now();
     // Always let the last one through, or the bar freezes just short of full and the
     // window it is in never hears that it is done.
@@ -390,7 +392,7 @@ function beginStartupScan(vault: string, db: IndexDb): void {
     }
     scanReported = now;
     sendScanProgress(progress);
-  }).finally(() => sendScanProgress(null));
+  })).finally(() => sendScanProgress(null));
 }
 
 const writer = new CaptureWriter(
@@ -440,6 +442,7 @@ async function main(): Promise<void> {
 
   const selfTestRounds = launch.selfTestRounds;
   const settings = loadSettings();
+  setProfilingEnabled(settings.profilingEnabled);
   cachedVaultPath = settings.vaultPath;
 
   installMinimalMenu();
@@ -832,7 +835,7 @@ async function warnAboutFilesOnDemand(vault: string): Promise<void> {
   const warned = loadSettings().filesOnDemandWarned;
   if (warned.includes(vault)) return;
 
-  const state = await checkFilesOnDemand(vault);
+  const state = await profile("files-on-demand.check", () => checkFilesOnDemand(vault));
   if (state !== "ondemand") return;
 
   await dialog.showMessageBox({
@@ -846,6 +849,20 @@ async function warnAboutFilesOnDemand(vault: string): Promise<void> {
 }
 
 function registerIpc(): void {
+  // One bounded profiler wrapper covers every invoke. Fast calls update aggregates only.
+  const originalHandle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = ((channel: string, handler: (...args: any[]) => any) =>
+    originalHandle(channel, profiledIpcHandler(channel, handler))) as typeof ipcMain.handle;
+
+  ipcMain.on(IPC.rendererProfiling, (_event, payload: RendererProfilingEvent) => {
+    const allowed = new Set<RendererProfilingEvent["operation"]>([
+      "renderer.tree", "renderer.notes", "renderer.conflicts", "renderer.facets", "renderer.refresh",
+    ]);
+    if (!payload || !allowed.has(payload.operation) || !Number.isFinite(payload.durationMs) ||
+      (payload.outcome !== "ok" && payload.outcome !== "error") ||
+      (payload.counts !== undefined && Object.values(payload.counts).some((value) => !Number.isFinite(value)))) return;
+    recordRendererProfiling(payload);
+  });
   ipcMain.on(IPC.capturePainted, (_event, token: number) => {
     const elapsed = completeMeasurement(token);
     notifyPainted();
@@ -915,6 +932,7 @@ function registerAppIpc(): void {
       libraryPaneWidths: settings.libraryPaneWidths,
       librarySort: settings.librarySort,
       loadRemoteImages: settings.loadRemoteImages,
+      profilingEnabled: settings.profilingEnabled,
     };
   });
 
@@ -924,6 +942,13 @@ function registerAppIpc(): void {
   // two windows to redraw every picture in them.
   ipcMain.handle(IPC.setLoadRemoteImages, (_event, load: boolean) => {
     saveSettings({ loadRemoteImages: load });
+  });
+
+  ipcMain.handle(IPC.setProfilingEnabled, (_event, enabled: boolean) => {
+    if (typeof enabled !== "boolean") return;
+    saveSettings({ profilingEnabled: enabled });
+    setProfilingEnabled(enabled);
+    buildTrayMenu();
   });
 
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {

@@ -31,6 +31,7 @@ const FALLBACK: Bootstrap = {
   libraryPaneWidths: null,
   librarySort: "modified",
   loadRemoteImages: true,
+  profilingEnabled: false,
 };
 
 /**

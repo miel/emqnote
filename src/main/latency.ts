@@ -1,6 +1,4 @@
-import { app } from "electron";
-import { appendFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { recordProfiling } from "./profiling.js";
 
 /**
  * The measurement phase 1 has to demonstrate: from global hotkey to a painted window
@@ -17,7 +15,6 @@ const HISTORY = 200;
 
 interface Pending {
   startedAt: bigint;
-  at: Date;
 }
 
 const pending = new Map<number, Pending>();
@@ -27,7 +24,7 @@ let nextToken = 1;
 export function beginMeasurement(): number {
   const token = nextToken;
   nextToken += 1;
-  pending.set(token, { startedAt: process.hrtime.bigint(), at: new Date() });
+  pending.set(token, { startedAt: process.hrtime.bigint() });
 
   // A window that never reports having painted must not hold on to memory.
   setTimeout(() => pending.delete(token), 10_000);
@@ -45,23 +42,9 @@ export function completeMeasurement(token: number): number | null {
   samples.push(elapsedMs);
   if (samples.length > HISTORY) samples.shift();
 
-  void log(started.at, elapsedMs);
+  recordProfiling({ operation: "capture.hotkey-to-caret", durationMs: elapsedMs, outcome: "ok" });
 
   return elapsedMs;
-}
-
-async function log(at: Date, elapsedMs: number): Promise<void> {
-  try {
-    const directory = app.getPath("userData");
-    await mkdir(directory, { recursive: true });
-    await appendFile(
-      join(directory, "latency.log"),
-      `${at.toISOString()} ${elapsedMs.toFixed(1)}\n`,
-      "utf8",
-    );
-  } catch {
-    // Measuring must never be the reason capturing a note fails.
-  }
 }
 
 export interface Outlier {

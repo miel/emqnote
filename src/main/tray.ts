@@ -8,9 +8,12 @@ import {
   type MenuItemConstructorOptions,
   type NativeImage,
 } from "electron";
+import { writeFile } from "node:fs/promises";
+import { arch, release } from "node:os";
 import { drawGlyph, rgbaToBgra } from "../shared/glyph.js";
 import type { VaultLocation } from "../shared/vault-types.js";
-import { describeStats } from "./latency.js";
+import { stats } from "./latency.js";
+import { clearProfiling, profilingReport, profilingSummary } from "./profiling.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { showCaptureWindow } from "./capture-window.js";
 import { showLibraryWindow } from "./library-window.js";
@@ -35,6 +38,31 @@ export interface VaultActions {
 }
 
 let vaultActions: VaultActions | null = null;
+
+function summaryText(): string {
+  const summary = profilingSummary(stats());
+  const duration = `${Math.round(summary.activeDurationMs / 1000)} s`;
+  const loop = summary.eventLoopDelay === null ? "not sampled yet" : `p50 ${summary.eventLoopDelay.p50} ms, p95 ${summary.eventLoopDelay.p95} ms, max ${summary.eventLoopDelay.max} ms`;
+  const memory = summary.resource === null ? "not sampled yet" : `CPU ${summary.resource.cpuPercent}%, memory ${Math.round(summary.resource.rssBytes / 1024 / 1024)} MB`;
+  const capture = summary.captureLatency.count ? `p50 ${summary.captureLatency.p50.toFixed(0)} ms, p95 ${summary.captureLatency.p95.toFixed(0)} ms, max ${summary.captureLatency.max.toFixed(0)} ms` : "not measured";
+  const slow = summary.slowest.map((item) => `${item.operation}: ${item.max.toFixed(0)} ms (${item.count}x)`).join("\n") || "none";
+  return `Recording: ${summary.enabled ? "on" : "paused"}\nActive duration: ${duration}\nEvent-loop delay: ${loop}\n${memory}\nCapture latency: ${capture}\nEvents: ${summary.retainedEvents} retained, ${summary.droppedEvents} dropped\nRecent failures: ${summary.recentFailures.length}\n\nSlowest operations:\n${slow}`;
+}
+
+async function showProfilingInformation(): Promise<void> {
+  const choice = await dialog.showMessageBox({ type: "info", title: "Profiling / debug information", message: "Session-only local diagnostics", detail: summaryText(), buttons: ["Export JSON…", "Clear data", "Close"], defaultId: 2, cancelId: 2 });
+  if (choice.response === 1) { clearProfiling(); buildTrayMenu(); return; }
+  if (choice.response !== 0) return;
+  const stamp = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "");
+  const save = await dialog.showSaveDialog({ title: "Export profiling information", defaultPath: `emqnote-profiling-${stamp}.json`, filters: [{ name: "JSON", extensions: ["json"] }] });
+  if (save.canceled || !save.filePath) return;
+  try {
+    const report = profilingReport({ app: { version: app.getVersion(), electron: process.versions.electron ?? "unknown", node: process.versions.node }, system: { platform: process.platform, release: release(), arch: arch() } }, stats());
+    await writeFile(save.filePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  } catch (error) {
+    await dialog.showMessageBox({ type: "error", title: "Could not export profiling information", message: error instanceof Error ? error.message : "Unknown write error" });
+  }
+}
 
 /**
  * The tray icon is computed rather than loaded from a file. See `src/shared/glyph.ts`
@@ -165,10 +193,9 @@ export function buildTrayMenu(): void {
         click: () => void checkForUpdates("manual"),
       },
       { type: "separator" },
-      { label: describeStats(), enabled: false },
       {
-        label: "Open latency log",
-        click: () => void shell.openPath(app.getPath("userData")),
+        label: "Profiling / debug information…",
+        click: () => void showProfilingInformation(),
       },
       { type: "separator" },
       { label: `emqnote ${app.getVersion()}`, enabled: false },

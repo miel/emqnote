@@ -8,6 +8,7 @@ interface Props {
   hotkey: string;
   /** Whether a picture named by a web address is fetched and drawn (B50). */
   loadRemoteImages: boolean;
+  profilingEnabled?: boolean;
   vaultPath: string | null;
   t: (key: string) => string;
   onChanged: () => void;
@@ -68,6 +69,7 @@ export function Settings({
   locale,
   hotkey,
   loadRemoteImages,
+  profilingEnabled = false,
   vaultPath,
   t,
   onChanged,
@@ -77,6 +79,7 @@ export function Settings({
 }: Props): React.ReactElement {
   const [recording, setRecording] = useState(false);
   const [remoteImages, setRemoteImages] = useState(loadRemoteImages);
+  const [profiling, setProfiling] = useState(profilingEnabled);
   const [current, setCurrent] = useState(hotkey);
   const [rejected, setRejected] = useState(false);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
@@ -181,6 +184,20 @@ export function Settings({
         </label>
 
         <p className="settings-note">{t("settings.remoteImagesWhy")}</p>
+
+        <label className="settings-row">
+          <span>{t("settings.profiling")}</span>
+          <input
+            type="checkbox"
+            checked={profiling}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setProfiling(next);
+              void window.emqnote.setProfilingEnabled(next).then(() => onChanged());
+            }}
+          />
+        </label>
+        <p className="settings-note">{t("settings.profilingWhy")}</p>
 
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is

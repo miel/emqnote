@@ -258,6 +258,8 @@ const DUTCH: Record<string, string> = {
   "settings.remoteImages": "Afbeeldingen van het web laden",
   "settings.remoteImagesWhy":
     "Een notitie kan naar een afbeelding op internet verwijzen. emqnote haalt die \u00e9\u00e9n keer op en bewaart hem lokaal, zodat de notitie ook zonder internet klopt.",
+  "settings.profiling": "Profilering / foutopsporing inschakelen",
+  "settings.profilingWhy": "Wordt alleen lokaal in dit programma bewaard totdat je afsluit. De export kan relatieve bestandsnamen uit je vault bevatten, maar nooit notitie- of klembordinhoud.",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -549,6 +551,8 @@ const ENGLISH: Record<string, string> = {
   "settings.remoteImages": "Load images from the web",
   "settings.remoteImagesWhy":
     "A note can point at a picture on the internet. emqnote fetches it once and keeps a local copy, so the note still reads offline.",
+  "settings.profiling": "Enable profiling / debug",
+  "settings.profilingWhy": "Collected locally for this session only. An export may include vault-relative filenames, but never note or clipboard content.",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

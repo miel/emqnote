@@ -1888,6 +1888,7 @@ export function Library(): React.ReactElement {
           locale={app.locale}
           hotkey={app.hotkey}
           loadRemoteImages={app.loadRemoteImages}
+          profilingEnabled={app.profilingEnabled}
           vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}

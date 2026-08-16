@@ -5,6 +5,7 @@ import {
   type ShowPayload,
   type StatusPayload,
 } from "../shared/ipc.js";
+import type { RendererProfilingEvent } from "../shared/profiling.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -50,6 +51,8 @@ contextBridge.exposeInMainWorld("emqnote", {
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setLoadRemoteImages: (load: boolean) => ipcRenderer.invoke(IPC.setLoadRemoteImages, load),
+  setProfilingEnabled: (enabled: boolean) => ipcRenderer.invoke(IPC.setProfilingEnabled, enabled),
+  profileRenderer: (event: RendererProfilingEvent) => ipcRenderer.send(IPC.rendererProfiling, event),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),

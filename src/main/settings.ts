@@ -43,6 +43,8 @@ export interface Settings {
    * protocol handler, never by the renderer choosing not to ask.
    */
   loadRemoteImages: boolean;
+  /** Opt-in only; recorded data remains in memory and is discarded on quit. */
+  profilingEnabled: boolean;
 }
 
 export { DEFAULT_HOTKEY };
@@ -58,6 +60,7 @@ function defaults(): Settings {
     libraryPaneWidths: null,
     librarySort: "modified",
     loadRemoteImages: true,
+    profilingEnabled: false,
   };
 }
 

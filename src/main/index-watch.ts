@@ -6,6 +6,7 @@ import { buildRecord } from "./index-scan.js";
 import { deleteNote, deleteNotesUnder, upsertNote, type IndexDb } from "./index-db.js";
 import { isHidden } from "./vault-io.js";
 import { isNoteFile } from "./note-files.js";
+import { recordProfiling } from "./profiling.js";
 
 /**
  * Keeps the index in step with the vault after the initial full scan — `02-technisch-
@@ -81,6 +82,7 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
 
   const reindex = (path: string): void => {
     if (!isNoteFile(path)) return;
+    const started = process.hrtime.bigint();
 
     try {
       const stats = statSync(path);
@@ -88,7 +90,9 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
       const own = options.isOwnWrite?.(path, contents) ?? false;
       upsertNote(db, buildRecord(vault, path, contents, stats));
       options.onChange?.({ path: toPosix(relative(vault, path)), kind: "changed", own });
-    } catch {
+      recordProfiling({ operation: "watcher.reindex", durationMs: Number(process.hrtime.bigint() - started) / 1e6, outcome: "ok", counts: { files: 1 } });
+    } catch (error) {
+      recordProfiling({ operation: "watcher.reindex", durationMs: Number(process.hrtime.bigint() - started) / 1e6, outcome: "error", error: { category: error instanceof Error ? error.name : "Error", message: "watcher reindex failed" } }, true);
       // Gone, or unreadable, by the time this ran — a rename mid-flight, most likely.
       // The `unlink` event chokidar sends for a real deletion is what reconciles that;
       // nothing needs doing here beyond not indexing bytes that were never settled, and
