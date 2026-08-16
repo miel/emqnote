@@ -89,11 +89,14 @@ function buildFake(initial: OpenedNote): Fake {
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
     trashFolder: async () => ({ trashed: true }),
+    moveFolder: async (path) => path,
+    deleteFromTrash: async () => ({ deleted: true }),
     revealNote: () => {},
     noteEditable: async () => true,
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},
@@ -147,6 +150,8 @@ function buildFake(initial: OpenedNote): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;
       return () => {

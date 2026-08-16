@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     ipcRenderer.invoke(IPC.saveAttachment, bytes, originalName),
   pickAttachment: (filter?: "image" | "any") => ipcRenderer.invoke(IPC.pickAttachment, filter),
   openWikiLink: (target: string) => ipcRenderer.invoke(IPC.openWikiLink, target),
+  openInSystemViewer: (target: string) => ipcRenderer.invoke(IPC.openInSystemViewer, target),
+  copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
   checkAttachments: (targets: string[]) => ipcRenderer.invoke(IPC.checkAttachments, targets),
   pdfPageCount: (target: string) => ipcRenderer.invoke(IPC.pdfPageCount, target),
   linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),
@@ -98,11 +100,16 @@ contextBridge.exposeInMainWorld("emqnote", {
       ipcRenderer.invoke(IPC.libraryRenameFolder, path, name),
     folderContents: (path: string) => ipcRenderer.invoke(IPC.libraryFolderContents, path),
     trashFolder: (path: string) => ipcRenderer.invoke(IPC.libraryTrashFolder, path),
+    moveFolder: (path: string, parent: string) =>
+      ipcRenderer.invoke(IPC.libraryMoveFolder, path, parent),
+    deleteFromTrash: (path: string) => ipcRenderer.invoke(IPC.libraryDeleteFromTrash, path),
     revealNote: (path: string) => ipcRenderer.send(IPC.libraryRevealNote, path),
     noteEditable: (path: string) => ipcRenderer.invoke(IPC.libraryNoteEditable, path),
     openInCapture: (path: string) => ipcRenderer.invoke(IPC.captureLoad, path),
     newNote: (folder?: string) => ipcRenderer.send(IPC.captureNew, folder),
     onRefresh: (handler: () => void) => subscribe<void>(IPC.libraryRefresh, handler),
+    onCyclePanes: (handler: (event: { backward: boolean }) => void) =>
+      subscribe<{ backward: boolean }>(IPC.libraryCyclePanes, handler),
     scanState: () => ipcRenderer.invoke(IPC.libraryScanState),
     onScanProgress: (handler: (progress: ScanProgress | null) => void) =>
       subscribe<ScanProgress | null>(IPC.libraryScanProgress, handler),

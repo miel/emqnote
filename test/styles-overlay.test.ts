@@ -73,6 +73,23 @@ describe("the stylesheets: dialog overlays stack above the grid", () => {
  * not. Same family as B48's `.wiki-link-duplicated`, and jsdom cannot see either: there
  * is no cascade under `test/` to lose in.
  */
+/**
+ * A third question about the same menus, and the same reason it can only be asked as
+ * text: whether a disabled item *looks* disabled.
+ *
+ * `color: var(--muted)` on its own is not an answer. That token already carries the
+ * shortcut column and the section headings inside every one of these menus, so a
+ * disabled row came out in a colour the menu is full of anyway — an ordinary-looking
+ * entry that silently does nothing, which is what "Rename folder" on the vault root was
+ * reported as. jsdom computes no cascade and paints nothing, so a rendered assertion
+ * would pass on a stylesheet that had lost the rule entirely.
+ */
+describe("the stylesheets: a disabled menu item reads as disabled", () => {
+  it("dims .context-menu-item:disabled with more than the muted colour", () => {
+    expect(rule(".context-menu-item:disabled")).toMatch(/opacity:\s*0?\.\d+;/);
+  });
+});
+
 describe("the stylesheets: the undimmed overlays out-rank the dimmed one", () => {
   for (const selector of [".overlay.context-menu-overlay", ".overlay.overlay-bare"]) {
     const own = selector.slice(".overlay".length);

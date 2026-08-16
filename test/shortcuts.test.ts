@@ -101,6 +101,23 @@ describe("matches", () => {
     expect(matches(indent, press("Tab"), false)).toBe(true);
     expect(matches(indent, press("Tab", { ctrlKey: true }), false)).toBe(false);
   });
+
+  it("reads the pane cycle the same on both platforms, which is what main asks it", () => {
+    // `library-window.ts` builds a `KeyEvent` out of `before-input-event`'s `input` and
+    // asks this, rather than comparing the fields itself, so that the chord has one
+    // spelling — the one the help sheet prints. It is worth pinning because the binding
+    // is written `Ctrl-Tab` and not `Mod-Tab`: it must *not* become Cmd on a Mac, where
+    // that chord belongs to the OS, and the Windows report this claim was built for makes
+    // "does it read the platform right" the first question anyone will ask of it.
+    const cycle = shortcut("cyclePanes");
+
+    for (const isMac of [true, false]) {
+      expect(matches(cycle, press("Tab", { ctrlKey: true }), isMac)).toBe(true);
+      expect(matches(cycle, press("Tab", { ctrlKey: true, shiftKey: true }), isMac)).toBe(true);
+      expect(matches(cycle, press("Tab", { metaKey: true }), isMac)).toBe(false);
+      expect(matches(cycle, press("Tab"), isMac)).toBe(false);
+    }
+  });
 });
 
 describe("formatting, on both platforms", () => {

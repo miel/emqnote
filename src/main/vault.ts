@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { INBOX } from "../shared/vault-types.js";
 
 const run = promisify(execFile);
 
@@ -12,8 +13,14 @@ export const VAULT_FOLDER_NAME = "emqnote";
  * The folders the app creates itself. Everything else in the vault — `10 Projects`,
  * `20 Areas`, `90 Archive` — is yours to arrange; the app never enforces a structure
  * it does not need.
+ *
+ * `INBOX` itself is defined in `src/shared/vault-types.ts` and re-exported here, so that
+ * every caller in `src/main/` goes on reading it from where it has always been while the
+ * library window — which cannot import from `src/main/` at all — names the same string
+ * rather than a copy of it. `TRASH_FOLDER` has lived there for the same reason since it
+ * was written.
  */
-export const INBOX = "00 Inbox";
+export { INBOX };
 export const INCOMING = join(INBOX, "_incoming");
 export const ATTACHMENTS = "_attachments";
 export const TEMPLATES = "_templates";
@@ -79,7 +86,14 @@ export function findOneDriveCandidates(): string[] {
   return found;
 }
 
-/** Only returns a path when there is exactly one business OneDrive; otherwise ask. */
+/**
+ * The vault path to *suggest* when there is exactly one business OneDrive; null otherwise.
+ *
+ * Despite the name it is no longer anybody's default. `settings.ts` used to seed
+ * `vaultPath` with this, which meant the one-tenant machine — the common one — had its
+ * vault chosen for it in silence and never saw the chooser at all. It composes
+ * `askForVault`'s suggestion now, and the answer to it is a click.
+ */
 export function defaultVaultPath(): string | null {
   const candidates = findOneDriveCandidates();
   return candidates.length === 1 ? join(candidates[0]!, VAULT_FOLDER_NAME) : null;

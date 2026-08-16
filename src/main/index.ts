@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   globalShortcut,
   ipcMain,
@@ -42,6 +43,7 @@ import { buildTrayMenu, createTray } from "./tray.js";
 import { checkForUpdates, setBeforeInstall } from "./updater.js";
 import {
   checkFilesOnDemand,
+  defaultVaultPath,
   ensureVaultLayout,
   FILES_ON_DEMAND_INSTRUCTION,
   findOneDriveCandidates,
@@ -50,11 +52,13 @@ import {
 } from "./vault.js";
 import {
   createFolder,
+  deleteFromTrash,
   diffConflict,
   duplicateNote,
   emptyTrash,
   folderContents,
   renameFolder,
+  moveFolder,
   moveNote,
   openNote,
   readFilesIn,
@@ -64,6 +68,7 @@ import {
   rewriteTargetPrefix,
   rewriteWikiLinks,
   saveNote,
+  summariseFile,
   toggleTask,
   trashAttachment,
   trashFolder,
@@ -117,6 +122,7 @@ import { FOLDER_ERROR } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
   ConflictPair,
+  FileSummary,
   LinkCandidateSummary,
   SaveNoteRequest,
   ScanProgress,
@@ -308,6 +314,65 @@ async function linkingNotesFor(
 ): Promise<{ path: string; targets: string[] }[]> {
   if (indexDb === null) return [];
   return linkingNotes(vault, indexDb, path);
+}
+
+/**
+ * A folder changed place — renamed (B44) or moved back out of the trash — with the links
+ * into it repaired around the move.
+ *
+ * One function for both handlers rather than a copy each, because the *ordering* is the
+ * whole of B44/B45 and a second copy is how the next one drifts. Both questions are asked
+ * **before** the folder moves, since a target resolves against where a note is *now* and
+ * afterwards there is nothing left for the index to find; both rewrites happen after it,
+ * against paths rebased onto the folder's new location. `apply` — one call to
+ * `renameFolder` or to `moveFolder` — is the only line that differs between the two.
+ *
+ * The lock guard is the one `IPC.libraryTrashFolder` has: `CaptureWriter`'s session pins
+ * the path it will write to next, and moving the folder under it does not update that
+ * path, so the next debounced write would recreate the note in a folder nobody else
+ * believes exists.
+ *
+ * It does not confirm, on either route. B44 argues that for the rename — a folder rename
+ * is not a gesture anyone makes about one note, and a dialog counting notes the user has
+ * never thought about is friction in front of a repair they cannot reasonably decline —
+ * and a restore is the same act read backwards.
+ */
+async function relocateFolder(
+  vault: string,
+  path: string,
+  apply: () => string,
+): Promise<string> {
+  const active = writer.activePath();
+  if (active !== null && active.startsWith(`${path}/`)) {
+    throw new Error(FOLDER_ERROR.locked);
+  }
+
+  const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
+  // The other half (B45), and the one the first version of the rename was missing
+  // entirely: every target that *carries a path* into this folder — a picture, a PDF, a
+  // path-form note link. `linkingNotesUnder` above answers a question about resolution and
+  // an attachment never resolves to a note, so it can say nothing about the folder of
+  // images this was first reported for.
+  const carrying = indexDb === null ? [] : await targetsUnder(vault, indexDb, path);
+
+  const moved = apply();
+
+  for (const rewrite of folderRenameRewrites(path, moved, linking)) {
+    rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
+  }
+  // After the move and after the link pass, so a note that was itself inside the folder is
+  // written at the path it now has. Both passes match on the *old* spelling, which exists
+  // only once, so neither can undo the other.
+  rewriteTargetPrefix(
+    vault,
+    carrying.map((one) => movedPath(one.path, path, moved)),
+    path,
+    moved,
+    writer.activePath(),
+  );
+
+  notifyLibrary();
+  return moved;
 }
 
 /**
@@ -532,11 +597,20 @@ async function main(): Promise<void> {
 /**
  * Replaces Electron's default application menu with only the clipboard roles.
  *
- * That default menu is invisible on a frameless window but its accelerators are not:
- * it binds Ctrl+M to Minimise, which is why indenting inside a list minimised the
- * whole window. It also claims Ctrl+R for reload and Ctrl+Shift+I for developer tools.
- * The Edit roles have to stay, because on macOS the menu is what makes Cmd+C and
- * Cmd+V work at all.
+ * That default menu's accelerators are the reason: it binds Ctrl+M to Minimise, which is
+ * why indenting inside a list minimised the whole window. It also claims Ctrl+R for
+ * reload and Ctrl+Shift+I for developer tools. The Edit roles have to stay, because on
+ * macOS the menu is what makes Cmd+C and Cmd+V work at all.
+ *
+ * This comment used to say the menu was "invisible on a frameless window", which is true
+ * of the capture window and of nothing else — and saying it in the one place that sets
+ * the menu for the whole app is what kept a Windows bug invisible for months. On Windows
+ * a `Menu.setApplicationMenu` menu is drawn *per window*, so the library window and the
+ * PDF window, which are both natively framed, grew a real menu strip between the title
+ * bar and the page: a bar reading "Edit" above the folder tree, on a window that has no
+ * business having one. Those two carry `autoHideMenuBar: true` for it — a no-op on macOS,
+ * where the menu belongs to the app rather than the window, and deliberately not
+ * `setMenu(null)`, which would take the Edit roles and their accelerators with it.
  */
 function installMinimalMenu(): void {
   const template: MenuItemConstructorOptions[] = [];
@@ -753,6 +827,17 @@ function registerHotkey(): void {
 }
 
 async function prepareVault(): Promise<void> {
+  // A measurement run must never sit on a dialog waiting for a human, and since the
+  // vault is no longer guessed into `settings.json` (see `settings.ts`) it now genuinely
+  // can be null here on a machine that has one OneDrive and has never been set up. The
+  // documented invocation always carries `--vault=`, which fills the path in before this
+  // and so never reaches the question — but a `--selftest` without one used to inherit
+  // the guess and now would block forever on an unattended machine, which is a CI job
+  // that hangs rather than fails. Nothing to prepare without a vault: exiting the way
+  // the cancel path already does leaves `main()` to carry on and the self-test to report
+  // its own failure.
+  if (loadSettings().vaultPath === null && launch.selfTestRounds > 0) return;
+
   if (loadSettings().vaultPath === null) {
     const chosen = await askForVault();
     if (chosen === null) return;
@@ -788,12 +873,47 @@ function adoptVault(path: string): void {
  * guess, because putting the vault on the wrong tenant means work content in the wrong
  * place. Better to ask once.
  *
- * The one place that knows this wording, for both the people who reach it: first run,
- * and "Choose another folder…" in settings. Two dialogs asking the same question in
- * different words would be two chances to describe the tenant choice badly.
+ * With exactly one there *is* a good guess, and for a long time the app acted on it
+ * silently: `defaults()` seeded `settings.vaultPath` with `defaultVaultPath()`, so
+ * `prepareVault` never saw the `null` that makes it ask, and a fresh install on the
+ * common one-tenant machine created and populated a folder nobody had been shown. The
+ * guess is still the guess — it is what this dialog puts in front of you and what
+ * `defaultPath` opens the picker on — but it is now something to accept rather than
+ * something that happened. One click either way, and the difference is knowing.
+ *
+ * The one place that knows this wording, for all three of the people who reach it: a
+ * first run with one OneDrive, a first run with several, and "Choose another folder…"
+ * in settings. Two dialogs asking the same question in different words would be two
+ * chances to describe the tenant choice badly.
  */
 async function askForVault(): Promise<string | null> {
   const candidates = findOneDriveCandidates();
+
+  if (candidates.length === 1) {
+    const suggestion = defaultVaultPath();
+
+    // The full path, not a tenant label: this is the one dialog where the answer is a
+    // folder that does not exist yet, and "we will create <path>" is only reassuring if
+    // you can read where. `cancelId` is the second button rather than a dismissal — there
+    // is no third outcome here, and closing the box lands on "choose another folder",
+    // which asks again rather than deciding for you.
+    if (suggestion !== null) {
+      const answer = await dialog.showMessageBox({
+        type: "question",
+        title: "Where should your vault go?",
+        message: "Keep your notes here?",
+        detail:
+          `emqnote will keep your notes in:\n\n${suggestion}\n\n` +
+          "That is the business OneDrive on this machine, so the notes sync to your " +
+          "other machines. The folder is created if it is not there yet.",
+        buttons: ["Use this folder", "Choose another folder…"],
+        cancelId: 1,
+        defaultId: 0,
+      });
+
+      if (answer.response === 0) return suggestion;
+    }
+  }
 
   if (candidates.length > 1) {
     const labels = candidates.map(tenantLabel);
@@ -993,11 +1113,16 @@ function registerAppIpc(): void {
       properties: ["openFile"],
       filters:
         filter === "image"
-          ? [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"] }]
+          ? [
+              {
+                name: "Images",
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"],
+              },
+            ]
           : [
               {
                 name: "Images and PDFs",
-                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "pdf"],
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "pdf"],
               },
             ],
     };
@@ -1098,6 +1223,44 @@ function registerAppIpc(): void {
     }
 
     return resolved.kind === "unique" ? "note" : "ambiguous";
+  });
+
+  /**
+   * The ⧉ on an embedded PDF's bar: this file, in the OS's own viewer.
+   *
+   * Deliberately *not* `openWikiLink` with a flag — that one asks `attachmentRoute`, whose
+   * whole job is to send a `.pdf` to B40's window, and the point of this channel is to go
+   * round it. The two ways to read a PDF stay both reachable: a plain `[[file.pdf]]` chip
+   * and the file list's Open button still raise B40's window, while the ⧉ *inside a note*
+   * is now the way out to Preview or Acrobat for printing and annotating.
+   *
+   * It takes a target where `pdf-window.ts`'s `openExternally` takes none. That one is sent
+   * by the viewer window, which is showing untrusted PDF content and shows one document at
+   * a time, so main remembers the name itself rather than letting the page choose a path.
+   * Here the sender is a note that may hold a dozen embeds and main knows nothing about
+   * which was clicked — so the target arrives with the click, the same as `openWikiLink`,
+   * and is made safe the same way: `resolveAttachment` is what decides, and it refuses
+   * anything landing outside the vault after `realpathSync` (B28).
+   */
+  ipcMain.handle(IPC.openInSystemViewer, (_event, target: string): void => {
+    if (typeof target !== "string" || target === "") return;
+
+    const vault = loadSettings().vaultPath;
+    if (vault === null) return;
+
+    const resolved = resolveAttachment(vault, target);
+    if (resolved !== null) void shell.openPath(resolved);
+  });
+
+  /**
+   * "Copy link" on a file row (B47), and anything else that needs the clipboard from a
+   * renderer. `clipboard.writeText` rather than `navigator.clipboard`, which needs a
+   * secure context a sandboxed `file://` page does not have — its failure is a rejected
+   * promise nobody sees, which is the worst possible shape for a copy.
+   */
+  ipcMain.handle(IPC.copyText, (_event, text: string): void => {
+    if (typeof text !== "string") return;
+    clipboard.writeText(text);
   });
 
   /**
@@ -1342,7 +1505,17 @@ function registerLibraryIpc(): void {
     // `null` means the index could not answer, not that nothing is referenced — the scan
     // reads the notes itself in that case rather than offering to delete every attachment
     // in the vault.
-    return findOrphanedAttachments(vault, referenced ?? undefined);
+    const orphans = await findOrphanedAttachments(vault, referenced ?? undefined);
+
+    // Answered as `FileSummary` rows rather than bare paths, because the pane that shows
+    // them is B47's file list: the same rows a folder's own files draw, so a name, a type
+    // and a size come with each. `summariseFile` is the very function `readFilesIn` uses,
+    // which is what stops the two lists describing one file two different ways. A file
+    // that vanished between the scan naming it and this stat — a real race on a synced
+    // vault — drops out rather than becoming a row that cannot be drawn.
+    return orphans
+      .map((path) => summariseFile(vault, join(vault, path)))
+      .filter((file): file is FileSummary => file !== null);
   });
 
   ipcMain.handle(IPC.libraryTrashAttachment, (_event, path: string) => {
@@ -1556,54 +1729,55 @@ function registerLibraryIpc(): void {
    * target that points into it — and until B44 it simply broke them all, silently, since a
    * note link says nothing about being broken until it is clicked (B35).
    *
-   * The repair is the same shape as `IPC.libraryMoveNote`'s, one level up, and the
-   * ordering is the load-bearing half: the question is asked **before** the rename,
-   * because a target resolves against where a note is *now* and after `renameFolder` there
-   * is nothing left for the index to find. It is carried out without asking, unlike the
-   * single-note case — a folder rename is not a gesture anyone makes about one note, and a
-   * dialog counting notes the user has never thought about is friction in front of a
-   * repair they cannot reasonably want to decline.
-   *
-   * The lock guard is the one `IPC.libraryTrashFolder` already has and this handler was
-   * missing: `CaptureWriter`'s session pins the path it will write to next, and renaming
-   * the folder under it does not update that path, so the next debounced write would
-   * recreate the note in a folder that no longer exists.
+   * `relocateFolder` above is the whole of the repair, and the reason it is a function
+   * rather than the body of this handler is `IPC.libraryMoveFolder` right below: the two
+   * differ by one call, and the ordering they share is exactly what B44 and B45 are about.
    */
   ipcMain.handle(IPC.libraryRenameFolder, async (_event, path: string, name: string) => {
     const vault = vaultPath();
     if (vault === null) return path;
+    return relocateFolder(vault, path, () => renameFolder(vault, path, name));
+  });
+
+  /**
+   * Restoring a folder out of the trash. The links into it are repaired exactly as a
+   * rename's are — same guard, same ordering, same two passes — because from `note_links`'
+   * point of view a folder that moved and a folder that was renamed are one event.
+   *
+   * There is no move-a-folder gesture anywhere else in the app: filing is what the tree is
+   * for, and dragging a whole folder around it is not something anyone asked for. This
+   * exists because a folder in `_trash` has nowhere to be *renamed* to, so the one way
+   * back out of the trash had to be a move.
+   */
+  ipcMain.handle(IPC.libraryMoveFolder, async (_event, path: string, parent: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    return relocateFolder(vault, path, () => moveFolder(vault, path, parent));
+  });
+
+  /**
+   * The second permanent delete the app has ever performed, and the first that names one
+   * thing (B24). `deleteFromTrash` carries the `realpathSync` guard `emptyTrash` has, on
+   * the target as well as on the trash folder; the confirmation naming what is about to
+   * go is the renderer's, the same shape Clear trash already uses.
+   *
+   * The lock guard is `IPC.libraryTrashFolder`'s, widened by one case: a *note* can be the
+   * thing being deleted here, so the capture window's claimed path is compared for equality
+   * as well as for containment. Without it the file would simply come back on the next
+   * debounced write — `writeAtomic`'s own `mkdirSync` recreating the trash folder around it.
+   */
+  ipcMain.handle(IPC.libraryDeleteFromTrash, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return { deleted: false };
 
     const active = writer.activePath();
-    if (active !== null && active.startsWith(`${path}/`)) {
-      throw new Error(FOLDER_ERROR.locked);
+    if (active !== null && (active === path || active.startsWith(`${path}/`))) {
+      return { deleted: false, locked: true };
     }
 
-    const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
-    // The other half (B45), and the one the first version of this was missing entirely:
-    // every target that *carries a path* into this folder — a picture, a PDF, a
-    // path-form note link. `linkingNotesUnder` above answers a question about resolution
-    // and an attachment never resolves to a note, so it can say nothing about the folder
-    // of images this was first reported for.
-    const carrying = indexDb === null ? [] : await targetsUnder(vault, indexDb, path);
-
-    const renamed = renameFolder(vault, path, name);
-
-    for (const rewrite of folderRenameRewrites(path, renamed, linking)) {
-      rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
-    }
-    // After the rename and after the link pass, so a note that was itself inside the
-    // folder is written at the path it now has. Both passes match on the *old* spelling,
-    // which exists only once, so neither can undo the other.
-    rewriteTargetPrefix(
-      vault,
-      carrying.map((one) => movedPath(one.path, path, renamed)),
-      path,
-      renamed,
-      writer.activePath(),
-    );
-
+    deleteFromTrash(vault, path);
     notifyLibrary();
-    return renamed;
+    return { deleted: true };
   });
 
   ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {

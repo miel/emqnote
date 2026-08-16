@@ -123,15 +123,18 @@ const DUTCH: Record<string, string> = {
   "table.alignDefault": "Auto",
 
   // De balk boven een ingesloten pdf-pagina (B43/B46), sinds 14 augustus 2026 in de vorm
-  // van de werkbalk van het pdf-venster zelf. Bladeren gebeurt in de notitie; ⧉ opent nog
-  // steeds dat venster (B40), waar zoomen en de systeemviewer zitten.
+  // van de werkbalk van het pdf-venster zelf. Bladeren gebeurt in de notitie; ⧉ ging
+  // eerst naar het pdf-venster (B40) en gaat nu rechtstreeks naar de systeemviewer —
+  // wie een pdf in de notitie leest, wil daarvandaan naar afdrukken en annoteren, niet
+  // naar een derde lezer. Het venster van B40 blijft bereikbaar via een gewone
+  // `[[bestand.pdf]]`-chip en via Openen in de bestandenlijst.
   "pdf.previousPage": "Vorige pagina",
   "pdf.nextPage": "Volgende pagina",
   "pdf.pageNumber": "Paginanummer",
   "pdf.fit": "Passend maken",
   "pdf.fitPage": "Hele pagina",
   "pdf.fitWidth": "Kolombreedte",
-  "pdf.openViewer": "Openen in pdf-venster",
+  "pdf.openSystem": "Openen in systeemviewer",
 
   // Link prompt
   "link.new": "Link",
@@ -161,6 +164,9 @@ const DUTCH: Record<string, string> = {
   "library.renameLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij hernoemd worden.",
   "library.duplicate": "Dupliceren",
+  // Het menu van een bestandsrij (B47). Kopieert `![[pad]]` of `[[pad]]` — dezelfde
+  // spelling die het invoegen zelf schrijft, zodat de twee niet uiteen kunnen lopen.
+  "library.copyLink": "Link kopiëren",
   "library.duplicateLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij gedupliceerd worden.",
   "library.tasks": "Taken",
@@ -171,6 +177,12 @@ const DUTCH: Record<string, string> = {
   "library.noPreview": "Geen voorbeeld voor dit bestandstype. Open het in het systeem.",
   "library.previewFailed": "Dit bestand kon niet getoond worden.",
   "library.delete": "Verwijderen",
+  /** Uit de prullenbak terug de vault in: vraagt naar welke map, de Inbox bovenaan. */
+  "library.restore": "Terugzetten",
+  /** Het enige menu-item dat echt iets weggooit (B24), naast Prullenbak legen. */
+  "library.deletePermanently": "Permanent verwijderen",
+  "library.deletePermanentlyLocked":
+    "Dit staat open in het invoervenster. Sluit het daar eerst, dan kan het verwijderd worden.",
   /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
    *  Its `title`; `library.actions` is what is written on it. */
   "library.moreActions": "Meer acties",
@@ -217,6 +229,9 @@ const DUTCH: Record<string, string> = {
   "ask.confirmDeleteFolder": "naar de prullenbak verplaatsen, met alles erin?",
   "ask.confirmClearTrash":
     "permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
+  // Voor één ding uit de prullenbak, waar `ask.confirmClearTrash` er een aantal telt.
+  "ask.confirmDeletePermanently":
+    "permanent verwijderen? Dit kan niet ongedaan worden gemaakt.",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
@@ -245,8 +260,10 @@ const DUTCH: Record<string, string> = {
   "folder.folder-not-found": "Die map bestaat niet meer.",
   "folder.folder-already-exists": "Er is al een map met die naam.",
   "folder.folder-holds-open-note": "Er staat een notitie in die open is in het invoervenster.",
+  "folder.folder-into-itself": "Een map kan niet in zichzelf gezet worden.",
   "folder.failed": "De map kon niet hernoemd worden.",
   "folder.deleteFailed": "De map kon niet verwijderd worden.",
+  "folder.moveFailed": "De map kon niet verplaatst worden.",
 
   // Settings
   "settings.title": "Instellingen",
@@ -283,12 +300,16 @@ const DUTCH: Record<string, string> = {
   "conflict.merge": "Samenvoegen in de editor",
   "conflict.close": "Sluiten",
 
-  // Orphaned attachments
+  // Verweesde bijlagen — sinds 16 augustus 2026 een plek in de zijbalk (tussen
+  // Sneltoetsen en Prullenbak) in plaats van een venster: de bestandenlijst van B47 in
+  // het notitiepaneel, de preview van B47 in de lezer, en Verwijderen in het menu van de
+  // rij. `orphans.title` is dus ook het label van die rij. De twee toestanden hieronder
+  // zijn geen versiering: dit is de enige bestandenlijst die een zoekopdracht is en dus
+  // kan mislukken, en precies daarop liep het oude venster vast op "Bezig met zoeken…".
   "orphans.title": "Verweesde bijlagen",
   "orphans.loading": "Bezig met zoeken…",
-  "orphans.failed": "Zoeken is niet gelukt. Sluit dit scherm en probeer het opnieuw.",
+  "orphans.failed": "Zoeken is niet gelukt. Kies de rij opnieuw om het nog eens te proberen.",
   "orphans.empty": "Geen verweesde bijlagen gevonden.",
-  "orphans.settingsHint": "Bestanden in _attachments/ waar geen notitie meer naar verwijst.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
@@ -425,8 +446,11 @@ const ENGLISH: Record<string, string> = {
   "table.alignRight": "Right",
   "table.alignDefault": "Auto",
 
-  // The bar under an embedded PDF page (B43). Pages are turned in the note itself; ⧉
-  // still opens the PDF window (B40), which is where zoom and the system viewer live.
+  // The bar above an embedded PDF page (B43/B46). Pages are turned in the note itself;
+  // ⧉ used to raise B40's PDF window and now goes straight to the OS's own viewer —
+  // somebody reading a PDF inside a note wants printing and annotating from there, not a
+  // third reader in between. B40's window is still reached by a plain `[[file.pdf]]`
+  // chip and by the file list's Open button, so neither way to read one was lost.
   "pdf.previousPage": "Previous page",
   "pdf.nextPage": "Next page",
   // The total is one round trip behind the picture, so the box beside it reads "/ –"
@@ -435,7 +459,7 @@ const ENGLISH: Record<string, string> = {
   "pdf.fit": "Fit",
   "pdf.fitPage": "Fit page",
   "pdf.fitWidth": "Fit width",
-  "pdf.openViewer": "Open in the PDF window",
+  "pdf.openSystem": "Open in system viewer",
 
   "link.new": "Link",
   "link.edit": "Edit link",
@@ -464,6 +488,9 @@ const ENGLISH: Record<string, string> = {
   "library.renameLocked":
     "This note is open in the note window. Close it there first, then it can be renamed.",
   "library.duplicate": "Duplicate",
+  // A file row's menu (B47). Copies `![[path]]` or `[[path]]` — the very spelling
+  // insertion writes, so a copied link and an inserted one cannot disagree.
+  "library.copyLink": "Copy link",
   "library.duplicateLocked":
     "This note is open in the note window. Close it there first, then it can be duplicated.",
   "library.tasks": "Tasks",
@@ -474,6 +501,12 @@ const ENGLISH: Record<string, string> = {
   "library.noPreview": "No preview for this file type. Open it in the system viewer.",
   "library.previewFailed": "This file could not be shown.",
   "library.delete": "Delete",
+  /** Out of the trash and back into the vault: asks which folder, the Inbox offered first. */
+  "library.restore": "Restore",
+  /** The only menu item that really throws something away (B24), beside Clear trash. */
+  "library.deletePermanently": "Delete permanently",
+  "library.deletePermanentlyLocked":
+    "This is open in the note window. Close it there first, then it can be deleted.",
   "library.moreActions": "More actions",
   "library.actions": "Actions",
   "library.insert": "Insert",
@@ -511,6 +544,8 @@ const ENGLISH: Record<string, string> = {
   "ask.confirmDelete": "Move to the trash?",
   "ask.confirmDeleteFolder": "Move to the trash, along with everything inside it?",
   "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
+  // For one thing out of the trash, where `ask.confirmClearTrash` counts several.
+  "ask.confirmDeletePermanently": "delete permanently? This cannot be undone.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
 
@@ -528,8 +563,9 @@ const ENGLISH: Record<string, string> = {
   "link.duplicateTitle": "A note with this title already exists in",
   "link.renameAnyway": "rename anyway?",
 
-  // Why a folder could not be renamed or deleted. The same codes cover both — only the
-  // generic `folder.failed`/`folder.deleteFailed` fallback differs per action.
+  // Why a folder could not be renamed, deleted or moved. The same codes cover all three —
+  // only the generic `folder.failed`/`folder.deleteFailed`/`folder.moveFailed` fallback
+  // differs per action.
   "folder.folder-is-root": "The vault itself cannot be renamed or deleted.",
   "folder.folder-is-reserved": "That folder belongs to the app.",
   "folder.folder-name-empty": "A folder needs a name.",
@@ -537,8 +573,10 @@ const ENGLISH: Record<string, string> = {
   "folder.folder-not-found": "That folder no longer exists.",
   "folder.folder-already-exists": "There is already a folder with that name.",
   "folder.folder-holds-open-note": "A note in it is open in the capture window.",
+  "folder.folder-into-itself": "A folder cannot be moved inside itself.",
   "folder.failed": "The folder could not be renamed.",
   "folder.deleteFailed": "The folder could not be deleted.",
+  "folder.moveFailed": "The folder could not be moved.",
 
   "settings.title": "Settings",
   "settings.language": "Language",
@@ -574,12 +612,16 @@ const ENGLISH: Record<string, string> = {
   "conflict.merge": "Merge in the editor",
   "conflict.close": "Close",
 
-  // Orphaned attachments
+  // Orphaned attachments — a place in the sidebar since 16 August 2026 (between Keyboard
+  // shortcuts and Trash) rather than a modal: B47's file list in the note pane, B47's
+  // preview in the reader, and Delete in the row's own menu. So `orphans.title` is the
+  // label on that row as well as the name of the thing. The two states below are not
+  // decoration: this is the one file list that is a *search* and so can fail, which is
+  // exactly what the old screen used to hang on at "Looking…".
   "orphans.title": "Orphaned attachments",
   "orphans.loading": "Looking…",
-  "orphans.failed": "The search did not finish. Close this and try again.",
+  "orphans.failed": "The search did not finish. Pick the row again to retry.",
   "orphans.empty": "No orphaned attachments found.",
-  "orphans.settingsHint": "Files in _attachments/ that no note points to any more.",
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",

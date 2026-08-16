@@ -2,6 +2,8 @@ import { app, BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { IPC } from "../shared/ipc.js";
+import { matches, shortcut } from "../shared/shortcuts.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -37,6 +39,13 @@ export function showLibraryWindow(): void {
     show: false,
     title: "emqnote",
     backgroundColor: "#1e1f22",
+    // This window is natively framed, and on Windows that means the application menu
+    // `installMinimalMenu` sets is drawn as a real strip inside it — an "Edit" bar above
+    // the folder tree, which is what was reported. Hiding it rather than dropping the
+    // menu keeps the Edit roles and their accelerators alive (Alt still reveals the bar),
+    // and `installMinimalMenu`'s own comment says why the menu itself has to stay. A
+    // no-op on macOS, where the menu belongs to the app and not to the window.
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(here, "../preload/index.cjs"),
       contextIsolation: true,
@@ -65,6 +74,39 @@ export function showLibraryWindow(): void {
 
   created.webContents.on("console-message", (_event, _level, message) => {
     console.error(`[library renderer] ${message}`);
+  });
+
+  /**
+   * Ctrl-Tab / Ctrl-Shift-Tab, claimed before anything else in the window can have it.
+   *
+   * The renderer used to listen for this itself, and on Windows it did nothing at all —
+   * reported, and never explained. It was *measured* arriving normally on Linux, and the
+   * binding spells `Ctrl` literally (`shortcuts.ts`), so it is not the comparison reading
+   * the platform wrong. `before-input-event` is the earliest point anything in this
+   * window can be claimed from: it runs ahead of every native accelerator and ahead of the
+   * page, so it is the one place a fix can stand without knowing what it is standing
+   * against. The Windows menu bar, removed in the same batch, is the other candidate and
+   * would also be covered from here.
+   *
+   * `matches` against the registry rather than comparing fields by hand: this is the same
+   * chord the help sheet prints, and two spellings of one binding is how they drift.
+   * `preventDefault` is what makes this a replacement rather than a second route — the
+   * `keydown` never fires, so `Library.tsx` has exactly one path into the ring.
+   */
+  created.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+
+    const cycling = matches(shortcut("cyclePanes"), {
+      key: input.key,
+      ctrlKey: input.control,
+      metaKey: input.meta,
+      shiftKey: input.shift,
+      altKey: input.alt,
+    }, process.platform === "darwin");
+
+    if (!cycling) return;
+    event.preventDefault();
+    created.webContents.send(IPC.libraryCyclePanes, { backward: input.shift });
   });
 
   created.on("closed", () => {

@@ -85,6 +85,17 @@ export const IPC = {
   libraryFolderContents: "library:folder-contents",
   /** Moves a folder into `_trash`, along with everything inside it — never a permanent delete (B24). */
   libraryTrashFolder: "library:trash-folder",
+  /**
+   * Moves a folder under another parent, links repaired around it exactly as a rename's
+   * are (B44/B45). Restore is the one caller: a folder in `_trash` has nowhere to be
+   * renamed *to*.
+   */
+  libraryMoveFolder: "library:move-folder",
+  /**
+   * Permanently deletes one note, attachment or folder out of `_trash`. The only delete
+   * beside `libraryEmptyTrash` with no way back, and the only one that names one thing.
+   */
+  libraryDeleteFromTrash: "library:delete-from-trash",
   libraryRevealNote: "library:reveal-note",
   listVaults: "vault:list",
   chooseVault: "vault:choose",
@@ -93,6 +104,15 @@ export const IPC = {
   libraryFacets: "library:facets",
   /** main → library renderer: the vault changed underneath, reload. */
   libraryRefresh: "library:refresh",
+  /**
+   * main → library renderer: move focus one pane around the ring (`cyclePanes`).
+   *
+   * The chord is claimed in `library-window.ts`'s `before-input-event` rather than by a
+   * `keydown` listener in the window, so this carries the *intent* and not the key: main
+   * has already decided the event was Ctrl-Tab and called `preventDefault()`, and the
+   * renderer never sees it. `backward` is Shift.
+   */
+  libraryCyclePanes: "library:cycle-panes",
   /** main → library renderer: how far the startup index scan has got. */
   libraryScanProgress: "library:scan-progress",
   /**
@@ -180,6 +200,29 @@ export const IPC = {
    * the two answers drift apart.
    */
   openWikiLink: "app:open-wiki-link",
+  /**
+   * The ⧉ on an embedded PDF's bar: hand *this* file to the OS's own viewer, skipping
+   * `attachmentRoute` entirely.
+   *
+   * It takes a target where `pdf-view-ipc.ts`'s `PDF_VIEW_OPEN_EXTERNALLY` takes nothing,
+   * and the difference is not an oversight. That one is sent by the PDF viewer window,
+   * which shows one document at a time and whose content is the untrusted PDF itself — so
+   * main remembers what it told that window to show rather than letting the page name a
+   * path. A note, by contrast, can hold any number of embeds and main knows nothing about
+   * which one was clicked; the target has to arrive with the click, exactly as it does for
+   * `openWikiLink`. It is no wider a capability than that one either: the same
+   * `resolveAttachment` guard decides, so nothing outside the vault can be named.
+   */
+  openInSystemViewer: "app:open-in-system-viewer",
+  /**
+   * Puts plain text on the system clipboard — the file list's "Copy link" (B47's rows).
+   *
+   * Main-side because `navigator.clipboard` is not dependable in a sandboxed `file://`
+   * renderer: it needs a secure context and a permission this app never grants, and the
+   * failure is a silently rejected promise rather than anything on screen. Electron's own
+   * `clipboard.writeText` is one line and always works.
+   */
+  copyText: "app:copy-text",
   /**
    * Which of these `[[…]]` targets name no file in the vault — what draws the "missing
    * attachment" marker on a chip or in place of a picture.
@@ -384,6 +427,20 @@ export interface LibraryApi {
    * code instead, exactly like `renameFolder`.
    */
   trashFolder: (path: string) => Promise<{ trashed: boolean; locked?: boolean }>;
+  /**
+   * Moves a folder under another parent and answers its new path — Restore's way back out
+   * of `_trash`, since a folder in there has no name to be renamed to. Rejects with a
+   * `FOLDER_ERROR` code, `renameFolder`'s shape rather than `trashFolder`'s: the caller
+   * has to rebase whatever it has open onto the answer, so it needs the real new path or
+   * a reason, never a silent `{ moved: false }`.
+   */
+  moveFolder: (path: string, parent: string) => Promise<string>;
+  /**
+   * Permanently deletes one thing out of `_trash`. `locked` when the capture window has
+   * that note — or a note inside that folder — claimed: its session pins the path it will
+   * write to next, so the file would come straight back on the next debounced write.
+   */
+  deleteFromTrash: (path: string) => Promise<{ deleted: boolean; locked?: boolean }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;
@@ -397,6 +454,8 @@ export interface LibraryApi {
    */
   newNote: (folder?: string) => void;
   onRefresh: (handler: () => void) => () => void;
+  /** Ctrl-Tab/Ctrl-Shift-Tab, forwarded by main — see `IPC.libraryCyclePanes`. */
+  onCyclePanes: (handler: (event: { backward: boolean }) => void) => () => void;
   /** How far the startup index scan has got, or null when nothing is scanning. */
   scanState: () => Promise<ScanProgress | null>;
   onScanProgress: (handler: (progress: ScanProgress | null) => void) => () => void;
@@ -412,12 +471,14 @@ export interface LibraryApi {
   resolveConflict: (pair: ConflictPair, choice: ConflictChoice) => Promise<void>;
 
   /**
-   * Vault-relative paths of the `_attachments/` files nothing names any more. The screen
-   * draws each one straight off `emqnote-attachment://` (B28) — there used to be a second
-   * call per file that base64'd the whole thing through IPC, which is what B28 refused for
-   * a note's own pictures and what made this screen load all-or-nothing.
+   * The `_attachments/` files nothing names any more, as the same `FileSummary` rows a
+   * folder's own files come back as — because they are drawn by the same file list (B47)
+   * now that this is a place in the sidebar rather than a modal of its own. Each row
+   * still draws straight off `emqnote-attachment://` (B28): there used to be a second
+   * call per file that base64'd the whole thing through IPC, which is what B28 refused
+   * for a note's own pictures and what made this screen load all-or-nothing.
    */
-  orphanedAttachments: () => Promise<string[]>;
+  orphanedAttachments: () => Promise<FileSummary[]>;
   trashAttachment: (path: string) => Promise<string>;
 
   /** Every task item under a folder scope (`""` for the whole vault), for the Tasks view. */
@@ -492,6 +553,15 @@ export interface CaptureApi {
    * like a click that had not registered.
    */
   openWikiLink: (target: string) => Promise<WikiLinkOutcome>;
+  /**
+   * Hands one attachment to the OS's own viewer, whatever `attachmentRoute` would have
+   * said — the ⧉ on an embedded PDF's bar. Resolves either way: a target that resolves to
+   * nothing is a chip that already marks itself missing (B39), and there is nothing for
+   * this side to do about it a second time.
+   */
+  openInSystemViewer: (target: string) => Promise<void>;
+  /** Puts `text` on the system clipboard. Always resolves; there is no failure to report. */
+  copyText: (text: string) => Promise<void>;
   /**
    * Answers the subset of `targets` that name no file in the vault, so a chip or an
    * embed can say the attachment behind it is gone. An empty answer means "nothing is

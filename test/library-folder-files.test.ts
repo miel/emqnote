@@ -90,11 +90,14 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
     trashFolder: async () => ({ trashed: true }),
+    moveFolder: async (path) => path,
+    deleteFromTrash: async () => ({ deleted: true }),
     revealNote,
     noteEditable: async () => true,
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},
@@ -150,6 +153,8 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 

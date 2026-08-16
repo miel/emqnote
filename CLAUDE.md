@@ -115,9 +115,11 @@ The capture window's bundle is kept deliberately small — it is the one that mu
 
 **Windows gets a real installer and auto-updater; macOS gets a version check and a link** (B22). `electron-builder.yml`'s `win.target` is a per-user NSIS installer (`perMachine: false` — no admin rights needed, same as unzipping a folder), and `src/main/updater.ts` drives `electron-updater` on that path with two explicit confirmations: one before downloading, one before restarting to install. macOS deliberately does not get that: no Developer ID, no notarization, so no Squirrel.Mac-based silent install. Instead it does a plain `fetch` against the GitHub releases API and opens the release page for a manual reinstall, the same upgrade step as before. Both paths read the same public GitHub repo; `src/main/update-check.ts` holds the Electron-free parsing/comparison logic, tested directly.
 
-**Electron's default application menu is removed** (`installMinimalMenu`). It is invisible on a frameless window but its accelerators are not: it claimed Ctrl+M for Minimise, so indenting inside a list minimised the window. Only the Edit clipboard roles stay, because on macOS the menu is what makes Cmd+C/Cmd+V work at all. macOS additionally gets an application submenu, because without one Cmd+Q was dead — but its Quit item is a custom click, never `{ role: "quit" }`: **Cmd+Q closes a window, it does not quit the app** (B25). The library window closes; the capture window commits and hides; the resident process survives both, which is the whole premise of B2/B3. The item is still labelled "Quit emqnote" for muscle memory, and the tray item of that name remains the only real exit.
+**Electron's default application menu is removed** (`installMinimalMenu`). Its accelerators are the reason: it claimed Ctrl+M for Minimise, so indenting inside a list minimised the window. This entry used to say the menu was "invisible on a frameless window", which is true of the capture window and of nothing else — and saying it here, in the one place that sets the menu for the whole app, is what kept a Windows bug invisible for months: on Windows the menu is drawn *per window*, so the library and PDF windows, both natively framed, grew a real "Edit" strip above their contents. Both carry `autoHideMenuBar: true` now — a no-op on macOS, and deliberately not `setMenu(null)`, which would take the Edit roles with it. Only the Edit clipboard roles stay, because on macOS the menu is what makes Cmd+C/Cmd+V work at all. macOS additionally gets an application submenu, because without one Cmd+Q was dead — but its Quit item is a custom click, never `{ role: "quit" }`: **Cmd+Q closes a window, it does not quit the app** (B25). The library window closes; the capture window commits and hides; the resident process survives both, which is the whole premise of B2/B3. The item is still labelled "Quit emqnote" for muscle memory, and the tray item of that name remains the only real exit.
 
 **The capture window is hidden, never destroyed.** `capture-window.ts` holds exactly one `BrowserWindow` reference, assigned once, so a destroyed window is unrecoverable: `reveal()` fails on `isDestroyed()` forever — hotkey and New note silently dead — and `hideCaptureWindow()` never runs, so `writer.finish()` never releases the loaded note and the library reports it "open for editing" in a window that no longer exists. On macOS the traffic lights are real (`titleBarStyle: "hidden"`), so the red button would do exactly that. The `close` handler therefore calls `preventDefault()` and routes to `hideCaptureWindow()`, the same commit-and-put-away path `IPC.captureClose` uses. A `quitting` flag, set from `before-quit`, lets a genuine quit through — without it the tray's Quit hangs on that `preventDefault()`. `reveal()` keeps its `isDestroyed()` guard but now recreates the window rather than returning.
+
+**The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the tree → notes → editor ring from there, and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
 
 **Windows path limits and reserved names.** Filenames follow `YYYY-MM-DD HHmm Subject.md`, truncated at 80 chars, forbidden characters `\ / : * ? " < > |` replaced by `-`, reserved names (`CON`, `PRN`, `COM1`…) suffixed with `_`, no trailing dot or space. `src/main/filename.ts`, tested in `test/filename.test.ts`.
 
@@ -143,7 +145,7 @@ In the library the header values live in their own `header` state, deliberately 
 
 Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): the worst single main-thread stall went from ~470–535 ms to 7–29 ms, with the total scan time unchanged. The old figure is the honest one to remember about the in-process version — `fullScan` yields every hundred files, but a hundred files is half a second of work, so the yielding bounded nothing that mattered next to an 80 ms hotkey budget. ESM workers were confirmed to load from inside a packaged `app.asar`, shared chunks and all, before this was built on.
 
-**Dragging a note onto a folder and "Move to…" are one operation, not two.** `Library.tsx`'s `moveNoteTo` is what both call; the dialog reaches a folder four levels deep without hunting for it, the drag reaches one already in front of you. The rules live in `src/renderer/library/drag.ts` — `canDropNote` answers for the drop *and* for the highlight that precedes it, so a folder can never light up and then refuse. The trash accepts nothing, matching the reason `MoveDialog` already excludes it: Delete is what puts a note there, and it asks first, so the one gesture with no confirmation must not be the one that destroys something. Nothing drags out of the trash either. The drag type is private (`application/x-emqnote-path`), never `text/plain`, which would make every row draggable into any text field on the machine. `onDrop` re-checks `canDropNote` against the path in the drop rather than trusting the highlight's state, so the consequential half never depends on a render having landed.
+**Dragging a note onto a folder and "Move to…" are one operation, not two.** `Library.tsx`'s `moveNoteTo` is what both call; the dialog reaches a folder four levels deep without hunting for it, the drag reaches one already in front of you. The rules live in `src/renderer/library/drag.ts` — `canDropNote` answers for the drop *and* for the highlight that precedes it, so a folder can never light up and then refuse. **The trash is a destination since B54**, and the drop routes through the same `trashNote` Delete uses rather than through `moveNoteTo`, so there is one way into `_trash`. It takes no confirmation, which reverses this file's own earlier reasoning on purpose: that argument ("the one gesture with no confirmation must not be the one that destroys something") held only while there was no way back, and Restore is now the named handling that undoes it. Only the trash *root* is a destination, never a folder inside it — Delete files everything flat, so a deeper drop would mean nothing. Nothing drags out of the trash, which is the same sentence read the other way: restoring is a deliberate act, not a consequence of having grabbed the wrong row. The drag type is private (`application/x-emqnote-path`), never `text/plain`, which would make every row draggable into any text field on the machine. `onDrop` re-checks `canDropNote` against the path in the drop rather than trusting the highlight's state, so the consequential half never depends on a render having landed.
 
 **`IPC.libraryMoveNote` refuses a note the capture window has claimed.** `CaptureWriter`'s session holds the path it will write to, decided when the note was loaded; moving the file does not update it, so the next debounced write recreates the note where it used to be — one note in two folders, the second written by a window that thinks it is still editing the first. The move dialog could only ever reach a note the reader had open; dragging can reach any row in the list, which is what turned this from a note into a guard.
 
@@ -151,7 +153,9 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **Ticking a checkbox from the Tasks view re-reads and re-checks first.** `toggleTask` in `vault-io.ts` re-parses the file, walks to the n-th task item, and **verifies its text still matches what the caller was shown** before flipping anything. An index row can lag the disk, and flipping the wrong line in a file the user does not have open is the one failure mode worth designing against. Then `serializeNote` + `writeAtomic`, never a text edit — B6 applies here like everywhere else. The IPC handler refuses a note the capture window has claimed, same as `IPC.libraryMoveNote`.
 
-**Deleting a folder is a rename into `_trash`** (B27), never `rmSync`. `emptyTrash` stays the only code in the app that permanently deletes anything (B24), and a second irreversible action next to it — one that takes a whole tree rather than one note — would erase that distinction. `trashFolder` reproduces `renameFolder`'s refusals code for code, so the renderer decodes both through one `folderErrorOf`, and the handler refuses a folder holding a note the capture window has claimed.
+**Deleting a folder is a rename into `_trash`** (B27), never `rmSync`. `trashFolder` reproduces `renameFolder`'s refusals code for code, so the renderer decodes both through one `folderErrorOf`, and the handler refuses a folder holding a note the capture window has claimed.
+
+**Anything in the trash comes back out, and one thing at a time can be destroyed** (B54). `moveFolder` is what Restore needs that did not exist — a rename never changes which parent a folder hangs off — and it repeats `trashFolder`'s refusals with three differences that are the whole operation: the *source* may be inside `_trash`, the *destination* may not (that is `trashFolder`, and two routes to one act is how they drift), and a folder cannot move inside itself. A collision is survived rather than refused, unlike in `renameFolder`, because nobody typed this name. Its handler *is* `IPC.libraryRenameFolder`'s, extracted into one shared function so B44's and B45's two link-repair passes cannot come to differ between them. `deleteFromTrash` is `emptyTrash` at a smaller scale and sits directly beside it, sharing its guard exactly — `realpathSync` on both sides, and the target resolved as well as the folder, which `emptyTrash` never has to do because it works on `readdirSync`'s own entries while this one takes a path off IPC. **Those two are now the only code in the app that permanently deletes anything**, which is B24 restated rather than relaxed: same folder, same guard, same confirmation naming what goes. Restore and Delete permanently both keep a non-menu route — the folder toolbar swaps its three buttons for them in the trash, exactly as `NoteList` swaps *New note* for *Clear trash* there, and the reader's Actions menu does the same for a note — because `--click-button` cannot open a right-click menu, so anything living only behind one does not exist for the self-test.
 
 **Attachments are served over `emqnote-attachment://`, not as `data:` URLs** (B28). A note with three screenshots would otherwise push each one through IPC a third larger, on every render; the orphaned-attachments thumbnail keeps its `data:` URL because it is one file, once. `resolveAttachment` refuses anything that lands outside the vault after `realpathSync` — following the symlinks *is* the guard, the same reasoning as `emptyTrash`, which is also why its tests compare against the real path and not the one `mkdtemp` returned. Both windows carry `emqnote-attachment:` in `img-src`; the capture window had no `img-src` at all before.
 
@@ -232,7 +236,13 @@ fourth renderer entry running pdf.js against the same `pdfjs-dist` devDependency
 thumbnail uses — instead of handing the file to `shell.openPath`. `attachment-route.ts` is
 the whole of the rule and draws the split from `isPreviewable`, so a `.docx` still goes to
 the OS; **Open in system viewer** inside the viewer is the way back out for printing and
-annotating. Three things are load-bearing. **`emqnote-attachment` needed `corsEnabled: true`
+annotating. **The ⧉ above an *embedded* page no longer comes here** (B56): it goes straight
+to the OS through `IPC.openInSystemViewer`, because B43 and B46 gave the inline page its
+first page, its other pages, a Fit choice and a page box — leaving zoom, text selection and
+printing as the difference, which is what the system viewer is better at anyway. This window
+stays, reached from a plain `[[file.pdf]]` chip and from the file list's Open. Changing only
+the *label* was refused: the button called `openWikiLink`, which sends a `.pdf` here by
+definition, so it would have said one thing and done another. Three things are load-bearing. **`emqnote-attachment` needed `corsEnabled: true`
 adding to its privileges**: the viewer reads the bytes with `fetch()`, and a `fetch`
 enforces CORS even for a scheme this app owns end to end — the exact trap B36 already fell
 into once, where every test passed and every thumbnail was silently broken in the real app.
@@ -389,10 +399,30 @@ resolves an arbitrary vault-relative path (B38), `emqnote-attachment://` serves 
 **A separate call and a separate type, never a widened `NoteSummary`**: sort, drag, move,
 duplicate, tasks and the conflict check all take one, and none of those questions means
 anything for a `.png` — a file row answering half that menu would read worse than one that
-plainly is not a note. There is no delete on this path either (B24/B27). `_attachments` stays
-hidden and unbrowsable; it is the app's own folder and has §6.5's screen. The reader pane's
-PDF preview asks the hidden window for its page like the inline embed does — **no pdf.js in
-the library bundle**, the same line B43 draws.
+plainly is not a note. `_attachments` stays hidden and unbrowsable; it is the app's own
+folder and has §6.5's screen — which is now a place rather than a screen, see B55 below. The
+reader pane's PDF preview asks the hidden window for its page like the inline embed does —
+**no pdf.js in the library bundle**, the same line B43 draws.
+
+A file row has a right-click menu of its own since 16 August 2026, and what is *not* on it is
+the decision: **Copy link** (`![[path]]` when `isEmbeddableAttachment` says the app can draw
+it, `[[path]]` otherwise — the same function `insert-attachment.ts` spells an insertion with,
+so a copied link and an inserted one cannot disagree), **Reveal**, and **Delete only in the
+orphans pane**. Delete is absent elsewhere rather than present and disabled: a file a note
+still names is not a thing to offer to remove, and a permanently greyed row on every picture
+is noise. Copying goes through `IPC.copyText` in main rather than `navigator.clipboard`,
+which is not dependable in a sandboxed `file://` renderer.
+
+**Orphaned attachments are a place in the sidebar, not a modal** (B55). `{ kind: "orphans" }`
+is a `Selection` like `{ kind: "tasks" }`; the note pane is B47's file list, the reader is
+B47's preview, and `IPC.libraryOrphanedAttachments` answers `FileSummary[]` through the same
+`summariseFile` `readFilesIn` uses. That deleted a whole screen rather than moving one. It has
+been in three places now — tree footer, then a row inside Settings (6 August), now the footer
+again — and the third is not a revert: what came back is a destination, where what left was a
+button opening a grid with its own previews and its own delete. **Its loading and failure
+states are load-bearing**, because this is the one file list that is a search over the whole
+index rather than one `readdir`, and the screen it replaces hung on "Looking…" for four
+separate reasons at once.
 
 **The orphaned-attachment scan is answered from the index, and it has an error state.** It
 stalled at "Looking…" for four separate reasons, and all four are worth not reintroducing:
@@ -518,9 +548,11 @@ the matrix arithmetic both files need, so neither has to import the other.
 
 **Timestamps are ISO 8601 with offset, never UTC `Z`** — otherwise a summer note reads back wrong in winter.
 
+**Where the vault goes is asked, never assumed.** `settings.ts`'s `defaults()` seeded `vaultPath` with `defaultVaultPath()` — which answers `<OneDrive>/emqnote` whenever the machine has exactly one business OneDrive, the common case — and `prepareVault` only asks when it finds `null`. So on a fresh install the folder was chosen, created and populated in silence, and the chooser existed without anybody ever being shown it. That is what "the vault location seems to be hardcoded" meant. The default is `null` now and the guess moved into `askForVault`, which offers it as a confirmable suggestion with the full path spelled out; `defaultVaultPath` keeps its name but is nobody's default any more. `prepareVault` returns early when a `--selftest` run finds no vault, or an unattended CI job would block on a dialog instead of failing.
+
 **Index, settings and window state live outside the vault**, in the local app data folder (B9). On Windows that is `%LOCALAPPDATA%`, forced in `src/main/index.ts` before `ready`, because Roaming AppData can be synced by a corporate profile. A half-synced SQLite database is a broken SQLite database.
 
-**Trash is the vault's own `_trash` folder**, not the system recycle bin: a OneDrive file in the Windows recycle bin is not synced, so it would be gone from the other machine with no way back. Deleting a note is still only a rename into it. Emptying it is a separate, explicit action — the trash folder's note list carries a **Clear trash** button where every other folder has *New note*, behind a confirmation that names the count and says it cannot be undone (B24). `emptyTrash` in `vault-io.ts` is the only code in the app that permanently deletes anything, and it checks with `realpathSync` that its target really is `<vault>/_trash` and inside the vault before it removes a byte — `resolve()` alone would happily follow a `_trash` that turned out to be a symlink. There is deliberately no age-based prune.
+**Trash is the vault's own `_trash` folder**, not the system recycle bin: a OneDrive file in the Windows recycle bin is not synced, so it would be gone from the other machine with no way back. Deleting a note is still only a rename into it. Emptying it is a separate, explicit action — the trash folder's note list carries a **Clear trash** button where every other folder has *New note*, behind a confirmation that names the count and says it cannot be undone (B24). `emptyTrash` in `vault-io.ts` and `deleteFromTrash` beside it (B54) are the only code in the app that permanently deletes anything, and both check with `realpathSync` that the target really is inside `<vault>/_trash` before removing a byte — `resolve()` alone would happily follow a `_trash` that turned out to be a symlink. There is deliberately no age-based prune. Since B54 the trash is also a place things come *out* of: a note or a folder restores through the Move to… picker with the Inbox offered first, since the trash is flat and nothing records where anything came from.
 
 **The app's own writes are told apart from a real external change by content hash, never by a timer** (B31). `own-writes.ts` remembers `sha256(contents)` per resolved path (lowercased on `win32`, the usual reason) after every `writeAtomic`, so the watcher can suppress the notification for its own debounced autosave without suppressing the *indexing* — those are two different things, and only the notification is ever skipped. A TTL ("ignore writes for N ms after our own save") was rejected because it turns a correctness property into a timing property, and OneDrive's own re-materialisation schedule is the one clock this app cannot trust. The library gets every `vault:file-changed` event unconditionally and filters against its own `open` state, because main has no reliable view of what the reader currently shows; the capture window is filtered in main instead, against `writer.activePath()`, because that path genuinely is main's own state. A clean note reloads silently; a dirty one gets a **Reload** / **Keep mine** bar; a deletion gets **Close** / **Keep mine** and — deliberately, asymmetrically — never auto-closes even when clean, because closing yanks away a window someone may be looking at and a transient OneDrive hiccup must not be able to do that unasked. The capture window cannot know from main alone whether it has unsaved edits (main only sees what has already crossed the 300 ms debounce), so it keeps its own `dirtyRef` that deliberately over-reports rather than risk discarding a half-typed sentence. `unlinkDir` is handled too, via `deleteNotesUnder` (a `substr`-based prefix match, not `LIKE` or `GLOB`, both of whose metacharacters real folder names can legitimately contain) — before this, a folder deleted outside the app left every note under it still indexed.
 
@@ -858,6 +890,61 @@ B35 introduced doing its job.
 on a real display, and how the double-click feels against the click that selects the folder
 first. Both are `TEST-PROTOCOL.md` items (§21).
 
+**Fourteen items from daily use landed on 16 August 2026**, built as three work packages in
+parallel worktrees and merged in one wave. They are not fourteen unrelated defects: **the
+trash was a place things could only go into** (no restore, no drag in, no per-item delete,
+and a right-click menu whose every entry was disabled), **a file that is not a note was a
+second-class citizen** (no menu, orphans still behind a modal in Settings, AVIF missing from
+four of six extension lists), and **Windows had never been looked at** (a menu bar above the
+folder tree, a dead Ctrl+Tab, a vault chooser nobody was ever shown). Three carry decisions:
+**B54** — the trash is reversible — **B55** — orphaned attachments are a place, not a modal —
+and **B56** — the ⧉ over an embedded PDF goes to the OS. The rest: the Tags panel can be
+collapsed again while a tag is selected (its B52 unfold effect listed `open` in its own
+dependencies, so folding it re-ran the effect and re-opened it on the same commit); Reveal is
+in the folder tree's menu; a disabled menu entry is dimmed by `opacity` as well as colour,
+having been the same `--muted` as the shortcut column; the date button truncates with an
+ellipsis instead of painting across the field beside it; and `autoHideMenuBar` takes the
+Edit strip off the two framed windows.
+
+Two things this batch is worth remembering for, and both are about a diagnosis rather than a
+fix. **The Ctrl+Tab cause was never found**, and the fix ships anyway: the chord was measured
+arriving perfectly well on Linux with real XTEST keys, cycling panes exactly as designed, and
+the binding spells `Ctrl` literally so it cannot be misreading the platform. It is claimed in
+`library-window.ts`'s `before-input-event` now and forwarded over `IPC.libraryCyclePanes` —
+not because Chromium was proven to eat it, but because that is the earliest point in the
+window anything can be claimed from, which is the only kind of fix available for a bug that
+will not reproduce. It *replaces* the renderer's `keydown` branch rather than joining it:
+main calls `preventDefault`, so a second branch could only ever run when the first had
+already failed. The Windows menu bar, removed in the same batch, is the other candidate
+cause and would also be covered. **And the vault was never hardcoded** — it was guessed, once,
+and then never mentioned again, which reads identically from the outside.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a fixture vault holding an
+Obsidian-shaped `99 - Attachments` folder, a real two-page PDF from `pdflatex` and a genuine
+AVIF from `ffmpeg`: the Tags panel folding with a tag still selected *and* still unfolding
+when a different tag arrives; a note dragged onto Trash landing in `_trash` on disk with the
+row lit as a destination first, the folder it already sits in staying unlit, and no dialog in
+the way; a trashed note's menu being exactly Restore and Delete permanently, the restore
+picker opening with `00 Inbox` first, and the file arriving back in the Inbox; a whole folder
+trashed and restored with its note inside it, driven from the **toolbar** buttons rather than
+the menu; Delete permanently removing a file from disk behind a confirmation naming it; the
+orphans row listing the one unreferenced picture and not the referenced one, with no overlay
+on screen; **Copy link** putting `![[_attachments/wees.png]]` on the real X clipboard, read
+back with `xclip`; Delete absent from a file row outside the orphans pane; a disabled menu
+entry computing `opacity: 0.55` against an enabled one's `1`; a real `.avif` drawing at its
+true 120×80 (`naturalWidth`, not merely an `<img>` in the DOM — the B38 lesson); the ⧉ over
+an embedded PDF opening **no** in-app window while a `[[…pdf]]` chip still raises one; and
+Ctrl+Tab driven with **real XTEST key events** — the only way to exercise
+`before-input-event` at all, since `Input.dispatchKeyEvent` is injected past it — walking
+editor → tree → notes and back, with the renderer's own listener recording that the chord
+never reached it while a plain Tab still did.
+
+**Not confirmed live**: the Windows half of all of it — the menu bar, Ctrl+Tab, and the
+first-run chooser on a machine with exactly one business OneDrive (measured here only against
+a mocked-up one). And, the limitation every batch since the disk-change work has
+named, all fourteen in the *capture* window specifically. All are `TEST-PROTOCOL.md` items
+(§22).
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -869,7 +956,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B53, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B56, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

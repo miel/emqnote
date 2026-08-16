@@ -47,11 +47,14 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
     trashFolder: async () => ({ trashed: true }),
+    moveFolder: async (path) => path,
+    deleteFromTrash: async () => ({ deleted: true }),
     revealNote: () => {},
     noteEditable: async () => true,
     openInCapture: async () => true,
     newNote: () => {},
     onRefresh: () => () => {},
+    onCyclePanes: () => () => {},
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},
@@ -107,6 +110,8 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     linkCandidates: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
+    openInSystemViewer: async () => {},
+    copyText: async () => {},
     library,
   };
 

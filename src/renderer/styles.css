@@ -196,9 +196,19 @@ body {
   margin-bottom: 6px;
 }
 
+/* The date button in the When cell. `nowrap` is right — a date broken over two lines
+   would grow the header strip — but on its own it only stops the text wrapping, not the
+   text leaving the box: narrow the window and the timestamp painted straight out of its
+   field and across the one beside it. The cell itself shrinks correctly (`flex: 1;
+   min-width: 0` inside the grid's `minmax(0, 1fr)` track, see the note above), so all
+   that was missing is somewhere for the overflow to go. `.reader-path` in `library.css`
+   is the same three lines for the same reason. The full timestamp stays reachable
+   because the button carries it as its `title`. */
 .created {
   color: var(--muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
@@ -1103,8 +1113,16 @@ body {
   cursor: default;
 }
 
+/* `--muted` alone was not enough to say "you cannot click this". It is the same token
+   the shortcut column beside each label and the section headings above them already
+   use, so a disabled row landed in a colour the menu was full of anyway and read as an
+   ordinary entry that simply did nothing when clicked — which is how "Rename folder" on
+   the vault root got reported as broken rather than as unavailable. The opacity is on
+   top of the colour rather than instead of it: it dims the whole row, glyph and shortcut
+   included, and it is the one thing in the menu nothing else wears. */
 .context-menu-item:disabled {
   color: var(--muted);
+  opacity: 0.55;
   cursor: default;
 }
 

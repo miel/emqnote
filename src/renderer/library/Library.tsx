@@ -8,6 +8,8 @@ import {
   canRenameFolder as canRenameFolderAt,
   folderErrorOf,
   folderOf,
+  INBOX,
+  isInTrash,
   selectionKey,
   TRASH_FOLDER,
   type ConflictPair,
@@ -40,7 +42,10 @@ import { NotePicker } from "./NotePicker.js";
 import { MoveDialog } from "./MoveDialog.js";
 import { NoteList } from "./NoteList.js";
 import { FilePreview } from "./FilePreview.js";
-import { OrphanedAttachments } from "./OrphanedAttachments.js";
+// The one question "how is a link to this file spelled" is answered — the same function
+// `insert-attachment.ts` asks before writing one, so the file list's Copy link and the
+// editor's own insertion cannot drift into two spellings of one thing.
+import { isEmbeddableAttachment } from "../editor/attachment-view.js";
 import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
 import { Settings } from "./Settings.js";
 import { Splitter } from "./Splitter.js";
@@ -106,7 +111,16 @@ type Dialog =
    */
   | { kind: "relink"; count: number; action: Relinkable }
   | { kind: "duplicateTitle"; title: string; path: string; folder: string }
+  /**
+   * One thing out of `_trash`, for good. `label` is what to call it in the question — a
+   * note's title, a folder's name — and `path` is what actually goes, because the two are
+   * not the same string and naming a path at someone is not asking them anything.
+   */
+  | { kind: "deletePermanently"; path: string; label: string }
   | { kind: "problem"; message: string };
+
+/** What Restore is currently asking for a destination for — a trashed note, or a trashed folder. */
+type Restorable = { kind: "note" | "folder"; path: string };
 
 export function Library(): React.ReactElement {
   const app = useBootstrap();
@@ -150,6 +164,12 @@ export function Library(): React.ReactElement {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** The non-note files in the folder being browsed, and which one the reader is showing (B47). */
   const [files, setFiles] = useState<FileSummary[]>([]);
+  /**
+   * Whether that list is settled. Only the orphaned-attachment pane is ever anything but
+   * `"ready"`: a folder's files come back from one `readdir`, while the orphans are a
+   * question put to the whole index.
+   */
+  const [filesState, setFilesState] = useState<"ready" | "loading" | "failed">("ready");
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   /**
@@ -170,6 +190,12 @@ export function Library(): React.ReactElement {
    */
   const [diskEvent, setDiskEvent] = useState<VaultFileEvent | null>(null);
   const [moving, setMoving] = useState(false);
+  /**
+   * The trashed note or folder waiting to be told where to go back to. A separate piece
+   * of state from `moving` and not a fourth `Dialog`, because it opens `MoveDialog`
+   * rather than `Ask` — the same split `moving` already is.
+   */
+  const [restoring, setRestoring] = useState<Restorable | null>(null);
   // The note being dragged over the tree. Held here rather than in either component,
   // because the row that knows which note it is and the branch that has to decide
   // whether it will take it are on opposite sides of the window.
@@ -211,7 +237,6 @@ export function Library(): React.ReactElement {
   const cancelingTitle = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [orphanedAttachmentsOpen, setOrphanedAttachmentsOpen] = useState(false);
   const [link, setLink] = useState<{ href: string } | null>(null);
   /**
    * The note picker (B41). `prefix` is what the user typed to open it — `"[["` from the
@@ -222,6 +247,15 @@ export function Library(): React.ReactElement {
   const [tableGrid, setTableGrid] = useState<{ x: number; y: number } | null>(null);
   /** The note-list row context menu — Open/Move/Rename/Reveal/Delete on whatever row was right-clicked. */
   const [noteMenu, setNoteMenu] = useState<{ note: NoteSummary; x: number; y: number } | null>(
+    null,
+  );
+  /**
+   * The same for a file row (B47's list) — Copy link, Reveal, and Delete in the orphans
+   * pane only. Its own state beside `noteMenu` rather than a widened one: the two act on
+   * different types and share only three of nine items, and folding them together is how
+   * a file row ends up offering half a note's menu — precisely what B47 refuses.
+   */
+  const [fileMenu, setFileMenu] = useState<{ file: FileSummary; x: number; y: number } | null>(
     null,
   );
   /**
@@ -344,6 +378,31 @@ export function Library(): React.ReactElement {
   const loadNotes = useCallback(async (target: Selection) => {
     const query = searchQueryRef.current;
     const searching = query.trim() !== "";
+
+    // The orphaned-attachment pane is files and nothing else, and it is the one file list
+    // that is a *search* rather than a `readdir` — over the whole index, so it can take
+    // long enough to need saying so, and it can fail. Both states are the bug this pane's
+    // predecessor shipped with: there was no `.catch` at all, so a rejected `invoke` left
+    // "Looking…" on screen for the rest of the session with nothing to explain it.
+    if (!searching && target.kind === "orphans") {
+      setNotes([]);
+      setFiles([]);
+      setFilesState("loading");
+      try {
+        const found = await window.emqnote.library.orphanedAttachments();
+        // Only if the pane is still the one that asked. A slow scan finishing after the
+        // tree has moved on would otherwise drop a folder's own list on the floor.
+        if (selectionRef.current.kind !== "orphans") return;
+        setFiles(found);
+        setFilesState("ready");
+      } catch {
+        if (selectionRef.current.kind !== "orphans") return;
+        setFilesState("failed");
+      }
+      return;
+    }
+
+    setFilesState("ready");
     setNotes(
       searching
         ? await window.emqnote.library.search(query)
@@ -481,6 +540,19 @@ export function Library(): React.ReactElement {
    * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
    * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
    * `keydown` listener sees it here.
+   *
+   * **Ctrl-Tab does not arrive as a `keydown` at all any more: main claims it** in
+   * `library-window.ts`'s `before-input-event` and forwards it over
+   * `IPC.libraryCyclePanes`, which is why the ring below is a function rather than a
+   * branch of the key handler. That is a fix for a Windows report — the chord does nothing
+   * there — whose cause was never found: it was measured arriving perfectly well on Linux,
+   * and `keyMatches` spells `Ctrl` literally so it cannot be reading the platform wrong.
+   * `before-input-event` is simply the earliest point in the window that anything can be
+   * claimed from, ahead of every native accelerator and of the renderer both, so it is the
+   * one place a fix can stand without knowing what it is standing against. It is
+   * deliberately *not* a second route beside the keyboard one: main calls
+   * `preventDefault()`, so the `keydown` never fires, and a branch here that could only
+   * run when the forward had already failed would be a second answer to one gesture.
    */
   useEffect(() => {
     // Deliberately narrower than "anywhere inside the pane": a roving row is where a
@@ -509,39 +581,26 @@ export function Library(): React.ReactElement {
       root.querySelector<HTMLElement>(selector)?.focus();
     };
 
-    const onKeyDown = (event: KeyboardEvent): void => {
+    /**
+     * One step around the ring, from wherever focus is now. `true` when it moved.
+     *
+     * Answers for the plain-Tab case and for the forwarded chord alike, which is the
+     * whole reason it is a function: the two differ only in where the intent came from,
+     * and a second copy of this ternary is how they would come to differ in more.
+     */
+    const cycle = (backward: boolean): boolean => {
       const current = paneOf(document.activeElement);
 
-      if (event.key === "Escape" && current === "editor") {
-        event.preventDefault();
-        focusPane("notes");
-        return;
-      }
-
-      // Both bindings share `key === "Tab"` with the plain Tab case below (Ctrl-Tab and
-      // Ctrl-Shift-Tab are still "Tab" plus modifiers), so `cycling` has to be checked
-      // with `matches`, not by comparing `event.key` alone.
-      const cycling = matches(shortcut("cyclePanes"), event, app.isMac);
-      if (!cycling && event.key !== "Tab") return;
-      // Ctrl-Tab/Ctrl-Shift-Tab is also the browser's own "next/previous tab" gesture;
-      // claim it unconditionally so that never fires instead of the pane switch, even
-      // when there is no pane to move to below.
-      if (cycling) event.preventDefault();
       if (current === null) {
         // Focus sits on `document.body` (or some other control `paneOf` does not
         // recognise) after an ordinary click that lands nowhere in particular — the
-        // usual state, not an edge case. A plain Tab has a sensible browser default
-        // there and is left alone; Ctrl-Tab/Ctrl-Shift-Tab has no pane to "complete the
-        // loop" from, so it enters the first one instead of doing nothing.
-        if (cycling) focusPane(event.shiftKey ? "editor" : "tree");
-        return;
+        // usual state, not an edge case. There is no pane to "complete the loop" from,
+        // so enter the first one instead of doing nothing.
+        focusPane(backward ? "editor" : "tree");
+        return true;
       }
-      // ProseMirror's own keymap consumes a *plain* Tab/Shift-Tab inside the editor (see
-      // the comment above), so only `cycling` — never a bare Tab — ever reaches here from
-      // that pane, which is what lets it complete the loop back to the tree.
-      if (current === "editor" && event.key === "Tab" && !cycling) return;
 
-      const forward = !event.shiftKey;
+      const forward = !backward;
       const next: "tree" | "notes" | "editor" | null =
         current === "tree"
           ? forward
@@ -555,13 +614,45 @@ export function Library(): React.ReactElement {
               ? "tree"
               : "notes";
 
-      if (next === null) return;
-      event.preventDefault();
+      if (next === null) return false;
       focusPane(next);
+      return true;
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const current = paneOf(document.activeElement);
+
+      if (event.key === "Escape" && current === "editor") {
+        event.preventDefault();
+        focusPane("notes");
+        return;
+      }
+
+      // Plain Tab only: main claims Ctrl-Tab before this listener can see it (see the
+      // comment above the effect), so anything arriving here with Control held is not
+      // the pane cycle and is none of this handler's business.
+      if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
+      // ProseMirror's own keymap consumes a plain Tab inside the editor, so a bare Tab
+      // never reaches here from that pane — which is precisely why the chord exists and
+      // why it has to be claimed somewhere the editor's keymap is not.
+      if (current === "editor") return;
+      // Focus on nothing this recognises — after a click on the background, say. A plain
+      // Tab has a sensible browser default there and keeps it; only the chord enters a
+      // pane from nowhere, because it has no default worth preserving.
+      if (current === null) return;
+
+      if (cycle(event.shiftKey)) event.preventDefault();
     };
 
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const stopForward = window.emqnote.library.onCyclePanes(({ backward }) => {
+      cycle(backward);
+    });
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      stopForward();
+    };
   }, [app.isMac]);
 
   /**
@@ -952,6 +1043,8 @@ export function Library(): React.ReactElement {
         return `${app.t("link.duplicateTitle")} "${open.folder === "" ? app.t("library.vaultRoot") : open.folder}" — ${app.t("link.renameAnyway")}`;
       case "delete":
         return `"${open.title}" — ${app.t("ask.confirmDelete")}`;
+      case "deletePermanently":
+        return `"${open.label}" — ${app.t("ask.confirmDeletePermanently")}`;
     }
   };
 
@@ -1082,36 +1175,45 @@ export function Library(): React.ReactElement {
       return;
     }
 
-    if (next !== path) {
-      const rebase = (candidate: string): string =>
-        candidate === path || candidate.startsWith(`${path}/`)
-          ? next + candidate.slice(path.length)
-          : candidate;
-
-      // The open note keeps its caret and its undo history: only the path moved, and
-      // the document reload is keyed on `docToken`, which nothing here touches.
-      const current = openRef.current;
-      if (current !== null) {
-        const moved = { ...current, path: rebase(current.path) };
-        setOpen(moved);
-        openRef.current = moved;
-      }
-
-      if (selectionRef.current.kind === "folder") {
-        const target: Selection = {
-          kind: "folder",
-          path: rebase(selectionRef.current.path),
-        };
-        setSelection(target);
-        selectionRef.current = target;
-      }
-
-      setLastFolder(rebase(lastFolder));
-    }
+    rebaseOntoMovedFolder(path, next);
 
     await loadTree();
     await loadNotes(selectionRef.current);
     refreshFacets();
+  };
+
+  /**
+   * Follows a folder that changed place — renamed (B44), or restored out of the trash —
+   * with everything in this window that was pointing inside it.
+   *
+   * Shared by both callers rather than written out twice: the two operations differ in
+   * which main-side call they make and in nothing else this side can see, and a second
+   * copy is how one of the three things below gets forgotten on whichever path nobody
+   * exercised. The open note keeps its caret and its undo history — only its path moved,
+   * and the document reload is keyed on `docToken`, which nothing here touches.
+   */
+  const rebaseOntoMovedFolder = (from: string, to: string): void => {
+    if (from === to) return;
+
+    const rebase = (candidate: string): string =>
+      candidate === from || candidate.startsWith(`${from}/`)
+        ? to + candidate.slice(from.length)
+        : candidate;
+
+    const current = openRef.current;
+    if (current !== null) {
+      const moved = { ...current, path: rebase(current.path) };
+      setOpen(moved);
+      openRef.current = moved;
+    }
+
+    if (selectionRef.current.kind === "folder") {
+      const target: Selection = { kind: "folder", path: rebase(selectionRef.current.path) };
+      setSelection(target);
+      selectionRef.current = target;
+    }
+
+    setLastFolder(rebase(lastFolder));
   };
 
   /**
@@ -1212,14 +1314,112 @@ export function Library(): React.ReactElement {
     refreshFacets();
   };
 
+  /**
+   * Moves one note into `_trash` — the one route there, whether the ask came from the
+   * Delete menu item or from dragging a row onto the Trash row (`drag.ts`).
+   *
+   * Two ways to reach the trash would be two places for the lock check, the reload and
+   * the reader's own bookkeeping to disagree, which is the same argument `moveNoteTo`
+   * makes for the dialog and the drag being one function.
+   *
+   * The reader is only put away if it was showing *this* note: a row dragged out of the
+   * list is usually not the one being read, and closing what you are reading because
+   * something else was deleted is the reverse of what the gesture asked for. The tree
+   * reloads because the very first delete in a fresh vault is what creates `_trash` —
+   * without it the Trash row would not appear until something else refreshed the tree.
+   */
+  const trashNoteAt = async (notePath: string): Promise<void> => {
+    await window.emqnote.library.trashNote(notePath);
+
+    const current = openRef.current;
+    if (current !== null && current.path === notePath) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    await loadTree();
+    void loadNotes(selectionRef.current);
+  };
+
   const trash = async (): Promise<void> => {
     const current = openRef.current;
     if (current === null) return;
+    await trashNoteAt(current.path);
+  };
 
-    await window.emqnote.library.trashNote(current.path);
-    setOpen(null);
-    openRef.current = null;
-    void loadNotes(selectionRef.current);
+  /**
+   * Puts a trashed note or folder back somewhere real.
+   *
+   * Deliberately the ordinary move on both halves — `IPC.libraryMoveNote` never had a
+   * trash restriction, and `IPC.libraryMoveFolder` is the rename handler with one line
+   * swapped — rather than a "restore" that would have to know where things came from. The
+   * trash records nothing about that: `trashNote` flattens every note into one folder, so
+   * "put it back where it was" is a question with no answer on disk. Asking is both the
+   * honest thing and the more useful one, since a note is usually being fished out to be
+   * filed somewhere better than where it was.
+   */
+  const restoreTo = async (item: Restorable, target: string): Promise<void> => {
+    if (item.kind === "note") {
+      // Through `moveNoteTo`, so the link question is asked in exactly one place. It
+      // never actually asks here: `index-scan.ts` leaves the trash out on purpose, so
+      // nothing in the index resolves to a trashed note and `linkingNotes` comes back
+      // empty — which is the right answer rather than a coincidence worth routing around.
+      await moveNoteTo(item.path, target);
+      return;
+    }
+
+    // Same flush, same order, same reason as `renameFolderAt`: `writeAtomic` calls
+    // `mkdirSync` on the way, so a debounced save landing after the folder has moved
+    // would recreate it where it used to be — here, back inside `_trash`.
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (dirty) await save();
+
+    let next: string;
+    try {
+      next = await window.emqnote.library.moveFolder(item.path, target);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.moveFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    rebaseOntoMovedFolder(item.path, next);
+
+    await loadTree();
+    await loadNotes(selectionRef.current);
+    refreshFacets();
+  };
+
+  /**
+   * Deletes one thing out of the trash for good — the second permanent delete in the app
+   * and the first that names one thing (B24), which is why it only ever runs behind the
+   * confirmation `dialogTitle`'s `deletePermanently` case writes.
+   *
+   * The reader is put away whether or not it was showing exactly this path: a folder went
+   * with everything under it, and there is no way left to check against a path that no
+   * longer exists — the same unconditional close `clearTrash` makes, for the same reason.
+   */
+  const deletePermanently = async (path: string): Promise<void> => {
+    const result = await window.emqnote.library.deleteFromTrash(path);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.deletePermanentlyLocked") });
+      return;
+    }
+
+    const current = openRef.current;
+    if (current !== null && (current.path === path || current.path.startsWith(`${path}/`))) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    await loadTree();
+    await loadNotes(selectionRef.current);
   };
 
   /**
@@ -1277,6 +1477,31 @@ export function Library(): React.ReactElement {
       if (searchTimer.current !== null) clearTimeout(searchTimer.current);
       setSearchQuery("");
     }
+  };
+
+  /**
+   * The orphaned-attachment pane. Clears the search box for exactly `openTasks`' reason:
+   * a live query wins over the selection outright in `loadNotes`, so a half-typed one
+   * would leave the footer row lit with search results beside it. Carries no scope of its
+   * own — the question is about `_attachments/`, which is the one folder the tree cannot
+   * browse, so there is nothing to scope it to.
+   */
+  const openOrphans = (): void => {
+    if (searchQuery !== "") {
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+      // Written through the ref as well as the state, because the reload below runs in
+      // this same tick and `loadNotes` reads the ref to decide whether a query wins.
+      searchQueryRef.current = "";
+      setSearchQuery("");
+    }
+
+    // Picking the row while its pane is already showing is the retry route for the
+    // failure state, and it needs saying out loud: `selectionKey` answers `"orphans"`
+    // whatever object is set, so the effect that loads a selection never fires for it.
+    // Nothing else in the sidebar needs this — every other row either carries state that
+    // changes the key or is a folder you can only be standing on one of.
+    if (selectionRef.current.kind === "orphans") void loadNotes({ kind: "orphans" });
+    else setSelection({ kind: "orphans" });
   };
 
   /**
@@ -1373,7 +1598,13 @@ export function Library(): React.ReactElement {
           dragging={dragging}
           onDropNote={(notePath, folder) => {
             setDragging(null);
-            void moveNoteTo(notePath, folder);
+            // A drop on the Trash row is Delete, not a move to a folder that happens to
+            // be called `_trash`: it goes through the same `trashNoteAt` the menu item
+            // calls, so the two cannot answer differently about the lock or about what
+            // the reader does next. No confirmation, deliberately — trashing is a rename
+            // (B24), and Restore is the named way back.
+            if (folder === TRASH_FOLDER) void trashNoteAt(notePath);
+            else void moveNoteTo(notePath, folder);
           }}
           onSelect={(target) => {
             setSelection(target);
@@ -1402,6 +1633,17 @@ export function Library(): React.ReactElement {
               setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
             });
           }}
+          onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
+          onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
+          onDeleteFolderPermanently={(path) =>
+            setDialog({
+              kind: "deletePermanently",
+              path,
+              // The folder's own name, not its `_trash/...` path: the question is about a
+              // thing, and a path read back at someone is not a question.
+              label: path.split("/").pop() ?? path,
+            })
+          }
           onNewNoteIn={(folder) => window.emqnote.library.newNote(folder)}
           lastFolder={lastFolder}
           canRenameFolder={canRenameFolderAt(lastFolder)}
@@ -1411,10 +1653,15 @@ export function Library(): React.ReactElement {
           onOpenHelp={() => setHelpOpen(true)}
           onOpenTasks={openTasks}
           tasksSelected={selection.kind === "tasks"}
+          onOpenOrphans={openOrphans}
+          orphansSelected={selection.kind === "orphans"}
           isMac={app.isMac}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           deleteFolderLabel={app.t("library.deleteFolder")}
+          revealLabel={app.t("library.reveal")}
+          restoreLabel={app.t("library.restore")}
+          deletePermanentlyLabel={app.t("library.deletePermanently")}
           newLabel={app.t("library.new")}
           renameLabel={app.t("library.rename")}
           deleteLabel={app.t("library.delete")}
@@ -1422,6 +1669,7 @@ export function Library(): React.ReactElement {
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
           tasksLabel={app.t("library.tasks")}
+          orphansLabel={app.t("orphans.title")}
           trashLabel={app.t("library.trash")}
           tagsLabel={app.t("library.tags")}
           peopleLabel={app.t("library.people")}
@@ -1454,6 +1702,7 @@ export function Library(): React.ReactElement {
           <NoteList
             notes={sorted}
             files={files}
+            filesState={filesState}
             selected={open?.path ?? null}
             selectedFile={openFile}
             // A file and a note are one selection between them: the reader shows one
@@ -1487,6 +1736,7 @@ export function Library(): React.ReactElement {
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
+            onFileContextMenu={(file, x, y) => setFileMenu({ file, x, y })}
             isMac={app.isMac}
             locale={app.locale}
             t={app.t}
@@ -1698,31 +1948,125 @@ export function Library(): React.ReactElement {
         />
       )}
 
+      {restoring !== null && (
+        <MoveDialog
+          folders={folders}
+          // `folders` already leaves the trash and everything under it out, so there is
+          // nothing here to exclude — the thing being restored is by definition in a
+          // folder this list does not contain. `TRASH_FOLDER` is passed only because the
+          // prop is required and this is the truthful answer to "where is it now".
+          current={TRASH_FOLDER}
+          preferred={INBOX}
+          t={app.t}
+          onCancel={() => setRestoring(null)}
+          onMove={(target) => {
+            const item = restoring;
+            setRestoring(null);
+            void restoreTo(item, target);
+          }}
+        />
+      )}
+
       {noteMenu !== null && (
         <ContextMenu
           x={noteMenu.x}
           y={noteMenu.y}
           onClose={() => setNoteMenu(null)}
+          items={
+            // A note in the trash gets the two entries that mean anything there. Move,
+            // Rename and Duplicate would all work on it — nothing in main refuses a
+            // trashed path — which is exactly the problem: they are ways of tidying a
+            // vault, offered on a row that is not in it any more. Read off the path, the
+            // same way `FolderTree`'s own menu reads it, so no extra state travels with
+            // the row to say so.
+            isInTrash(folderOf(noteMenu.note.path))
+              ? [
+                  {
+                    label: app.t("library.restore"),
+                    onSelect: () => setRestoring({ kind: "note", path: noteMenu.note.path }),
+                  },
+                  {
+                    label: app.t("library.deletePermanently"),
+                    danger: true,
+                    onSelect: () =>
+                      setDialog({
+                        kind: "deletePermanently",
+                        path: noteMenu.note.path,
+                        label: noteMenu.note.title,
+                      }),
+                  },
+                ]
+              : [
+                  {
+                    label: app.t("library.open"),
+                    onSelect: () => void openNote(noteMenu.note.path),
+                  },
+                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  {
+                    label: app.t("library.rename"),
+                    onSelect: () => setEditingTitle(noteMenu.note.title),
+                  },
+                  { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
+                  {
+                    label: app.t("library.reveal"),
+                    onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),
+                  },
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
+                  },
+                ]
+          }
+        />
+      )}
+
+      {fileMenu !== null && (
+        <ContextMenu
+          x={fileMenu.x}
+          y={fileMenu.y}
+          onClose={() => setFileMenu(null)}
           items={[
             {
-              label: app.t("library.open"),
-              onSelect: () => void openNote(noteMenu.note.path),
+              // The same spelling `insert-attachment.ts` writes, decided by the same
+              // `isEmbeddableAttachment` — a picture or a PDF is `![[…]]` and draws in the
+              // note, everything else is `[[…]]` and is a chip that opens. Copying and
+              // inserting must not be able to disagree about what a link to one file
+              // looks like, which is why the question is asked in one place.
+              label: app.t("library.copyLink"),
+              onSelect: () =>
+                void window.emqnote.copyText(
+                  isEmbeddableAttachment(fileMenu.file.name)
+                    ? `![[${fileMenu.file.path}]]`
+                    : `[[${fileMenu.file.path}]]`,
+                ),
             },
-            { label: app.t("library.move"), onSelect: () => setMoving(true) },
-            {
-              label: app.t("library.rename"),
-              onSelect: () => setEditingTitle(noteMenu.note.title),
-            },
-            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
             {
               label: app.t("library.reveal"),
-              onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),
+              onSelect: () => window.emqnote.library.revealNote(fileMenu.file.path),
             },
-            {
-              label: app.t("library.delete"),
-              danger: true,
-              onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
-            },
+            // Delete is offered in the orphaned-attachment pane and nowhere else. A
+            // permanently visible, permanently disabled Delete on every picture in a
+            // folder is noise, and B47's own reasoning is that a file row answering half
+            // a note's menu reads worse than one that plainly is not a note — this is the
+            // one pane where throwing the file away is the whole point of being there.
+            ...(selection.kind === "orphans"
+              ? [
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => {
+                      void window.emqnote.library
+                        .trashAttachment(fileMenu.file.path)
+                        .then(() => {
+                          // The reader is showing the file that just went into the trash.
+                          if (openFile === fileMenu.file.path) setOpenFile(null);
+                          void loadNotes(selectionRef.current);
+                        });
+                    },
+                  },
+                ]
+              : []),
           ]}
         />
       )}
@@ -1732,23 +2076,49 @@ export function Library(): React.ReactElement {
           x={readerMenu.x}
           y={readerMenu.y}
           onClose={() => setReaderMenu(null)}
-          items={[
-            {
-              label: app.t("library.rename"),
-              onSelect: () => setEditingTitle(open.title),
-            },
-            { label: app.t("library.move"), onSelect: () => setMoving(true) },
-            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
-            {
-              label: app.t("library.reveal"),
-              onSelect: () => window.emqnote.library.revealNote(open.path),
-            },
-            {
-              label: app.t("library.delete"),
-              danger: true,
-              onSelect: () => setDialog({ kind: "delete", title: open.title }),
-            },
-          ]}
+          items={
+            // The same two entries the note list's menu shows for a trashed note, and
+            // this is where they become *reachable*: the note list's copy opens only on
+            // right-click or `Mod-Shift-M`, and `--click-button` can drive neither, while
+            // this menu hangs off a plain "Actions" button — so `"Actions>Restore"` is a
+            // real route and CLAUDE.md's rule that nothing lives exclusively behind a
+            // right-click menu keeps holding. Read off the open note's own path rather
+            // than the selection, which may be standing somewhere else entirely.
+            isInTrash(folderOf(open.path))
+              ? [
+                  {
+                    label: app.t("library.restore"),
+                    onSelect: () => setRestoring({ kind: "note", path: open.path }),
+                  },
+                  {
+                    label: app.t("library.deletePermanently"),
+                    danger: true,
+                    onSelect: () =>
+                      setDialog({
+                        kind: "deletePermanently",
+                        path: open.path,
+                        label: open.title,
+                      }),
+                  },
+                ]
+              : [
+                  {
+                    label: app.t("library.rename"),
+                    onSelect: () => setEditingTitle(open.title),
+                  },
+                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
+                  {
+                    label: app.t("library.reveal"),
+                    onSelect: () => window.emqnote.library.revealNote(open.path),
+                  },
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => setDialog({ kind: "delete", title: open.title }),
+                  },
+                ]
+          }
         />
       )}
 
@@ -1803,11 +2173,13 @@ export function Library(): React.ReactElement {
           confirmLabel={
             dialog.kind === "delete" || dialog.kind === "deleteFolder"
               ? app.t("library.delete")
-              : dialog.kind === "clearTrash"
-                ? app.t("library.clearTrash")
-                : dialog.kind === "relink"
-                  ? app.t("link.update")
-                  : app.t("ask.ok")
+              : dialog.kind === "deletePermanently"
+                ? app.t("library.deletePermanently")
+                : dialog.kind === "clearTrash"
+                  ? app.t("library.clearTrash")
+                  : dialog.kind === "relink"
+                    ? app.t("link.update")
+                    : app.t("ask.ok")
           }
           // "Leave them" rather than "Cancel" for the link question, because that button
           // does not cancel anything — the move or the rename happens either way. See the
@@ -1816,7 +2188,8 @@ export function Library(): React.ReactElement {
           danger={
             dialog.kind === "delete" ||
             dialog.kind === "clearTrash" ||
-            dialog.kind === "deleteFolder"
+            dialog.kind === "deleteFolder" ||
+            dialog.kind === "deletePermanently"
           }
           dismissOnly={dialog.kind === "problem"}
           onCancel={() => {
@@ -1829,6 +2202,7 @@ export function Library(): React.ReactElement {
             setDialog(null);
             if (current.kind === "delete") void trash();
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
+            if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);
@@ -1895,13 +2269,6 @@ export function Library(): React.ReactElement {
           // reach disk first — and into the vault it was typed in, not the new one.
           onBeforeSwitch={flushPendingSave}
           onClose={() => setSettingsOpen(false)}
-          // Settings closes first, then Orphaned Attachments opens — sequenced rather
-          // than both flags flipped at once, so the two modals are never stacked on top
-          // of each other even for the one render in between.
-          onOpenOrphanedAttachments={() => {
-            setSettingsOpen(false);
-            setOrphanedAttachmentsOpen(true);
-          }}
         />
       )}
 
@@ -1913,10 +2280,6 @@ export function Library(): React.ReactElement {
           t={app.t}
           onClose={() => setHelpOpen(false)}
         />
-      )}
-
-      {orphanedAttachmentsOpen && (
-        <OrphanedAttachments t={app.t} onClose={() => setOrphanedAttachmentsOpen(false)} />
       )}
     </div>
   );

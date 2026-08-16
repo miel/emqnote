@@ -26,7 +26,11 @@ const ROOT: FolderNode = {
 
 const SELECTION: Selection = { kind: "folder", path: "00 Inbox" };
 
-function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
+function renderFooter(
+  tasksSelected = false,
+  root: FolderNode = ROOT,
+  orphansSelected = false,
+): string {
   return renderToStaticMarkup(
     createElement(FolderTree, {
       root,
@@ -40,6 +44,9 @@ function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
       onNewFolder: () => {},
       onRenameFolder: () => {},
       onDeleteFolder: () => {},
+      onRevealFolder: () => {},
+      onRestoreFolder: () => {},
+      onDeleteFolderPermanently: () => {},
       onNewNoteIn: () => {},
       lastFolder: "00 Inbox",
       canRenameFolder: true,
@@ -49,10 +56,15 @@ function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
       onOpenHelp: () => {},
       onOpenTasks: () => {},
       tasksSelected,
+      onOpenOrphans: () => {},
+      orphansSelected,
       isMac: false,
       newFolderLabel: "New folder",
       renameFolderLabel: "Rename folder",
       deleteFolderLabel: "Delete folder",
+      revealLabel: "Reveal",
+      restoreLabel: "Restore",
+      deletePermanentlyLabel: "Delete permanently",
       newLabel: "New",
       renameLabel: "Rename",
       deleteLabel: "Delete",
@@ -60,6 +72,7 @@ function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
       helpLabel: "Help label",
       settingsLabel: "Settings label",
       tasksLabel: "Tasks label",
+      orphansLabel: "Orphans label",
       trashLabel: "Trash label",
       tagsLabel: "Tags label",
       peopleLabel: "People label",
@@ -71,27 +84,32 @@ function renderFooter(tasksSelected = false, root: FolderNode = ROOT): string {
 }
 
 describe("FolderTree footer order (bug 6)", () => {
-  it("puts Tasks before Settings and Trash after Help", () => {
+  it("puts Tasks before Settings, then Help, Orphaned attachments and Trash", () => {
     const html = renderFooter();
     const tasksAt = html.indexOf("Tasks label");
     const settingsAt = html.indexOf("Settings label");
     const helpAt = html.indexOf("Help label");
+    const orphansAt = html.indexOf("Orphans label");
     const trashAt = html.indexOf("Trash label");
 
     expect(tasksAt).toBeGreaterThan(-1);
     expect(settingsAt).toBeGreaterThan(-1);
     expect(helpAt).toBeGreaterThan(-1);
+    expect(orphansAt).toBeGreaterThan(-1);
     expect(trashAt).toBeGreaterThan(-1);
 
-    // Tags/People precede all four (unchanged) — checked via Tasks, the first of the
-    // four, since it is also the earliest of the swapped pair.
+    // Tags/People precede all five (unchanged) — checked via Tasks, the first of them,
+    // since it is also the earliest of the swapped pair.
     expect(html.indexOf("Tags label")).toBeLessThan(tasksAt);
     expect(html.indexOf("People label")).toBeLessThan(tasksAt);
 
     // The swap itself: Tasks now comes before Settings/Help, and Trash comes after.
+    // Orphaned attachments sits between Help and Trash — where it was asked for, and
+    // beside the only two other rows down here that are not filters.
     expect(tasksAt).toBeLessThan(settingsAt);
     expect(settingsAt).toBeLessThan(helpAt);
-    expect(helpAt).toBeLessThan(trashAt);
+    expect(helpAt).toBeLessThan(orphansAt);
+    expect(orphansAt).toBeLessThan(trashAt);
   });
 
   it("still highlights the Tasks row when the Tasks view is selected", () => {
@@ -159,14 +177,29 @@ describe("only folders inside the trash are dimmed", () => {
   });
 });
 
-describe("Orphaned attachments removed from the tree footer (bug 7)", () => {
-  // `FolderTree`'s `Props` no longer declares `onOpenOrphanedAttachments` or
-  // `orphanedAttachmentsLabel` at all — passing either from a caller (as `Library.tsx`
-  // used to) is a compile-time error now, which `npm run typecheck` guards. What is
-  // left to check at runtime is that the row itself is gone.
-  it("renders no orphaned-attachments row or label at all", () => {
+/**
+ * The inverse of what this file used to assert, deliberately.
+ *
+ * Bug 7 (6 August 2026) moved orphaned attachments off this footer into a row inside
+ * Settings, on the argument that it is an occasional action rather than an everyday
+ * destination. It is back on 16 August 2026 as neither: a `Selection` of its own, whose
+ * pane is B47's file list and whose reader is B47's preview — which makes it a place in
+ * the vault, which is exactly what the sidebar is a list of.
+ */
+describe("Orphaned attachments is a footer row again", () => {
+  it("renders a row carrying its label", () => {
+    expect(renderFooter()).toContain("Orphans label");
+  });
+
+  it("highlights that row when its pane is what is showing", () => {
+    const html = renderFooter(false, ROOT, true);
+    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Orphans label"));
+    expect(html.slice(rowStart, html.indexOf("Orphans label"))).toContain("branch-on");
+  });
+
+  it("leaves it unhighlighted otherwise", () => {
     const html = renderFooter();
-    expect(html).not.toContain("orphan");
-    expect(html).not.toContain("Orphan");
+    const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Orphans label"));
+    expect(html.slice(rowStart, html.indexOf("Orphans label"))).not.toContain("branch-on");
   });
 });
