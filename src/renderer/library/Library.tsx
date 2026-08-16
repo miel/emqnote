@@ -1439,26 +1439,50 @@ export function Library(): React.ReactElement {
    * longer exists — the same unconditional close `clearTrash` makes, for the same reason.
    */
   const deletePermanently = async (path: string): Promise<void> => {
+    // Let go *before* asking main to delete, not after. This window may be showing a file
+    // from inside the folder about to go — B47 put a preview in the reader and the trash is
+    // browsable — and on Windows a handle open inside a folder is what stops the folder
+    // being removed. A finished `<img>` load holds nothing, so this is not claimed as the
+    // cause of anything; an in-flight one does, and the state change is free.
+    //
+    // Deliberately *not* waited on with `requestAnimationFrame`: an occluded or minimised
+    // window is throttled and may not paint for as long as it stays that way, which turned
+    // Delete permanently into a button that hung and did nothing at all — the very bug this
+    // is in the middle of fixing, reintroduced from the other end. Found by running it.
+    // These calls sit in the click's own task, so React commits them before the `invoke`
+    // below can resolve, which is all this needs.
+    const current = openRef.current;
+    if (current !== null && (current.path === path || current.path.startsWith(`${path}/`))) {
+      setOpen(null);
+      openRef.current = null;
+    }
+    setOpenFile(null);
+
     const result = await window.emqnote.library.deleteFromTrash(path);
     if (result.locked === true) {
       setDialog({ kind: "problem", message: app.t("library.deletePermanentlyLocked") });
       return;
     }
-    // Not a lock this app holds but one the operating system reports — a folder Windows
-    // will not remove because something else has it open. Main answers rather than
-    // rejecting, because a rejection here went nowhere: this is called as `void …`, so
-    // the dialog closed and the folder stayed, which is what "does not work" meant.
+    // Not a lock this app holds but one the operating system reports. Main answers rather
+    // than rejecting, because a rejection here went nowhere: this is called as `void …`,
+    // so the dialog closed and the folder stayed, which is what "does not work" meant.
+    //
+    // The message carries `reason` verbatim — an error code and a path, in a dialog, which
+    // is not how this app talks. It earns it: B57 removed the app's own handle from the
+    // picture and the report came back word for word the same, so the next one has to
+    // arrive naming what the filesystem said and which entry said it.
     if (result.failed === true) {
-      setDialog({ kind: "problem", message: app.t("library.deletePermanentlyFailed") });
+      setDialog({
+        kind: "problem",
+        message:
+          app.t("library.deletePermanentlyFailed") +
+          (result.reason === undefined
+            ? ""
+            : `\n\n${result.reason.code} — ${result.reason.path}`),
+      });
       await loadTree();
       await loadNotes(selectionRef.current);
       return;
-    }
-
-    const current = openRef.current;
-    if (current !== null && (current.path === path || current.path.startsWith(`${path}/`))) {
-      setOpen(null);
-      openRef.current = null;
     }
 
     await loadTree();
@@ -1488,7 +1512,14 @@ export function Library(): React.ReactElement {
     // be said, or the trash quietly still has something in it after a confirmation that
     // named a count.
     if (emptied.failed > 0) {
-      setDialog({ kind: "problem", message: app.t("library.clearTrashFailed") });
+      setDialog({
+        kind: "problem",
+        message:
+          app.t("library.clearTrashFailed") +
+          (emptied.firstFailure === undefined
+            ? ""
+            : `\n\n${emptied.firstFailure.code} — ${emptied.firstFailure.path}`),
+      });
     }
   };
 

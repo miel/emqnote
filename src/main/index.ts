@@ -99,6 +99,7 @@ import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import { findUnlinkedAttachments } from "./unlinked-attachments.js";
+import { probeTrashPath, reportTrashProbe } from "./trash-probe.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import {
   attachmentNameFromUrl,
@@ -196,7 +197,10 @@ const launch = readLaunchOptions();
 // needs it for the same reason again: it exists to be run against the everyday vault,
 // on demand, without first quitting the resident app.
 const bypassesSingleInstance =
-  launch.selfTestRounds > 0 || launch.dumpClipboard !== null || launch.thumbnailProbe !== null;
+  launch.selfTestRounds > 0 ||
+  launch.dumpClipboard !== null ||
+  launch.thumbnailProbe !== null ||
+  launch.trashProbe !== null;
 if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -489,6 +493,14 @@ async function main(): Promise<void> {
     }
     const code = await runThumbnailProbe(vault, thumbnailCacheDir(), launch.thumbnailProbe);
     app.exit(code);
+    return;
+  }
+
+  // Alongside the resident instance, like the probes above it — and here that is the
+  // point rather than a convenience: if the delete only works with emqnote quit, the app
+  // is the holder, and running this both ways is how that gets settled.
+  if (launch.trashProbe !== null) {
+    app.exit(reportTrashProbe(probeTrashPath(loadSettings().vaultPath, launch.trashProbe)));
     return;
   }
 
@@ -1717,6 +1729,12 @@ function registerLibraryIpc(): void {
 
     const emptied = emptyTrash(vault);
     notifyLibrary();
+    if (emptied.firstFailure !== undefined) {
+      console.error(
+        `Could not empty the whole trash: ${emptied.firstFailure.code} at ` +
+          `${emptied.firstFailure.path} — ${emptied.firstFailure.message}`,
+      );
+    }
     return emptied;
   });
 
@@ -1791,24 +1809,31 @@ function registerLibraryIpc(): void {
       return { deleted: false, locked: true };
     }
 
+    let outcome;
     try {
-      deleteFromTrash(vault, path);
+      outcome = deleteFromTrash(vault, path);
     } catch (error) {
-      // Something else on the machine has it — on Windows that is a folder, never a
-      // file, and it is the whole of the reported bug: this threw, the rejection died in
-      // the renderer's `void` call, the dialog closed and the folder was still there.
-      // `REMOVE_OPTIONS` has already spent a second retrying by the time this runs.
-      //
-      // Logged as well as answered, because the other way in here is `deleteFromTrash`'s
-      // own guard refusing a path that is not inside the trash at all — a different
-      // thing entirely, and one the message on screen deliberately does not try to say.
-      console.warn(`Could not delete ${path} from the trash:`, error);
-      notifyLibrary();
+      // The only way out of `deleteFromTrash` that still throws is its own guard refusing
+      // a path that is not inside `_trash` at all — nothing a person can act on, and
+      // nothing the message on screen tries to explain. The filesystem refusing is not an
+      // exception any more; it comes back as `outcome` below, named.
+      console.error(`Refused to delete ${path} from the trash:`, error);
       return { deleted: false, failed: true };
     }
 
     notifyLibrary();
-    return { deleted: true };
+    if (outcome.removed) return { deleted: true };
+
+    // Logged with the whole error and answered with the short form. The `code` is the
+    // point: B57 removed this app's own handle from the picture and the report came back
+    // unchanged, so the next one has to arrive with the operating system's own word for
+    // what happened, and with the entry that refused rather than the folder that was
+    // asked for.
+    console.error(
+      `Could not delete ${path} from the trash: ${outcome.failure.code} at ` +
+        `${outcome.failure.path} — ${outcome.failure.message}`,
+    );
+    return { deleted: false, failed: true, reason: outcome.failure };
   });
 
   ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {

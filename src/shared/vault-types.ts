@@ -184,6 +184,20 @@ export type Selection =
   // folder, which is why it is the one folder the tree cannot browse).
   | { kind: "unlinked" };
 
+/**
+ * Why something in `_trash` would not go, when the filesystem refuses.
+ *
+ * Crosses IPC, so it lives here rather than beside the code that produces it
+ * (`main/trash-delete.ts`). The `code` is the operating system's own word — `EPERM`,
+ * `EBUSY`, `ENOTEMPTY` — and `path` is the *entry* that refused, which for a folder is
+ * almost always one file inside it rather than the folder that was asked for.
+ */
+export interface RemovalFailure {
+  path: string;
+  code: string;
+  message: string;
+}
+
 /** Stable string form, for React keys, highlight comparison and effect dependencies. */
 export function selectionKey(selection: Selection): string {
   if (selection.kind === "folder") return `folder:${selection.path}`;

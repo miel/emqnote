@@ -6,7 +6,6 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -39,6 +38,11 @@ import {
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
 import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
+import {
+  removeFromTrash,
+  type RemovalFailure,
+  type RemovalOutcome,
+} from "./trash-delete.js";
 import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
 
 /**
@@ -749,37 +753,17 @@ export function trashNote(vault: string, notePath: string): string {
 }
 
 /**
- * How `rmSync` is called by the two functions below, and the only place either of them
- * differs by platform.
- *
- * Node's default is `maxRetries: 0`, and its Windows backoff for EBUSY, EPERM, EMFILE,
- * ENFILE and ENOTEMPTY only engages above zero — `force: true` suppresses ENOENT and
- * nothing else. So one transient lock was an immediate hard failure, which is what
- * "permanently deleting a folder does not work" meant: OneDrive, Explorer, an antivirus
- * scanner or this app's own watcher (see `index-watch.ts`'s `pollingOptions`) can each
- * hold a directory for a moment, and a folder is the only thing they hold — which is
- * exactly why deleting a *file* out of the trash always worked.
- *
- * A second of retries, not more: past that it is not transient, and the caller has a
- * message to show.
- */
-const REMOVE_OPTIONS = {
-  recursive: true,
-  force: true,
-  maxRetries: 10,
-  retryDelay: 100,
-} as const;
-
-/**
  * What emptying the trash actually managed.
  *
- * `failed` is not an error code — it is a count, because one locked folder must not stop
- * the entries beside it from going. The caller has something to say either way: how much
- * went, and whether anything stayed.
+ * `failed` is a count, not an error: one entry that will not go must not stop the ones
+ * beside it. `firstFailure` is the other half — a count alone tells someone that
+ * something is wrong and nothing about what, which is exactly the position the second
+ * report of this bug left everyone in.
  */
 export interface TrashEmptied {
   removed: number;
   failed: number;
+  firstFailure?: RemovalFailure;
 }
 
 /**
@@ -806,19 +790,21 @@ export function emptyTrash(vault: string): TrashEmptied {
   const entries = readdirSync(trashDirectory);
   let removed = 0;
   let failed = 0;
+  let firstFailure: RemovalFailure | undefined;
   for (const entry of entries) {
-    try {
-      rmSync(join(trashDirectory, entry), REMOVE_OPTIONS);
+    // Counted, never thrown. Stopping at the first entry that will not go would leave the
+    // rest of the trash behind on account of one folder, and the caller has something to
+    // say either way. The guard above is the failure that still throws: that one means
+    // this was never the trash, which is not a thing to carry on past.
+    const outcome = removeFromTrash(vault, join(trashDirectory, entry));
+    if (outcome.removed) {
       removed += 1;
-    } catch {
-      // Held by something else — counted, not thrown. Stopping here would leave the rest
-      // of the trash behind on account of one folder, and the caller is going to say
-      // something about it either way. The guard above is the failure that still throws:
-      // that one means this was never the trash, which is not a thing to carry on past.
-      failed += 1;
+      continue;
     }
+    failed += 1;
+    firstFailure ??= outcome.failure;
   }
-  return { removed, failed };
+  return { removed, failed, ...(firstFailure === undefined ? {} : { firstFailure }) };
 }
 
 /**
@@ -839,9 +825,9 @@ export function emptyTrash(vault: string): TrashEmptied {
  * real those are the same, and for a link inside the trash pointing at another file
  * inside it, removing the link is what was asked for.
  */
-export function deleteFromTrash(vault: string, path: string): void {
+export function deleteFromTrash(vault: string, path: string): RemovalOutcome {
   const target = join(vault, path);
-  if (!existsSync(target)) return;
+  if (!existsSync(target)) return { removed: true };
 
   const realTrash = join(realpathSync(vault), TRASH);
   if (realpathSync(join(vault, TRASH)) !== realTrash) {
@@ -855,7 +841,7 @@ export function deleteFromTrash(vault: string, path: string): void {
     throw new Error("refusing to delete a path outside the vault's own trash folder");
   }
 
-  rmSync(target, REMOVE_OPTIONS);
+  return removeFromTrash(vault, target);
 }
 
 /**

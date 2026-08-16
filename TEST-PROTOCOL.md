@@ -772,6 +772,29 @@ real business OneDrive can say what it is.
 
 ---
 
+## 24. The trash delete, second attempt (16 August 2026)
+
+**This section exists because §23a failed.** B57 removed this app's own directory handle
+and the report came back word for word the same, so nothing here should be read as "the fix
+is in, please confirm". What shipped this time is a *question that answers itself*: the
+refusal now carries the operating system's own error code and names the file that refused,
+and `--trash-probe` walks the folder without deleting anything.
+
+If 24a fails again, **the failure message is now the report** — copy it verbatim, run 24c,
+and paste both. That is enough to settle it without another round of guessing.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 24a | **Windows.** Put a folder in the trash, then **Delete permanently**, and confirm | It goes, and is gone in Explorer. If it does not, a dialog appears ending in a line like `EBUSY — _trash\Alpha\offerte.pdf`. **Copy that line exactly** — the code and the path are the whole of what is being asked for |  |
+| 24b | If 24a failed: quit emqnote from the tray and delete the same folder in Explorer | If it goes now, this app is holding it after all and the next fix is in the app. If Explorer refuses too, it is not — that is a different fix, and just as useful to know |  |
+| 24c | If 24a failed: with emqnote running again, `emqnote --trash-probe="_trash\<folder>"` from a terminal | A line per entry, then a summary. It deletes nothing, so it is safe to run repeatedly. Paste the whole output |  |
+| 24d | **Windows.** Delete a *file* out of the trash | Still works, as it always did. If this ever starts failing too, say so — it would mean the cause has moved |  |
+| 24e | **Clear trash** with something in it that will not go | The rest of the trash empties anyway, and one dialog names what stayed. Nothing should be silently left behind without a word |  |
+| 24f | Anywhere. Open a note in the trash, then Delete permanently on the folder holding it | The reader lets go first, so the delete is not blocked by this window's own preview. No stale reader afterwards either |  |
+| 24g | **Windows.** Delete permanently with the library window minimised behind something, then bring it back | It really deleted. The first version of the "let go first" change waited for a frame, which never comes to a throttled window — the button did nothing at all |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -781,13 +804,13 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s or §23j fails,
+§18x, §19u, §20m, §22s, §23j or §24a fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make. **§22a, §22b, §22c and now §23a–§23d
+judgements about how something feels or reads, which no script can make. **§22a, §22b, §22c, §23a–§23d and §24a–§24d
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours. §22b is the
 sharpest of them, because the bug it fixes did not reproduce here at all; §23c is a different

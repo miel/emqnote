@@ -10,6 +10,7 @@ import type {
   LinkingNoteSummary,
   NoteSummary,
   OpenedNote,
+  RemovalFailure,
   SaveNoteRequest,
   ScanProgress,
   Selection,
@@ -415,7 +416,12 @@ export interface LibraryApi {
    * threw on the first failure and the rejection died in a `void` call, which read as
    * the button doing nothing at all.
    */
-  emptyTrash: () => Promise<{ removed: number; failed: number; locked?: boolean }>;
+  emptyTrash: () => Promise<{
+    removed: number;
+    failed: number;
+    locked?: boolean;
+    firstFailure?: RemovalFailure;
+  }>;
   createFolder: (parent: string, name: string) => Promise<string>;
   /**
    * Renames a folder in place and answers with its new path. Rejects rather than
@@ -453,7 +459,13 @@ export interface LibraryApi {
    */
   deleteFromTrash: (
     path: string,
-  ) => Promise<{ deleted: boolean; locked?: boolean; failed?: boolean }>;
+  ) => Promise<{
+    deleted: boolean;
+    locked?: boolean;
+    failed?: boolean;
+    /** What the filesystem said, and about which entry — see `trash-delete.ts`. */
+    reason?: RemovalFailure;
+  }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;

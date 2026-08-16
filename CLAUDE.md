@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1317 tests
+npm test               # vitest run — 1335 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -46,6 +46,20 @@ emqnote.exe --selftest=50 --vault=%TEMP%\emqnote-proef
 ```
 
 Runs on the *packaged* app. Measures hotkey → painted caret 50 times, then really types a note and checks a correct file lands in the Inbox. Exits with a status code, so it works in CI. Results go to `%LOCALAPPDATA%\emqnote\` / `~/Library/Application Support/emqnote/` as `selftest-result.json` plus `latency.log`. Flags are preferred over env vars because `set EMQNOTE_SELFTEST=50` only works in `cmd` — PowerShell silently ignores it. Other flags: `--library`, `--screenshot=<path>`, `--open-note=<title fragment>`, `--click-button=<label>`. `--screenshot` on its own photographs the *capture* window; with `--library` it photographs the library. `--click-button` takes a `>`-separated sequence, so `--click-button="Tags>#klantx"` unfolds the tag list and then picks one, and it matches folder and filter rows as well as buttons.
+
+```bash
+emqnote --trash-probe="_trash/Alpha"
+```
+
+Says why something in `_trash` will not delete, per entry: what it is, whether it is
+read-only, and whether another process has it open. **It deletes nothing** — the evidence is
+the point on the one operation with no way back. It exists because "permanently deleting a
+folder does not work" survived its first fix (B57): at that point guessing has had its turn.
+Two things it cannot see are printed alongside the findings rather than left implicit — a
+handle on a *directory* (which is what B57 was about) and, off Windows, anything at all
+about holders, locking there being advisory. Runs alongside the resident instance like the
+probes below, and that is the experiment rather than a convenience: if the delete works with
+emqnote quit, the app is the holder.
 
 ```bash
 emqnote --thumbnail-probe="2026-08-04-1030-offerte.pdf" --vault=/path/to/vault
@@ -615,17 +629,58 @@ vault every two seconds, forever — because the alternative is an app that bloc
 tool its own vault lives on. `awaitWriteFinish` still applies in polling mode, so the reason
 it is set (OneDrive writing a synced file over several passes) is unaffected.
 
-**Nothing this app deletes gets one attempt.** `vault-io.ts`'s `REMOVE_OPTIONS` gives
-`rmSync` `maxRetries: 10, retryDelay: 100`: Node's default is zero, and its Windows backoff
-for EBUSY/EPERM/ENOTEMPTY only engages above zero — `force: true` suppresses `ENOENT` and
-nothing else — so one transient lock was an immediate hard failure. And a failure has to
-arrive somewhere: both handlers answer (`{ deleted: false, failed: true }`,
-`{ removed, failed }`) rather than rejecting, because the renderer calls them as `void …`,
-so a rejection became an unhandled promise rejection, the dialog closed, and the folder was
-still there — which is what "does not work" looked like from the outside. `emptyTrash` counts
-what would not go instead of stopping at it: one locked folder must not keep the rest of the
-trash. `IPC.libraryEmptyTrash` also gained the `writer.activePath()` guard its sibling
-already had.
+**Nothing this app deletes gets one attempt, and a refusal names itself.**
+`trash-delete.ts` is the whole of permanent deletion now, and it exists because the *first*
+fix for "deleting a folder from the trash does not work" (B57, above) shipped and the report
+came back word for word unchanged. That is how a diagnosis is shown to have been incomplete
+rather than wrong — chokidar really did hold a handle per directory, and removing it really
+did not fix this. So the code stopped asserting a cause and started reporting one. Four
+parts, and the last two are the ones that matter:
+
+- `REMOVE_OPTIONS` gives `rmSync` `maxRetries: 10, retryDelay: 100`. Node's default is zero
+  and its Windows backoff for EBUSY/EPERM/ENOTEMPTY only engages above zero; `force: true`
+  suppresses `ENOENT` and nothing else.
+- `clearReadOnly` clears the read-only attribute first, because **retrying is no use against
+  an attribute** — it is still read-only a second later, and `EPERM` from one reads exactly
+  like a lock held by another process. Files everywhere; *directories only on `win32`*,
+  where `RemoveDirectory` refuses one carrying `FILE_ATTRIBUTE_READONLY`. On POSIX a
+  directory's mode is a real permission this app has no business rewriting on its way past.
+- **`findRemovalCulprit` names the entry that refused, not the folder that was asked for.**
+  It runs only after `rmSync` has already failed, walking bottom-up and removing as it goes,
+  so it costs nothing on the path that works. "`_trash/Alpha/offerte.pdf` — EBUSY" points at
+  whatever has that file open; "this folder could not be removed" points at nothing.
+- Both handlers **answer** (`{ deleted: false, failed: true, reason }`,
+  `{ removed, failed, firstFailure }`) rather than rejecting, because the renderer calls
+  them as `void …` — a rejection became an unhandled promise rejection, the dialog closed,
+  and the folder was still there, which is what "does not work" looked like from outside.
+  The dialog carries the code and the path verbatim. An error code in a dialog is not how
+  this app talks, and it earns the exception: the next report has to arrive with the
+  operating system's own word for what happened.
+
+`emptyTrash` counts what would not go instead of stopping at it — one locked folder must not
+keep the rest of the trash — and `IPC.libraryEmptyTrash` gained the `writer.activePath()`
+guard its sibling already had. **The message no longer claims a holder**: it says the
+operating system refused and leaves the code to say why, because the version that asserted
+"something else has it open" was wrong for every `EACCES`.
+
+**`--trash-probe=<path>` is how the next round gets settled** (`trash-probe.ts`), and it is
+`--thumbnail-probe`'s reasoning applied to this: walk what the delete would walk, and report
+per entry rather than guess. **It deletes nothing** — the evidence is the point on the one
+operation with no way back (B24). Two blind spots belong in its output rather than in a
+footnote, and are printed there: a handle on a *directory* is invisible to it (a directory
+cannot be opened for writing, and that is exactly what B57 was about), and on POSIX the
+held check means almost nothing because locking there is advisory. It never asks whether a
+read-only file is held, either — that fails with `EACCES` for a reason that has nothing to
+do with holders, and the first version of the probe duly reported a read-only file as
+"held", which is the same confident wrong answer it exists to replace.
+
+**Letting go before deleting, not after.** `deletePermanently` clears the reader and the
+file preview *before* calling main, since the trash is browsable and B47 puts a preview in
+the reader — on Windows an open handle inside a folder is what stops the folder going. A
+finished `<img>` load holds nothing, so this is not claimed as the cause of anything. The
+first version of it waited for `requestAnimationFrame` before continuing, which **hung the
+delete outright** on an occluded or minimised window, where frames are throttled: the button
+did nothing at all, which is the very bug it sits inside. Only running it found that.
 
 **Every panel has a right-click menu, and every action behind one has a non-menu route too.** The folder tree, the note list and the note panel (both windows) each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the same reason `Ask.tsx` is a component and not `window.prompt`: nothing under `test/` can drive a native menu, it costs an IPC round trip per open, and `--click-button` (`library-window.ts`) has no way to reach into one. `--click-button` matching on `.branch`/`.branch-name` text is why nothing may move exclusively behind a menu. A roving `tabIndex` (`roving.ts`) keeps exactly one row per pane a Tab stop; Mod-Shift-M and the `ContextMenu` key open the menu at the focused row's own position, so the keyboard route and the mouse route land on the same component. `onRenameFolder`/`onDeleteFolder` take a `path` now, not the toolbar's `lastFolder` — a per-row menu has to act on the row that was actually right-clicked, and the toolbar keeps its old behaviour by passing `lastFolder` explicitly.
 
@@ -1077,7 +1132,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B58, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B59, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

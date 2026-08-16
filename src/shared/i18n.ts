@@ -183,13 +183,15 @@ const DUTCH: Record<string, string> = {
   "library.deletePermanently": "Permanent verwijderen",
   "library.deletePermanentlyLocked":
     "Dit staat open in het invoervenster. Sluit het daar eerst, dan kan het verwijderd worden.",
-  /** Niet dit programma maar het besturingssysteem weigert: op Windows houdt OneDrive,
-   *  de Verkenner of een virusscanner een map soms even vast. Er is al een seconde lang
-   *  opnieuw geprobeerd (`REMOVE_OPTIONS`) voordat dit op het scherm komt. */
+  /** Niet dit programma maar het besturingssysteem weigert. Wat de reden is, zegt de
+   *  regel eronder — die noemt de code en het bestand dat weigerde, en de tekst hier
+   *  noemt met opzet géén oorzaak meer: de vorige versie beweerde "iets houdt het open"
+   *  en dat klopte niet altijd. Er is al een seconde lang opnieuw geprobeerd
+   *  (`REMOVE_OPTIONS`) voordat dit op het scherm komt. */
   "library.deletePermanentlyFailed":
-    "Dit kon niet verwijderd worden: iets anders op deze computer heeft het nog open. Probeer het zo nog eens.",
+    "Het besturingssysteem wilde dit niet verwijderen. Wat wél weg kon is weg; de rest staat er nog. Meestal heeft een ander programma het bestand open — een viewer, OneDrive tijdens het synchroniseren, een virusscanner.",
   "library.clearTrashFailed":
-    "Een deel van de prullenbak kon niet verwijderd worden: iets anders op deze computer heeft het nog open. Probeer het zo nog eens.",
+    "Een deel van de prullenbak wilde het besturingssysteem niet verwijderen. De rest is wel weg. Meestal heeft een ander programma een bestand open — een viewer, OneDrive tijdens het synchroniseren, een virusscanner.",
   "library.clearTrashLocked":
     "Er staat iets uit de prullenbak open in het invoervenster. Sluit het daar eerst.",
   /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
@@ -519,13 +521,15 @@ const ENGLISH: Record<string, string> = {
   "library.deletePermanently": "Delete permanently",
   "library.deletePermanentlyLocked":
     "This is open in the note window. Close it there first, then it can be deleted.",
-  /** Not this app refusing but the operating system: on Windows OneDrive, Explorer or a
-   *  virus scanner can hold a folder for a moment. A second of retries has already been
-   *  spent (`REMOVE_OPTIONS`) by the time this reaches the screen. */
+  /** Not this app refusing but the operating system. What the reason *was* is the line
+   *  underneath, which carries the code and the entry that refused; this sentence
+   *  deliberately no longer names a cause, because the previous one asserted "something
+   *  else has it open" and that turned out not to always be true. A second of retries has
+   *  already been spent (`REMOVE_OPTIONS`) by the time this reaches the screen. */
   "library.deletePermanentlyFailed":
-    "This could not be removed: something else on this machine still has it open. Try again in a moment.",
+    "The operating system would not remove this. Whatever could go has gone; the rest is still there. Usually another program has the file open — a viewer, OneDrive mid-sync, a virus scanner.",
   "library.clearTrashFailed":
-    "Part of the trash could not be removed: something else on this machine still has it open. Try again in a moment.",
+    "The operating system would not remove part of the trash. The rest of it has gone. Usually another program has a file open — a viewer, OneDrive mid-sync, a virus scanner.",
   "library.clearTrashLocked":
     "Something in the trash is open in the note window. Close it there first.",
   "library.moreActions": "More actions",

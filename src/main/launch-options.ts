@@ -20,6 +20,14 @@ export interface LaunchOptions {
   dumpClipboard: string | null;
   /** Diagnose why `<name>` (an `_attachments/` file) does or does not get a B30 thumbnail, then exit. */
   thumbnailProbe: string | null;
+  /**
+   * Report what stops `<path>` (something inside `_trash`) from being deleted, then exit.
+   *
+   * Reports rather than deletes: the question is which entry refuses and what the
+   * filesystem calls it, and answering it by destroying the evidence would be a poor
+   * trade on the one operation in this app with no way back (B24).
+   */
+  trashProbe: string | null;
 }
 
 function flagValue(argv: string[], name: string): string | null {
@@ -49,5 +57,6 @@ export function readLaunchOptions(argv: string[] = process.argv): LaunchOptions 
     screenshot: flagValue(argv, "screenshot"),
     dumpClipboard: flagValue(argv, "dump-clipboard"),
     thumbnailProbe: flagValue(argv, "thumbnail-probe"),
+    trashProbe: flagValue(argv, "trash-probe"),
   };
 }

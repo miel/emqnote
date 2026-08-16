@@ -1919,6 +1919,51 @@ plakking en een heropening het over dezelfde tekens oneens worden.
 
 ---
 
+## B59 — Een weigering om te verwijderen noemt zichzelf
+
+**Genomen** op 16 augustus 2026, nadat B57 was uitgebracht en de melding *woordelijk
+hetzelfde* terugkwam: permanent verwijderen van een map uit de prullenbak doet het nog
+steeds niet.
+
+Dat is het belangrijkste feit in dit besluit. B57 was geen verkeerde diagnose — chokidar
+hield werkelijk een handle per map open, en op Windows verhindert dat werkelijk een `rmdir`
+— maar het was niet *deze* oorzaak. Twee keer achter elkaar een oorzaak aanwijzen die het
+niet blijkt te zijn, is het moment om te stoppen met aanwijzen.
+
+**Wat er nu gebeurt.** `trash-delete.ts` weigert niet langer met een zin die een oorzaak
+beweert, maar met de code die het besturingssysteem zelf gaf *en het bestand dat weigerde*.
+Een map die niet weg wil is bijna altijd één bestand daarbinnen dat niet weg wil, en
+"`_trash/Alpha/offerte.pdf` — EBUSY" wijst ergens heen waar "deze map kon niet verwijderd
+worden" dat niet doet. Het zoeken naar dat bestand (`findRemovalCulprit`) loopt alleen ná
+een mislukte `rmSync`, dus het kost niets op het pad dat wel werkt.
+
+**Twee echte reparaties zitten er wel in**, want dit is niet alleen diagnostiek.
+`clearReadOnly` haalt het alleen-lezen-attribuut eraf vóór het verwijderen: `rmSync`
+probeert het bij `EPERM` opnieuw, en opnieuw proberen helpt niet tegen een attribuut — het
+is een seconde later nog steeds alleen-lezen, en een OneDrive-map is een plek waar bestanden
+dat attribuut krijgen zonder dat iemand het zet. En de lezer laat het bestand los vóór de
+verwijdering in plaats van erna, omdat de prullenbak doorbladerbaar is en B47 er een preview
+in tekent.
+
+**De tekst op het scherm beweert niets meer.** De vorige versie zei "iets anders heeft het
+nog open", en dat is onwaar voor elke `EACCES`. Er staat nu dat het besturingssysteem
+weigerde, met de code eronder. Een foutcode in een dialoogvenster is niet hoe deze app
+praat; dat is hier verdiend, omdat de volgende melding met het woord van het
+besturingssysteem zelf moet aankomen in plaats van met een derde gok.
+
+**`--trash-probe=<pad>`** is de andere helft, en volgt `--thumbnail-probe` op de voet: loop
+wat de verwijdering zou lopen en meld per bestand wat er waar van is. **Het verwijdert
+niets** — het bewijsmateriaal is juist het punt bij de enige handeling zonder weg terug
+(B24). Wat het níét kan zien staat in de uitvoer en niet in een voetnoot: een handle op een
+*map* (precies waar B57 over ging), en buiten Windows sowieso niets over houders, omdat
+vergrendeling daar adviserend is.
+
+**Wat hier níét is gekozen**: nog een derde oorzaak aanwijzen en die repareren. Er staan
+kandidaten open — OneDrive zelf, een viewer die een pdf openhoudt, een virusscanner — en
+welke het is, is nu een vraag met een antwoord in plaats van een vermoeden.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -1936,5 +1981,6 @@ plakking en een heropening het over dezelfde tekens oneens worden.
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
+| **Wát houdt die map op Windows vast?** | Onbekend, en dat hoort hier te staan. B57 haalde de eigen handle van de app weg en de melding kwam ongewijzigd terug, dus de watcher was het niet (alleen). Sinds B59 noemt de weigering de code en het bestand, en `--trash-probe` loopt de map na — de eerstvolgende melding hoort de vraag te beantwoorden in plaats van te verplaatsen. `TEST-PROTOCOL.md` §24 |
 | **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |

@@ -748,7 +748,13 @@ describe("emptying the trash", () => {
 
     const emptied = emptyTrash(vault);
 
-    expect(emptied).toEqual({ removed: 1, failed: 1 });
+    expect(emptied.removed).toBe(1);
+    expect(emptied.failed).toBe(1);
+    // A count alone tells someone that something is wrong and nothing about what, which is
+    // where the second report of this bug left everyone. The entry and the code travel
+    // with it now, and the entry is the one that actually refused.
+    expect(emptied.firstFailure?.code).toBe("EACCES");
+    expect(emptied.firstFailure?.path).toBe("_trash/Vast/Binnenin");
     expect(existsSync(join(vault, TRASH_FOLDER, "Los.md"))).toBe(false);
     expect(existsSync(join(vault, TRASH_FOLDER, "Vast"))).toBe(true);
 
