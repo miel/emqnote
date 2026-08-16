@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { foldTag } from "../../markdown/tags.js";
 import { selectionKey, type Facet, type Selection } from "../../shared/vault-types.js";
 import { score } from "./fuzzy.js";
@@ -93,22 +93,43 @@ export function FilterSection({
   };
 
   /**
-   * Unfold when what is selected is one of these.
+   * Unfold when a selection of this kind *arrives* — not "stay unfolded while one is set".
    *
    * Written as a property of the section rather than as something the caller does, so
    * every route to a tag selection lands the same way — a `#tag` Mod+clicked in a note
    * (B52) today, anything else later. `onExpand` is called for the same reason `toggle`
    * calls it: this is where the vault's first scan is triggered, and a section that
    * opened without asking for the facets would open on an empty list.
+   *
+   * The arrival is remembered in a ref rather than read back off `open`, and that is the
+   * whole of it: with `open` in the dependency list, collapsing the section changed a
+   * dependency, the effect re-ran with the same tag still selected, `!open` now passed,
+   * and it re-opened on the same commit — the Tags list simply could not be folded away
+   * while it was doing any filtering, which is the state you are most likely to want it
+   * out of the way in. A key already acted on is one this effect has nothing left to do
+   * about, however many times the section is opened and closed by hand afterwards.
    */
+  const unfolded = useRef<string | null>(null);
   useEffect(() => {
-    if (selected.kind !== kind || open) return;
+    if (selected.kind !== kind) {
+      // Back to a folder or a selection of the other kind: the next tag to arrive is a
+      // fresh arrival even if it is the same one as last time.
+      unfolded.current = null;
+      return;
+    }
+
+    const key = selectionKey(selected);
+    if (unfolded.current === key) return;
+    unfolded.current = key;
+
+    if (open) return;
     setOpen(true);
     onExpand();
-    // `onExpand` is deliberately not a dependency: it is a fresh arrow on every render of
-    // `FolderTree`, and including it would re-run this on every keystroke in the reader.
+    // `open` is deliberately not a dependency — see above. `onExpand` is not one either:
+    // it is a fresh arrow on every render of `FolderTree`, and including it would re-run
+    // this on every keystroke in the reader.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey(selected), kind, open]);
+  }, [selectionKey(selected), kind]);
 
   return (
     <div className="filter-section">

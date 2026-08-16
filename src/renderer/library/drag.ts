@@ -1,4 +1,4 @@
-import { folderOf, TRASH_FOLDER } from "../../shared/vault-types.js";
+import { folderOf, isInTrash, TRASH_FOLDER } from "../../shared/vault-types.js";
 
 /**
  * Dragging a note from the list onto a folder in the tree — `04-bouwplan.md`'s phase-3
@@ -26,22 +26,26 @@ export const NOTE_DRAG_TYPE = "application/x-emqnote-path";
  * same question is exactly how that mismatch gets in.
  */
 export function canDropNote(notePath: string, targetFolder: string): boolean {
-  // The trash is not a destination. `MoveDialog` already leaves it out, for the reason
-  // spelled out at its call site: offering it among the folders makes it look like an
-  // ordinary one, when what puts a note there is Delete — with a confirmation. A drag
-  // has no confirmation, so it must not be the one gesture that can destroy something.
-  if (isInTrash(targetFolder)) return false;
-
-  // And nothing drags *out* of the trash either. Restoring a deleted note is a real
-  // thing to want, but it is a deliberate action with a name, not a side effect of
-  // having grabbed the wrong row in a list.
+  // Nothing drags *out* of the trash. Restore is the named action for that, and it has
+  // to be: `trashNote` flattens everything into one folder, so a note in there has no
+  // remembered home, and putting it back is a question about where — which a drag onto
+  // one particular folder answers by accident rather than on purpose.
   if (isInTrash(folderOf(notePath))) return false;
+
+  // The trash itself *is* a destination, and a drop on it is Delete — the very same
+  // rename into `_trash`, through the very same call (see `Library.tsx`'s drop handler),
+  // with no confirmation in front of it. This used to be refused on the argument that a
+  // drag has no confirmation and so must not be the one gesture that destroys something.
+  // The argument was sound and the premise was not: trashing destroys nothing, since
+  // `emptyTrash` and `deleteFromTrash` are the only code in the app that ever does (B24)
+  // — and Restore now stands beside them as the named way back.
+  //
+  // A folder *inside* the trash is still no destination, and that is not a leftover of
+  // the old rule: Delete files flat, so a note dropped three levels deep in there would
+  // sit somewhere nothing else in the app ever puts one and nothing else ever looks.
+  if (targetFolder !== TRASH_FOLDER && isInTrash(targetFolder)) return false;
 
   // Dropping a note where it already is is not a refusal, it is simply nothing — but it
   // should not light up as though something were about to happen.
   return folderOf(notePath) !== targetFolder;
-}
-
-function isInTrash(folder: string): boolean {
-  return folder === TRASH_FOLDER || folder.startsWith(`${TRASH_FOLDER}/`);
 }

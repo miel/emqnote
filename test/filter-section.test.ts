@@ -79,6 +79,17 @@ function rowNames(): string[] {
   return [...container.querySelectorAll("li .branch-name")].map((node) => node.textContent ?? "");
 }
 
+/**
+ * Clicks the section's own heading — the row carrying "Tags"/"People", which is the
+ * first `.branch` in the section and, unlike the facet rows, is not inside an `<li>`.
+ */
+function collapse(): void {
+  const heading = container.querySelector(".filter-section > .branch") as HTMLElement;
+  act(() => {
+    heading.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
 function selectedRowName(): string | null {
   const row = container.querySelector("li .branch.branch-on");
   return row?.querySelector(".branch-name")?.textContent ?? null;
@@ -114,6 +125,35 @@ describe("FilterSection unfolds itself for a selection of its own kind", () => {
     render({ kind: "tag", name: "offerte" });
 
     expect(onExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays collapsed when it is folded away with the tag still selected", () => {
+    // The rule is "unfold when a selection arrives", not "stay unfolded while one is
+    // set". Written as its own test because the difference is invisible until you try to
+    // close the section: with `open` in the effect's dependency list, collapsing changed
+    // a dependency, the effect re-ran against the same tag, and it re-opened on the same
+    // commit — the list could not be folded away at all while it was filtering.
+    render({ kind: "tag", name: "klantx" });
+    expect(rowNames()).toEqual(["#klantx", "#offerte"]);
+
+    collapse();
+    expect(rowNames()).toEqual([]);
+
+    // And it survives the parent re-rendering with that same tag still selected, which
+    // happens on every keystroke in the reader.
+    render({ kind: "tag", name: "klantx" });
+    expect(rowNames()).toEqual([]);
+  });
+
+  it("unfolds again when a different tag arrives after it was folded away", () => {
+    render({ kind: "tag", name: "klantx" });
+    collapse();
+    render({ kind: "tag", name: "offerte" });
+
+    expect(rowNames()).toEqual(["#klantx", "#offerte"]);
+    // Asked again, exactly as `toggle` asks again when the section is reopened by hand:
+    // an unfold is an unfold, and `loadFacets` on the other end is idempotent.
+    expect(onExpand).toHaveBeenCalledTimes(2);
   });
 });
 

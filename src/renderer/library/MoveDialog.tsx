@@ -6,6 +6,16 @@ import { useActiveRowVisible, useHoverGuard } from "./palette-scroll.js";
 interface Props {
   folders: string[];
   current: string;
+  /**
+   * One folder to offer first while nothing has been typed — Restore's Inbox, which is
+   * where a note coming back out of the trash nearly always belongs.
+   *
+   * Only while the query is empty, and that half is the point: once something is typed
+   * the ranking *is* the answer to what was typed, and a folder pinned above better
+   * matches would be this dialog quietly overruling the search it just offered. It is a
+   * nudge at the top of an unfiltered list, not a preference the list carries around.
+   */
+  preferred?: string;
   onMove: (folder: string) => void;
   onCancel: () => void;
   t: (key: string) => string;
@@ -14,6 +24,7 @@ interface Props {
 export function MoveDialog({
   folders,
   current,
+  preferred,
   onMove,
   onCancel,
   t,
@@ -27,15 +38,25 @@ export function MoveDialog({
   useEffect(() => input.current?.focus(), []);
 
   const matches = useMemo(() => {
-    return folders
+    const ranked = folders
       .filter((folder) => folder !== current)
       .map((folder) => ({ folder, rank: score(folder, query) }))
       .filter((entry): entry is { folder: string; rank: number } => entry.rank !== null)
-      .sort((a, b) => b.rank - a.rank)
-      // Enough to scroll through when nothing is typed yet; the whole point of
-      // opening this is to see where a note could go.
-      .slice(0, 50);
-  }, [folders, current, query]);
+      .sort((a, b) => b.rank - a.rank);
+
+    // Lifted before the cap, not after: with nothing typed every folder scores 0, so the
+    // fifty that survive are simply the first fifty in tree order — and in a vault with
+    // more folders than that the one this dialog most wants to offer could be among the
+    // ones cut. Same reasoning as `FilterSection` keeping the selected facet on its list.
+    if (query === "" && preferred !== undefined) {
+      const index = ranked.findIndex((entry) => entry.folder === preferred);
+      if (index > 0) ranked.unshift(...ranked.splice(index, 1));
+    }
+
+    // Enough to scroll through when nothing is typed yet; the whole point of
+    // opening this is to see where a note could go.
+    return ranked.slice(0, 50);
+  }, [folders, current, preferred, query]);
 
   useEffect(() => setActive(0), [query]);
 

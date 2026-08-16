@@ -1103,8 +1103,16 @@ body {
   cursor: default;
 }
 
+/* `--muted` alone was not enough to say "you cannot click this". It is the same token
+   the shortcut column beside each label and the section headings above them already
+   use, so a disabled row landed in a colour the menu was full of anyway and read as an
+   ordinary entry that simply did nothing when clicked — which is how "Rename folder" on
+   the vault root got reported as broken rather than as unavailable. The opacity is on
+   top of the colour rather than instead of it: it dims the whole row, glyph and shortcut
+   included, and it is the one thing in the menu nothing else wears. */
 .context-menu-item:disabled {
   color: var(--muted);
+  opacity: 0.55;
   cursor: default;
 }
 

@@ -9,6 +9,30 @@
 export const TRASH_FOLDER = "_trash";
 
 /**
+ * Where a note lands when nothing else says otherwise — the hotkey's own destination
+ * (B29), and the folder Restore offers first.
+ *
+ * It lives here beside `TRASH_FOLDER` for the same reason that one does: the folders the
+ * app creates are `src/main/vault.ts`'s business, but nothing under `src/renderer/`
+ * imports from `src/main/`, so a library that needed to name the Inbox could only spell
+ * it out a second time — and a second spelling is one rename away from disagreeing with
+ * the one that actually files notes. `vault.ts` imports it back, so there is still
+ * exactly one definition.
+ */
+export const INBOX = "00 Inbox";
+
+/**
+ * Is this path the trash itself, or something inside it?
+ *
+ * The separator matters: `_trashy` is an ordinary folder whose name happens to start
+ * with the same seven characters, and a bare `startsWith(TRASH_FOLDER)` would quietly
+ * treat every note in it as deleted.
+ */
+export function isInTrash(path: string): boolean {
+  return path === TRASH_FOLDER || path.startsWith(`${TRASH_FOLDER}/`);
+}
+
+/**
  * A vault this machine knows about, as the settings panel shows it.
  *
  * Three states and not two. "Unavailable" is its own answer rather than an absence,
@@ -49,6 +73,13 @@ export const FOLDER_ERROR = {
    * dialogs already decode one.
    */
   locked: "folder-holds-open-note",
+  /**
+   * A folder was asked to move inside itself, or inside something already inside it —
+   * the one refusal `moveFolder` needs that a rename cannot produce, since a rename never
+   * changes which parent a folder hangs off. `renameSync` would answer `EINVAL` here, but
+   * an errno is not a sentence the dialog can show in either language.
+   */
+  intoItself: "folder-into-itself",
 } as const;
 
 export type FolderErrorCode = (typeof FOLDER_ERROR)[keyof typeof FOLDER_ERROR];

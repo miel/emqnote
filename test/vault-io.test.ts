@@ -14,11 +14,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createFolder,
+  deleteFromTrash,
   diffConflict,
   duplicateNote,
   emptyTrash,
   flattenFolders,
   folderContents,
+  moveFolder,
   moveNote,
   openNote,
   readFolderTree,
@@ -735,6 +737,166 @@ describe("emptying the trash", () => {
 
     expect(() => emptyTrash(vault)).toThrow(
       "refusing to empty a path outside the vault's own trash folder",
+    );
+    expect(existsSync(join(outside, "secret.txt"))).toBe(true);
+
+    rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+/**
+ * The way back out of the trash, and the one refusal a rename cannot produce.
+ *
+ * A folder in `_trash` has nowhere to be *renamed* to — a rename never changes which
+ * parent a folder hangs off — so Restore had to be a move, and this is the only
+ * move-a-folder call in the app.
+ */
+describe("moving a folder", () => {
+  it("moves it, and everything inside it, under another parent", () => {
+    trashFolder(vault, "10 Projects/Klant X");
+
+    const restored = moveFolder(vault, `${TRASH_FOLDER}/Klant X`, "10 Projects");
+
+    expect(restored).toBe("10 Projects/Klant X");
+    expect(existsSync(join(vault, TRASH_FOLDER, "Klant X"))).toBe(false);
+    expect(flattenFolders(readFolderTree(vault))).toContain("10 Projects/Klant X/Project Alpha");
+  });
+
+  it("takes the vault root as an empty parent, the same spelling moveNote uses", () => {
+    trashFolder(vault, "10 Projects/Klant X");
+
+    expect(moveFolder(vault, `${TRASH_FOLDER}/Klant X`, "")).toBe("Klant X");
+    expect(existsSync(join(vault, "Klant X", "Project Alpha"))).toBe(true);
+  });
+
+  it("survives a name collision rather than refusing one, unlike renameFolder", () => {
+    // Nobody typed this name: the folder keeps the one it already had, so a destination
+    // that happens to hold one of the same name is a collision to get past, not a
+    // mistake to correct. `renameFolder`'s own comment argues the opposite case.
+    trashFolder(vault, "10 Projects/Klant X");
+    mkdirSync(join(vault, "10 Projects", "Klant X"), { recursive: true });
+
+    expect(moveFolder(vault, `${TRASH_FOLDER}/Klant X`, "10 Projects")).toBe(
+      "10 Projects/Klant X (2)",
+    );
+  });
+
+  it("answers with the path unchanged when it is already there", () => {
+    // Without this the collision suffix would turn "move it where it is" into a rename.
+    expect(moveFolder(vault, "10 Projects/Klant X", "10 Projects")).toBe("10 Projects/Klant X");
+    expect(existsSync(join(vault, "10 Projects", "Klant X", "Project Alpha"))).toBe(true);
+  });
+
+  describe("refuses rather than corrects", () => {
+    it("the vault root, and the trash folder itself", () => {
+      expect(() => moveFolder(vault, "", "10 Projects")).toThrow(FOLDER_ERROR.root);
+      expect(() => moveFolder(vault, TRASH_FOLDER, "10 Projects")).toThrow(FOLDER_ERROR.reserved);
+    });
+
+    it("a folder the app owns, on either end", () => {
+      expect(() => moveFolder(vault, "_attachments", "10 Projects")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+      expect(() => moveFolder(vault, "10 Projects/Klant X", "_attachments")).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+    });
+
+    it("the trash as a destination — trashFolder is that route, and two would drift", () => {
+      expect(() => moveFolder(vault, "10 Projects/Klant X", TRASH_FOLDER)).toThrow(
+        FOLDER_ERROR.reserved,
+      );
+    });
+
+    it("a folder moved inside itself", () => {
+      expect(() => moveFolder(vault, "10 Projects", "10 Projects/Klant X")).toThrow(
+        FOLDER_ERROR.intoItself,
+      );
+    });
+
+    it("a folder that is gone", () => {
+      expect(() => moveFolder(vault, "10 Projects/Weg", "00 Inbox")).toThrow(
+        FOLDER_ERROR.missing,
+      );
+    });
+  });
+});
+
+/**
+ * The second permanent delete in the app, and the first that names one thing (B24). It
+ * shares `emptyTrash`'s guard exactly, which is what most of these are about: that guard
+ * is the reason this is allowed to exist beside it at all.
+ */
+describe("deleting one thing out of the trash", () => {
+  it("removes one trashed note and leaves the rest of the trash alone", () => {
+    const gone = trashNote(vault, "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md");
+    writeFileSync(join(vault, TRASH_FOLDER, "blijft.md"), "nog niet weg");
+
+    deleteFromTrash(vault, gone);
+
+    expect(existsSync(join(vault, gone))).toBe(false);
+    expect(existsSync(join(vault, TRASH_FOLDER, "blijft.md"))).toBe(true);
+  });
+
+  it("removes a whole trashed folder, contents and all", () => {
+    writeFileSync(join(vault, "10 Projects", "Klant X", "2026-07-25 1432 Iets.md"), NOTE);
+    const gone = trashFolder(vault, "10 Projects/Klant X");
+
+    deleteFromTrash(vault, gone);
+
+    expect(existsSync(join(vault, gone))).toBe(false);
+    expect(readdirSync(join(vault, TRASH_FOLDER))).toEqual([]);
+  });
+
+  it("does nothing at all for a path that is already gone", () => {
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+    expect(() => deleteFromTrash(vault, `${TRASH_FOLDER}/nooit-bestaan.md`)).not.toThrow();
+  });
+
+  it("refuses a path outside the trash, however ordinary it looks", () => {
+    const live = "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md";
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+
+    expect(() => deleteFromTrash(vault, live)).toThrow(
+      "refusing to delete a path outside the vault's own trash folder",
+    );
+    expect(existsSync(join(vault, live))).toBe(true);
+  });
+
+  it("refuses the trash folder itself — emptying it is emptyTrash's job", () => {
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+
+    expect(() => deleteFromTrash(vault, TRASH_FOLDER)).toThrow(
+      "refusing to delete a path outside the vault's own trash folder",
+    );
+    expect(existsSync(join(vault, TRASH_FOLDER))).toBe(true);
+  });
+
+  it("refuses to follow a _trash that is a symlink outside the vault", () => {
+    // `resolve()` only normalises text; `realpathSync` is what actually asks the
+    // filesystem, which is why `emptyTrash` uses it and why this does too.
+    const outside = mkdtempSync(join(tmpdir(), "emqnote-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "not the vault's to delete");
+    symlinkSync(outside, join(vault, TRASH_FOLDER));
+
+    expect(() => deleteFromTrash(vault, `${TRASH_FOLDER}/secret.txt`)).toThrow(
+      "refusing to delete inside a path outside the vault's own trash folder",
+    );
+    expect(existsSync(join(outside, "secret.txt"))).toBe(true);
+
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("refuses a symlink inside the trash that points out of it", () => {
+    // A link *in* `_trash` is as good a way out of it as a symlinked `_trash` is, which
+    // is why the target is resolved as well as the folder it sits in.
+    const outside = mkdtempSync(join(tmpdir(), "emqnote-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "not the vault's to delete");
+    mkdirSync(join(vault, TRASH_FOLDER), { recursive: true });
+    symlinkSync(join(outside, "secret.txt"), join(vault, TRASH_FOLDER, "ziet-er-weg-uit.txt"));
+
+    expect(() => deleteFromTrash(vault, `${TRASH_FOLDER}/ziet-er-weg-uit.txt`)).toThrow(
+      "refusing to delete a path outside the vault's own trash folder",
     );
     expect(existsSync(join(outside, "secret.txt"))).toBe(true);
 

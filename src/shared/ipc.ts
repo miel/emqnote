@@ -85,6 +85,17 @@ export const IPC = {
   libraryFolderContents: "library:folder-contents",
   /** Moves a folder into `_trash`, along with everything inside it — never a permanent delete (B24). */
   libraryTrashFolder: "library:trash-folder",
+  /**
+   * Moves a folder under another parent, links repaired around it exactly as a rename's
+   * are (B44/B45). Restore is the one caller: a folder in `_trash` has nowhere to be
+   * renamed *to*.
+   */
+  libraryMoveFolder: "library:move-folder",
+  /**
+   * Permanently deletes one note, attachment or folder out of `_trash`. The only delete
+   * beside `libraryEmptyTrash` with no way back, and the only one that names one thing.
+   */
+  libraryDeleteFromTrash: "library:delete-from-trash",
   libraryRevealNote: "library:reveal-note",
   listVaults: "vault:list",
   chooseVault: "vault:choose",
@@ -384,6 +395,20 @@ export interface LibraryApi {
    * code instead, exactly like `renameFolder`.
    */
   trashFolder: (path: string) => Promise<{ trashed: boolean; locked?: boolean }>;
+  /**
+   * Moves a folder under another parent and answers its new path — Restore's way back out
+   * of `_trash`, since a folder in there has no name to be renamed to. Rejects with a
+   * `FOLDER_ERROR` code, `renameFolder`'s shape rather than `trashFolder`'s: the caller
+   * has to rebase whatever it has open onto the answer, so it needs the real new path or
+   * a reason, never a silent `{ moved: false }`.
+   */
+  moveFolder: (path: string, parent: string) => Promise<string>;
+  /**
+   * Permanently deletes one thing out of `_trash`. `locked` when the capture window has
+   * that note — or a note inside that folder — claimed: its session pins the path it will
+   * write to next, so the file would come straight back on the next debounced write.
+   */
+  deleteFromTrash: (path: string) => Promise<{ deleted: boolean; locked?: boolean }>;
   revealNote: (path: string) => void;
   /** True if nothing else currently has this note claimed for writing. */
   noteEditable: (path: string) => Promise<boolean>;

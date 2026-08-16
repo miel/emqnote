@@ -8,6 +8,8 @@ import {
   canRenameFolder as canRenameFolderAt,
   folderErrorOf,
   folderOf,
+  INBOX,
+  isInTrash,
   selectionKey,
   TRASH_FOLDER,
   type ConflictPair,
@@ -106,7 +108,16 @@ type Dialog =
    */
   | { kind: "relink"; count: number; action: Relinkable }
   | { kind: "duplicateTitle"; title: string; path: string; folder: string }
+  /**
+   * One thing out of `_trash`, for good. `label` is what to call it in the question — a
+   * note's title, a folder's name — and `path` is what actually goes, because the two are
+   * not the same string and naming a path at someone is not asking them anything.
+   */
+  | { kind: "deletePermanently"; path: string; label: string }
   | { kind: "problem"; message: string };
+
+/** What Restore is currently asking for a destination for — a trashed note, or a trashed folder. */
+type Restorable = { kind: "note" | "folder"; path: string };
 
 export function Library(): React.ReactElement {
   const app = useBootstrap();
@@ -170,6 +181,12 @@ export function Library(): React.ReactElement {
    */
   const [diskEvent, setDiskEvent] = useState<VaultFileEvent | null>(null);
   const [moving, setMoving] = useState(false);
+  /**
+   * The trashed note or folder waiting to be told where to go back to. A separate piece
+   * of state from `moving` and not a fourth `Dialog`, because it opens `MoveDialog`
+   * rather than `Ask` — the same split `moving` already is.
+   */
+  const [restoring, setRestoring] = useState<Restorable | null>(null);
   // The note being dragged over the tree. Held here rather than in either component,
   // because the row that knows which note it is and the branch that has to decide
   // whether it will take it are on opposite sides of the window.
@@ -952,6 +969,8 @@ export function Library(): React.ReactElement {
         return `${app.t("link.duplicateTitle")} "${open.folder === "" ? app.t("library.vaultRoot") : open.folder}" — ${app.t("link.renameAnyway")}`;
       case "delete":
         return `"${open.title}" — ${app.t("ask.confirmDelete")}`;
+      case "deletePermanently":
+        return `"${open.label}" — ${app.t("ask.confirmDeletePermanently")}`;
     }
   };
 
@@ -1082,36 +1101,45 @@ export function Library(): React.ReactElement {
       return;
     }
 
-    if (next !== path) {
-      const rebase = (candidate: string): string =>
-        candidate === path || candidate.startsWith(`${path}/`)
-          ? next + candidate.slice(path.length)
-          : candidate;
-
-      // The open note keeps its caret and its undo history: only the path moved, and
-      // the document reload is keyed on `docToken`, which nothing here touches.
-      const current = openRef.current;
-      if (current !== null) {
-        const moved = { ...current, path: rebase(current.path) };
-        setOpen(moved);
-        openRef.current = moved;
-      }
-
-      if (selectionRef.current.kind === "folder") {
-        const target: Selection = {
-          kind: "folder",
-          path: rebase(selectionRef.current.path),
-        };
-        setSelection(target);
-        selectionRef.current = target;
-      }
-
-      setLastFolder(rebase(lastFolder));
-    }
+    rebaseOntoMovedFolder(path, next);
 
     await loadTree();
     await loadNotes(selectionRef.current);
     refreshFacets();
+  };
+
+  /**
+   * Follows a folder that changed place — renamed (B44), or restored out of the trash —
+   * with everything in this window that was pointing inside it.
+   *
+   * Shared by both callers rather than written out twice: the two operations differ in
+   * which main-side call they make and in nothing else this side can see, and a second
+   * copy is how one of the three things below gets forgotten on whichever path nobody
+   * exercised. The open note keeps its caret and its undo history — only its path moved,
+   * and the document reload is keyed on `docToken`, which nothing here touches.
+   */
+  const rebaseOntoMovedFolder = (from: string, to: string): void => {
+    if (from === to) return;
+
+    const rebase = (candidate: string): string =>
+      candidate === from || candidate.startsWith(`${from}/`)
+        ? to + candidate.slice(from.length)
+        : candidate;
+
+    const current = openRef.current;
+    if (current !== null) {
+      const moved = { ...current, path: rebase(current.path) };
+      setOpen(moved);
+      openRef.current = moved;
+    }
+
+    if (selectionRef.current.kind === "folder") {
+      const target: Selection = { kind: "folder", path: rebase(selectionRef.current.path) };
+      setSelection(target);
+      selectionRef.current = target;
+    }
+
+    setLastFolder(rebase(lastFolder));
   };
 
   /**
@@ -1212,14 +1240,112 @@ export function Library(): React.ReactElement {
     refreshFacets();
   };
 
+  /**
+   * Moves one note into `_trash` — the one route there, whether the ask came from the
+   * Delete menu item or from dragging a row onto the Trash row (`drag.ts`).
+   *
+   * Two ways to reach the trash would be two places for the lock check, the reload and
+   * the reader's own bookkeeping to disagree, which is the same argument `moveNoteTo`
+   * makes for the dialog and the drag being one function.
+   *
+   * The reader is only put away if it was showing *this* note: a row dragged out of the
+   * list is usually not the one being read, and closing what you are reading because
+   * something else was deleted is the reverse of what the gesture asked for. The tree
+   * reloads because the very first delete in a fresh vault is what creates `_trash` —
+   * without it the Trash row would not appear until something else refreshed the tree.
+   */
+  const trashNoteAt = async (notePath: string): Promise<void> => {
+    await window.emqnote.library.trashNote(notePath);
+
+    const current = openRef.current;
+    if (current !== null && current.path === notePath) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    await loadTree();
+    void loadNotes(selectionRef.current);
+  };
+
   const trash = async (): Promise<void> => {
     const current = openRef.current;
     if (current === null) return;
+    await trashNoteAt(current.path);
+  };
 
-    await window.emqnote.library.trashNote(current.path);
-    setOpen(null);
-    openRef.current = null;
-    void loadNotes(selectionRef.current);
+  /**
+   * Puts a trashed note or folder back somewhere real.
+   *
+   * Deliberately the ordinary move on both halves — `IPC.libraryMoveNote` never had a
+   * trash restriction, and `IPC.libraryMoveFolder` is the rename handler with one line
+   * swapped — rather than a "restore" that would have to know where things came from. The
+   * trash records nothing about that: `trashNote` flattens every note into one folder, so
+   * "put it back where it was" is a question with no answer on disk. Asking is both the
+   * honest thing and the more useful one, since a note is usually being fished out to be
+   * filed somewhere better than where it was.
+   */
+  const restoreTo = async (item: Restorable, target: string): Promise<void> => {
+    if (item.kind === "note") {
+      // Through `moveNoteTo`, so the link question is asked in exactly one place. It
+      // never actually asks here: `index-scan.ts` leaves the trash out on purpose, so
+      // nothing in the index resolves to a trashed note and `linkingNotes` comes back
+      // empty — which is the right answer rather than a coincidence worth routing around.
+      await moveNoteTo(item.path, target);
+      return;
+    }
+
+    // Same flush, same order, same reason as `renameFolderAt`: `writeAtomic` calls
+    // `mkdirSync` on the way, so a debounced save landing after the folder has moved
+    // would recreate it where it used to be — here, back inside `_trash`.
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (dirty) await save();
+
+    let next: string;
+    try {
+      next = await window.emqnote.library.moveFolder(item.path, target);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.moveFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    rebaseOntoMovedFolder(item.path, next);
+
+    await loadTree();
+    await loadNotes(selectionRef.current);
+    refreshFacets();
+  };
+
+  /**
+   * Deletes one thing out of the trash for good — the second permanent delete in the app
+   * and the first that names one thing (B24), which is why it only ever runs behind the
+   * confirmation `dialogTitle`'s `deletePermanently` case writes.
+   *
+   * The reader is put away whether or not it was showing exactly this path: a folder went
+   * with everything under it, and there is no way left to check against a path that no
+   * longer exists — the same unconditional close `clearTrash` makes, for the same reason.
+   */
+  const deletePermanently = async (path: string): Promise<void> => {
+    const result = await window.emqnote.library.deleteFromTrash(path);
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.deletePermanentlyLocked") });
+      return;
+    }
+
+    const current = openRef.current;
+    if (current !== null && (current.path === path || current.path.startsWith(`${path}/`))) {
+      setOpen(null);
+      openRef.current = null;
+    }
+
+    await loadTree();
+    await loadNotes(selectionRef.current);
   };
 
   /**
@@ -1373,7 +1499,13 @@ export function Library(): React.ReactElement {
           dragging={dragging}
           onDropNote={(notePath, folder) => {
             setDragging(null);
-            void moveNoteTo(notePath, folder);
+            // A drop on the Trash row is Delete, not a move to a folder that happens to
+            // be called `_trash`: it goes through the same `trashNoteAt` the menu item
+            // calls, so the two cannot answer differently about the lock or about what
+            // the reader does next. No confirmation, deliberately — trashing is a rename
+            // (B24), and Restore is the named way back.
+            if (folder === TRASH_FOLDER) void trashNoteAt(notePath);
+            else void moveNoteTo(notePath, folder);
           }}
           onSelect={(target) => {
             setSelection(target);
@@ -1402,6 +1534,17 @@ export function Library(): React.ReactElement {
               setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
             });
           }}
+          onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
+          onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
+          onDeleteFolderPermanently={(path) =>
+            setDialog({
+              kind: "deletePermanently",
+              path,
+              // The folder's own name, not its `_trash/...` path: the question is about a
+              // thing, and a path read back at someone is not a question.
+              label: path.split("/").pop() ?? path,
+            })
+          }
           onNewNoteIn={(folder) => window.emqnote.library.newNote(folder)}
           lastFolder={lastFolder}
           canRenameFolder={canRenameFolderAt(lastFolder)}
@@ -1415,6 +1558,9 @@ export function Library(): React.ReactElement {
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}
           deleteFolderLabel={app.t("library.deleteFolder")}
+          revealLabel={app.t("library.reveal")}
+          restoreLabel={app.t("library.restore")}
+          deletePermanentlyLabel={app.t("library.deletePermanently")}
           newLabel={app.t("library.new")}
           renameLabel={app.t("library.rename")}
           deleteLabel={app.t("library.delete")}
@@ -1698,32 +1844,76 @@ export function Library(): React.ReactElement {
         />
       )}
 
+      {restoring !== null && (
+        <MoveDialog
+          folders={folders}
+          // `folders` already leaves the trash and everything under it out, so there is
+          // nothing here to exclude — the thing being restored is by definition in a
+          // folder this list does not contain. `TRASH_FOLDER` is passed only because the
+          // prop is required and this is the truthful answer to "where is it now".
+          current={TRASH_FOLDER}
+          preferred={INBOX}
+          t={app.t}
+          onCancel={() => setRestoring(null)}
+          onMove={(target) => {
+            const item = restoring;
+            setRestoring(null);
+            void restoreTo(item, target);
+          }}
+        />
+      )}
+
       {noteMenu !== null && (
         <ContextMenu
           x={noteMenu.x}
           y={noteMenu.y}
           onClose={() => setNoteMenu(null)}
-          items={[
-            {
-              label: app.t("library.open"),
-              onSelect: () => void openNote(noteMenu.note.path),
-            },
-            { label: app.t("library.move"), onSelect: () => setMoving(true) },
-            {
-              label: app.t("library.rename"),
-              onSelect: () => setEditingTitle(noteMenu.note.title),
-            },
-            { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
-            {
-              label: app.t("library.reveal"),
-              onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),
-            },
-            {
-              label: app.t("library.delete"),
-              danger: true,
-              onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
-            },
-          ]}
+          items={
+            // A note in the trash gets the two entries that mean anything there. Move,
+            // Rename and Duplicate would all work on it — nothing in main refuses a
+            // trashed path — which is exactly the problem: they are ways of tidying a
+            // vault, offered on a row that is not in it any more. Read off the path, the
+            // same way `FolderTree`'s own menu reads it, so no extra state travels with
+            // the row to say so.
+            isInTrash(folderOf(noteMenu.note.path))
+              ? [
+                  {
+                    label: app.t("library.restore"),
+                    onSelect: () => setRestoring({ kind: "note", path: noteMenu.note.path }),
+                  },
+                  {
+                    label: app.t("library.deletePermanently"),
+                    danger: true,
+                    onSelect: () =>
+                      setDialog({
+                        kind: "deletePermanently",
+                        path: noteMenu.note.path,
+                        label: noteMenu.note.title,
+                      }),
+                  },
+                ]
+              : [
+                  {
+                    label: app.t("library.open"),
+                    onSelect: () => void openNote(noteMenu.note.path),
+                  },
+                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  {
+                    label: app.t("library.rename"),
+                    onSelect: () => setEditingTitle(noteMenu.note.title),
+                  },
+                  { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
+                  {
+                    label: app.t("library.reveal"),
+                    onSelect: () => window.emqnote.library.revealNote(noteMenu.note.path),
+                  },
+                  {
+                    label: app.t("library.delete"),
+                    danger: true,
+                    onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
+                  },
+                ]
+          }
         />
       )}
 
@@ -1803,11 +1993,13 @@ export function Library(): React.ReactElement {
           confirmLabel={
             dialog.kind === "delete" || dialog.kind === "deleteFolder"
               ? app.t("library.delete")
-              : dialog.kind === "clearTrash"
-                ? app.t("library.clearTrash")
-                : dialog.kind === "relink"
-                  ? app.t("link.update")
-                  : app.t("ask.ok")
+              : dialog.kind === "deletePermanently"
+                ? app.t("library.deletePermanently")
+                : dialog.kind === "clearTrash"
+                  ? app.t("library.clearTrash")
+                  : dialog.kind === "relink"
+                    ? app.t("link.update")
+                    : app.t("ask.ok")
           }
           // "Leave them" rather than "Cancel" for the link question, because that button
           // does not cancel anything — the move or the rename happens either way. See the
@@ -1816,7 +2008,8 @@ export function Library(): React.ReactElement {
           danger={
             dialog.kind === "delete" ||
             dialog.kind === "clearTrash" ||
-            dialog.kind === "deleteFolder"
+            dialog.kind === "deleteFolder" ||
+            dialog.kind === "deletePermanently"
           }
           dismissOnly={dialog.kind === "problem"}
           onCancel={() => {
@@ -1829,6 +2022,7 @@ export function Library(): React.ReactElement {
             setDialog(null);
             if (current.kind === "delete") void trash();
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
+            if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();
             if (current.kind === "newFolder") {
               void window.emqnote.library.createFolder(current.parent, value);

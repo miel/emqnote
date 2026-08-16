@@ -59,7 +59,12 @@ interface Fake {
   duplicateNote: ReturnType<typeof vi.fn>;
 }
 
-function buildFake(): Fake {
+/**
+ * `listPath` is what the one row in the list claims to be. It is a parameter only so the
+ * trashed-note case can hand over a `_trash/…` path — `notes()` here ignores the selection
+ * anyway, so nothing else has to move for the list to be showing the trash.
+ */
+function buildFake(listPath: string = NOTE_PATH): Fake {
   const tree: FolderNode = {
     path: "",
     name: "Vault",
@@ -80,7 +85,7 @@ function buildFake(): Fake {
 
   const library: LibraryApi = {
     tree: async () => tree,
-    notes: async () => [noteSummary(NOTE_PATH, "Test note")],
+    notes: async () => [noteSummary(listPath, "Test note")],
     folderFiles: async () => [],
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
@@ -95,6 +100,8 @@ function buildFake(): Fake {
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
     trashFolder: async () => ({ trashed: true }),
+    moveFolder: async (path) => path,
+    deleteFromTrash: async () => ({ deleted: true }),
     revealNote,
     noteEditable: async () => true,
     openInCapture: async () => true,
@@ -244,6 +251,52 @@ describe("the note list's right-click menu", () => {
       (node) => node.querySelector(".context-menu-label")!.textContent,
     );
     expect(labels).toEqual(["Open", "Move", "Rename", "Duplicate", "Reveal", "Delete"]);
+  });
+
+  it("shows Restore and Delete permanently instead, for a note in the trash", async () => {
+    // Move, Rename and Duplicate all *work* on a trashed note — nothing in main refuses
+    // one — which is precisely why they must not be offered: they are ways of tidying a
+    // vault, on a row that is no longer in it. Read off the path, so no extra state has
+    // to travel with the row.
+    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
+    await mount(fake);
+    await rightClickRow();
+
+    const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
+      (node) => node.querySelector(".context-menu-label")!.textContent,
+    );
+    expect(labels).toEqual(["Restore", "Delete permanently"]);
+  });
+
+  it("Restore asks which folder, through the same palette Move uses", async () => {
+    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Restore").click();
+    });
+    await flush();
+
+    // The trash remembers nothing about where a note came from, so where it goes is a
+    // question — and `MoveDialog` is what asks it, here as everywhere else.
+    expect(container.querySelector(".palette")).not.toBeNull();
+  });
+
+  it("Delete permanently asks first, naming the note and saying it cannot be undone", async () => {
+    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete permanently").click();
+    });
+    await flush();
+
+    const ask = container.querySelector(".ask");
+    expect(ask).not.toBeNull();
+    expect(ask!.textContent).toContain("Test note");
+    expect(ask!.textContent).toContain("cannot be undone");
   });
 
   it("Open re-opens the note through the same openNote path", async () => {
