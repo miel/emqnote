@@ -3,6 +3,7 @@ import {
   canCreateFolderIn,
   canDeleteFolder as canDeleteFolderAt,
   canRenameFolder as canRenameFolderAt,
+  isInTrash,
   selectionKey,
   TRASH_FOLDER,
   type Facets,
@@ -33,6 +34,15 @@ interface Props {
   onRenameFolder: (path: string) => void;
   /** Deletes the given folder — same split as `onRenameFolder`. */
   onDeleteFolder: (path: string) => void;
+  /** Shows the folder in Explorer/Finder. `IPC.libraryRevealNote` assumes nothing about note-ness. */
+  onRevealFolder: (path: string) => void;
+  /**
+   * Puts a folder inside `_trash` back somewhere real — the picker asks where, because
+   * the trash records nothing about where a folder came from.
+   */
+  onRestoreFolder: (path: string) => void;
+  /** Deletes a trashed folder for good. The one thing in this menu with no way back (B24). */
+  onDeleteFolderPermanently: (path: string) => void;
   /** Files a new note into the given folder — the context menu's "New note". */
   onNewNoteIn: (folder: string) => void;
   /** The last folder that was selected — what the toolbar buttons act on. */
@@ -54,6 +64,9 @@ interface Props {
   newFolderLabel: string;
   renameFolderLabel: string;
   deleteFolderLabel: string;
+  revealLabel: string;
+  restoreLabel: string;
+  deletePermanentlyLabel: string;
   /**
    * The toolbar's short forms — "+ New", "Rename", "Delete" — reusing `library.new`,
    * `library.rename` and `library.delete` rather than `newFolderLabel` etc. The panel is
@@ -148,9 +161,13 @@ function Branch({
   /** The note currently under the pointer, or null. See `NoteList`'s `onDragNote`. */
   dragging: string | null;
   /**
-   * Files the dragged note here. Absent on the trash branch, which is what makes the
-   * trash refuse a drop rather than merely look like it does — `canDropNote` says no as
-   * well, but the branch that cannot accept one should not be wired to try.
+   * Files the dragged note here — or, on the trash branch, deletes it: `Library.tsx`
+   * routes a drop whose target is `TRASH_FOLDER` through the same `trashNote` the Delete
+   * menu item calls, so the lock and the link behaviour cannot come out two ways.
+   *
+   * Optional because `canDropNote` and this prop have to agree about which rows are
+   * destinations, and a branch that would refuse every drop should not be wired to try;
+   * nothing leaves it off today.
    */
   onDropNote?: (notePath: string, folder: string) => void;
   /**
@@ -349,6 +366,9 @@ export function FolderTree({
   onNewFolder,
   onRenameFolder,
   onDeleteFolder,
+  onRevealFolder,
+  onRestoreFolder,
+  onDeleteFolderPermanently,
   onNewNoteIn,
   lastFolder,
   canRenameFolder,
@@ -362,6 +382,9 @@ export function FolderTree({
   newFolderLabel,
   renameFolderLabel,
   deleteFolderLabel,
+  revealLabel,
+  restoreLabel,
+  deletePermanentlyLabel,
   newLabel,
   renameLabel,
   deleteLabel,
@@ -402,29 +425,57 @@ export function FolderTree({
   // cannot open a menu).
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
 
-  const menuItems = (path: string): MenuItem[] => [
-    {
-      label: newFolderLabel,
-      disabled: !canCreateFolderIn(path),
-      onSelect: () => onCreateFolder(path),
-    },
-    {
-      label: renameFolderLabel,
-      disabled: !canRenameFolderAt(path),
-      onSelect: () => onRenameFolder(path),
-    },
-    {
-      label: deleteFolderLabel,
-      danger: true,
-      disabled: !canDeleteFolderAt(path),
-      onSelect: () => onDeleteFolder(path),
-    },
-    {
-      label: newNoteLabel,
-      disabled: !canCreateFolderIn(path),
-      onSelect: () => onNewNoteIn(path),
-    },
-  ];
+  const menuItems = (path: string): MenuItem[] => {
+    // A folder *inside* the trash gets its own two entries. The four ordinary ones are
+    // all disabled there — every one of them refuses a trashed path — so the menu that
+    // opened on a deleted folder said nothing at all about the only two things anyone
+    // ever wants to do with one.
+    //
+    // Trashed-ness is read off the path, so nothing has to be threaded down from
+    // `Library`: it is the same question `canRenameFolder` and its two neighbours in
+    // `vault-types.ts` already ask, and `isInTrash` is where the answer lives. The Trash
+    // row itself is deliberately not one of these — it is a place, not a deleted folder,
+    // and Clear trash in the note list is what empties it.
+    if (path !== TRASH_FOLDER && isInTrash(path)) {
+      return [
+        { label: restoreLabel, onSelect: () => onRestoreFolder(path) },
+        {
+          label: deletePermanentlyLabel,
+          danger: true,
+          onSelect: () => onDeleteFolderPermanently(path),
+        },
+      ];
+    }
+
+    return [
+      {
+        label: newFolderLabel,
+        disabled: !canCreateFolderIn(path),
+        onSelect: () => onCreateFolder(path),
+      },
+      {
+        label: renameFolderLabel,
+        disabled: !canRenameFolderAt(path),
+        onSelect: () => onRenameFolder(path),
+      },
+      {
+        label: deleteFolderLabel,
+        danger: true,
+        disabled: !canDeleteFolderAt(path),
+        onSelect: () => onDeleteFolder(path),
+      },
+      {
+        label: newNoteLabel,
+        disabled: !canCreateFolderIn(path),
+        onSelect: () => onNewNoteIn(path),
+      },
+      // Never disabled, on any row: `IPC.libraryRevealNote` is `shell.showItemInFolder`
+      // on a joined path and assumes nothing about what is at the end of it — the vault
+      // root and the trash are both perfectly good things to open a file manager on, and
+      // opening one is the one action here that changes nothing.
+      { label: revealLabel, onSelect: () => onRevealFolder(path) },
+    ];
+  };
 
   return (
     <nav className="tree">
@@ -552,9 +603,11 @@ export function FolderTree({
               // No new folders inside the trash: it is a destination for deleted notes,
               // not a place to organise.
               onCreateFolder={() => {}}
-              // And no drops either: Delete is what puts a note in here, and it asks
-              // first. `onDropNote` left off entirely rather than passed as a no-op, so
-              // the branch never even offers to accept one.
+              // A drop *is* accepted here, and it is Delete — the same rename into
+              // `_trash`, no confirmation, because trashing destroys nothing and Restore
+              // is the named way back (see `drag.ts`). `canDropNote` still refuses a
+              // folder *inside* the trash, so only this one row lights up.
+              onDropNote={onDropNote}
               dragging={dragging}
               activePath={activePath}
               onActivate={setActivePath}

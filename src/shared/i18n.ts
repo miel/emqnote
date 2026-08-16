@@ -171,6 +171,12 @@ const DUTCH: Record<string, string> = {
   "library.noPreview": "Geen voorbeeld voor dit bestandstype. Open het in het systeem.",
   "library.previewFailed": "Dit bestand kon niet getoond worden.",
   "library.delete": "Verwijderen",
+  /** Uit de prullenbak terug de vault in: vraagt naar welke map, de Inbox bovenaan. */
+  "library.restore": "Terugzetten",
+  /** Het enige menu-item dat echt iets weggooit (B24), naast Prullenbak legen. */
+  "library.deletePermanently": "Permanent verwijderen",
+  "library.deletePermanentlyLocked":
+    "Dit staat open in het invoervenster. Sluit het daar eerst, dan kan het verwijderd worden.",
   /** The reader toolbar's overflow button, opening Rename/Move/Duplicate/Reveal/Delete.
    *  Its `title`; `library.actions` is what is written on it. */
   "library.moreActions": "Meer acties",
@@ -217,6 +223,9 @@ const DUTCH: Record<string, string> = {
   "ask.confirmDeleteFolder": "naar de prullenbak verplaatsen, met alles erin?",
   "ask.confirmClearTrash":
     "permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
+  // Voor één ding uit de prullenbak, waar `ask.confirmClearTrash` er een aantal telt.
+  "ask.confirmDeletePermanently":
+    "permanent verwijderen? Dit kan niet ongedaan worden gemaakt.",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
@@ -245,8 +254,10 @@ const DUTCH: Record<string, string> = {
   "folder.folder-not-found": "Die map bestaat niet meer.",
   "folder.folder-already-exists": "Er is al een map met die naam.",
   "folder.folder-holds-open-note": "Er staat een notitie in die open is in het invoervenster.",
+  "folder.folder-into-itself": "Een map kan niet in zichzelf gezet worden.",
   "folder.failed": "De map kon niet hernoemd worden.",
   "folder.deleteFailed": "De map kon niet verwijderd worden.",
+  "folder.moveFailed": "De map kon niet verplaatst worden.",
 
   // Settings
   "settings.title": "Instellingen",
@@ -474,6 +485,12 @@ const ENGLISH: Record<string, string> = {
   "library.noPreview": "No preview for this file type. Open it in the system viewer.",
   "library.previewFailed": "This file could not be shown.",
   "library.delete": "Delete",
+  /** Out of the trash and back into the vault: asks which folder, the Inbox offered first. */
+  "library.restore": "Restore",
+  /** The only menu item that really throws something away (B24), beside Clear trash. */
+  "library.deletePermanently": "Delete permanently",
+  "library.deletePermanentlyLocked":
+    "This is open in the note window. Close it there first, then it can be deleted.",
   "library.moreActions": "More actions",
   "library.actions": "Actions",
   "library.insert": "Insert",
@@ -511,6 +528,8 @@ const ENGLISH: Record<string, string> = {
   "ask.confirmDelete": "Move to the trash?",
   "ask.confirmDeleteFolder": "Move to the trash, along with everything inside it?",
   "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
+  // For one thing out of the trash, where `ask.confirmClearTrash` counts several.
+  "ask.confirmDeletePermanently": "delete permanently? This cannot be undone.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
 
@@ -528,8 +547,9 @@ const ENGLISH: Record<string, string> = {
   "link.duplicateTitle": "A note with this title already exists in",
   "link.renameAnyway": "rename anyway?",
 
-  // Why a folder could not be renamed or deleted. The same codes cover both — only the
-  // generic `folder.failed`/`folder.deleteFailed` fallback differs per action.
+  // Why a folder could not be renamed, deleted or moved. The same codes cover all three —
+  // only the generic `folder.failed`/`folder.deleteFailed`/`folder.moveFailed` fallback
+  // differs per action.
   "folder.folder-is-root": "The vault itself cannot be renamed or deleted.",
   "folder.folder-is-reserved": "That folder belongs to the app.",
   "folder.folder-name-empty": "A folder needs a name.",
@@ -537,8 +557,10 @@ const ENGLISH: Record<string, string> = {
   "folder.folder-not-found": "That folder no longer exists.",
   "folder.folder-already-exists": "There is already a folder with that name.",
   "folder.folder-holds-open-note": "A note in it is open in the capture window.",
+  "folder.folder-into-itself": "A folder cannot be moved inside itself.",
   "folder.failed": "The folder could not be renamed.",
   "folder.deleteFailed": "The folder could not be deleted.",
+  "folder.moveFailed": "The folder could not be moved.",
 
   "settings.title": "Settings",
   "settings.language": "Language",

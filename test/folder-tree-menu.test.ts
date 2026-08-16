@@ -13,7 +13,14 @@ const ROOT: FolderNode = {
   noteCount: 0,
   children: [
     { path: "00 Inbox", name: "00 Inbox", noteCount: 1, children: [] },
-    { path: "_trash", name: "_trash", noteCount: 0, children: [] },
+    {
+      path: "_trash",
+      name: "_trash",
+      noteCount: 0,
+      // A deleted folder sitting in the trash: the one row whose menu is not the ordinary
+      // four-with-everything-disabled.
+      children: [{ path: "_trash/Klant X", name: "Klant X", noteCount: 2, children: [] }],
+    },
   ],
 };
 
@@ -34,7 +41,13 @@ afterEach(() => {
   container.remove();
 });
 
-function mount(overrides: { onCreateFolder?: () => void } = {}): void {
+function mount(
+  overrides: {
+    onCreateFolder?: () => void;
+    onRestoreFolder?: (path: string) => void;
+    onDeleteFolderPermanently?: (path: string) => void;
+  } = {},
+): void {
   root = createRoot(container);
   act(() => {
     root.render(
@@ -50,6 +63,9 @@ function mount(overrides: { onCreateFolder?: () => void } = {}): void {
         onNewFolder: () => {},
         onRenameFolder: () => {},
         onDeleteFolder: () => {},
+        onRevealFolder: () => {},
+        onRestoreFolder: overrides.onRestoreFolder ?? (() => {}),
+        onDeleteFolderPermanently: overrides.onDeleteFolderPermanently ?? (() => {}),
         onNewNoteIn: () => {},
         lastFolder: "00 Inbox",
         canRenameFolder: true,
@@ -63,6 +79,9 @@ function mount(overrides: { onCreateFolder?: () => void } = {}): void {
         newFolderLabel: "New folder",
         renameFolderLabel: "Rename folder",
         deleteFolderLabel: "Delete folder",
+        revealLabel: "Reveal",
+        restoreLabel: "Restore",
+        deletePermanentlyLabel: "Delete permanently",
         newLabel: "New",
         renameLabel: "Rename",
         deleteLabel: "Delete",
@@ -112,11 +131,36 @@ function menuItemDisabled(label: string): boolean {
   return (button as HTMLButtonElement).disabled;
 }
 
+/** The Trash branch starts collapsed, so what is inside it has to be asked for first. */
+function unfoldTrash(): void {
+  const twisty = branchByName("Trash").querySelector("button.twisty") as HTMLButtonElement;
+  act(() => {
+    twisty.click();
+  });
+}
+
 describe("FolderTree's right-click menu", () => {
-  it("renders New folder, Rename folder, Delete folder and New note on an ordinary row", () => {
+  it("renders New folder, Rename folder, Delete folder, New note and Reveal on an ordinary row", () => {
     mount();
     rightClick(branchByName("00 Inbox"));
-    expect(menuItemLabels()).toEqual(["New folder", "Rename folder", "Delete folder", "New note"]);
+    expect(menuItemLabels()).toEqual([
+      "New folder",
+      "Rename folder",
+      "Delete folder",
+      "New note",
+      "Reveal",
+    ]);
+  });
+
+  it("keeps Reveal enabled everywhere, including the root and the trash", () => {
+    mount();
+    // `shell.showItemInFolder` on a joined path assumes nothing about what is at the end
+    // of it, and opening a file manager is the one entry here that changes nothing.
+    rightClick(branchByName("Vault"));
+    expect(menuItemDisabled("Reveal")).toBe(false);
+
+    rightClick(branchByName("Trash"));
+    expect(menuItemDisabled("Reveal")).toBe(false);
   });
 
   it("does not replace the old right-click-creates-a-folder gesture with an immediate action", () => {
@@ -152,5 +196,43 @@ describe("FolderTree's right-click menu", () => {
     rightClick(branchByName("00 Inbox"));
     expect(menuItemDisabled("Rename folder")).toBe(false);
     expect(menuItemDisabled("Delete folder")).toBe(false);
+  });
+
+  it("offers Restore and Delete permanently on a folder inside the trash", () => {
+    // Every ordinary entry refuses a trashed path, so the menu that opened on a deleted
+    // folder used to say nothing about the only two things anyone does with one.
+    mount();
+    unfoldTrash();
+    rightClick(branchByName("Klant X"));
+
+    expect(menuItemLabels()).toEqual(["Restore", "Delete permanently"]);
+    expect(menuItemDisabled("Restore")).toBe(false);
+    expect(menuItemDisabled("Delete permanently")).toBe(false);
+  });
+
+  it("calls back with the row's own path, not the folder the toolbar last acted on", () => {
+    const onRestoreFolder = vi.fn();
+    const onDeleteFolderPermanently = vi.fn();
+    mount({ onRestoreFolder, onDeleteFolderPermanently });
+    unfoldTrash();
+    rightClick(branchByName("Klant X"));
+
+    const restore = [...container.querySelectorAll(".context-menu-item")].find(
+      (node) => node.querySelector(".context-menu-label")?.textContent === "Restore",
+    ) as HTMLButtonElement;
+    act(() => {
+      restore.click();
+    });
+
+    expect(onRestoreFolder).toHaveBeenCalledWith("_trash/Klant X");
+    expect(onDeleteFolderPermanently).not.toHaveBeenCalled();
+  });
+
+  it("leaves the Trash row itself on the ordinary menu", () => {
+    // It is a place you go to, not a folder that was thrown away — Restore and Delete
+    // permanently are both meaningless on it, and Clear trash is what empties it.
+    mount();
+    rightClick(branchByName("Trash"));
+    expect(menuItemLabels()).not.toContain("Restore");
   });
 });

@@ -754,6 +754,43 @@ export function emptyTrash(vault: string): number {
 }
 
 /**
+ * Permanently deletes one thing out of the trash — a note, an attachment, or a whole
+ * folder with everything under it, `rmSync`'s `recursive` serving all three.
+ *
+ * It sits here rather than anywhere else in this file because it is `emptyTrash` at a
+ * smaller scale, and those two are now the only code in the app that destroys anything
+ * (B24). It shares that function's guard exactly, for exactly that reason: `resolve()`
+ * only normalises text, so a `_trash` that turned out to be a symlink somewhere else
+ * would sail through a text-only check while `rmSync` removed whatever the link really
+ * named. `realpathSync` is what actually asks the filesystem, and it runs on both sides.
+ *
+ * The target is resolved as well as the trash folder, which `emptyTrash` has no need to
+ * do — it works on `readdirSync`'s own entries, this one on a path that came over IPC. A
+ * symlink *inside* `_trash` is as good a way out of it as a symlinked `_trash` is. What
+ * is then removed is the path as given rather than what it resolved to: for anything
+ * real those are the same, and for a link inside the trash pointing at another file
+ * inside it, removing the link is what was asked for.
+ */
+export function deleteFromTrash(vault: string, path: string): void {
+  const target = join(vault, path);
+  if (!existsSync(target)) return;
+
+  const realTrash = join(realpathSync(vault), TRASH);
+  if (realpathSync(join(vault, TRASH)) !== realTrash) {
+    throw new Error("refusing to delete inside a path outside the vault's own trash folder");
+  }
+
+  // `startsWith(realTrash + sep)` and not `realTrash` itself: emptying the trash is
+  // `emptyTrash`'s job, and removing the folder rather than its contents would leave the
+  // one place every delete in this app writes to missing.
+  if (!realpathSync(target).startsWith(realTrash + sep)) {
+    throw new Error("refusing to delete a path outside the vault's own trash folder");
+  }
+
+  rmSync(target, { recursive: true, force: true });
+}
+
+/**
  * `uniquePath`'s own collision suffix is hardcoded to `.md` — exactly right for a note,
  * silently wrong for anything else: a colliding `photo.png` would come back
  * `photo (2).md`, an image quietly turned into a markdown file by its own trash
@@ -964,6 +1001,77 @@ export function trashFolder(vault: string, folderPath: string): string {
   mkdirSync(trashDirectory, { recursive: true });
 
   const to = uniqueFolderPath(trashDirectory, basename(folderPath));
+  renameSync(from, to);
+
+  return toPosix(relative(vault, to));
+}
+
+/**
+ * Moves a folder — and everything inside it — under another parent, answering its new
+ * vault-relative path.
+ *
+ * Restore is the one caller: a folder in `_trash` has nowhere to be *renamed* to, since
+ * a rename never changes which parent a folder hangs off, so the only way back out of
+ * the trash is a move. `""` for `targetParent` is the vault root, exactly as it is for
+ * `moveNote` and for `newNoteFolder`.
+ *
+ * The refusals reproduce `trashFolder`'s code for code — which reproduce `renameFolder`'s
+ * — so the renderer goes on decoding one set through the one `folderErrorOf`, with three
+ * differences that are the whole of what this operation is:
+ *
+ * - the *source* may be inside `_trash`, which is the point of it, though the trash
+ *   folder itself may not be moved;
+ * - the *destination* may not be, because moving a folder into the trash is
+ *   `trashFolder`, and two routes to one act is how the two drift;
+ * - a folder cannot move inside itself, the one hazard a rename cannot produce.
+ *
+ * A name collision is *not* refused here, unlike in `renameFolder`. That function argues
+ * that quietly turning "Klant A" into "Klant A (2)" leaves the user with two folders they
+ * believe are one — true when they typed the name and expected it to be taken. Here they
+ * typed nothing: the folder keeps the name it already had, and the destination happening
+ * to hold one of the same name is not a mistake to correct but a collision to survive, the
+ * same way `trashFolder` survives one.
+ */
+export function moveFolder(vault: string, folderPath: string, targetParent: string): string {
+  if (folderPath === "") throw new Error(FOLDER_ERROR.root);
+
+  const segments = folderPath.split("/");
+  if (folderPath === TRASH_FOLDER || segments.some(isHidden)) {
+    throw new Error(FOLDER_ERROR.reserved);
+  }
+
+  const parentSegments = targetParent === "" ? [] : targetParent.split("/");
+  if (parentSegments[0] === TRASH_FOLDER || parentSegments.some(isHidden)) {
+    throw new Error(FOLDER_ERROR.reserved);
+  }
+
+  if (targetParent === folderPath || targetParent.startsWith(`${folderPath}/`)) {
+    throw new Error(FOLDER_ERROR.intoItself);
+  }
+
+  // Already there. `renameFolder` answers the same way for a rename to the name a folder
+  // already has, and for the same reason: without this the collision suffix below would
+  // turn "move it where it is" into "make it 'Klant X (2)'".
+  if (segments.slice(0, -1).join("/") === targetParent) return folderPath;
+
+  const from = join(vault, folderPath);
+  const targetDirectory = targetParent === "" ? vault : join(vault, targetParent);
+
+  // Same defence as `renameFolder` and `trashFolder`, on both ends this time: this is the
+  // one call that turns two typed strings into a pair of directory locations.
+  if (!resolve(from).startsWith(resolve(vault) + sep)) throw new Error(FOLDER_ERROR.outside);
+  if (
+    resolve(targetDirectory) !== resolve(vault) &&
+    !resolve(targetDirectory).startsWith(resolve(vault) + sep)
+  ) {
+    throw new Error(FOLDER_ERROR.outside);
+  }
+
+  if (!existsSync(from)) throw new Error(FOLDER_ERROR.missing);
+
+  mkdirSync(targetDirectory, { recursive: true });
+
+  const to = uniqueFolderPath(targetDirectory, basename(folderPath));
   renameSync(from, to);
 
   return toPosix(relative(vault, to));

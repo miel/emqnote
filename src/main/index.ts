@@ -51,11 +51,13 @@ import {
 } from "./vault.js";
 import {
   createFolder,
+  deleteFromTrash,
   diffConflict,
   duplicateNote,
   emptyTrash,
   folderContents,
   renameFolder,
+  moveFolder,
   moveNote,
   openNote,
   readFilesIn,
@@ -309,6 +311,65 @@ async function linkingNotesFor(
 ): Promise<{ path: string; targets: string[] }[]> {
   if (indexDb === null) return [];
   return linkingNotes(vault, indexDb, path);
+}
+
+/**
+ * A folder changed place — renamed (B44) or moved back out of the trash — with the links
+ * into it repaired around the move.
+ *
+ * One function for both handlers rather than a copy each, because the *ordering* is the
+ * whole of B44/B45 and a second copy is how the next one drifts. Both questions are asked
+ * **before** the folder moves, since a target resolves against where a note is *now* and
+ * afterwards there is nothing left for the index to find; both rewrites happen after it,
+ * against paths rebased onto the folder's new location. `apply` — one call to
+ * `renameFolder` or to `moveFolder` — is the only line that differs between the two.
+ *
+ * The lock guard is the one `IPC.libraryTrashFolder` has: `CaptureWriter`'s session pins
+ * the path it will write to next, and moving the folder under it does not update that
+ * path, so the next debounced write would recreate the note in a folder nobody else
+ * believes exists.
+ *
+ * It does not confirm, on either route. B44 argues that for the rename — a folder rename
+ * is not a gesture anyone makes about one note, and a dialog counting notes the user has
+ * never thought about is friction in front of a repair they cannot reasonably decline —
+ * and a restore is the same act read backwards.
+ */
+async function relocateFolder(
+  vault: string,
+  path: string,
+  apply: () => string,
+): Promise<string> {
+  const active = writer.activePath();
+  if (active !== null && active.startsWith(`${path}/`)) {
+    throw new Error(FOLDER_ERROR.locked);
+  }
+
+  const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
+  // The other half (B45), and the one the first version of the rename was missing
+  // entirely: every target that *carries a path* into this folder — a picture, a PDF, a
+  // path-form note link. `linkingNotesUnder` above answers a question about resolution and
+  // an attachment never resolves to a note, so it can say nothing about the folder of
+  // images this was first reported for.
+  const carrying = indexDb === null ? [] : await targetsUnder(vault, indexDb, path);
+
+  const moved = apply();
+
+  for (const rewrite of folderRenameRewrites(path, moved, linking)) {
+    rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
+  }
+  // After the move and after the link pass, so a note that was itself inside the folder is
+  // written at the path it now has. Both passes match on the *old* spelling, which exists
+  // only once, so neither can undo the other.
+  rewriteTargetPrefix(
+    vault,
+    carrying.map((one) => movedPath(one.path, path, moved)),
+    path,
+    moved,
+    writer.activePath(),
+  );
+
+  notifyLibrary();
+  return moved;
 }
 
 /**
@@ -1612,54 +1673,55 @@ function registerLibraryIpc(): void {
    * target that points into it — and until B44 it simply broke them all, silently, since a
    * note link says nothing about being broken until it is clicked (B35).
    *
-   * The repair is the same shape as `IPC.libraryMoveNote`'s, one level up, and the
-   * ordering is the load-bearing half: the question is asked **before** the rename,
-   * because a target resolves against where a note is *now* and after `renameFolder` there
-   * is nothing left for the index to find. It is carried out without asking, unlike the
-   * single-note case — a folder rename is not a gesture anyone makes about one note, and a
-   * dialog counting notes the user has never thought about is friction in front of a
-   * repair they cannot reasonably want to decline.
-   *
-   * The lock guard is the one `IPC.libraryTrashFolder` already has and this handler was
-   * missing: `CaptureWriter`'s session pins the path it will write to next, and renaming
-   * the folder under it does not update that path, so the next debounced write would
-   * recreate the note in a folder that no longer exists.
+   * `relocateFolder` above is the whole of the repair, and the reason it is a function
+   * rather than the body of this handler is `IPC.libraryMoveFolder` right below: the two
+   * differ by one call, and the ordering they share is exactly what B44 and B45 are about.
    */
   ipcMain.handle(IPC.libraryRenameFolder, async (_event, path: string, name: string) => {
     const vault = vaultPath();
     if (vault === null) return path;
+    return relocateFolder(vault, path, () => renameFolder(vault, path, name));
+  });
+
+  /**
+   * Restoring a folder out of the trash. The links into it are repaired exactly as a
+   * rename's are — same guard, same ordering, same two passes — because from `note_links`'
+   * point of view a folder that moved and a folder that was renamed are one event.
+   *
+   * There is no move-a-folder gesture anywhere else in the app: filing is what the tree is
+   * for, and dragging a whole folder around it is not something anyone asked for. This
+   * exists because a folder in `_trash` has nowhere to be *renamed* to, so the one way
+   * back out of the trash had to be a move.
+   */
+  ipcMain.handle(IPC.libraryMoveFolder, async (_event, path: string, parent: string) => {
+    const vault = vaultPath();
+    if (vault === null) return path;
+    return relocateFolder(vault, path, () => moveFolder(vault, path, parent));
+  });
+
+  /**
+   * The second permanent delete the app has ever performed, and the first that names one
+   * thing (B24). `deleteFromTrash` carries the `realpathSync` guard `emptyTrash` has, on
+   * the target as well as on the trash folder; the confirmation naming what is about to
+   * go is the renderer's, the same shape Clear trash already uses.
+   *
+   * The lock guard is `IPC.libraryTrashFolder`'s, widened by one case: a *note* can be the
+   * thing being deleted here, so the capture window's claimed path is compared for equality
+   * as well as for containment. Without it the file would simply come back on the next
+   * debounced write — `writeAtomic`'s own `mkdirSync` recreating the trash folder around it.
+   */
+  ipcMain.handle(IPC.libraryDeleteFromTrash, (_event, path: string) => {
+    const vault = vaultPath();
+    if (vault === null) return { deleted: false };
 
     const active = writer.activePath();
-    if (active !== null && active.startsWith(`${path}/`)) {
-      throw new Error(FOLDER_ERROR.locked);
+    if (active !== null && (active === path || active.startsWith(`${path}/`))) {
+      return { deleted: false, locked: true };
     }
 
-    const linking = indexDb === null ? new Map() : await linkingNotesUnder(vault, indexDb, path);
-    // The other half (B45), and the one the first version of this was missing entirely:
-    // every target that *carries a path* into this folder — a picture, a PDF, a
-    // path-form note link. `linkingNotesUnder` above answers a question about resolution
-    // and an attachment never resolves to a note, so it can say nothing about the folder
-    // of images this was first reported for.
-    const carrying = indexDb === null ? [] : await targetsUnder(vault, indexDb, path);
-
-    const renamed = renameFolder(vault, path, name);
-
-    for (const rewrite of folderRenameRewrites(path, renamed, linking)) {
-      rewriteWikiLinks(vault, rewrite.references, rewrite.newTarget, writer.activePath());
-    }
-    // After the rename and after the link pass, so a note that was itself inside the
-    // folder is written at the path it now has. Both passes match on the *old* spelling,
-    // which exists only once, so neither can undo the other.
-    rewriteTargetPrefix(
-      vault,
-      carrying.map((one) => movedPath(one.path, path, renamed)),
-      path,
-      renamed,
-      writer.activePath(),
-    );
-
+    deleteFromTrash(vault, path);
     notifyLibrary();
-    return renamed;
+    return { deleted: true };
   });
 
   ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {
