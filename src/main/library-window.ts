@@ -37,6 +37,13 @@ export function showLibraryWindow(): void {
     show: false,
     title: "emqnote",
     backgroundColor: "#1e1f22",
+    // This window is natively framed, and on Windows that means the application menu
+    // `installMinimalMenu` sets is drawn as a real strip inside it — an "Edit" bar above
+    // the folder tree, which is what was reported. Hiding it rather than dropping the
+    // menu keeps the Edit roles and their accelerators alive (Alt still reveals the bar),
+    // and `installMinimalMenu`'s own comment says why the menu itself has to stay. A
+    // no-op on macOS, where the menu belongs to the app and not to the window.
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(here, "../preload/index.cjs"),
       contextIsolation: true,

@@ -42,6 +42,7 @@ import { buildTrayMenu, createTray } from "./tray.js";
 import { checkForUpdates, setBeforeInstall } from "./updater.js";
 import {
   checkFilesOnDemand,
+  defaultVaultPath,
   ensureVaultLayout,
   FILES_ON_DEMAND_INSTRUCTION,
   findOneDriveCandidates,
@@ -532,11 +533,20 @@ async function main(): Promise<void> {
 /**
  * Replaces Electron's default application menu with only the clipboard roles.
  *
- * That default menu is invisible on a frameless window but its accelerators are not:
- * it binds Ctrl+M to Minimise, which is why indenting inside a list minimised the
- * whole window. It also claims Ctrl+R for reload and Ctrl+Shift+I for developer tools.
- * The Edit roles have to stay, because on macOS the menu is what makes Cmd+C and
- * Cmd+V work at all.
+ * That default menu's accelerators are the reason: it binds Ctrl+M to Minimise, which is
+ * why indenting inside a list minimised the whole window. It also claims Ctrl+R for
+ * reload and Ctrl+Shift+I for developer tools. The Edit roles have to stay, because on
+ * macOS the menu is what makes Cmd+C and Cmd+V work at all.
+ *
+ * This comment used to say the menu was "invisible on a frameless window", which is true
+ * of the capture window and of nothing else — and saying it in the one place that sets
+ * the menu for the whole app is what kept a Windows bug invisible for months. On Windows
+ * a `Menu.setApplicationMenu` menu is drawn *per window*, so the library window and the
+ * PDF window, which are both natively framed, grew a real menu strip between the title
+ * bar and the page: a bar reading "Edit" above the folder tree, on a window that has no
+ * business having one. Those two carry `autoHideMenuBar: true` for it — a no-op on macOS,
+ * where the menu belongs to the app rather than the window, and deliberately not
+ * `setMenu(null)`, which would take the Edit roles and their accelerators with it.
  */
 function installMinimalMenu(): void {
   const template: MenuItemConstructorOptions[] = [];
@@ -753,6 +763,17 @@ function registerHotkey(): void {
 }
 
 async function prepareVault(): Promise<void> {
+  // A measurement run must never sit on a dialog waiting for a human, and since the
+  // vault is no longer guessed into `settings.json` (see `settings.ts`) it now genuinely
+  // can be null here on a machine that has one OneDrive and has never been set up. The
+  // documented invocation always carries `--vault=`, which fills the path in before this
+  // and so never reaches the question — but a `--selftest` without one used to inherit
+  // the guess and now would block forever on an unattended machine, which is a CI job
+  // that hangs rather than fails. Nothing to prepare without a vault: exiting the way
+  // the cancel path already does leaves `main()` to carry on and the self-test to report
+  // its own failure.
+  if (loadSettings().vaultPath === null && launch.selfTestRounds > 0) return;
+
   if (loadSettings().vaultPath === null) {
     const chosen = await askForVault();
     if (chosen === null) return;
@@ -788,12 +809,47 @@ function adoptVault(path: string): void {
  * guess, because putting the vault on the wrong tenant means work content in the wrong
  * place. Better to ask once.
  *
- * The one place that knows this wording, for both the people who reach it: first run,
- * and "Choose another folder…" in settings. Two dialogs asking the same question in
- * different words would be two chances to describe the tenant choice badly.
+ * With exactly one there *is* a good guess, and for a long time the app acted on it
+ * silently: `defaults()` seeded `settings.vaultPath` with `defaultVaultPath()`, so
+ * `prepareVault` never saw the `null` that makes it ask, and a fresh install on the
+ * common one-tenant machine created and populated a folder nobody had been shown. The
+ * guess is still the guess — it is what this dialog puts in front of you and what
+ * `defaultPath` opens the picker on — but it is now something to accept rather than
+ * something that happened. One click either way, and the difference is knowing.
+ *
+ * The one place that knows this wording, for all three of the people who reach it: a
+ * first run with one OneDrive, a first run with several, and "Choose another folder…"
+ * in settings. Two dialogs asking the same question in different words would be two
+ * chances to describe the tenant choice badly.
  */
 async function askForVault(): Promise<string | null> {
   const candidates = findOneDriveCandidates();
+
+  if (candidates.length === 1) {
+    const suggestion = defaultVaultPath();
+
+    // The full path, not a tenant label: this is the one dialog where the answer is a
+    // folder that does not exist yet, and "we will create <path>" is only reassuring if
+    // you can read where. `cancelId` is the second button rather than a dismissal — there
+    // is no third outcome here, and closing the box lands on "choose another folder",
+    // which asks again rather than deciding for you.
+    if (suggestion !== null) {
+      const answer = await dialog.showMessageBox({
+        type: "question",
+        title: "Where should your vault go?",
+        message: "Keep your notes here?",
+        detail:
+          `emqnote will keep your notes in:\n\n${suggestion}\n\n` +
+          "That is the business OneDrive on this machine, so the notes sync to your " +
+          "other machines. The folder is created if it is not there yet.",
+        buttons: ["Use this folder", "Choose another folder…"],
+        cancelId: 1,
+        defaultId: 0,
+      });
+
+      if (answer.response === 0) return suggestion;
+    }
+  }
 
   if (candidates.length > 1) {
     const labels = candidates.map(tenantLabel);

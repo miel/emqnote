@@ -79,7 +79,14 @@ export function findOneDriveCandidates(): string[] {
   return found;
 }
 
-/** Only returns a path when there is exactly one business OneDrive; otherwise ask. */
+/**
+ * The vault path to *suggest* when there is exactly one business OneDrive; null otherwise.
+ *
+ * Despite the name it is no longer anybody's default. `settings.ts` used to seed
+ * `vaultPath` with this, which meant the one-tenant machine — the common one — had its
+ * vault chosen for it in silence and never saw the chooser at all. It composes
+ * `askForVault`'s suggestion now, and the answer to it is a click.
+ */
 export function defaultVaultPath(): string | null {
   const candidates = findOneDriveCandidates();
   return candidates.length === 1 ? join(candidates[0]!, VAULT_FOLDER_NAME) : null;
