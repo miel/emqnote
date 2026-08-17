@@ -129,6 +129,29 @@ The capture window's bundle is kept deliberately small — it is the one that mu
 
 **Windows gets a real installer and auto-updater; macOS gets a version check and a link** (B22). `electron-builder.yml`'s `win.target` is a per-user NSIS installer (`perMachine: false` — no admin rights needed, same as unzipping a folder), and `src/main/updater.ts` drives `electron-updater` on that path with two explicit confirmations: one before downloading, one before restarting to install. macOS deliberately does not get that: no Developer ID, no notarization, so no Squirrel.Mac-based silent install. Instead it does a plain `fetch` against the GitHub releases API and opens the release page for a manual reinstall, the same upgrade step as before. Both paths read the same public GitHub repo; `src/main/update-check.ts` holds the Electron-free parsing/comparison logic, tested directly.
 
+**`autoUpdater` is reached with `require`, never with `await import`** (17 August 2026). That
+one line is why "Check for updates…" did nothing at all on Windows for every release since
+B22. electron-updater is CJS, and `autoUpdater` is its single export written as a lazy
+`Object.defineProperty(exports, "autoUpdater", { get })` rather than a plain assignment —
+a shape `cjs-module-lexer` does not recognise, so Node leaves it out of the ESM namespace it
+synthesises while all seventeen other exports come through. `const { autoUpdater } = await
+import(…)` therefore yielded `undefined`, the next line threw on `undefined.autoDownload`,
+and both callers are `void checkForUpdates(…)`, so the throw became an unhandled rejection
+and the tray click produced nothing. Three things follow. **It could only ever fail on
+Windows**, because `checkMac` is a plain `fetch` and `checkWindows` is the only code in the
+app that loads electron-updater at all — so the one platform running that line was the one
+platform nobody could debug. **No test could have caught it, and the obvious test would have
+asserted it away**: under vitest the import goes through Vite's own interop, which builds the
+namespace by reading the exports object, so `autoUpdater` is right there and passing —
+`test/updater-import.test.ts` spawns a real `node` for that case specifically. Same family as
+B36's trailing slash and B40's missing `corsEnabled`: a property of the runtime, not of this
+source tree. And **`checkForUpdates` now catches its own failures** and routes them through
+`reportError`, so the next thing that goes wrong on this path says so instead of doing
+nothing — `trash-delete.ts`'s "a refusal names itself", applied to the one feature whose only
+output is a dialog. Verified by driving the built bundle's own `createRequire` line inside
+the real packaged `app.asar` against the live GitHub release: a genuine `NsisUpdater`, "Up to
+date" at 0.8.8 and "Update available → 0.8.8" at 0.8.0.
+
 **Electron's default application menu is removed** (`installMinimalMenu`). Its accelerators are the reason: it claimed Ctrl+M for Minimise, so indenting inside a list minimised the window. This entry used to say the menu was "invisible on a frameless window", which is true of the capture window and of nothing else — and saying it here, in the one place that sets the menu for the whole app, is what kept a Windows bug invisible for months: on Windows the menu is drawn *per window*, so the library and PDF windows, both natively framed, grew a real "Edit" strip above their contents. Both carry `autoHideMenuBar: true` now — a no-op on macOS, and deliberately not `setMenu(null)`, which would take the Edit roles with it. Only the Edit clipboard roles stay, because on macOS the menu is what makes Cmd+C/Cmd+V work at all. macOS additionally gets an application submenu, because without one Cmd+Q was dead — but its Quit item is a custom click, never `{ role: "quit" }`: **Cmd+Q closes a window, it does not quit the app** (B25). The library window closes; the capture window commits and hides; the resident process survives both, which is the whole premise of B2/B3. The item is still labelled "Quit emqnote" for muscle memory, and the tray item of that name remains the only real exit.
 
 **The capture window is hidden, never destroyed.** `capture-window.ts` holds exactly one `BrowserWindow` reference, assigned once, so a destroyed window is unrecoverable: `reveal()` fails on `isDestroyed()` forever — hotkey and New note silently dead — and `hideCaptureWindow()` never runs, so `writer.finish()` never releases the loaded note and the library reports it "open for editing" in a window that no longer exists. On macOS the traffic lights are real (`titleBarStyle: "hidden"`), so the red button would do exactly that. The `close` handler therefore calls `preventDefault()` and routes to `hideCaptureWindow()`, the same commit-and-put-away path `IPC.captureClose` uses. A `quitting` flag, set from `before-quit`, lets a genuine quit through — without it the tray's Quit hangs on that `preventDefault()`. `reveal()` keeps its `isDestroyed()` guard but now recreates the window rather than returning.

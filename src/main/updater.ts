@@ -1,4 +1,6 @@
 import { app, dialog, shell } from "electron";
+import { createRequire } from "node:module";
+import type { AppUpdater } from "electron-updater";
 import { isNewerVersion, parseLatestRelease } from "./update-check.js";
 
 const REPO = "miel/emqnote";
@@ -35,11 +37,50 @@ export function setBeforeInstall(handler: () => Promise<void>): void {
  * answer.
  */
 export async function checkForUpdates(trigger: "startup" | "manual"): Promise<void> {
-  if (process.platform === "win32") {
-    await checkWindows(trigger);
-  } else {
-    await checkMac(trigger);
+  try {
+    if (process.platform === "win32") {
+      await checkWindows(trigger);
+    } else {
+      await checkMac(trigger);
+    }
+  } catch (error) {
+    // Both callers are `void checkForUpdates(…)` — the tray item and the startup check
+    // have nothing to await — so without this a throw anywhere below becomes an unhandled
+    // rejection and the click does *nothing at all*, which is exactly how the broken
+    // `autoUpdater` import stayed invisible for every release since B22. The same
+    // reasoning as `trash-delete.ts`: on a path with no other output, a failure has to
+    // name itself. `reportError` still respects `trigger`, so the startup check stays
+    // quiet.
+    await reportError(trigger, error);
   }
+}
+
+/**
+ * electron-updater's `autoUpdater`, loaded the way electron-updater is actually written.
+ *
+ * **Not `await import("electron-updater")`**, which is what this used to be and is why
+ * "check for updates" did nothing on Windows for every release since B22. That package is
+ * CJS, and `autoUpdater` is its one export defined as a lazy `Object.defineProperty`
+ * getter rather than a plain assignment — a shape `cjs-module-lexer` does not recognise,
+ * so it is the one name missing from the ESM namespace Node synthesises. Measured inside
+ * the real packaged `app.asar`: the namespace carries `AppUpdater`, `NsisUpdater`,
+ * `MacUpdater` and thirteen more, and `autoUpdater` comes back `undefined`. The next line
+ * then threw on `undefined.autoDownload`, and the `void` at the call site swallowed it.
+ *
+ * The failure could only ever show on Windows, because `checkMac` uses a plain `fetch`
+ * and this is the only code in the app that loads electron-updater at all. Nothing under
+ * `test/` could have caught it either — it is a property of Node's CJS/ESM interop, not of
+ * this source tree, the same family as B36's trailing slash and B40's missing
+ * `corsEnabled`. `test/updater-import.test.ts` pins it now.
+ *
+ * `require` rather than the `.default.autoUpdater` that also works: CJS is the module
+ * system this package ships for, and going through it does not depend on a static
+ * analyser recognising a pattern — which is the thing that failed here. It stays inside
+ * the function so macOS, which needs none of it, still never loads it.
+ */
+function loadAutoUpdater(): AppUpdater {
+  const require = createRequire(import.meta.url);
+  return (require("electron-updater") as { autoUpdater: AppUpdater }).autoUpdater;
 }
 
 async function reportError(trigger: "startup" | "manual", error: unknown): Promise<void> {
@@ -90,7 +131,7 @@ async function checkMac(trigger: "startup" | "manual"): Promise<void> {
 }
 
 async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
-  const { autoUpdater } = await import("electron-updater");
+  const autoUpdater = loadAutoUpdater();
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
@@ -100,6 +141,22 @@ async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
       if (settled) return;
       settled = true;
       resolve();
+    };
+
+    // The startup check is deliberately silent about everything except an update being
+    // there — but from the moment the user clicks "Download and install", every outcome
+    // is an answer to something they asked for, and a download that fails after that must
+    // not be as quiet as the check that preceded it.
+    let owedAnAnswer = trigger === "manual";
+    // One report per check. electron-updater emits `error` *and* rejects the promise the
+    // failing call returned, so a failed download reaches this from two directions; the
+    // flag is set synchronously because the first arrival is still inside `showMessageBox`
+    // when the second gets here, and `settled` cannot stand in for it.
+    let reported = false;
+    const fail = (error: unknown): void => {
+      if (reported) return;
+      reported = true;
+      void reportError(owedAnAnswer ? "manual" : "startup", error).then(finish);
     };
 
     autoUpdater.once("update-available", (info) => {
@@ -117,8 +174,9 @@ async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
           finish();
           return;
         }
+        owedAnAnswer = true;
         await autoUpdater.downloadUpdate();
-      })();
+      })().catch(fail);
     });
 
     autoUpdater.once("update-downloaded", () => {
@@ -136,20 +194,23 @@ async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
           finish();
           return;
         }
+        owedAnAnswer = true;
         await beforeInstall();
         autoUpdater.quitAndInstall();
         finish();
-      })();
+      })().catch(fail);
     });
 
     autoUpdater.once("update-not-available", () => {
       void reportUpToDate(trigger).then(finish);
     });
 
-    autoUpdater.once("error", (error) => {
-      void reportError(trigger, error).then(finish);
-    });
+    autoUpdater.once("error", fail);
 
-    void autoUpdater.checkForUpdates();
+    // The rejection is the same failure the `error` event above already reports, so this
+    // catch is only here to keep it from surfacing as an unhandled rejection alongside the
+    // dialog. `fail` is idempotent through `finish`, so letting both run would be correct
+    // too — but reporting one failure twice is not.
+    autoUpdater.checkForUpdates().catch(() => {});
   });
 }
