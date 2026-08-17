@@ -135,6 +135,12 @@ The capture window's bundle is kept deliberately small — it is the one that mu
 
 **The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the tree → notes → editor ring from there, and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
 
+**An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway. If Windows reports it unchanged, the next step is `paragraph`'s precedent — a second alias chord beside the first.
+
+**Both global accelerators are registered by one function** (B60). `registerGlobalHotkeys` in `index.ts` reads `settings.hotkey` and `settings.libraryHotkey` and claims both; every path that changes a chord goes through it. That is not tidiness: `globalShortcut` cannot give up one claim without knowing what it was, so every caller used `unregisterAll()` — which, the moment there are two hotkeys, silently drops the other one. The handlers save first and register second, then roll the setting back if the OS refused, because the register step reads the settings file. `Mod+O` stays as the in-window form; the global chord is a *setting*, not a `shortcuts.ts` entry, and the help sheet draws it the same way it draws the capture hotkey.
+
+**A deliberate launch opens the library; a login start stays silent** (B61). `shouldOpenLibraryAtLaunch` in `launch-options.ts` is the whole rule, pure and separate from the launch that carries it out, because two entry points ask it: the first instance about its own argv, and `second-instance` about the argv the relaunch handed over — clicking the shortcut of a running app is the same gesture as clicking the shortcut of a stopped one. macOS asks a third time through `activate`, since an `LSUIElement` app with no dock icon never sees a second instance. **The signal is an argument on the login item**, written by `applyLoginItem` and nowhere else: `setLoginItemSettings` used to be called with `{ openAtLogin }` alone, so nothing distinguished the two launches, and the tray's own checkbox set it directly — a second call site that would have dropped the argument on the first toggle. macOS's `wasOpenedAtLogin` is read alongside the flag rather than instead of it, because an entry written by an older version carries no flag until it is rewritten.
+
 **Windows path limits and reserved names.** Filenames follow `YYYY-MM-DD HHmm Subject.md`, truncated at 80 chars, forbidden characters `\ / : * ? " < > |` replaced by `-`, reserved names (`CON`, `PRN`, `COM1`…) suffixed with `_`, no trailing dot or space. `src/main/filename.ts`, tested in `test/filename.test.ts`.
 
 **A `#` that opens a tag is not escaped at the start of a line** (B19). Everywhere else a line-initial `#` becomes `\#`, because it could begin a heading — but `\#klantx` is not a tag to Obsidian, and half the tags in the vault being silently inert is exactly what B7 forbids. The exception is narrow: `startsWithTag` in `src/markdown/tags.ts` requires a tag character immediately after the hash, so `\# Dit is geen kop` keeps its backslash. It is implemented as a custom `text` handler in `pipeline.ts` that cuts the value around the hash and runs the pieces through `state.safe` separately — never by unescaping the output afterwards, which would eat a literal backslash the user typed.
@@ -232,6 +238,36 @@ nothing follows, so nothing can split, and leaving the list is the useful readin
 structure and hands a plain-text target a checklist with every bullet, number and box
 stripped off. The `text/html` flavour was always fine, so this is only about the plain-text
 one — and it stays plain: no escaping, nothing that would make it markdown.
+
+**A bullet, a number or a checkbox follows its own line's formatting** (`list-marker-style.ts`,
+17 August 2026). Bold a whole bulleted line and the `•` stayed upright, which reads as the
+marker not belonging to the line it introduces. It is a `DecorationSet` putting a class on
+the `listItem` and nothing else — no schema change, nothing reaching the serializer, nothing
+on disk, so there is no B6 or B10 question to answer. Four things are decided rather than
+incidental. **Only when the whole line carries it**: half a bold line is a formatted phrase,
+and a marker that went bold for it would claim something about the item that is not true —
+`isMarkActive` is no help there, being selection-based and *any* rather than all.
+**Whitespace outside the run is ignored**, or a trailing space would make the marker flicker
+while typing. **The CSS sets the properties on `::marker`, never on the `li`**: `font-weight`
+on the item is inherited, so a plain sub-item nested inside a bold one would draw a bold
+bullet of its own — the same family as B48's `display: none` and the `.overlay` dimming, and
+the reason `test/styles-list-marker.test.ts` asserts the bare-`li` form is *absent*. A task
+item has no marker at all, so the same pair of rules lands on `.task-check`'s SVG instead,
+where CSS outranks the presentation attributes `checkbox.ts` writes. Bold and italic only:
+strikethrough was asked about and refused, since a `::marker` cannot draw a line through
+itself and it would mean giving up the native marker for a `::before`.
+
+**A modal gives focus back, and it does it on unmount.** `Help.tsx` and `Settings.tsx` record
+`document.activeElement` on mount and refocus it when they go away, which is `ContextMenu.tsx`'s
+recipe with one difference that matters: `ContextMenu` restores in its own `close()`, and the
+help sheet has a way out that never calls `onClose` at all — `Mod-/` a second time is caught
+by the window-level listener in `Capture.tsx`/`Library.tsx`, which just flips its flag. Before
+this the focused panel was simply removed, focus collapsed to `document.body`, and the next
+Tab started at the top of the document: the folder tree's `+ New` button, whatever pane the
+sheet was opened from. `Capture.tsx` no longer focuses the editor in its `onClose` either —
+with the opener restored that only takes focus away from the subject field. `Settings.tsx`
+additionally never focused its panel, so its own `trapTab` trapped nothing and Escape only
+worked once something inside had been clicked.
 
 **An empty task item is written `- [ ]`, and reading it back takes its own code.** GFM
 requires a checkbox to be followed by whitespace *and* content, so a box on its own is an
@@ -1135,6 +1171,48 @@ stat sweep costs on a real business OneDrive vault can only be felt there. Both 
 `TEST-PROTOCOL.md` §23. And the paste in the *capture* window specifically, the limitation
 every batch since the disk-change work has named.
 
+**Six items from daily use landed on 17 August 2026**, and four of them are one theme: **the
+app was hard to reach**. There was no way to raise the library from outside the capture
+window, starting the app from its shortcut showed nothing at all, a chord printed in the help
+sheet did nothing on Windows, and closing the help sheet dropped keyboard focus on the floor.
+Three carry decisions: **B60** — the library gets its own global hotkey, which reverses
+`shortcuts.ts`'s own "window-local on purpose" — **B61** — a deliberate launch opens the
+library and a login start stays silent — and **B62** — no numbered headings.
+
+Two of the six were not what the report said, and both are worth remembering. **There already
+was a shortcut for the library**, `Mod+O`, marked `where: "capture"` — so from Outlook, from
+Word, from the library itself it did not exist, which is indistinguishable from not being
+there. And **there is no Tasks-view shortcut in this app at all**: `Ctrl+Shift+T` is the
+editor's "Task with a checkbox", which is what the report was about. Reading the registry
+before believing the sentence is what turned a missing feature into a delivery bug.
+
+The other two: markers follow their own line's bold and italic, and the help sheet gives
+focus back. **B62 is a `no` with code behind it anyway** — two cases in
+`test/limitations.test.ts`, because the boundary between "a heading under a numbered item"
+(fine, byte-identical) and "a heading as the item's first content" (escapes the list on the
+second read) is exactly the kind of thing that gets rediscovered.
+
+Confirmed in the real app under `Xvfb`, driven over CDP and real XTEST keys, against a
+fixture vault: a plain launch putting the library on screen (`visibilityState` "visible", not
+merely a target in the list), a `--login` launch producing **only the hidden capture window
+and no library at all**, and a second launch while that silent instance was resident raising
+the library rather than the capture window; `Ctrl+Shift+B` pressed with the *capture* window
+focused creating the library window from nothing and showing it; `Ctrl+Shift+T` driven with
+**real XTEST keys** — the only thing that reaches `before-input-event` — producing a real
+`<li data-checked="false">` in the **capture** window, with a listener recording that the `T`
+never reached the page while an unclaimed `Ctrl+Shift+L` did; a fully bold bullet and a fully
+bold numbered item computing `font-weight: 700` on `::marker` against `400` for a half-bold
+one, a fully italic item computing `italic`, and a bold task's checkbox stroke measuring
+2.2px against a plain one's 1.4px — with the note coming back **byte-identical from
+`npm run canonical`** afterwards; and the help sheet opened from a focused note row and closed
+both ways (Escape, and `Ctrl+/` again, which never calls `onClose`) putting focus back on that
+same row, with the following Tab staying in the note list instead of jumping to `+ New`.
+
+**Not confirmed live**: the Windows half of the `Ctrl+Shift+T` claim, which is the whole point
+of it — the failure does not reproduce here, exactly as with Ctrl+Tab. Nor the login item on a
+real Windows or macOS sign-in: `setLoginItemSettings` is a no-op on Linux, so what was measured
+is the flag being read, not the flag being written by the OS. `TEST-PROTOCOL.md` §25.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1146,7 +1224,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B59, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B62, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

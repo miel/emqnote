@@ -41,6 +41,33 @@ describe("known limitations", () => {
     );
   });
 
+  /**
+   * B62 — numbered headings, asked for as "1. Title, 1.1 Subtitle, 1.1.1 Subsubtitle"
+   * and answered no.
+   *
+   * A heading may not be the *first* thing in a list item: `listItem` is
+   * `paragraph block*`, so `from-mdast.ts` prepends an empty paragraph to satisfy the
+   * content expression, and the serializer then writes an empty item with an indented
+   * heading under it. Read back, the heading escapes the list altogether and the empty
+   * list is dropped — a document that is not structurally the one that was written, which
+   * is what `03-markdown-dialect.md` §8 forbids.
+   *
+   * Pinned rather than fixed because the fix is not in this app: GFM has no numbering for
+   * headings, so the numbers could only be either invented at draw time (and then absent
+   * from every note pasted into Outlook, which is where these notes go) or written into
+   * the heading text, which would make the app the owner of renumbering every heading in
+   * every note on every edit.
+   */
+  it("cannot put a heading first in a list item", () => {
+    expect(roundtrip("1. # Titel\n")).toBe("1.\n\n   # Titel\n");
+    // And the second pass is where it actually breaks: no list left at all.
+    expect(roundtrip("1.\n\n   # Titel\n")).toBe("# Titel\n");
+  });
+
+  it("reads a hash inside a task item as text, because GFM does", () => {
+    expect(roundtrip("- [ ] # Taak\n")).toBe("- [ ] \\# Taak\n");
+  });
+
   it("turns an escaped hash at the start of a line into a live tag", () => {
     // Written by hand as literal text, comes back as a tag. Same cause as the two above:
     // the backslash is gone by the time we parse, so nothing can tell this from a tag
@@ -72,6 +99,11 @@ describe("guaranteed not a limitation", () => {
     expect(roundtrip("Started ==halfway but never finished.\n")).toBe(
       "Started ==halfway but never finished.\n",
     );
+  });
+
+  /** The other half of B62: a heading *under* a numbered item is a normal thing to write. */
+  it("keeps a heading that follows the item's own first line", () => {
+    expect(roundtrip("1. Titel\n\n   ## Subtitel\n")).toBe("1. Titel\n\n   ## Subtitel\n");
   });
 
   it("keeps escaping a line-start hash that does not open a tag", () => {

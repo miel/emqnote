@@ -14,6 +14,17 @@ export interface LaunchOptions {
   vaultOverride: string | null;
   /** Open the library window immediately, for looking at it while building it. */
   openLibrary: boolean;
+  /**
+   * Started by the login item rather than by a person (B61).
+   *
+   * The login item is registered with this flag on its command line (`applyLoginItem` in
+   * `index.ts`), which is the only signal there is: nothing else about the process
+   * distinguishes "Windows started me at sign-in" from "somebody double-clicked the
+   * shortcut". macOS has a second one, `getLoginItemSettings().wasOpenedAtLogin`, and
+   * both are read — the flag alone would go missing for anyone whose login item was
+   * registered by an older version and never rewritten.
+   */
+  startedAtLogin: boolean;
   /** Write a PNG of the library window to this path and exit. */
   screenshot: string | null;
   /** Dump the system clipboard to `<prefix>.html`/`.txt`/`.png` and exit. */
@@ -54,9 +65,47 @@ export function readLaunchOptions(argv: string[] = process.argv): LaunchOptions 
     selfTestRounds: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
     vaultOverride: vault === "" ? null : vault,
     openLibrary: argv.includes("--library"),
+    startedAtLogin: argv.includes(LOGIN_FLAG),
     screenshot: flagValue(argv, "screenshot"),
     dumpClipboard: flagValue(argv, "dump-clipboard"),
     thumbnailProbe: flagValue(argv, "thumbnail-probe"),
     trashProbe: flagValue(argv, "trash-probe"),
   };
+}
+
+/** Written onto the login item's command line and read back off it. One spelling. */
+export const LOGIN_FLAG = "--login";
+
+/**
+ * Whether this launch should put the library on screen (B61).
+ *
+ * Reported from daily use: starting emqnote from its shortcut appeared to do nothing at
+ * all. It did not — the tray icon arrived and the capture window was built hidden — but a
+ * deliberate launch that shows no window is indistinguishable from a launch that failed.
+ * A login start is the one case where silence is right: that one is meant to leave the
+ * resident process running and nothing else, at a moment nobody asked for a window.
+ *
+ * Pure, and separate from the launch that carries it out, so both entry points can ask the
+ * same question: the first instance asks it about its own argv, and `second-instance` asks
+ * it about the argv the relaunch handed over — a shortcut clicked while the app is already
+ * resident is the same gesture and deserves the same answer.
+ *
+ * The measurement and probe paths are excluded here rather than at the call sites: they
+ * end in `app.exit()`, and a window appearing in front of a latency run is exactly the
+ * kind of thing that would show up in the numbers.
+ */
+export function shouldOpenLibraryAtLaunch(
+  options: LaunchOptions,
+  wasOpenedAtLogin = false,
+): boolean {
+  if (options.selfTestRounds > 0) return false;
+  if (options.dumpClipboard !== null) return false;
+  if (options.thumbnailProbe !== null) return false;
+  if (options.trashProbe !== null) return false;
+
+  // `--library` is explicit and outranks everything, including the login flag: it exists
+  // to be able to say "open it" whatever else is going on.
+  if (options.openLibrary) return true;
+
+  return !options.startedAtLogin && !wasOpenedAtLogin;
 }

@@ -15,6 +15,7 @@ import { loadSettings, saveSettings } from "./settings.js";
 import { showCaptureWindow } from "./capture-window.js";
 import { showLibraryWindow } from "./library-window.js";
 import { checkForUpdates } from "./updater.js";
+import { applyLoginItem } from "./login-item.js";
 import { vaultMenuEntries } from "./vault-menu.js";
 
 let tray: Tray | null = null;
@@ -138,11 +139,13 @@ export function buildTrayMenu(): void {
         click: () => showCaptureWindow(),
       },
       {
-        // No accelerator here. An accelerator in a tray menu is drawn but never
-        // registered, so the menu promised a Cmd+Shift+E that did nothing — and making
-        // it real would have claimed a machine-wide shortcut for a once-in-a-while
-        // action. Browsing is reachable from here and from Mod+O in the capture window.
+        // The accelerator is drawn here and registered elsewhere — `registerGlobalHotkeys`
+        // in `index.ts`, exactly as the row above. This row deliberately carried none for
+        // a long time, on the argument that a machine-wide claim was too much for a
+        // once-in-a-while action; B60 reverses that, since from any window other than the
+        // capture one there was no way to reach the library at all.
         label: "Browse notes…",
+        accelerator: settings.libraryHotkey,
         click: () => showLibraryWindow(),
       },
       { type: "separator" },
@@ -156,7 +159,10 @@ export function buildTrayMenu(): void {
         checked: settings.openAtLogin,
         click: (item) => {
           saveSettings({ openAtLogin: item.checked });
-          app.setLoginItemSettings({ openAtLogin: item.checked });
+          // Through `applyLoginItem`, never `setLoginItemSettings` directly: the entry
+          // carries `--login`, and that is the only thing telling a sign-in start apart
+          // from a double-click (B61).
+          applyLoginItem(item.checked);
           buildTrayMenu();
         },
       },

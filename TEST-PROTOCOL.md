@@ -795,6 +795,31 @@ and paste both. That is enough to settle it without another round of guessing.
 
 ---
 
+## 25. Reaching the app (17 August 2026)
+
+Four of that batch's six items are about getting *to* emqnote, and two of them can only be
+answered on Windows. §25a is the sharpest: like Ctrl+Tab before it, the failure does not
+reproduce on this sandbox at all, so what shipped is a claim at the earliest point in the
+window rather than a fix for a known cause. If it fails again, that is real information and
+not a wasted round — the next step is a second chord beside the first, and knowing this one
+did not work is what justifies it.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 25a | **Windows.** In a new note, type a line and press **Ctrl+Shift+T** | The line becomes a task with a checkbox. Try it in the library's reader too. If it still does nothing, say so plainly — that is the answer this exists to get |  |
+| 25b | **Windows.** Same chord with the caret in the *subject* field, and again with a note row selected in the list | Nothing happens, in both places. It is an editor command and always was; this is only here so "it does nothing" can be told apart from "it does nothing *there*" |  |
+| 25c | **Windows.** Sign out and back in, with *Start at login* ticked | emqnote is running — the tray icon is there — and **no window appeared**. That is the whole point of the silent path |  |
+| 25d | **Windows.** Now start emqnote from its Start-menu or desktop shortcut | The library window opens. Do it again while it is still running: the library comes to the front, not the note window |  |
+| 25e | **macOS.** Same pair: a login start shows nothing; opening emqnote from Spotlight or Finder opens the library | As above. macOS reads its own `wasOpenedAtLogin` as well as the flag, so both halves are worth checking |  |
+| 25f | Untick *Start at login* in the tray, tick it again, then sign out and back in | Still silent. The tray checkbox rewrites the login entry, and the flag has to survive that — it is the one place it could quietly be lost |  |
+| 25g | Press **Ctrl/Cmd+Shift+B** while in Outlook, Word, or anything else | The library opens. This is a new machine-wide claim (B60) |  |
+| 25h | While emqnote runs, check whether anything you use has lost that chord — classic Outlook binds Ctrl+Shift+B to the Address Book | If it is in the way, change it in Settings → *Shortcut for the library*. Say which chord you moved to; the default is a guess and worth revisiting |  |
+| 25i | Settings: record a new chord for each of the two shortcuts in turn, then use **both** | Changing one must not silently kill the other. That is the specific hazard of having two — one function registers both, and this is the check on it |  |
+| 25j | Open the help sheet with **Ctrl+/** from inside a note, close it with **Escape**, then press Tab | Focus is back where you were, and Tab moves on from there — not from the folder tree's *+ New*. Close it the second way too (Ctrl+/ again) |  |
+| 25k | The same in the capture window, and in the Settings panel | Same behaviour. Settings additionally now takes focus when it opens, so Escape closes it without clicking inside first |  |
+| 25l | Make a bulleted line entirely bold, then a numbered one, then a task | The bullet, the number and the checkbox go bold with the text. Bold only *part* of a line and the marker stays as it was |  |
+| 25m | The same with italic, and on a real display: does the slanted checkbox read as deliberate or as a rendering fault? | A judgement no script can make. If it looks wrong, say so — it is one CSS rule |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -804,16 +829,19 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j or §24a fails,
+§18x, §19u, §20m, §22s, §23j, §24a or §25a fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make. **§22a, §22b, §22c, §23a–§23d and §24a–§24d
+judgements about how something feels or reads, which no script can make, and §25m joins them.
+**§22a, §22b, §22c, §23a–§23d, §24a–§24d and §25a–§25f
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
-they are about — this sandbox is Linux, and all of them are Windows behaviours. §22b is the
-sharpest of them, because the bug it fixes did not reproduce here at all; §23c is a different
+they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the
+macOS half of the same pair). §22b and §25a are the sharpest of them, because neither bug
+reproduces here at all — both are claimed at the earliest point in the window rather than
+fixed at a known cause; §23c is a different
 shape again, being a *cost* to measure rather than a behaviour to check. §19m is a third kind: what a
 remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

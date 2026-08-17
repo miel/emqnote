@@ -365,6 +365,16 @@ De serializer ontsnapt met een backslash, en alleen waar het echt nodig is:
 | HTML behalve `<u>`, `<br>`, `<mark>`, `<table>`-familie | Houdt bestanden leesbaar |
 | Harde regelafbreking op kolombreedte | Onleesbare diffs |
 | Volgnummers `1.` voor elk item | Onleesbaar als je het bestand rauw bekijkt |
+| Een kop als eerste inhoud van een lijstitem (`1. # Titel`) | Overleeft de rondgang niet: `listItem` is `paragraph block*`, dus er komt een lege alinea vóór, en bij het teruglezen ontsnapt de kop uit de lijst (B62) |
+| Genummerde koppen (`1.` / `1.1` / `1.1.1` vóór een kop) | GFM kent ze niet; zie B62 voor waarom ze ook niet verzonnen worden |
+
+Een kop *onder* de eerste regel van een lijstitem mag wel, en komt byte-identiek terug:
+
+```markdown
+1. Titel
+
+   ## Subtitel
+```
 
 ## 8. De rondgang-eis
 

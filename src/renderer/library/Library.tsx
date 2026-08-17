@@ -2348,6 +2348,7 @@ export function Library(): React.ReactElement {
         <Settings
           locale={app.locale}
           hotkey={app.hotkey}
+          libraryHotkey={app.libraryHotkey}
           loadRemoteImages={app.loadRemoteImages}
           vaultPath={app.vaultPath}
           t={app.t}
@@ -2364,6 +2365,7 @@ export function Library(): React.ReactElement {
           window="library"
           isMac={app.isMac}
           hotkey={app.hotkey}
+          libraryHotkey={app.libraryHotkey}
           t={app.t}
           onClose={() => setHelpOpen(false)}
         />

@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import type { Command, EditorState } from "prosemirror-state";
-import { applyLink, linkAt, selectLink, type CommandContext } from "./commands.js";
+import { applyLink, COMMANDS, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
 import {
   attachmentNodeView,
@@ -307,6 +307,26 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       window.removeEventListener("keyup", onKeyChange);
       window.removeEventListener("blur", onBlur);
     };
+  }, []);
+
+  /**
+   * The editor chords main claims ahead of the page (`editor-keys.ts`, `IPC.editorCommand`).
+   *
+   * Subscribed here rather than in the two windows because this is the component that owns
+   * the view and its `CommandContext`, and because both windows draw it — one subscription,
+   * one behaviour. `hasFocus()` is the whole of the scoping: main cannot tell the caret in
+   * the note from the caret in the subject field, so a claimed chord that arrives while the
+   * editor is not focused does nothing, exactly as the keymap binding it replaces did.
+   */
+  useEffect(() => {
+    return window.emqnote.onEditorCommand(({ id }) => {
+      const current = view.current;
+      if (current === null || !current.hasFocus()) return;
+
+      const build = COMMANDS[id];
+      if (build === undefined) return;
+      build(commandContext())(current.state, current.dispatch, current);
+    });
   }, []);
 
   useImperativeHandle(ref, () => ({

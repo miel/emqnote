@@ -72,6 +72,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.openLibrary": "Bibliotheek openen",
   "shortcut.help": "Dit overzicht",
   "shortcut.newNote": "Nieuwe notitie (overal)",
+  "shortcut.openLibraryGlobal": "Bibliotheek openen (overal)",
   "shortcut.contextMenu": "Menu bij de gefocuste rij",
   "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
 
@@ -280,6 +281,7 @@ const DUTCH: Record<string, string> = {
   "settings.title": "Instellingen",
   "settings.language": "Taal",
   "settings.hotkey": "Sneltoets voor een nieuwe notitie",
+  "settings.libraryHotkey": "Sneltoets voor de bibliotheek",
   "settings.hotkeyHint": "Klik en druk de toetsencombinatie in.",
   "settings.close": "Sluiten",
   "settings.hotkeyTaken": "Die combinatie is al bezet.",
@@ -410,6 +412,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.openLibrary": "Open the library",
   "shortcut.help": "This sheet",
   "shortcut.newNote": "New note (from anywhere)",
+  "shortcut.openLibraryGlobal": "Open the library (from anywhere)",
   "shortcut.contextMenu": "Menu for the focused row",
   "shortcut.cyclePanes": "Switch between folders, list and note",
 
@@ -606,6 +609,7 @@ const ENGLISH: Record<string, string> = {
   "settings.title": "Settings",
   "settings.language": "Language",
   "settings.hotkey": "Shortcut for a new note",
+  "settings.libraryHotkey": "Shortcut for the library",
   "settings.hotkeyHint": "Click, then press the key combination.",
   "settings.close": "Close",
   "settings.hotkeyTaken": "That combination is already taken.",

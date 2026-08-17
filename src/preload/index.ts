@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     subscribe<StatusPayload>(IPC.captureStatus, handler),
   onLoad: (handler: (note: OpenedNote) => void) =>
     subscribe<OpenedNote>(IPC.captureLoadNote, handler),
+  onEditorCommand: (handler: (event: { id: string }) => void) =>
+    subscribe<{ id: string }>(IPC.editorCommand, handler),
   painted: (token: number) => ipcRenderer.send(IPC.capturePainted, token),
   change: (payload: CapturePayload) => ipcRenderer.send(IPC.captureChange, payload),
   close: () => ipcRenderer.send(IPC.captureClose),
@@ -51,6 +53,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setLoadRemoteImages: (load: boolean) => ipcRenderer.invoke(IPC.setLoadRemoteImages, load),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
+  setLibraryHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setLibraryHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),
   setSort: (sort: SortKey) => ipcRenderer.send(IPC.setSort, sort),

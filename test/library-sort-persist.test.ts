@@ -78,6 +78,7 @@ function buildFake(): Fake {
     onReset: () => () => {},
     onStatus: () => () => {},
     onLoad: () => () => {},
+    onEditorCommand: () => () => {},
     painted: () => {},
     change: () => {},
     close: () => {},
@@ -88,6 +89,7 @@ function buildFake(): Fake {
       locale: "en-US",
       platform: "darwin",
       hotkey: "CommandOrControl+Shift+Space",
+      libraryHotkey: "CommandOrControl+Shift+B",
       vaultPath: "/vault",
       libraryPaneWidths: null,
       // The persisted value, deliberately not "modified" — the default `useState` in
@@ -98,6 +100,7 @@ function buildFake(): Fake {
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
     setHotkey: async () => true,
+    setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
     setSort,
     listVaults: async () => [],

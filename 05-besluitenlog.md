@@ -1962,6 +1962,91 @@ vergrendeling daar adviserend is.
 kandidaten open — OneDrive zelf, een viewer die een pdf openhoudt, een virusscanner — en
 welke het is, is nu een vraag met een antwoord in plaats van een vermoeden.
 
+## B60 — De bibliotheek krijgt een eigen systeembrede sneltoets
+
+**Genomen** op 17 augustus 2026, naar aanleiding van "geen sneltoets om de notitiebrowser
+te openen". Die was er wel — `Mod+O` — maar alleen in het opnamevenster, en dat is precies
+het punt: vanuit Outlook, vanuit Word, vanuit de bibliotheek zelf bestond hij niet. Een
+sneltoets die je alleen kunt gebruiken in het venster dat je juist wilde verlaten, is geen
+sneltoets.
+
+Dit **draait de eigen redenering van `shortcuts.ts` om**, en daarom staat het hier. Bij
+`openLibrary` stond: "Window-local on purpose. A second global claim would be taken away
+from every other app on the machine for something used a few times a day at most." Dat
+argument klopt nog steeds — het weegt alleen anders zodra blijkt dat het alternatief "niet
+bereikbaar" is in plaats van "bereikbaar via het andere venster".
+
+**Wat er is gebouwd.** `settings.libraryHotkey` naast `settings.hotkey`, met dezelfde
+opnameknop in Instellingen (één `HotkeyRow`, twee keer gebruikt) en een eigen regel in het
+sneltoetsoverzicht. `Mod+O` blijft bestaan als de vorm binnen het opnamevenster.
+
+**Eén functie registreert beide** (`registerGlobalHotkeys`), en dat is de enige echt
+technische keuze hier. `globalShortcut` kan een claim niet teruggeven zonder te weten welke
+het was; elk pad gebruikte `unregisterAll()`, en met een tweede sneltoets haalt dat stilletjes
+de ander weg. Alles wat een toetscombinatie verandert — de start, `IPC.setHotkey`,
+`IPC.setLibraryHotkey` — gaat daardoorheen, zodat wat deze app op de machine claimt op één
+plek staat. De weigering noemt bovendien wélke van de twee bezet was; "een sneltoets is
+bezet" laat de lezer zelf uitzoeken wat er niet meer werkt.
+
+**Wat hier eerlijk bij hoort.** De standaard is `Ctrl/Cmd+Shift+B` ("browse"), en een
+systeembrede claim wordt voor de duur van de sessie van elke andere applicatie afgepakt —
+B18's afweging, ongewijzigd. Het klassieke Outlook bindt bijna elke `Ctrl+Shift+<letter>`
+aan iets, en `B` is daar het adresboek. Dáárom is dit een instelling en geen constante: de
+constante is alleen wat een machine krijgt waar nog niets is gekozen.
+
+## B61 — Zelf starten opent de bibliotheek; starten bij aanmelden blijft stil
+
+**Genomen** op 17 augustus 2026. De app starten via zijn snelkoppeling zag eruit als "er
+gebeurt niets". Dat was niet zo — het pictogram in de systeembalk kwam, het opnamevenster
+werd verborgen opgebouwd — maar een bewuste start die geen enkel venster laat zien, is van
+buiten niet te onderscheiden van een start die mislukt is.
+
+**De omkering is klein en de reden is de asymmetrie.** Bij aanmelden is stil zijn juist
+goed: dat is het hele idee van B2/B3, het proces hoort er de hele dag te zijn en niemand
+vroeg op dat moment om een venster. Elke andere start is een handeling van een mens, en die
+verdient een antwoord.
+
+**Er was geen enkel signaal om die twee uit elkaar te houden**, en dat is de eigenlijke
+bevinding. `setLoginItemSettings` werd aangeroepen met alleen `{ openAtLogin }`, dus de
+Run-sleutel op Windows droeg een kale opdrachtregel. Nu staat `--login` erop
+(`applyLoginItem`, één functie — de systeembalk zette de aanmeldstart eerder zelf en zou het
+argument bij de eerste klik weer kwijtraken), en macOS levert daarnaast
+`getLoginItemSettings().wasOpenedAtLogin`. Beide worden gelezen: een sleutel die door een
+oudere versie is geschreven draagt het argument pas na een herschrijving.
+
+**Opnieuw starten terwijl de app al draait is dezelfde handeling** en krijgt hetzelfde
+antwoord: `second-instance` stelt de vraag opnieuw, over de argumenten die de nieuwe start
+meebrengt, en toonde eerder altijd het opnamevenster. Op macOS gaat dat via `activate`, want
+een `LSUIElement`-app zonder dock-pictogram krijgt geen tweede instantie te zien.
+
+`shouldOpenLibraryAtLaunch` is een pure functie in `launch-options.ts`, apart van de start
+die hem uitvoert, zodat beide ingangen dezelfde vraag stellen. De meet- en probepaden staan
+er expliciet in en niet bij de aanroep: die eindigen in `app.exit()`, en een venster dat vóór
+een latentiemeting opkomt is precies het soort ding dat in de getallen terechtkomt.
+
+## B62 — Geen genummerde koppen
+
+**Genomen** op 17 augustus 2026, als antwoord op de vraag of opsomming, nummering of taken
+te combineren zijn met koppen: "1. Titel (kop 1), 1.1 Subtitel (kop 2), 1.1.1 Subsubtitel".
+Het antwoord is **nee**, en dat is het waard om vast te leggen, want de vraag komt terug.
+
+**Wat wél kan en al werkte:** een kop *onder* de eerste regel van een lijstitem.
+`listItem` is `paragraph block*`, dus `1. Titel` met daaronder `## Subtitel` is geldig en
+komt byte-identiek terug.
+
+**Wat niet kan:** een kop als eerste inhoud van een item. `from-mdast.ts` zet er een lege
+alinea vóór om de inhoudsexpressie te vullen, de serializer schrijft dan een leeg item met
+een ingesprongen kop eronder, en bij het teruglezen ontsnapt de kop uit de lijst en verdwijnt
+de lege lijst. Dat is een document dat structureel niet meer het geschrevene is — precies wat
+`03-markdown-dialect.md` §8 verbiedt. `test/limitations.test.ts` pint beide vast.
+
+**Afgewezen: de nummers zelf verzinnen.** Twee vormen, allebei slechter dan niets doen.
+Alleen op het scherm nummeren (CSS-tellers) betekent dat de nummers verdwijnen zodra de
+notitie in Outlook wordt geplakt — en dat is waar deze notities heen gaan. De nummers in de
+koptekst schrijven maakt de app eigenaar van het hernummeren van elke kop in elke notitie bij
+elke bewerking, en laat handgetypte nummers botsen met verzonnen nummers. Geen van beide
+verdient de gereedschapskist die eronder hoort.
+
 ---
 
 ## Open punten
@@ -1981,6 +2066,7 @@ welke het is, is nu een vraag met een antwoord in plaats van een vermoeden.
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
+| **En waarom deed Ctrl+Shift+T niets op Windows?** | Onbekend, precies zoals hierboven, en op 17 augustus 2026 met dezelfde reparatie beantwoord: geclaimd in `before-input-event` (`editor-keys.ts`), nu ook in het opnamevenster, dat daar nog geen enkele handler had. Op Linux is met echte XTEST-toetsen gemeten dat de toetscombinatie ná de claim werkt en dat de `T` de pagina niet meer bereikt terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. Komt de melding ongewijzigd terug, dan is de volgende stap `paragraph`'s precedent: een tweede toetscombinatie ernaast. `TEST-PROTOCOL.md` §25 |
 | **Wát houdt die map op Windows vast?** | Onbekend, en dat hoort hier te staan. B57 haalde de eigen handle van de app weg en de melding kwam ongewijzigd terug, dus de watcher was het niet (alleen). Sinds B59 noemt de weigering de code en het bestand, en `--trash-probe` loopt de map na — de eerstvolgende melding hoort de vraag te beantwoorden in plaats van te verplaatsen. `TEST-PROTOCOL.md` §24 |
 | **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |

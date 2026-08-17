@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC } from "../shared/ipc.js";
 import { matches, shortcut } from "../shared/shortcuts.js";
+import { installEditorKeyClaims } from "./editor-keys.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -108,6 +109,10 @@ export function showLibraryWindow(): void {
     event.preventDefault();
     created.webContents.send(IPC.libraryCyclePanes, { backward: input.shift });
   });
+
+  // The editor chords claimed on the same argument, one file over: this window draws the
+  // same ProseMirror editor in its reader pane.
+  installEditorKeyClaims(created.webContents);
 
   created.on("closed", () => {
     window = null;

@@ -64,8 +64,14 @@ In Tauri zou daar een Rust-equivalent en een bridge voor nodig zijn.
 
 Draait continu, ook als er geen venster zichtbaar is.
 
-- **Tray/menubalk-icoon** en autostart bij inloggen
-- **Global hotkey** (`globalShortcut`) → `captureWindow.show()` + focus
+- **Tray/menubalk-icoon** en autostart bij inloggen. De aanmeldstart draagt `--login`
+  (`applyLoginItem`), want dat is het enige wat hem onderscheidt van iemand die de
+  snelkoppeling aanklikt: die tweede opent de bibliotheek, de eerste blijft stil (B61)
+- **Global hotkeys** (`globalShortcut`) — twee, beide een instelling en beide door één
+  `registerGlobalHotkeys` geclaimd: het opnamevenster (`captureWindow.show()` + focus) en
+  de bibliotheek (B60)
+- **Toetsclaims vóór het venster** (`before-input-event`): `cyclePanes` en de
+  editor-akkoorden in `editor-keys.ts`, doorgestuurd als *intentie* naar de renderer
 - **Venstersbeheer**: het capture-venster wordt bij het starten al aangemaakt en
   gerenderd, maar verborgen gehouden. `backgroundThrottling: false` zodat Chromium het
   verborgen venster niet in slaapstand zet.
