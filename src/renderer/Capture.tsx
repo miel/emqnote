@@ -459,11 +459,12 @@ export function Capture(): React.ReactElement {
           window="capture"
           isMac={app.isMac}
           hotkey={app.hotkey}
+          libraryHotkey={app.libraryHotkey}
           t={app.t}
-          onClose={() => {
-            setHelpOpen(false);
-            editor.current?.focus();
-          }}
+          // No `editor.focus()` here any more: the sheet puts focus back where it found
+          // it, and forcing the editor would take it away from the subject field for
+          // anyone who opened the sheet from there.
+          onClose={() => setHelpOpen(false)}
         />
       )}
     </div>

@@ -173,8 +173,12 @@ export const SHORTCUTS: ShortcutEntry[] = [
     where: "capture",
     group: "window",
     why:
-      "Window-local on purpose. A second global claim would be taken away from every " +
-      "other app on the machine for something used a few times a day at most.",
+      "Was window-local on purpose, on the argument that a second global claim would be " +
+      "taken from every other app on the machine for something used a few times a day. " +
+      "B60 reverses that: from any window but this one there was no way to reach the " +
+      "library at all, which is what 'no shortcut for the note browser' meant. The " +
+      "global chord is a *setting* and lives with the capture hotkey (`settings.ts`'s " +
+      "`libraryHotkey`), not in this table; this entry stays as the in-window form.",
   },
 
   // ---- both windows ----

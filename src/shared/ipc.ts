@@ -114,6 +114,15 @@ export const IPC = {
    * renderer never sees it. `backward` is Shift.
    */
   libraryCyclePanes: "library:cycle-panes",
+  /**
+   * main → either renderer: run this editor command (`editor-keys.ts`).
+   *
+   * The same shape as `libraryCyclePanes` above and for the same reason — main claimed the
+   * chord in `before-input-event` and called `preventDefault()`, so what crosses is the
+   * intent and never the key. The id is a `shortcuts.ts` id, which is also its key into
+   * `COMMANDS`; the renderer runs it only when the editor genuinely has focus.
+   */
+  editorCommand: "editor:command",
   /** main → library renderer: how far the startup index scan has got. */
   libraryScanProgress: "library:scan-progress",
   /**
@@ -164,6 +173,8 @@ export const IPC = {
   bootstrap: "app:bootstrap",
   setLocale: "app:set-locale",
   setHotkey: "app:set-hotkey",
+  /** The library's global accelerator (B60). Answers false when the chord is taken. */
+  setLibraryHotkey: "app:set-library-hotkey",
   /**
    * renderer → main: whether a picture named by a web address is fetched and drawn (B50).
    * The renderer only reports the switch; whether an image is served is decided in main,
@@ -288,6 +299,8 @@ export interface Bootstrap {
   locale: Locale;
   platform: NodeJS.Platform;
   hotkey: string;
+  /** The second global accelerator, which raises the library from anywhere (B60). */
+  libraryHotkey: string;
   /** Where the notes are, so the settings panel can mark the current one. */
   vaultPath: string | null;
   /** The library's tree/notes pane widths, or null if the splitters were never dragged. */
@@ -307,6 +320,21 @@ export interface Bootstrap {
  * Outlook, which is the one application this hotkey is pressed from. See B18.
  */
 export const DEFAULT_HOTKEY = "CommandOrControl+Shift+Y";
+
+/**
+ * The library's own global accelerator (B60).
+ *
+ * `Mod+O` opens the library too, but only from the capture window — reported as "no
+ * shortcut key for opening the note browser", which from anywhere else is exactly what it
+ * is. This one is registered with the OS like the capture hotkey and answers everywhere.
+ *
+ * `B` for browse. The same trade-off B18 weighed for the capture chord applies and is
+ * worth stating: a global accelerator is taken from every other application for as long as
+ * emqnote runs, and classic Outlook binds nearly every `Ctrl+Shift+<letter>` to something
+ * — `B` is its Address Book. That is why this is a setting and not a constant; the
+ * constant is only what an unconfigured machine starts with.
+ */
+export const DEFAULT_LIBRARY_HOTKEY = "CommandOrControl+Shift+B";
 
 export interface ShowPayload {
   /** Marker tying this appearance to its measurement. */
@@ -535,6 +563,12 @@ export interface CaptureApi {
   onStatus: (handler: (payload: StatusPayload) => void) => () => void;
   /** An existing note was handed over from the library window — load it in place. */
   onLoad: (handler: (note: OpenedNote) => void) => () => void;
+  /**
+   * An editor chord main claimed on this window's behalf — see `IPC.editorCommand`.
+   * Both windows subscribe; each runs it against its own editor, and only when that
+   * editor has focus.
+   */
+  onEditorCommand: (handler: (event: { id: string }) => void) => () => void;
   painted: (token: number) => void;
   change: (payload: CapturePayload) => void;
   close: () => void;
@@ -544,6 +578,8 @@ export interface CaptureApi {
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  /** The library's global accelerator (B60). False when the chord was refused. */
+  setLibraryHotkey: (hotkey: string) => Promise<boolean>;
   setLoadRemoteImages: (load: boolean) => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;

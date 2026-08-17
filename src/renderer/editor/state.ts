@@ -14,6 +14,7 @@ import { taskHighlight } from "./task-highlight.js";
 import { remoteImages } from "./paste-images.js";
 import { trailingParagraph, withTrailingParagraph } from "./trailing-paragraph.js";
 import { duplicateEmbedLinks } from "./duplicate-embed.js";
+import { listMarkerStyle } from "./list-marker-style.js";
 import { tableDecorations } from "./table-align.js";
 import { cellDragging } from "./table-drag.js";
 import { tableToolbar } from "./table-toolbar.js";
@@ -188,6 +189,9 @@ export function createEditorState(
       // Obsidian's `[[x.pdf]]` beside its own `![[x.pdf]]`: the chip is hidden, the file
       // keeps both (B48).
       duplicateEmbedLinks(),
+      // A bullet, number or checkbox follows the formatting of its own line, when the
+      // whole line carries it. Presentation only — nothing reaches the file.
+      listMarkerStyle(),
       // Column alignment, the caret's own cell and a selected rectangle — none of the
       // three reachable from a stylesheet.
       tableDecorations(),

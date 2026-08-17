@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
 import { beginMeasurement } from "./latency.js";
+import { installEditorKeyClaims } from "./editor-keys.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -85,6 +86,11 @@ export function createCaptureWindow(): BrowserWindow {
     event.preventDefault();
     hideCaptureWindow();
   });
+
+  // The chords main claims ahead of the page. This window has never had a
+  // `before-input-event` handler, and it is the window notes are actually written in —
+  // see `editor-keys.ts` for why the claim is here rather than in the keymap.
+  installEditorKeyClaims(created.webContents);
 
   const devServer = process.env.ELECTRON_RENDERER_URL;
   if (devServer !== undefined) {

@@ -16,6 +16,8 @@ interface Props {
   isMac: boolean;
   /** The global accelerator, which is a setting rather than a constant. */
   hotkey: string;
+  /** The library's global accelerator (B60), a setting for the same reason. */
+  libraryHotkey: string;
   t: (key: string) => string;
   onClose: () => void;
 }
@@ -33,11 +35,30 @@ interface Props {
  * keymap. A sheet that listed the keys separately would be wrong within a month — the
  * table in the design document it replaces already was.
  */
-export function Help({ window: which, isMac, hotkey, t, onClose }: Props): React.ReactElement {
+export function Help({
+  window: which,
+  isMac,
+  hotkey,
+  libraryHotkey,
+  t,
+  onClose,
+}: Props): React.ReactElement {
   const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
+  /**
+   * Focus goes to the panel and comes back to whatever opened it, exactly as
+   * `ContextMenu.tsx` does — but on unmount rather than in a `close()` of its own, because
+   * this sheet has four ways out and one of them is not ours: `Mod-/` a second time is
+   * caught by the window-level listener in `Capture.tsx`/`Library.tsx` and never reaches
+   * `onClose`. Without this the focused node is simply removed, focus collapses to
+   * `document.body`, and the next Tab starts at the top of the document — which in the
+   * library is the folder tree's `+ New` button, whatever pane the sheet was opened from.
+   */
   useEffect(() => {
+    opener.current = document.activeElement as HTMLElement | null;
     panel.current?.focus();
+    return () => opener.current?.focus();
   }, []);
 
   const shown = SHORTCUTS.filter(
@@ -85,14 +106,20 @@ export function Help({ window: which, isMac, hotkey, t, onClose }: Props): React
                     </div>
                   ))}
 
-                  {/* The one entry that is not a constant: the global hotkey is a
-                      setting, so it is rendered from what is configured rather than
+                  {/* The two entries that are not constants: both global hotkeys are
+                      settings, so they are rendered from what is configured rather than
                       written down twice. */}
                   {group === "window" && (
-                    <div className="help-row">
-                      <dt>{t("shortcut.newNote")}</dt>
-                      <dd>{formatAccelerator(hotkey, isMac)}</dd>
-                    </div>
+                    <>
+                      <div className="help-row">
+                        <dt>{t("shortcut.newNote")}</dt>
+                        <dd>{formatAccelerator(hotkey, isMac)}</dd>
+                      </div>
+                      <div className="help-row">
+                        <dt>{t("shortcut.openLibraryGlobal")}</dt>
+                        <dd>{formatAccelerator(libraryHotkey, isMac)}</dd>
+                      </div>
+                    </>
                   )}
                 </dl>
               </section>

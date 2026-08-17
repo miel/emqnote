@@ -2,7 +2,7 @@ import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locale } from "../shared/i18n.js";
-import { DEFAULT_HOTKEY } from "../shared/ipc.js";
+import { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY } from "../shared/ipc.js";
 import type { SortKey } from "../shared/vault-types.js";
 import { readLaunchOptions } from "./launch-options.js";
 
@@ -25,6 +25,8 @@ export interface Settings {
    */
   vaultPath: string | null;
   hotkey: string;
+  /** The second global accelerator: raise the library from anywhere (B60). */
+  libraryHotkey: string;
   locale: Locale;
   openAtLogin: boolean;
   /**
@@ -60,12 +62,13 @@ export interface Settings {
   loadRemoteImages: boolean;
 }
 
-export { DEFAULT_HOTKEY };
+export { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY };
 
 function defaults(): Settings {
   return {
     vaultPath: null,
     hotkey: DEFAULT_HOTKEY,
+    libraryHotkey: DEFAULT_LIBRARY_HOTKEY,
     locale: "en-US",
     openAtLogin: true,
     filesOnDemandWarned: [],

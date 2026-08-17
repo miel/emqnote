@@ -37,7 +37,8 @@ import {
   getLibraryWindow,
   showLibraryWindow,
 } from "./library-window.js";
-import { readLaunchOptions } from "./launch-options.js";
+import { readLaunchOptions, shouldOpenLibraryAtLaunch } from "./launch-options.js";
+import { applyLoginItem } from "./login-item.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
 import { checkForUpdates, setBeforeInstall } from "./updater.js";
@@ -186,7 +187,11 @@ protocol.registerSchemesAsPrivileged([
 
 const launch = readLaunchOptions();
 
-// One resident instance. A second launch simply opens the capture window.
+// One resident instance. A second launch raises a window rather than starting a second
+// app — the library since B61, because clicking the shortcut of a running app is the same
+// gesture as clicking the shortcut of a stopped one and should not mean two different
+// things. The one exception is a relaunch that carries `--login`, which is what the login
+// item does when the app somehow survived a sign-out.
 //
 // A self-test is the exception: it has to be able to run while the everyday instance
 // is resident, otherwise it would quietly hand off to that instance and appear to do
@@ -205,7 +210,10 @@ if (!bypassesSingleInstance && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   if (!bypassesSingleInstance) {
-    app.on("second-instance", () => showCaptureWindow());
+    app.on("second-instance", (_event, argv) => {
+      if (shouldOpenLibraryAtLaunch(readLaunchOptions(argv))) showLibraryWindow();
+      else showCaptureWindow();
+    });
   }
   void main();
 }
@@ -530,7 +538,7 @@ async function main(): Promise<void> {
   // icon next to the one already there, and no fight over the global shortcut with the
   // instance that is already running.
   if (selfTestRounds === 0) {
-    app.setLoginItemSettings({ openAtLogin: settings.openAtLogin });
+    applyLoginItem(settings.openAtLogin);
     // The same three the settings panel reaches over IPC. Handed in rather than imported,
     // since `askForVault` and `switchVaultTo` live here and the tray is created here.
     createTray({
@@ -538,7 +546,7 @@ async function main(): Promise<void> {
       choose: askForVault,
       switchTo: switchVaultTo,
     });
-    registerHotkey();
+    registerHotkeysAndWarn();
   }
 
   setHideHandler(() => {
@@ -586,7 +594,19 @@ async function main(): Promise<void> {
 
   if (selfTestRounds === 0) maybeCheckForUpdatesOnStartup();
 
-  if (launch.openLibrary) showLibraryWindow();
+  // B61. Not `launch.openLibrary` any more: a launch nobody asked for — the login item at
+  // sign-in — stays silent, and every other one puts the library on screen, because a
+  // deliberate start that shows no window at all reads as an app that failed to start.
+  // `wasOpenedAtLogin` is macOS's own answer and is only ever true there.
+  if (shouldOpenLibraryAtLaunch(launch, app.getLoginItemSettings().wasOpenedAtLogin)) {
+    showLibraryWindow();
+  }
+
+  // Clicking the icon of a running app: macOS sends this rather than `second-instance`,
+  // and with `LSUIElement` set there is no dock icon, so this is Finder or Spotlight.
+  app.on("activate", () => {
+    if (selfTestRounds === 0) showLibraryWindow();
+  });
 
   if (launch.screenshot !== null) {
     const file = launch.screenshot;
@@ -820,22 +840,48 @@ function maybeCheckForUpdatesOnStartup(): void {
   void checkForUpdates("startup");
 }
 
-function registerHotkey(): void {
-  const { hotkey } = loadSettings();
+/**
+ * Both global accelerators, registered together (B60).
+ *
+ * One function rather than one per hotkey, because `globalShortcut` has no way to give up
+ * a single claim without knowing what it was: `unregisterAll()` is what every path used,
+ * and with a second hotkey in existence that silently takes the other one down. Everything
+ * that changes a chord — startup, `IPC.setHotkey`, `IPC.setLibraryHotkey` — comes through
+ * here, so the app's claim on the machine is stated in exactly one place.
+ *
+ * Returns which of the two the OS refused, so a caller changing one chord can put the old
+ * one back rather than leaving the app with no shortcut at all.
+ */
+function registerGlobalHotkeys(): { hotkey: boolean; libraryHotkey: boolean } {
+  const { hotkey, libraryHotkey } = loadSettings();
 
   globalShortcut.unregisterAll();
-  const registered = globalShortcut.register(hotkey, () => showCaptureWindow());
+  return {
+    hotkey: globalShortcut.register(hotkey, () => showCaptureWindow()),
+    libraryHotkey: globalShortcut.register(libraryHotkey, () => showLibraryWindow()),
+  };
+}
 
-  if (!registered) {
-    dialog.showMessageBox({
-      type: "warning",
-      title: "Shortcut unavailable",
-      message: `The shortcut ${hotkey} is already taken by another program.`,
-      detail:
-        "emqnote is running, but you can only open the window from the tray icon. " +
-        "Pick a different shortcut in settings.json.",
-    });
-  }
+function registerHotkeysAndWarn(): void {
+  const registered = registerGlobalHotkeys();
+  const { hotkey, libraryHotkey } = loadSettings();
+
+  // Named individually: "a shortcut is taken" without saying which one leaves the reader
+  // to work out for themselves which of the two things stopped working.
+  const taken = [
+    ...(registered.hotkey ? [] : [`${hotkey} (new note)`]),
+    ...(registered.libraryHotkey ? [] : [`${libraryHotkey} (browse notes)`]),
+  ];
+  if (taken.length === 0) return;
+
+  dialog.showMessageBox({
+    type: "warning",
+    title: "Shortcut unavailable",
+    message: `Already taken by another program: ${taken.join(", ")}.`,
+    detail:
+      "emqnote is running, and everything is still reachable from the tray icon. " +
+      "Pick a different shortcut in the settings.",
+  });
 }
 
 async function prepareVault(): Promise<void> {
@@ -1043,6 +1089,7 @@ function registerAppIpc(): void {
       locale: settings.locale,
       platform: process.platform,
       hotkey: settings.hotkey,
+      libraryHotkey: settings.libraryHotkey,
       vaultPath: settings.vaultPath,
       libraryPaneWidths: settings.libraryPaneWidths,
       librarySort: settings.librarySort,
@@ -1068,17 +1115,37 @@ function registerAppIpc(): void {
     }
   });
 
+  /**
+   * Both of these save first and register afterwards, then roll the setting back if the
+   * OS refused — the reverse of the order the single-hotkey version used, and it has to
+   * be: `registerGlobalHotkeys` reads the settings file, because it is the one place that
+   * knows both chords. Rolling back re-registers from the restored settings, so a refused
+   * chord leaves the machine exactly as it was.
+   */
   ipcMain.handle(IPC.setHotkey, (_event, hotkey: string) => {
-    globalShortcut.unregisterAll();
-    const registered = globalShortcut.register(hotkey, () => showCaptureWindow());
+    const previous = loadSettings().hotkey;
+    saveSettings({ hotkey });
 
-    if (!registered) {
-      // Put the old one back rather than leaving the app with no shortcut at all.
-      globalShortcut.register(loadSettings().hotkey, () => showCaptureWindow());
+    if (!registerGlobalHotkeys().hotkey) {
+      saveSettings({ hotkey: previous });
+      registerGlobalHotkeys();
       return false;
     }
 
-    saveSettings({ hotkey });
+    buildTrayMenu();
+    return true;
+  });
+
+  ipcMain.handle(IPC.setLibraryHotkey, (_event, libraryHotkey: string) => {
+    const previous = loadSettings().libraryHotkey;
+    saveSettings({ libraryHotkey });
+
+    if (!registerGlobalHotkeys().libraryHotkey) {
+      saveSettings({ libraryHotkey: previous });
+      registerGlobalHotkeys();
+      return false;
+    }
+
     buildTrayMenu();
     return true;
   });

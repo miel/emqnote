@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_HOTKEY, type Bootstrap } from "../shared/ipc.js";
+import { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY, type Bootstrap } from "../shared/ipc.js";
 import { translate, type Locale } from "../shared/i18n.js";
 
 export interface Bootstrapped extends Bootstrap {
@@ -27,6 +27,7 @@ const FALLBACK: Bootstrap = {
   locale: "en-US",
   platform: window.emqnote.platform,
   hotkey: DEFAULT_HOTKEY,
+  libraryHotkey: DEFAULT_LIBRARY_HOTKEY,
   vaultPath: null,
   libraryPaneWidths: null,
   librarySort: "modified",

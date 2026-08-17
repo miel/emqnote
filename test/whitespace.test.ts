@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../src/markdown/schema.js";
 import { serializeBody } from "../src/markdown/index.js";
-import { readLaunchOptions } from "../src/main/launch-options.js";
+import {
+  readLaunchOptions,
+  shouldOpenLibraryAtLaunch,
+} from "../src/main/launch-options.js";
 import { isoWithOffset } from "../src/shared/time.js";
 
 const NBSP = String.fromCharCode(160);
@@ -111,5 +114,50 @@ describe("launch options", () => {
 
   it("treats a normal launch as no clipboard dump", () => {
     expect(readLaunchOptions(["emqnote"]).dumpClipboard).toBeNull();
+  });
+
+  it("reads the login flag", () => {
+    expect(readLaunchOptions(["emqnote", "--login"]).startedAtLogin).toBe(true);
+    expect(readLaunchOptions(["emqnote"]).startedAtLogin).toBe(false);
+  });
+});
+
+/**
+ * B61. Starting the app from its shortcut looked like nothing happening at all: the tray
+ * icon arrived, the capture window was built hidden, and no window was ever shown. A start
+ * nobody asked for — the login item at sign-in — is the one case where that is right.
+ */
+describe("shouldOpenLibraryAtLaunch", () => {
+  const at = (...argv: string[]): ReturnType<typeof readLaunchOptions> =>
+    readLaunchOptions(["emqnote", ...argv]);
+
+  it("opens the library on a plain launch", () => {
+    expect(shouldOpenLibraryAtLaunch(at())).toBe(true);
+  });
+
+  it("stays silent when the login item started it", () => {
+    expect(shouldOpenLibraryAtLaunch(at("--login"))).toBe(false);
+  });
+
+  it("stays silent on macOS's own answer, flag or no flag", () => {
+    expect(shouldOpenLibraryAtLaunch(at(), true)).toBe(false);
+  });
+
+  // The flag is explicit and outranks the login one, so `--library` never has to be
+  // reasoned about together with how the app happened to start.
+  it("still opens for an explicit --library", () => {
+    expect(shouldOpenLibraryAtLaunch(at("--library", "--login"), true)).toBe(true);
+  });
+
+  /**
+   * A window in front of a latency measurement would land in the numbers, and the probes
+   * exit as soon as they have printed. Excluded here rather than at the call site so the
+   * rule is in one place.
+   */
+  it("shows nothing for a measurement or a probe", () => {
+    expect(shouldOpenLibraryAtLaunch(at("--selftest=50"))).toBe(false);
+    expect(shouldOpenLibraryAtLaunch(at("--dump-clipboard=/tmp/x"))).toBe(false);
+    expect(shouldOpenLibraryAtLaunch(at("--thumbnail-probe=a.pdf"))).toBe(false);
+    expect(shouldOpenLibraryAtLaunch(at("--trash-probe=_trash/Alpha"))).toBe(false);
   });
 });

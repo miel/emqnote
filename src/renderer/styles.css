@@ -391,6 +391,33 @@ body {
   color: var(--accent);
 }
 
+/* The marker follows the formatting of its own line, when the whole line carries it.
+   `list-marker-style.ts` puts the class on the `<li>`; only bold and italic, and only for
+   an item whose every word is marked — see that file for why not strikethrough.
+
+   Set on the pseudo-element and never on the `li` itself: `font-weight` on the item would
+   be inherited by everything under it, so a plain sub-item nested inside a bold one would
+   draw a bold bullet of its own. `::marker` honours the font properties and takes them
+   from the `li`, so stating them here reaches the marker and stops there. */
+.editor-content li.li-strong::marker {
+  font-weight: 700;
+}
+
+.editor-content li.li-em::marker {
+  font-style: italic;
+}
+
+/* A task item has no marker (`content: none` above), so the same two rules land on the
+   checkbox instead. The SVG carries its stroke widths as presentation attributes, which
+   CSS outranks — no second drawing, and `TaskList.tsx` keeps the plain box it shares. */
+.editor-content li.li-strong > .task-check svg * {
+  stroke-width: 2.2;
+}
+
+.editor-content li.li-em > .task-check svg {
+  transform: skewX(-12deg);
+}
+
 .editor-content .task-check:hover {
   color: var(--text);
 }

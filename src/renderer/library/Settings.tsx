@@ -6,6 +6,8 @@ import { trapTab } from "./focus-trap.js";
 interface Props {
   locale: Locale;
   hotkey: string;
+  /** The library's own global accelerator (B60). */
+  libraryHotkey: string;
   /** Whether a picture named by a web address is fetched and drawn (B50). */
   loadRemoteImages: boolean;
   vaultPath: string | null;
@@ -58,9 +60,78 @@ function shorten(path: string): string {
   return `…/${parts.slice(-2).join("/")}`;
 }
 
+interface HotkeyRowProps {
+  label: string;
+  /** The chord as it stands; the row tracks its own from there. */
+  initial: string;
+  /** Registers it with the OS; false when the chord was refused. */
+  save: (accelerator: string) => Promise<boolean>;
+  /** Whether *this* row is armed — the panel keeps that, since only one may be. */
+  armed: boolean;
+  onArm: () => void;
+  onDisarm: () => void;
+  t: (key: string) => string;
+}
+
+/**
+ * One recorded global accelerator.
+ *
+ * A component rather than the markup written out twice (B60 gave the library its own
+ * hotkey): the recording rules below are subtle enough that a copy would drift — the
+ * button owns every key while armed, a refusal has to leave the old chord showing, and
+ * whether a row is armed has to be visible to the panel, whose Tab trap and Escape stand
+ * aside for it.
+ */
+function HotkeyRow({
+  label,
+  initial,
+  save,
+  armed,
+  onArm,
+  onDisarm,
+  t,
+}: HotkeyRowProps): React.ReactElement {
+  const [current, setCurrent] = useState(initial);
+  const [rejected, setRejected] = useState(false);
+
+  return (
+    <>
+      <div className="settings-row">
+        <span>{label}</span>
+        <button
+          type="button"
+          className={armed ? "recording" : ""}
+          onClick={() => {
+            onArm();
+            setRejected(false);
+          }}
+          onKeyDown={(event) => {
+            if (!armed) return;
+            event.preventDefault();
+
+            const accelerator = toAccelerator(event);
+            if (accelerator === null) return;
+
+            void save(accelerator).then((accepted) => {
+              onDisarm();
+              setRejected(!accepted);
+              if (accepted) setCurrent(accelerator);
+            });
+          }}
+        >
+          {armed ? t("settings.hotkeyHint") : current}
+        </button>
+      </div>
+
+      {rejected && <p className="settings-warning">{t("settings.hotkeyTaken")}</p>}
+    </>
+  );
+}
+
 export function Settings({
   locale,
   hotkey,
+  libraryHotkey,
   loadRemoteImages,
   vaultPath,
   t,
@@ -68,16 +139,28 @@ export function Settings({
   onBeforeSwitch,
   onClose,
 }: Props): React.ReactElement {
-  const [recording, setRecording] = useState(false);
+  /** Which row is recording, if any. One at a time: they all swallow every key. */
+  const [recording, setRecording] = useState<"capture" | "library" | null>(null);
   const [remoteImages, setRemoteImages] = useState(loadRemoteImages);
-  const [current, setCurrent] = useState(hotkey);
-  const [rejected, setRejected] = useState(false);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     void window.emqnote.listVaults().then(setVaults);
+  }, []);
+
+  /**
+   * The same focus handling `Help.tsx` and `ContextMenu.tsx` do, and for the same reason:
+   * without it the panel never holds focus, so `trapTab` below traps nothing, Escape only
+   * closes once something inside has been clicked, and Tab walks the library behind the
+   * overlay instead.
+   */
+  useEffect(() => {
+    opener.current = document.activeElement as HTMLElement | null;
+    panel.current?.focus();
+    return () => opener.current?.focus();
   }, []);
 
   /** A freshly picked folder goes straight to the confirmation, like any other. */
@@ -90,6 +173,7 @@ export function Settings({
       <div
         className="settings"
         ref={panel}
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           // The hotkey-recording button owns every key while it is armed — including
@@ -124,37 +208,31 @@ export function Settings({
           </select>
         </label>
 
-        <div className="settings-row">
-          <span>{t("settings.hotkey")}</span>
-          <button
-            type="button"
-            className={recording ? "recording" : ""}
-            onClick={() => {
-              setRecording(true);
-              setRejected(false);
-            }}
-            onKeyDown={(event) => {
-              if (!recording) return;
-              event.preventDefault();
+        <HotkeyRow
+          label={t("settings.hotkey")}
+          initial={hotkey}
+          armed={recording === "capture"}
+          onArm={() => setRecording("capture")}
+          onDisarm={() => {
+            setRecording(null);
+            onChanged();
+          }}
+          save={(accelerator) => window.emqnote.setHotkey(accelerator)}
+          t={t}
+        />
 
-              const accelerator = toAccelerator(event);
-              if (accelerator === null) return;
-
-              void window.emqnote.setHotkey(accelerator).then((accepted) => {
-                setRecording(false);
-                setRejected(!accepted);
-                if (accepted) {
-                  setCurrent(accelerator);
-                  onChanged();
-                }
-              });
-            }}
-          >
-            {recording ? t("settings.hotkeyHint") : current}
-          </button>
-        </div>
-
-        {rejected && <p className="settings-warning">{t("settings.hotkeyTaken")}</p>}
+        <HotkeyRow
+          label={t("settings.libraryHotkey")}
+          initial={libraryHotkey}
+          armed={recording === "library"}
+          onArm={() => setRecording("library")}
+          onDisarm={() => {
+            setRecording(null);
+            onChanged();
+          }}
+          save={(accelerator) => window.emqnote.setLibraryHotkey(accelerator)}
+          t={t}
+        />
 
         {/* B50. Held here as its own state rather than read back from the bootstrap on
             every render: the round trip that refreshes that happens on `onChanged`, and a
