@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1336 tests
+npm test               # vitest run — 1399 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -60,6 +60,25 @@ handle on a *directory* (which is what B57 was about) and, off Windows, anything
 about holders, locking there being advisory. Runs alongside the resident instance like the
 probes below, and that is the experiment rather than a convenience: if the delete works with
 emqnote quit, the app is the holder.
+
+```bash
+emqnote --key-probe
+```
+
+Logs every key a window is handed, to `<userData>/key-probe.log` and to stdout, one line per
+press: the window, the key, its code, every modifier, and **which registry entry `matches()`
+says it is** — or `—`. It exists because `Ctrl+Shift+T` was reported dead on Windows, claimed
+in `before-input-event` (the earliest point in a window there is), and reported dead again;
+that is the point at which this project stops asserting a cause and reports one. Unlike the
+three probes below it does **not** exit and does **not** bypass the single-instance lock: the
+question is what the everyday resident instance receives, so quit the app first and start it
+with the flag. Three answers, and the third is the one the app cannot see and so is printed in
+the log's own header: a line with `claim=task:editor` means the key arrives and the claim fires
+(so the fault is downstream); a line with `claim=—` means it arrives and the modifiers are not
+what the chord spells; **no line at all means the key never reached the window**, which rules
+out everything in this source tree. It is installed ahead of the claim handlers, so a claimed
+key is logged as well as an unclaimed one. Only real keys reach it — `Input.dispatchKeyEvent`
+over CDP is injected past `before-input-event`, so driving it takes XTEST.
 
 ```bash
 emqnote --thumbnail-probe="2026-08-04-1030-offerte.pdf" --vault=/path/to/vault
@@ -279,6 +298,29 @@ item has no marker at all, so the same pair of rules lands on `.task-check`'s SV
 where CSS outranks the presentation attributes `checkbox.ts` writes. Bold and italic only:
 strikethrough was asked about and refused, since a `::marker` cannot draw a line through
 itself and it would mean giving up the native marker for a `::before`.
+
+**Whoever handles a key stops it; a window listener asks the event where it happened**
+(18 August 2026). Two reported bugs with one cause, and the cause is that
+`preventDefault()` does not end an event. An overlay handled its own Escape and, on the way
+out, restored focus to whatever opened it — so by the time the still-bubbling key reached
+`Library.tsx`'s window listener, `document.activeElement` read as the editor, and the same
+press *also* ran "leave the editor for the note list". One press, two things. `Mod-/` a
+second time never did it, because it is not Escape: that asymmetry is the report. The same
+mechanism made `Ctrl+F` open the find bar and then immediately take the caret back out of it
+and put it in the vault search box, because a ProseMirror keymap command returning `true`
+likewise only calls `preventDefault()` (B64). Both halves of the rule are in place and each
+is correct alone: `Help.tsx`, `ContextMenu.tsx`, `slash-menu.ts` and `find-in-note.ts` call
+`stopPropagation()` on the key they handled — `ContextMenu` for **every** key, since an open
+menu owns the keyboard, which is the rule `Capture.tsx`'s own guard already stated for the
+overlays it knew about — and the Escape branch in `Library.tsx` reads `paneOf(event.target)`
+rather than `paneOf(document.activeElement)`. The Tab branch beside it deliberately keeps
+`document.activeElement`: Tab genuinely is a question about where focus *is*. `slash-menu.ts`
+is worth remembering for on its own — its comment asserted the key "does not reach the
+window", which is exactly what kept the bug there invisible. **jsdom only reproduces half of
+this**: `ContextMenu` restores focus synchronously inside its own `close()` and so fails a
+test without the fix, while `Help` restores it from an unmount cleanup that jsdom runs after
+the event has finished bubbling — `test/keyboard-nav.test.ts` says so where it would
+otherwise look like two guards.
 
 **A modal gives focus back, and it does it on unmount.** `Help.tsx` and `Settings.tsx` record
 `document.activeElement` on mount and refocus it when they go away, which is `ContextMenu.tsx`'s
@@ -1250,6 +1292,59 @@ of it — the failure does not reproduce here, exactly as with Ctrl+Tab. Nor the
 real Windows or macOS sign-in: `setLoginItemSettings` is a no-op on Linux, so what was measured
 is the flag being read, not the flag being written by the OS. `TEST-PROTOCOL.md` §25.
 
+**Six items from daily use landed on 18 August 2026**, and four of them are one theme: **the
+note itself was hard to reach with the keyboard.** There was no way to search inside a note at
+all, no chord to start one from the library, none to reach the search box, and none to reach a
+note's own title. Two carry decisions: **B63** — finding inside a note is a decoration and
+nothing else — and **B64** — `Ctrl+F` means two things and the plugin is what decides which.
+The other two: one Escape stopped doing two things, and `Ctrl+Shift+T` got the second chord its
+own code comment had already named as the next step.
+
+The new chords, in one line each: `Ctrl+F` finds inside the note when the caret is in one and
+focuses the vault search box everywhere else (two registry entries, one spelling, B64);
+`Ctrl+N` files a new note where the tree is standing, through the very expression the "+ New
+note" button calls (B29); `Ctrl+Shift+R` puts the caret in the title — the subject field in the
+capture window, the click-to-edit title in the reader, and it declines on a note the capture
+window has claimed, the guard `IPC.libraryRenameNote` already carries.
+
+Two things this batch is worth remembering for, and both were found by running it. **The
+contextual `Ctrl+F` did not work as designed and every test passed** — `outlookKeymap` binds
+`find`, its command returns `true`, and that makes ProseMirror call `preventDefault()` and
+nothing else, so the chord went on bubbling to the library's window listener and *both* fired.
+Same family as B36's trailing slash and B40's missing `corsEnabled`. And **the fix for
+`Ctrl+Shift+T` shipped and the report came back word for word**, which is the second time this
+project has been at that exact place (B57 → B59). So the alias went in *and* `--key-probe` did,
+because a diagnosis that survives its own report has been shown to be incomplete rather than
+wrong.
+
+Confirmed in the real app under `Xvfb`, driven over CDP and — where nothing else reaches
+`before-input-event` — real XTEST keys, against a two-note fixture vault: `Ctrl+F` in the
+reader drawing the bar with its input focused, `offerte` counting **4 matches in 5 spans**
+(one match split across a `**offer**te` mark boundary, which is the case a per-text-node
+search would miss), the active match computing `rgb(87, 201, 168)` against a plain one's
+`rgb(191, 233, 220)` — real computed colours, not classes in the DOM, and neither of them one
+of the two yellows already in a note — Enter and Shift+Enter walking `1 of 4` → `2 of 4` → `1
+of 4`, Escape leaving the caret **on** the match with the bar and every decoration gone, and
+the searched note's **hash and mtime both unchanged** (B10); `Ctrl+F` from a folder row
+focusing the search box and opening **no** bar, in the same session; `Ctrl+Shift+R` selecting
+the whole title in both windows; `Ctrl+N` from the tree raising the capture window
+(`visibilityState` "visible", subject field present, "Nothing saved yet") and doing nothing at
+all with the help sheet up; Escape out of a right-click menu, out of the help sheet, and out
+of the `/` menu each leaving focus **in the editor** and the `/quo` text exactly where it was,
+while a plain Escape still leaves for the note list; `Ctrl+Shift+T` and `Ctrl+Shift+D` both
+producing a real `<li data-checked="false">` with the letter never reaching the page while an
+unclaimed `Ctrl+Shift+L` did; and `--key-probe` writing one line per press, naming
+`task:editor` for both chords and `find:editor,searchVault:library` for the shared one.
+
+**And the whole of it was driven in the *capture* window as well** — the find bar, the caret
+to the subject field, and the task chords. That is the limitation every batch since the
+disk-change work has named, and it is narrower than it has been stated: what that window lacks
+is a *unit-test* harness, not the ability to be driven.
+
+**Not confirmed live**: the Windows half, which is the whole point of both the alias and the
+probe — `--key-probe`'s own output from a real Windows machine is the deliverable this batch
+is waiting on. `TEST-PROTOCOL.md` §26.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1261,7 +1356,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B62, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B64, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
