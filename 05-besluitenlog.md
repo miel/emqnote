@@ -2047,6 +2047,94 @@ koptekst schrijven maakt de app eigenaar van het hernummeren van elke kop in elk
 elke bewerking, en laat handgetypte nummers botsen met verzonnen nummers. Geen van beide
 verdient de gereedschapskist die eronder hoort.
 
+
+## B63 — Zoeken binnen één notitie is een decoratie en verder niets
+
+**Genomen** op 18 augustus 2026. Er was geen enkele manier om in de geopende notitie te
+zoeken. `IPC.librarySearch` beantwoordt *welke* notities, uit de index; *waar in deze ene*
+werd door niets beantwoord, dus een lange vergadernotitie moest doorgelezen worden. `Ctrl+F`
+is daarvoor op beide platformen de toetscombinatie van élke applicatie, en dus de enige die
+niemand uitgelegd hoeft te krijgen.
+
+**Er wordt niets geschreven.** Elke treffer is een `Decoration`, de balk staat buiten het
+bewerkbare document, en langs de treffers lopen verstuurt geen enkele transactie. Daarmee is
+er geen B6-vraag (er komt niets bij de serializer) en geen B10-vraag (een notitie openen en
+doorzoeken laat het bestand ongemoeid, bytes én mtime). Onder `Xvfb` gemeten: hash en mtime
+van de doorzochte notitie waren achteraf ongewijzigd.
+
+**`findMatches` is een zuivere functie**, apart getest — dezelfde scheiding die
+`editor-keys.ts` aanbrengt tussen `editorKeyIntent` en de Electron-gebeurtenis eromheen. De
+tekst wordt **per tekstblok** verzameld, niet per tekstknoop en niet over het hele document.
+Per tekstknoop breekt elke treffer die over een markgrens loopt: `**offer**te` zijn twee
+knopen en moet `offerte` opleveren — precies het geval dat een lezer niet kán zien en dus als
+fout meldt. Over het hele document zou een treffer van het einde van de ene alinea naar het
+begin van de volgende kunnen lopen, en dat markeert iets wat op het scherm niet één ding is.
+Een `hardBreak` sluit een reeks af om dezelfde reden; een inline-atoom wordt één teken dat
+niemand typt.
+
+**Afgewezen: `prosemirror-search`.** B42 en B49 wezen al een ProseMirror-pakket af waarvan
+het model rijker is dan dit schema; hier is het bezwaar kleiner maar van dezelfde vorm — dat
+pakket brengt vervangen, reguliere expressies en een eigen toetsenkaart mee die deze app niet
+gebruikt, ín de bundel met het latentiebudget. `findMatches` is veertig regels.
+
+**Afgewezen: zoeken én vervangen.** Vervangen is een tweede functie, een destructieve, en het
+zou de enige plek in de app zijn die veel regels tegelijk verandert zonder bevestiging en
+zonder te benoemen wat er geraakt wordt — B24's argument, een niveau lager.
+
+**Platte DOM, geen React**, net als `slash-menu.ts` en om diens tweede reden: de plugin gaat
+één keer in `createEditorState` en beide vensters hebben de functie zonder dat één van beide
+er iets van hoeft te weten. Het opnamevenster — waar notities werkelijk geschreven worden, en
+dat binnen 80 ms op het scherm moet staan — krijgt het er gratis bij. Op 18 augustus 2026
+onder `Xvfb` in dát venster bevestigd, niet alleen in de bibliotheek.
+
+**Langs de treffers lopen verandert de selectie niet.** Het schuift de DOM-knoop van de
+actieve decoratie in beeld. Een selectiewijziging zou een stap in de geschiedenis zetten —
+zoeken is niets om ongedaan te maken — en zou met het invoerveld om de focus vechten. De
+cursor wordt precies één keer verplaatst, bij het afsluiten, want landen op wat je gevonden
+hebt is wat zoeken bruikbaar maakt om te bewerken in plaats van alleen om te kijken.
+
+De kleur is een **derde**, opzettelijk geen tint van de twee bestaande: `==highlight==` is een
+mark die de notitie draagt en `--task-highlight` is de Takenweergave die naar een regel wijst.
+Een treffer die op één van beide lijkt is de verwarring die B32 al eens opgeruimd heeft. En
+de actieve treffer draagt **beide klassenamen in één selector**, nooit alleen de modifier: bij
+één klasse elk verliezen ze op bronvolgorde, wat B48 en `.overlay` allebei al een keer gekost
+heeft.
+
+## B64 — `Ctrl+F` betekent twee dingen, en de plugin is wat dat beslist
+
+**Genomen** op 18 augustus 2026, samen met B63. In de bibliotheek zijn er twee zoekopdrachten:
+de zoekbalk over de hele vault, en zoeken binnen de geopende notitie. Ze verdienen allebei
+`Ctrl+F`, want dat is in beide gevallen wat een mens intikt. Dus zijn het **twee vermeldingen
+in het register** met dezelfde spelling en een verschillende `where`: `find` (`editor`) en
+`searchVault` (`library`). Het hulpoverzicht drukt in de bibliotheek beide regels af, en dat
+is met opzet de duidelijkste beschikbare formulering van een toetscombinatie die twee dingen
+betekent.
+
+**Het ontwerp klopte en de uitvoering niet, en alleen het draaien liet dat zien.** De
+redenering was dat `outlookKeymap` — dat alleen de `editor`-vermeldingen bindt — de toets
+opeet zodra de cursor in een notitie staat, zodat de vensterluisteraar hem alleen daarbuiten
+ziet. Dat is niet wat er gebeurt: een keymap-commando dat `true` teruggeeft laat ProseMirror
+`preventDefault()` aanroepen en verder niets, dus de toets borrelde gewoon door naar
+`Library.tsx` en **beide vuurden**. De balk ging open en de cursor werd er meteen weer uit
+gehaald en in de zoekbalk gezet. Elke test slaagde; de twee wonen in verschillende modules en
+geen van beide weet van de ander. Dezelfde familie als B36's slash en B40's ontbrekende
+`corsEnabled` — een eigenschap van de looptijd, niet van deze broncode.
+
+`find-in-note.ts`'s `handleKeyDown` houdt de toets tegen bij de editor, en die ene regel is
+wat de scheiding echt maakt. Bewust smal: alleen deze toetscombinatie, en alleen tegengehouden
+— er wordt `false` teruggegeven zodat de keymap het commando nog steeds uitvoert, waardoor de
+binding op precies één plek gedefinieerd blijft. Elke toets die de keymap afhandelt laten
+tegenhouden zou de algemene reparatie zijn, en een veel grotere verandering in hoe elke andere
+toetscombinatie in de app zich gedraagt.
+
+**Dat is dezelfde fout als de Escape-melding uit dezelfde partij**, en daarom staat het hier
+en niet alleen in een commentaar: `preventDefault` sluit een gebeurtenis niet af.
+`Help.tsx`, `ContextMenu.tsx` en `slash-menu.ts` hielden Escape tegen noch af, en die ene
+druk sloot dus het paneel én wierp de focus uit de notitie in de notitielijst. De regel die
+beide antwoorden is: **wie een toets afhandelt, houdt hem tegen — en een vensterluisteraar
+vraagt de gebeurtenis waar hij vandaan komt, niet waar de focus geëindigd is.**
+
+
 ---
 
 ## Open punten
@@ -2066,7 +2154,7 @@ verdient de gereedschapskist die eronder hoort.
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
-| **En waarom deed Ctrl+Shift+T niets op Windows?** | Onbekend, precies zoals hierboven, en op 17 augustus 2026 met dezelfde reparatie beantwoord: geclaimd in `before-input-event` (`editor-keys.ts`), nu ook in het opnamevenster, dat daar nog geen enkele handler had. Op Linux is met echte XTEST-toetsen gemeten dat de toetscombinatie ná de claim werkt en dat de `T` de pagina niet meer bereikt terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. Komt de melding ongewijzigd terug, dan is de volgende stap `paragraph`'s precedent: een tweede toetscombinatie ernaast. `TEST-PROTOCOL.md` §25 |
+| **En waarom deed Ctrl+Shift+T niets op Windows?** | Nog steeds onbekend, en de melding kwám ongewijzigd terug — de reparatie van 17 augustus 2026 (geclaimd in `before-input-event`, `editor-keys.ts`, ook in het opnamevenster) heeft hem niet weggenomen. Daarmee is dit dezelfde plek als B57/B59: een diagnose die zijn eigen melding overleeft, is onvolledig geweest. Dus is er op 18 augustus 2026 twee dingen gedaan. `paragraph`'s precedent — een tweede toetscombinatie ernaast, `Mod-Shift-D`, op Linux met echte XTEST-toetsen bevestigd: een gewone alinea wordt een echt `<li data-checked="false">`, de `D` bereikt de pagina niet terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. En **`--key-probe`** (`key-probe.ts`), dat elke toets logt die een venster krijgt aangereikt, vóórdat iets hem claimt — zodat de volgende ronde met het antwoord van het besturingssysteem aankomt in plaats van met een derde gok. **Geen regel voor een druk betekent dat de toets het venster nooit bereikt heeft**, en dat is wat de app zelf niet kan zien; het staat in de kop van het logbestand. `TEST-PROTOCOL.md` §26 |
 | **Wát houdt die map op Windows vast?** | Onbekend, en dat hoort hier te staan. B57 haalde de eigen handle van de app weg en de melding kwam ongewijzigd terug, dus de watcher was het niet (alleen). Sinds B59 noemt de weigering de code en het bestand, en `--trash-probe` loopt de map na — de eerstvolgende melding hoort de vraag te beantwoorden in plaats van te verplaatsen. `TEST-PROTOCOL.md` §24 |
 | **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |

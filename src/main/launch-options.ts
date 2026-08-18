@@ -39,6 +39,15 @@ export interface LaunchOptions {
    * trade on the one operation in this app with no way back (B24).
    */
   trashProbe: string | null;
+  /**
+   * Log every key this app's windows receive, to `<userData>/key-probe.log`.
+   *
+   * Unlike the three probes above this one does **not** exit and does **not** bypass the
+   * single-instance lock: the question it answers is what the everyday resident instance
+   * is handed, so it is a mode of the ordinary app rather than a separate run beside it.
+   * Quit the resident app first. See `key-probe.ts` for why guessing ran out.
+   */
+  keyProbe: boolean;
 }
 
 function flagValue(argv: string[], name: string): string | null {
@@ -70,6 +79,7 @@ export function readLaunchOptions(argv: string[] = process.argv): LaunchOptions 
     dumpClipboard: flagValue(argv, "dump-clipboard"),
     thumbnailProbe: flagValue(argv, "thumbnail-probe"),
     trashProbe: flagValue(argv, "trash-probe"),
+    keyProbe: argv.includes("--key-probe"),
   };
 }
 

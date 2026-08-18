@@ -19,6 +19,7 @@ import { tableDecorations } from "./table-align.js";
 import { cellDragging } from "./table-drag.js";
 import { tableToolbar } from "./table-toolbar.js";
 import { slashMenu } from "./slash-menu.js";
+import { findInNote } from "./find-in-note.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -201,6 +202,9 @@ export function createEditorState(
       tableToolbar(context),
       // `/` at the start of a line opens the insert menu, and typing filters it (B51).
       slashMenu(context),
+      // Ctrl+F inside the note: matches as decorations, a bar of its own, nothing written
+      // to the document or the file (B63).
+      findInNote(context),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

@@ -79,6 +79,12 @@ export function Help({
           trapTab(event, panel.current);
           if (event.key === "Escape") {
             event.preventDefault();
+            // Stopped as well as prevented. `preventDefault` does not end the bubble, so
+            // this Escape went on to `Library.tsx`'s window listener — which by then saw
+            // focus already restored to the editor by the unmount effect below, read that
+            // as "leave the editor" and threw focus into the note list. One press, two
+            // things. The `Mod-/`-twice route never did this, which is the report exactly.
+            event.stopPropagation();
             onClose();
           }
         }}

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
 import { beginMeasurement } from "./latency.js";
 import { installEditorKeyClaims } from "./editor-keys.js";
+import { installKeyProbe } from "./key-probe.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -86,6 +87,11 @@ export function createCaptureWindow(): BrowserWindow {
     event.preventDefault();
     hideCaptureWindow();
   });
+
+  // Before the claim below, deliberately: listeners run in the order they were added, so
+  // this is what lets `--key-probe` record a key that is about to be claimed as well as
+  // one that is not. A no-op without the flag.
+  installKeyProbe(created.webContents, "capture");
 
   // The chords main claims ahead of the page. This window has never had a
   // `before-input-event` handler, and it is the window notes are actually written in —

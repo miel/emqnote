@@ -25,6 +25,9 @@ import type { FolderNode, NoteSummary, OpenedNote, Selection } from "../src/shar
  */
 let cyclePanes: ((event: { backward: boolean }) => void) | null = null;
 
+/** Every folder `library.newNote` was asked to file into, so Mod-N can be checked. */
+let newNoteCalls: string[] = [];
+
 const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -94,7 +97,9 @@ function buildFake(): CaptureApi {
     revealNote: () => {},
     noteEditable: async () => true,
     openInCapture: async () => true,
-    newNote: () => {},
+    newNote: (folder?: string) => {
+      newNoteCalls.push(folder ?? "");
+    },
     onRefresh: () => () => {},
     onCyclePanes: (handler) => {
       cyclePanes = handler;
@@ -185,7 +190,7 @@ function cycle(backward: boolean): void {
 function keydown(
   target: Element,
   key: string,
-  modifiers: { shiftKey?: boolean; ctrlKey?: boolean } = {},
+  modifiers: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean } = {},
 ): void {
   act(() => {
     target.dispatchEvent(
@@ -217,6 +222,7 @@ describe("keyboard navigation across the library's panes", () => {
   });
 
   async function mount(): Promise<void> {
+    newNoteCalls = [];
     (window as unknown as { emqnote: unknown }).emqnote = buildFake();
     root = createRoot(container);
     await act(async () => {
@@ -402,5 +408,143 @@ describe("keyboard navigation across the library's panes", () => {
 
     const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeNote);
+  });
+
+  /**
+   * One Escape must do one thing.
+   *
+   * An overlay handles its own Escape and, on the way out, gives focus back to whatever
+   * opened it. The window listener above then saw the editor focused and read the same
+   * still-bubbling key as "leave the editor", so closing a menu or the help sheet from
+   * inside a note also threw focus into the note list — while `Mod-/` a second time,
+   * which is not Escape, did not. That asymmetry is exactly what was reported.
+   *
+   * Both halves of the fix are asserted here because either alone would pass this: the
+   * overlays stop the key at their own panel, and the listener asks the *event* where it
+   * happened rather than asking where focus ended up.
+   *
+   * **Only the context-menu case pins the bug in jsdom**, and that is worth saying rather
+   * than assuming. Checked by reverting both halves: the menu test fails, and the help
+   * test does not — `ContextMenu` restores focus synchronously inside its own `close()`,
+   * while `Help` restores it from an unmount cleanup that jsdom runs after the event has
+   * finished bubbling, so the ordering that produces the bug in a real window does not
+   * occur here. The help test stays because it still asserts the end state a person cares
+   * about; the ordering itself is a `TEST-PROTOCOL.md` item.
+   */
+  async function openNote(): Promise<HTMLElement> {
+    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
+    await act(async () => {
+      noteRow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+    return container.querySelector<HTMLElement>(".editor-content")!;
+  }
+
+  it("Escape out of the note panel's context menu stays in the editor", async () => {
+    await mount();
+    const editorContent = await openNote();
+    editorContent.focus();
+
+    act(() => {
+      editorContent.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "m",
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await flush();
+
+    const menu = container.querySelector<HTMLElement>(".context-menu")!;
+    expect(menu).not.toBeNull();
+
+    act(() => {
+      menu.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await flush();
+
+    expect(container.querySelector(".context-menu")).toBeNull();
+    expect(document.activeElement).toBe(editorContent);
+  });
+
+  it("Escape out of the help sheet opened from the editor stays in the editor", async () => {
+    await mount();
+    const editorContent = await openNote();
+    editorContent.focus();
+
+    keydown(editorContent, "/", { metaKey: true });
+    await flush();
+
+    const sheet = container.querySelector<HTMLElement>(".help")!;
+    expect(sheet).not.toBeNull();
+
+    act(() => {
+      sheet.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await flush();
+
+    expect(container.querySelector(".help")).toBeNull();
+    expect(document.activeElement).toBe(editorContent);
+  });
+
+  it("Mod-N files a new note where the tree is standing", async () => {
+    await mount();
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    treeRow.focus();
+
+    keydown(treeRow, "n", { metaKey: true });
+    await flush();
+
+    // `lastFolder`'s default, which is the same value the "+ New note" button passes —
+    // one expression, so the chord and the button cannot file into two places (B29).
+    expect(newNoteCalls).toEqual(["00 Inbox"]);
+  });
+
+  it("Mod-N does nothing while a modal owns the keyboard", async () => {
+    await mount();
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    treeRow.focus();
+
+    keydown(treeRow, "/", { metaKey: true });
+    await flush();
+    expect(container.querySelector(".help")).not.toBeNull();
+
+    keydown(container.querySelector<HTMLElement>(".help")!, "n", { metaKey: true });
+    await flush();
+
+    expect(newNoteCalls).toEqual([]);
+  });
+
+  it("Mod-F puts the caret in the search box when the caret is not in a note", async () => {
+    await mount();
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    treeRow.focus();
+
+    keydown(treeRow, "f", { metaKey: true });
+    await flush();
+
+    expect(document.activeElement).toBe(container.querySelector(".notes-search input"));
+  });
+
+  it("Mod-Shift-R starts editing the open note's title", async () => {
+    await mount();
+    const editorContent = await openNote();
+    editorContent.focus();
+    expect(container.querySelector(".reader-title-input")).toBeNull();
+
+    keydown(editorContent, "r", { metaKey: true, shiftKey: true });
+    await flush();
+
+    const input = container.querySelector<HTMLInputElement>(".reader-title-input")!;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe("Test note");
+    expect(document.activeElement).toBe(input);
   });
 });

@@ -284,6 +284,18 @@ export function Capture(): React.ReactElement {
         window.emqnote.openLibrary();
         return;
       }
+
+      if (fires("focusTitle")) {
+        // The subject field only renders for a brand-new note (`variant === "capture"`);
+        // a note handed over from the library has none, and its title belongs to Rename in
+        // the reader. So the chord simply declines there, the same fallback the `onShow`
+        // handler above already makes.
+        if (subjectInput.current === null) return;
+        event.preventDefault();
+        subjectInput.current.focus();
+        subjectInput.current.select();
+        return;
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);

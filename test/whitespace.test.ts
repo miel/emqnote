@@ -116,6 +116,13 @@ describe("launch options", () => {
     expect(readLaunchOptions(["emqnote"]).dumpClipboard).toBeNull();
   });
 
+  it("reads --key-probe as a plain flag", () => {
+    // A flag with no value, unlike the three probes beside it, because it is a mode of
+    // the ordinary app rather than a run that reports one thing and exits.
+    expect(readLaunchOptions(["emqnote", "--key-probe"]).keyProbe).toBe(true);
+    expect(readLaunchOptions(["emqnote"]).keyProbe).toBe(false);
+  });
+
   it("reads the login flag", () => {
     expect(readLaunchOptions(["emqnote", "--login"]).startedAtLogin).toBe(true);
     expect(readLaunchOptions(["emqnote"]).startedAtLogin).toBe(false);

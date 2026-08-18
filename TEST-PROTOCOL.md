@@ -820,6 +820,37 @@ did not work is what justifies it.
 | 25l | Make a bulleted line entirely bold, then a numbered one, then a task | The bullet, the number and the checkbox go bold with the text. Bold only *part* of a line and the marker stays as it was |  |
 | 25m | The same with italic, and on a real display: does the slanted checkbox read as deliberate or as a rendering fault? | A judgement no script can make. If it looks wrong, say so — it is one CSS rule |  |
 
+## 26. Reaching the note (18 August 2026)
+
+Four new chords, one Escape that stopped doing two things, and the one item this whole batch
+is actually waiting on: **`--key-probe`'s output from the Windows machine.** `Ctrl+Shift+T`
+was claimed at the earliest point in the window on 17 August and reported dead again, so the
+app has stopped asserting a cause and started reporting one. §26a is the deliverable.
+
+Everything else here has been driven on Linux under `Xvfb`, in **both** windows including the
+capture window, with real computed colours and real XTEST keys where nothing else reaches
+`before-input-event`. What is left for a person is the Windows half, and how it all feels.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 26a | **Windows.** Quit emqnote from the tray. Start it as `emqnote.exe --key-probe`. Put the caret in a note and press, one at a time: **Ctrl+Shift+T**, **Ctrl+Shift+D**, **Ctrl+Shift+L**, **Ctrl+F**. Quit, then send `%LOCALAPPDATA%\emqnote\key-probe.log` | Four lines, each naming what the app thinks the chord is. **A missing line is the finding** — it means the key never reached the window, and nothing in this app can be responsible. Send the file whatever it says; that is the point |  |
+| 26b | **Windows.** With the app running normally, type a line in a note and press **Ctrl+Shift+D** | The line becomes a task with a checkbox. This is the second chord for the item `Ctrl+Shift+T` was supposed to make. If **both** now work, say so — that matters as much as if neither does |  |
+| 26c | **Windows.** And **Ctrl+Shift+T** once more, in the note window and in the library's reader | Whatever it does. Unchanged is a real answer here, not a failure of the round |  |
+| 26d | In the library, with the caret in a note, press **Ctrl+F** and type a word that occurs several times | A bar appears over the note. Every occurrence is highlighted, the current one more strongly, and the counter reads "1 of n" |  |
+| 26e | Press **Enter** repeatedly, then **Shift+Enter** | It walks forward through the matches and back again, wrapping, scrolling each one into view. The caret stays in the search box the whole time |  |
+| 26f | Press **Escape** | The bar and the highlights go, and the caret is left **on the match you had reached**, ready to type. Check the note is not marked as changed |  |
+| 26g | Now click a folder in the tree (or a note row) and press **Ctrl+F** | The caret goes to the vault search box at the top of the note list — *not* the find bar. One chord, two searches, decided by where you were |  |
+| 26h | The same **Ctrl+F** in the new-note window | The find bar, always — that window has no vault search |  |
+| 26i | On a real display: do the two highlight colours read as "all matches" and "this one"? And can either be confused with `==highlighted==` text or with the yellow the Tasks view uses? | A judgement no script can make. They are three deliberately different colours; if two of them fight, say which |  |
+| 26j | With a long note open, does the bar sit somewhere sensible, and does it get in the way of the text it is searching? | Same kind of question. It is fixed at the top right of the note pane and does not scroll with the text |  |
+| 26k | In the library, press **Ctrl+N** | A new note window opens, filed into the folder the tree is standing in — the same folder the "+ New note" button would use |  |
+| 26l | Open the *Move to…* dialog, then press **Ctrl+N** while it is up | Nothing happens. A dialog owns the keyboard while it is open |  |
+| 26m | With the caret in a note, press **Ctrl+Shift+R** | The note's title is selected and ready to retype: the subject field in the new-note window, the title above the reader in the library. Enter commits, Escape cancels |  |
+| 26n | The same in the library on a note that is open in the new-note window | Nothing happens. That note is claimed, and renaming it from here is the "one note in two folders" hazard |  |
+| 26o | **The Escape fix.** With the caret in a note, right-click for the menu, then press **Escape** | The menu closes and the caret is still **in the note**. Before this, that one press also threw focus out into the note list |  |
+| 26p | The same with the help sheet (**Ctrl+/**, then **Escape**), and with the `/` menu (type `/` on an empty line, then **Escape**) | The same: focus stays in the note. The `/` you typed stays where it was. Compare against closing the help sheet with **Ctrl+/** a second time, which was always correct |  |
+| 26q | And with nothing open, press **Escape** with the caret in a note | Focus *does* leave for the note list. That behaviour is deliberate and had to survive the fix |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -829,19 +860,23 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j, §24a or §25a fails,
+§18x, §19u, §20m, §22s, §23j, §24a, §25a or §26a–§26c fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
-window has no test harness — and §18o–§18q are a gap of their own: a tray menu is not
+window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
+it has been driven over CDP, and on 18 August the whole of §26's find bar and both title chords
+were confirmed in it — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make, and §25m joins them.
-**§22a, §22b, §22c, §23a–§23d, §24a–§24d and §25a–§25f
+judgements about how something feels or reads, which no script can make, and §25m, §26i and
+§26j join them.
+**§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the
 macOS half of the same pair). §22b and §25a are the sharpest of them, because neither bug
 reproduces here at all — both are claimed at the earliest point in the window rather than
-fixed at a known cause; §23c is a different
+fixed at a known cause, and §25a has now come back unchanged, which is why §26a exists at
+all: it asks the operating system rather than guessing a third time; §23c is a different
 shape again, being a *cost* to measure rather than a behaviour to check. §19m is a third kind: what a
 remote host observes is not visible from inside the app at all. §4.5 is no longer one of them — since B36 the rendering itself has been seen
 working, on the same Chromium the packaged app ships.

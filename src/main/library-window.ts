@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { IPC } from "../shared/ipc.js";
 import { matches, shortcut } from "../shared/shortcuts.js";
 import { installEditorKeyClaims } from "./editor-keys.js";
+import { installKeyProbe } from "./key-probe.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -76,6 +77,10 @@ export function showLibraryWindow(): void {
   created.webContents.on("console-message", (_event, _level, message) => {
     console.error(`[library renderer] ${message}`);
   });
+
+  // First, so `--key-probe` sees a key before anything below claims it. A no-op unless
+  // the flag is set.
+  installKeyProbe(created.webContents, "library");
 
   /**
    * Ctrl-Tab / Ctrl-Shift-Tab, claimed before anything else in the window can have it.

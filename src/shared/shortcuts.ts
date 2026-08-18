@@ -99,10 +99,18 @@ export const SHORTCUTS: ShortcutEntry[] = [
   },
   {
     id: "task",
-    keys: ["Mod-Shift-t"],
+    keys: ["Mod-Shift-t", "Mod-Shift-d"],
     where: "editor",
     group: "lists",
-    why: "Same family as the other two list keys, so it is guessable from them.",
+    why:
+      "Mod-Shift-t is the same family as the other two list keys, so it is guessable " +
+      "from them, and it stays first. Mod-Shift-d is `paragraph`'s precedent applied to " +
+      "the one chord that has now survived a fix: it was reported dead on Windows, " +
+      "claimed in main's `before-input-event` (`editor-keys.ts`) ahead of every native " +
+      "accelerator and ahead of the page, and reported dead again. A second chord is " +
+      "what is left when the first cannot be shown to arrive — and both are claimed " +
+      "from that same place, because `editorKeyIntent` asks `matches` about the whole " +
+      "entry rather than about one binding. 'D' for done; it is free in every scope.",
   },
   {
     id: "tick",
@@ -155,6 +163,37 @@ export const SHORTCUTS: ShortcutEntry[] = [
   { id: "softBreak", keys: ["Shift-Enter"], where: "editor", group: "structure" },
   { id: "undo", keys: ["Mod-z"], where: "editor", group: "structure" },
   { id: "redo", keys: ["Mod-Shift-z", "Mod-y"], where: "editor", group: "structure" },
+
+  // ---- the note you are in ----
+  {
+    id: "find",
+    keys: ["Mod-f"],
+    where: "editor",
+    group: "note",
+    why:
+      "The chord every application on both platforms uses for 'find in this thing', so " +
+      "it is the one nobody has to be told. It shares its spelling with `searchVault` " +
+      "below and that collision is deliberate — `where` is what tells them apart — but " +
+      "the scopes alone do NOT resolve it, which running it is what showed: " +
+      "`outlookKeymap` binds this entry and its command returns true, and that makes " +
+      "ProseMirror call `preventDefault()` and nothing else, so the key still reached " +
+      "the library's window listener and both fired at once. `find-in-note.ts`'s " +
+      "`handleKeyDown` stops it at the editor; that one line is what makes the split " +
+      "real. B64.",
+  },
+  {
+    id: "focusTitle",
+    keys: ["Mod-Shift-r"],
+    where: "global",
+    group: "note",
+    why:
+      "There was no way at all to reach a note's own title from the keyboard: in the " +
+      "capture window it is the subject field, in the library it is a title you have to " +
+      "click to edit, and neither had a chord. 'R' for rename, which is what the " +
+      "library's Actions menu already calls the same act. `where: \"global\"` because " +
+      "both windows have a title; what that title *is* differs, so each window handles " +
+      "it rather than sharing a control neither of them has.",
+  },
 
   // ---- the capture window itself ----
   {
@@ -215,6 +254,33 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "F6 used to be the one key that reached every pane; dropped for the fn-key " +
       "reason (B32) and replaced with the browser's own 'switch tab' chord, which " +
       "keymap.ts has no binding for and so still reaches out of the editor.",
+  },
+  {
+    id: "newNoteHere",
+    keys: ["Mod-n"],
+    where: "library",
+    group: "window",
+    why:
+      "Starting a note from the library took the mouse: a button in the note list, a " +
+      "row in the folder tree's menu, or the global hotkey — which is a *setting* and " +
+      "so is not printed here at all. Deliberately not the id `newNote`: that i18n key " +
+      "already labels the global hotkey's row in the help sheet, and two rows both " +
+      "reading 'New note' against two different chords would be the one screen whose " +
+      "job is to be looked up contradicting itself. The longer name is also the truer " +
+      "one — this files where the tree is standing (B29), which the global hotkey does " +
+      "not.",
+  },
+  {
+    id: "searchVault",
+    keys: ["Mod-f"],
+    where: "library",
+    group: "window",
+    why:
+      "The search box was reachable by mouse or by Tabbing to it and by nothing else. " +
+      "The shared spelling with `find` above is the whole design, and what actually " +
+      "keeps the two apart is written there — it is not this table. The help sheet " +
+      "prints both rows in this window on purpose, which is the clearest available " +
+      "statement of a chord that means two things. B64.",
   },
 ];
 

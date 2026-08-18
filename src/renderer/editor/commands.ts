@@ -16,6 +16,9 @@ import {
   wrapInList,
 } from "prosemirror-schema-list";
 import { schema } from "../../markdown/schema.js";
+// Only the type travels back the other way (`CommandContext`), so this pair is not a
+// runtime cycle — `import type` is erased.
+import { openFind } from "./find-in-note.js";
 
 type Dispatch = ((tr: Transaction) => void) | undefined;
 
@@ -793,6 +796,11 @@ export const COMMANDS: Record<string, (context: CommandContext) => Command> = {
   softBreak: () => softBreak,
   undo: () => undo,
   redo: () => redo,
+
+  // The one entry whose command lives with its plugin rather than in this file: opening
+  // the find bar is a meta on `findKey` and nothing else, and splitting it from the
+  // `Meta` union it has to spell would be two definitions of one message (B63).
+  find: () => openFind,
 };
 
 export function isMarkActive(state: EditorState, markName: string): boolean {
