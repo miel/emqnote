@@ -113,6 +113,15 @@ export interface VaultWatcher {
    * missed. Nothing in the app needs to await this today (the full scan already covers
    * startup state), but a caller that does need the guarantee — a test, first of all —
    * has it available rather than reaching for an arbitrary delay.
+   *
+   * That race is worse under polling than under a native backend, and it is measured
+   * rather than assumed (`test/index-watch.test.ts`'s `startWatching` carries the
+   * numbers). A poller finds a new file by re-reading a directory and diffing against the
+   * entries it already knows, so a file that lands before that baseline is taken is *in*
+   * the baseline and is never reported at all — permanently missed, not merely noticed a
+   * poll later. On Windows, where this app polls (B57), the startup full scan running
+   * beside the watcher is therefore not just a duplicate of it: for anything OneDrive
+   * lands in the first moments after launch, it is the only thing that will see it.
    */
   ready(): Promise<void>;
 }

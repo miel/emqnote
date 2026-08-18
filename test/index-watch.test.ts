@@ -114,10 +114,21 @@ async function waitFor(check: () => void): Promise<void> {
  * mirror image of this race for months — fsevents reporting a file written *before*
  * watching as a live event — with exactly this wait, for exactly this reason.
  *
- * Paid on darwin alone, because this is a property of that one backend: inotify delivers
- * from the moment the watch is added, and Windows does not use a backend at all any more
- * — it polls (B57), where the wait is a whole interval rather than a gap and
- * `WATCH_INTERVAL_MS` is what answers it.
+ * **Windows has the same gap, and the sentence that used to stand here denied it.** It
+ * said polling meant "a whole interval rather than a gap", so `WATCH_INTERVAL_MS` answered
+ * it and no settle was owed — and that belief is what let this file fail a third release
+ * (v0.8.9), on the one test that writes into the gap hardest. Measured by forcing
+ * `pollingOptions` on off-Windows and running the failing sequence 40 times per delay:
+ * **23 of 40 missed with no wait, 0 of 40 at 25 ms and at every longer wait**, while
+ * native watching missed 0 of 40 with no wait at all. Not late — *never*: a poller finds
+ * a new file by re-reading the directory and diffing against the entries it already knows,
+ * so a file that lands before that baseline is taken is in the baseline, and no amount of
+ * polling will ever call it new. That is why the failure reads as a total silence rather
+ * than a slow arrival, and why raising the ceiling could not have helped.
+ *
+ * The cliff is sharp — it is one arming tick, not a load-dependent window — so `SETTLE_MS`
+ * clears it six times over. Linux alone goes without: inotify delivers from the moment the
+ * watch is added, which is the one backend measured to need nothing.
  *
  * Two of the tests here assert that something is *not* indexed. Those cannot fail from a
  * missed event — they pass, for the wrong reason — so they go through this too, or they
@@ -130,7 +141,7 @@ async function startWatching(options: WatchOptions = {}): Promise<VaultWatcher> 
     ...options,
   });
   await started.ready();
-  if (process.platform === "darwin") await settle();
+  if (process.platform !== "linux") await settle();
   return started;
 }
 

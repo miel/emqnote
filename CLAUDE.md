@@ -758,17 +758,31 @@ B42's row, column and alignment commands were the exception that proved it: they
 The suite must stay under about two seconds so it can run on every change. `test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
 
 **Everything in that file starts its watcher through `startWatching`, and the reason is a
-macOS property rather than a slow runner.** chokidar's `ready()` resolves when its initial
-crawl has finished, which on darwin is not the moment the fsevents stream begins delivering:
-a file written into that gap produces **no event at all**, and an event that was never sent
-cannot be waited out — which is why raising the timeouts, twice, never settled it, and why it
-went on failing a release every few dozen runs on the macOS runner and nowhere else. The
-helper pays one settle after `ready()`, on darwin only — inotify delivers from the moment
-the watch is added, and Windows no longer uses a backend at all: it polls (B57), where the
-wait is a whole interval rather than a gap. That interval is `WatchOptions.watchInterval`,
-turned down in the tests exactly as `stabilityThreshold` already is: at the production two
-seconds every waiting assertion in that file waits out a poll, which put it at 23 seconds
-on the Windows runner.
+backend property rather than a slow runner.** chokidar's `ready()` resolves when its initial
+crawl has finished, which is not the moment the watcher is actually armed: a file written
+into that gap produces **no event at all**, and an event that was never sent cannot be
+waited out — which is why raising the timeouts, twice, never settled it, and why it went on
+failing a release every few dozen runs. The helper pays one settle after `ready()` on every
+platform but Linux, where inotify delivers from the moment the watch is added.
+
+**That used to say "on darwin only", and the sentence that excused Windows is what cost a
+third release** (v0.8.9). It reasoned that polling has no gap — only an interval — so
+`watchInterval` answered it and no settle was owed. It does have a gap, and a worse one: a
+poller finds a new file by re-reading a directory and diffing against the entries it already
+knows, so a file that lands before that baseline is taken is *in* the baseline and is never
+called new at all. Permanently missed, not noticed a poll later, which is why the failure
+reads as total silence and why no ceiling could have helped. Measured by forcing
+`pollingOptions` on off-Windows and running the failing sequence 40 times per delay: **23 of
+40 missed with no wait, 0 of 40 at 25 ms and at every longer wait, 0 of 100 at the settle
+now paid** — against native watching missing 0 of 40 with no wait at all. The general lesson
+is the one this file keeps relearning: a platform excused from a wait because of how its
+backend is *described* is a platform whose behaviour nobody measured. `index-watch.ts`'s
+`ready()` carries what this means for the app, which is not nothing — on Windows the startup
+full scan is the only thing that will see a file OneDrive lands in those first moments.
+
+The poll interval is `WatchOptions.watchInterval`, turned down in the tests exactly as
+`stabilityThreshold` already is: at the production two seconds every waiting assertion in
+that file waits out a poll, which put it at 23 seconds on the Windows runner.
 
 **And that file's `waitFor` ceiling is deliberately generous rather than tight.** It was
 four seconds, picked to fit under vitest's five-second default, and that is the wrong way
