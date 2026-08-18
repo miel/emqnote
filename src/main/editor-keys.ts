@@ -28,9 +28,17 @@ import { IPC } from "../shared/ipc.js";
  *   before. Main cannot know that — which is why the intent is forwarded rather than
  *   carried out here.
  *
- * If Windows reports this unchanged, the next step is `paragraph`'s precedent in
- * `shortcuts.ts`: a second alias chord listed beside the first, the way `Mod-0` sits
- * beside Word's `Mod-Shift-N` because Chromium eats that one.
+ * Windows did report it unchanged, and that next step is taken: `task` now carries
+ * `Mod-Shift-d` beside `Mod-Shift-t` in `shortcuts.ts`, `paragraph`'s precedent exactly.
+ * Nothing here changed for it — `editorKeyIntent` asks `matches` about the whole entry,
+ * so both spellings are claimed from this same handler, which is the point of matching
+ * against the registry rather than comparing fields by hand.
+ *
+ * The claim stands, but it is no longer the argument: a fix that survives its own report
+ * is a diagnosis that was incomplete, and this file has stopped asserting one. `--key-probe`
+ * (`key-probe.ts`) logs every key a window is handed, before anything here claims it, so
+ * the next round arrives with the operating system's own account of what happened rather
+ * than a third guess — the same move `--trash-probe` made for B57.
  */
 export const CLAIMED_EDITOR_KEYS = ["task"];
 

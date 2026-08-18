@@ -361,10 +361,17 @@ export function slashMenu(context: CommandContext): Plugin<SlashState | null> {
             controller.pick();
             return true;
           case "Escape":
-            // Escape closes the menu and leaves the `/` exactly where it was typed. It
-            // does *not* reach the window, where it does nothing in the capture window by
-            // design (`Editor.tsx`) — but a key that closed a menu and dismissed something
-            // else behind it would be one keystroke doing two things.
+            // Escape closes the menu and leaves the `/` exactly where it was typed.
+            //
+            // The `stopPropagation` is what makes the sentence that used to stand here
+            // true. It claimed the key "does *not* reach the window" — it did: returning
+            // `true` from `handleKeyDown` makes ProseMirror call `preventDefault()` and
+            // nothing else, so the event went on bubbling to `Library.tsx`'s window
+            // listener, which reads Escape in the editor as "leave for the note list". So
+            // `/quo` + Escape both dismissed the menu and threw focus out of the note —
+            // exactly the one-keystroke-two-things this comment already forbade, and
+            // invisible for as long as the comment asserted it could not happen.
+            event.stopPropagation();
             controller.close();
             return true;
           default:

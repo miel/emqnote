@@ -23,6 +23,28 @@ describe("editorKeyIntent", () => {
     expect(editorKeyIntent(press({ control: true, shift: true }), false)).toBe("task");
   });
 
+  it("claims the alias chord too, on both platforms", () => {
+    // `task` grew a second binding after the first fix was reported unchanged. Nothing in
+    // `editor-keys.ts` changed for it: `editorKeyIntent` asks `matches` about the whole
+    // entry, so an alias added to the registry is claimed from the same handler — which
+    // is the point of matching against the registry rather than comparing fields by hand.
+    expect(editorKeyIntent(press({ key: "D", control: true, shift: true }), false)).toBe("task");
+    expect(editorKeyIntent(press({ key: "d", meta: true, shift: true }), true)).toBe("task");
+  });
+
+  it("does not claim the alias with the other platform's modifier", () => {
+    expect(editorKeyIntent(press({ key: "D", control: true, shift: true }), true)).toBeNull();
+    expect(editorKeyIntent(press({ key: "D", meta: true, shift: true }), false)).toBeNull();
+  });
+
+  it("does not claim the alias when AltGr is held", () => {
+    // The Dutch-layout hazard `heading1`'s own `why` records: Ctrl+Alt is AltGr, and a
+    // claim that ignored Alt would swallow a character somebody was typing.
+    expect(
+      editorKeyIntent(press({ key: "D", control: true, shift: true, alt: true }), false),
+    ).toBeNull();
+  });
+
   it("claims Cmd+Shift+T on macOS", () => {
     expect(editorKeyIntent(press({ meta: true, shift: true }), true)).toBe("task");
   });

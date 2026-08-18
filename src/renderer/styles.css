@@ -8,6 +8,12 @@
   --warning: #e8a33d;
   --highlight: #6b5a1e;
   --task-highlight: #e8c547;
+  /* A third highlight, deliberately not a shade of the two above: `==highlight==` is a
+     mark the note carries and `--task-highlight` is the Tasks view pointing at a line,
+     and a find match that looked like either would be the confusion B32 already fixed
+     once. Teal, so it also cannot be read as `--accent`, which is what a link wears. */
+  --find-match: #2c5a52;
+  --find-active: #3f9c85;
 }
 
 @media (prefers-color-scheme: light) {
@@ -21,6 +27,8 @@
     --warning: #9a6200;
     --highlight: #fff2a8;
     --task-highlight: #f5c518;
+    --find-match: #bfe9dc;
+    --find-active: #57c9a8;
   }
 }
 
@@ -229,6 +237,57 @@ body {
 .editor {
   flex: 1;
   overflow-y: auto;
+}
+
+/* ---- find in this note (B63) ----
+   `position: fixed`, placed against the editor's own rect by `find-in-note.ts`, because
+   `.editor` above is the scroll container: a bar positioned inside it would scroll away
+   with the text it is searching. */
+.find-bar {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+  font-size: 12px;
+}
+
+.find-input {
+  width: 180px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+}
+
+.find-count {
+  min-width: 68px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.find-button {
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.find-button:hover {
+  border-color: var(--border);
+  background: var(--background);
 }
 
 .editor-content {
@@ -974,6 +1033,20 @@ body {
    is a plain removal, not an animated fade. Its own variable, `--task-highlight`, on
    purpose: reusing `--highlight` (the `==mark==` colour) would make a transient click
    flash look identical to a real highlight mark in a note that has both. */
+/* Every match, and then the one being walked to. Both class names on the active
+   selector, never `.find-match-active` alone: at one class each they would tie on
+   specificity and the later rule would win by source order, which is the trap B48 and
+   `styles-overlay.test.ts` have each sprung once already. */
+.editor-content .find-match {
+  background: var(--find-match);
+  border-radius: 2px;
+}
+
+.editor-content .find-match.find-match-active {
+  background: var(--find-active);
+  color: #10231e;
+}
+
 .editor-content .task-highlight {
   background: color-mix(in srgb, var(--task-highlight) 50%, transparent);
   border-radius: 2px;

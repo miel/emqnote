@@ -152,6 +152,12 @@ export function Library(): React.ReactElement {
    * in the tree keeps that button working from a filter view instead of guessing.
    */
   const [lastFolder, setLastFolder] = useState("00 Inbox");
+  // Mirrored, because the window-level shortcut listener below is installed once and must
+  // not be torn down and rebuilt every time the tree selection moves.
+  const lastFolderRef = useRef(lastFolder);
+  lastFolderRef.current = lastFolder;
+  /** The vault search box, so `searchVault` (Mod-F) can put the caret in it. */
+  const searchInput = useRef<HTMLInputElement>(null);
   /**
    * A search overrides the current selection rather than combining with it — clicking
    * the tree while searching clears the box (see `FolderTree`'s `onSelect` below), so
@@ -546,13 +552,75 @@ export function Library(): React.ReactElement {
     void loadNotes(selectionRef.current);
   }, [key, loadNotes]);
 
-  // Mod-/ opens the sheet here too, tested against the same registry the editor is
-  // built from. Escape is handled inside the sheet, where it cannot reach a note.
+  /**
+   * This window's own shortcuts: the help sheet, a new note, the search box, the title.
+   *
+   * Tested against the same registry the editor is built from, and installed once — every
+   * changing value it reads comes through a ref, so a tree selection or an open note never
+   * tears the listener down and rebuilds it.
+   *
+   * **`Mod-F` reaches here only from outside a note.** It is two registry entries, `find`
+   * (`where: "editor"`) and `searchVault` (`where: "library"`), and what keeps them apart
+   * is not the scopes but `find-in-note.ts`'s `handleKeyDown`, which stops the key at the
+   * editor. Without that stop both fire — a ProseMirror keymap command returning `true`
+   * only calls `preventDefault()`, so the chord went on bubbling to this listener and the
+   * caret was taken straight back out of the find bar and put in the search box. B64.
+   *
+   * `help` is deliberately outside the overlay guard, exactly as in `Capture.tsx`: the
+   * second `Mod-/` press is what closes the sheet, and a guard that included it would trap
+   * the sheet open. Everything else declines while a modal owns the keyboard — a context
+   * menu stops its own keys at its panel (`ContextMenu.tsx`), so only this window's React
+   * dialogs need naming here.
+   */
+  const overlayOpen =
+    settingsOpen ||
+    helpOpen ||
+    dialog !== null ||
+    moving ||
+    restoring !== null ||
+    linkPick !== null ||
+    notePick !== null ||
+    tableGrid !== null ||
+    link !== null;
+  const overlayOpenRef = useRef(overlayOpen);
+  overlayOpenRef.current = overlayOpen;
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!matches(shortcut("help"), event, app.isMac)) return;
-      event.preventDefault();
-      setHelpOpen((open) => !open);
+      const fires = (id: string): boolean => matches(shortcut(id), event, app.isMac);
+
+      if (fires("help")) {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+        return;
+      }
+
+      if (overlayOpenRef.current) return;
+
+      if (fires("newNoteHere")) {
+        event.preventDefault();
+        // The very expression the note list's "+ New note" button calls, so the chord and
+        // the button cannot come to file a note in two different places (B29).
+        window.emqnote.library.newNote(lastFolderRef.current);
+        return;
+      }
+
+      if (fires("searchVault")) {
+        event.preventDefault();
+        searchInput.current?.focus();
+        searchInput.current?.select();
+        return;
+      }
+
+      if (fires("focusTitle")) {
+        // Only when there is a title to edit and this window is allowed to edit it: a note
+        // the capture window has claimed must not be renamed from here, the same guard
+        // `IPC.libraryRenameNote` carries. The `<h1>`'s own click asks exactly this.
+        const note = openRef.current;
+        if (note === null || !note.editable) return;
+        event.preventDefault();
+        setEditingTitle(note.title);
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -653,13 +721,28 @@ export function Library(): React.ReactElement {
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
-      const current = paneOf(document.activeElement);
-
-      if (event.key === "Escape" && current === "editor") {
+      // Escape asks the *event* where it happened; Tab below asks where focus is. That
+      // difference is the whole of a reported bug. An overlay — the help sheet, a context
+      // menu, the slash menu — handles its own Escape and, on the way out, restores focus
+      // to whatever opened it. When that was the note panel, `document.activeElement`
+      // reads "editor" by the time the still-bubbling event arrives here, and this branch
+      // fired as well: one press closed the overlay *and* threw focus into the note list.
+      // The event's target is the overlay's own panel, which is not inside
+      // `.editor-content`, so asking it declines whatever focus restoration has already
+      // run. The overlays stop the event too (`Help.tsx`, `ContextMenu.tsx`,
+      // `slash-menu.ts`, `find-in-note.ts`); either fix alone is correct, and both are
+      // kept because this listener cannot know every overlay that will ever exist.
+      //
+      // Tab is genuinely a question about where focus *is* — nothing has moved it, and the
+      // key is about to move it — so it keeps `document.activeElement`.
+      if (event.key === "Escape") {
+        if (paneOf(event.target instanceof Element ? event.target : null) !== "editor") return;
         event.preventDefault();
         focusPane("notes");
         return;
       }
+
+      const current = paneOf(document.activeElement);
 
       // Plain Tab only: main claims Ctrl-Tab before this listener can see it (see the
       // comment above the effect), so anything arriving here with Control held is not
@@ -1820,6 +1903,7 @@ export function Library(): React.ReactElement {
             // `lastFolder` rather than the selection, for the same reason "+ New folder"
             // uses it: a tag or the Tasks view is not a place to put a note.
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
+            searchRef={searchInput}
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}

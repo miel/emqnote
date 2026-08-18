@@ -68,6 +68,8 @@ const DUTCH: Record<string, string> = {
   "shortcut.softBreak": "Regelovergang binnen de alinea",
   "shortcut.undo": "Ongedaan maken",
   "shortcut.redo": "Opnieuw",
+  "shortcut.find": "Zoeken in deze notitie",
+  "shortcut.focusTitle": "De titel bewerken",
   "shortcut.close": "Bewaren en sluiten",
   "shortcut.openLibrary": "Bibliotheek openen",
   "shortcut.help": "Dit overzicht",
@@ -75,6 +77,8 @@ const DUTCH: Record<string, string> = {
   "shortcut.openLibraryGlobal": "Bibliotheek openen (overal)",
   "shortcut.contextMenu": "Menu bij de gefocuste rij",
   "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
+  "shortcut.newNoteHere": "Nieuwe notitie in deze map",
+  "shortcut.searchVault": "Zoeken in alle notities",
 
   // Rechtermuisknop-menu's. De namen komen uit editor-menu.ts en de menu's op mappen/
   // notities; wat een actie *is* staat bij de sneltoets (hierboven), wat het menu-item
@@ -110,6 +114,16 @@ const DUTCH: Record<string, string> = {
   // Het /-menu (B51).
   "slash.nothing": "Niets gevonden",
   "slash.label": "Invoegmenu",
+
+  // De zoekbalk binnen één notitie (B63). De knoppen dragen zichtbare tekst naast hun
+  // teken, want `--click-button` matcht op `textContent`.
+  "find.label": "Zoeken in deze notitie",
+  "find.placeholder": "Zoeken in deze notitie",
+  "find.none": "Niets gevonden",
+  "find.of": "van",
+  "find.previous": "Vorige",
+  "find.next": "Volgende",
+  "find.close": "Sluiten",
 
   "table.toolbar": "Tabelbewerkingen",
   "table.rowAbove": "Rij ↑",
@@ -408,6 +422,8 @@ const ENGLISH: Record<string, string> = {
   "shortcut.softBreak": "Line break within the paragraph",
   "shortcut.undo": "Undo",
   "shortcut.redo": "Redo",
+  "shortcut.find": "Find in this note",
+  "shortcut.focusTitle": "Edit the title",
   "shortcut.close": "Save and close",
   "shortcut.openLibrary": "Open the library",
   "shortcut.help": "This sheet",
@@ -415,6 +431,8 @@ const ENGLISH: Record<string, string> = {
   "shortcut.openLibraryGlobal": "Open the library (from anywhere)",
   "shortcut.contextMenu": "Menu for the focused row",
   "shortcut.cyclePanes": "Switch between folders, list and note",
+  "shortcut.newNoteHere": "New note in this folder",
+  "shortcut.searchVault": "Search every note",
 
   // Right-click menus. The command names come from `editor-menu.ts` and the folder/
   // note-list menus; what an action *is* lives with the shortcut above, what the menu
@@ -450,6 +468,16 @@ const ENGLISH: Record<string, string> = {
   // fourth alignment state — a plain `---`, which is not the same as left.
   "slash.nothing": "Nothing matches",
   "slash.label": "Insert menu",
+
+  // The find bar inside one note (B63). The buttons carry visible words beside their
+  // glyph, because `--click-button` matches on `textContent`.
+  "find.label": "Find in this note",
+  "find.placeholder": "Find in this note",
+  "find.none": "No matches",
+  "find.of": "of",
+  "find.previous": "Previous",
+  "find.next": "Next",
+  "find.close": "Close",
 
   "table.toolbar": "Table operations",
   "table.rowAbove": "Row ↑",

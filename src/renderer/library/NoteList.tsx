@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import {
   folderOf,
   TRASH_FOLDER,
@@ -37,6 +37,15 @@ interface Props {
   /** A search query is currently narrowing the list — results can come from anywhere, same as a tag or a person. */
   searching: boolean;
   searchQuery: string;
+  /**
+   * The search box itself, so `Library.tsx` can put the caret in it on Mod-F.
+   *
+   * A ref handed down, the way `Capture.tsx` hands `subjectRef` to `HeaderBlock`, rather
+   * than a `querySelector` from the window root: `focusPane` reaches for a selector
+   * because it is hunting for *whichever* row happens to be the tab stop, and this is not
+   * that question — there is exactly one search box and this is it.
+   */
+  searchRef?: RefObject<HTMLInputElement | null>;
   onSearchChange: (query: string) => void;
   sort: SortKey;
   onSort: (key: SortKey) => void;
@@ -86,6 +95,7 @@ export function NoteList({
   showing,
   searching,
   searchQuery,
+  searchRef,
   onSearchChange,
   sort,
   onSort,
@@ -128,6 +138,7 @@ export function NoteList({
     <div className="notes">
       <div className="notes-search">
         <input
+          ref={searchRef}
           type="text"
           value={searchQuery}
           placeholder={t("library.search")}

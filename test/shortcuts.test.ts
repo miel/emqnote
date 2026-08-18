@@ -11,6 +11,7 @@ import {
   type KeyEvent,
 } from "../src/shared/shortcuts.js";
 import { COMMANDS } from "../src/renderer/editor/commands.js";
+import { translate } from "../src/shared/i18n.js";
 
 /**
  * The registry is the single definition of the bindings, so what it has to be tested for
@@ -56,6 +57,55 @@ describe("the registry holds together", () => {
     expect(shortcut("heading1").why).toMatch(/AltGr/);
     expect(shortcut("paragraph").why).toMatch(/incognito/);
     expect(shortcut("openLibrary").why).toMatch(/global/);
+  });
+
+  it("has an English label for every entry", () => {
+    // The help sheet renders `shortcut.<id>`, and `translate` falls back to the key name
+    // rather than throwing — so a missing label ships as a row reading "shortcut.find".
+    const unlabelled = SHORTCUTS.filter(
+      (entry) => translate("en-US", `shortcut.${entry.id}`) === `shortcut.${entry.id}`,
+    ).map((entry) => entry.id);
+
+    expect(unlabelled).toEqual([]);
+  });
+
+  it("lets Mod-F mean two things, in two scopes (B64)", () => {
+    // Deliberate, and the test above allows it because the pair it forbids is
+    // `where:binding`. What makes it unambiguous is not this table but `outlookKeymap`,
+    // which binds only the `editor` entries: with the caret in a note the keymap consumes
+    // the key, and everywhere else the library's window listener sees it.
+    expect(shortcut("find").keys).toEqual(["Mod-f"]);
+    expect(shortcut("find").where).toBe("editor");
+    expect(shortcut("searchVault").keys).toEqual(["Mod-f"]);
+    expect(shortcut("searchVault").where).toBe("library");
+
+    // And the reason is written down where the next reader will look before "fixing" it.
+    expect(shortcut("find").why).toMatch(/B64/);
+    expect(shortcut("searchVault").why).toMatch(/B64/);
+  });
+
+  it("gives the task item a second chord, and both are claimed", () => {
+    // `paragraph`'s precedent: Mod-Shift-T was reported dead on Windows, claimed in
+    // `before-input-event`, and reported dead again. The alias is what is left.
+    expect(shortcut("task").keys).toEqual(["Mod-Shift-t", "Mod-Shift-d"]);
+
+    const alias = press("d", { ctrlKey: true, shiftKey: true });
+    expect(matches(shortcut("task"), alias, false)).toBe(true);
+    // And it belongs to nothing else, in any scope.
+    const others = SHORTCUTS.filter(
+      (entry) => entry.id !== "task" && matches(entry, alias, false),
+    );
+    expect(others).toEqual([]);
+  });
+
+  it("keeps the new window chords off the editor keymap's plate", () => {
+    // `newNoteHere` and `searchVault` are handled by `Library.tsx`'s window listener, not
+    // by `outlookKeymap` — which is why they have no `COMMANDS` entry and must not be
+    // `where: "editor"`, or the first test in this file would fail asking for one.
+    expect(shortcut("newNoteHere").where).toBe("library");
+    expect(shortcut("searchVault").where).toBe("library");
+    expect(shortcut("focusTitle").where).toBe("global");
+    expect(COMMANDS.find).toBeDefined();
   });
 });
 

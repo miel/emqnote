@@ -96,6 +96,18 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.ReactElement
         style={{ left: position.x, top: position.y }}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
+          // An open menu owns the keyboard, which is the rule `Capture.tsx`'s own listener
+          // already states for the overlays it knows about — this is that rule where it
+          // can be enforced once, for every menu in both windows. Without it a window
+          // shortcut fires behind the menu: Ctrl+N would make a note, Ctrl+Enter would
+          // save and dismiss the capture window, each with a menu still on screen.
+          //
+          // Escape is the case that was actually reported. `close()` restores focus to
+          // whatever opened this menu; when that was the note panel, a still-bubbling
+          // Escape then reached `Library.tsx`'s window listener, which saw the editor
+          // focused and read the key as "leave for the note list" — so one press both
+          // closed the menu and threw focus out of the note.
+          event.stopPropagation();
           trapTab(event, panel.current);
           if (event.key === "Escape") {
             event.preventDefault();
