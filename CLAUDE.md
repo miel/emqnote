@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1457 tests
+npm test               # vitest run — 1475 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -698,13 +698,18 @@ it has always had — and **neither half is rolled up**: both count the notes fi
 folder itself, exactly as `noteCount` always has, so the two halves cannot end up counting
 different notes.
 
-The task half comes out of `note_tasks` (`openTaskCountsByFolder`), never out of a walk over
-the folder: re-parsing a folder's notes on demand is B26's 470–535 ms main-thread stall, and
-the table is already filled by every scan and every watcher reindex. It joins `notes`, so a
-row whose note has left the index cannot make the badge promise tasks the Tasks view does not
-list. The fold from note path to folder path happens in JS rather than in SQL — SQLite has no
-`dirname`, and spelling that rule a second time with `instr`/`substr` is how two answers to
-one question come to differ.
+The task half comes out of `note_tasks`, never out of a walk over the folder: re-parsing a
+folder's notes on demand is B26's 470–535 ms main-thread stall, and the table is already
+filled by every scan and every watcher reindex. It joins `notes`, so a row whose note has left
+the index cannot make the badge promise tasks the Tasks view does not list. The fold from note
+path to folder path happens in JS rather than in SQL — SQLite has no `dirname`, and spelling
+that rule a second time with `instr`/`substr` is how two answers to one question come to
+differ.
+
+**Since B69 the fold reads the per-note answer rather than asking its own question.**
+`openTaskCountsByPath` is the query; `openTaskCountsByFolder` is the fold over it. That is not
+tidiness — a folder saying two are open with rows beneath it that disagree is the failure
+worth designing out rather than testing for, and one query is how.
 
 **It is a second IPC call, not a field on `IPC.libraryTree`**, and that is the whole shape of
 it: the tree is one `readdir` and must answer at once (`vault-scan.ts`'s own rule that
@@ -716,6 +721,75 @@ pair or it is nothing, so a folder that is genuinely done cannot be read as one 
 counted. A tick is a save and a save raises `library:refresh`, so the badge follows a checkbox
 without knowing anything about one; a failed refresh keeps the last counts, the rule the
 unlinked pane already learned.
+
+**The note list says `[open] of [total]` under the date** (B69). B67's answer a level down,
+out of the same `openTaskCountsByPath`, so the folder badge and the rows inside that folder
+cannot disagree about the notes they are both counting. Accent while there is work left, muted
+once `open` is `0`.
+
+**Two numbers, not one, and absent is not zero.** `0 of 5` is a note whose work is done; a
+note that never had a checkbox says nothing at all, and only `total` tells those apart. A note
+missing from the map draws nothing — the same "absent, not zero" rule `FolderNode.openTasks`
+carries, for the same reason: the rows come off a `readdir` and the counts come from behind
+`ensureScanned`, so a row must never be able to claim a note is clear while the answer is
+still on its way. It is a second IPC call for B67's reason exactly.
+
+**It cannot come off `NoteSummary`.** `summarise` reads the frontmatter and the first lines of
+a file without ever building a document — deliberately, 0.09 ms against 1.51 ms per note — so
+it cannot see a task item at all.
+
+**People keep their line**, which was the alternative and was refused: a meeting note that
+quietly stopped naming who was at it is a worse trade than one more row. The count sits
+right-aligned on that same row, carrying `margin-left: auto` rather than the row carrying
+`justify-content: space-between` — either works when both halves are there, and only that one
+keeps the count on the right for a note with tasks and nobody attending. `.note-tasks-open` is
+written as a doubled selector for B48's reason; `test/styles-note-tasks.test.ts` pins it.
+
+**A new note can be thrown away, and it goes to the trash** (B68). Every other way out of the
+capture window commits — the X, Ctrl+Enter, Escape, blur, quit — and the draft is on disk 800 ms
+after the first keystroke, so a note begun by mistake was a note that existed. **Discard** is a
+button in the status bar, for a brand-new note only.
+
+**No confirmation, and that is B54's argument rather than an oversight**: the file is renamed
+into `_trash` and comes back through Restore, which is also why dragging a note onto the trash
+asks nothing. B24 is untouched — this is not a third place that permanently deletes.
+
+**The ordering is the whole of it.** `CaptureWriter.discard` swaps a fresh session in *before*
+it answers, `finish()`'s reason exactly, so the `writer.finish()` that every close runs
+(`hideCaptureWindow` → `onHide`) works on an empty session and `writeSession` returns `NOTHING`
+for a `null` payload instead of putting the note back where it was just taken from. Only
+running it finds that one, which is why `test/capture-writer.test.ts` spells the following
+`finish()` out rather than assuming it. What discard does **not** skip is a write already in
+flight: `writeSession` decides the file name on the first write and stores it on the session,
+so an answer taken before that settles is `null` for a file that appears a tick later — an
+orphan nobody can find. It waits the queue out.
+
+**Two independent locks on the loaded-note case**: the button is not drawn when `existing` is
+true, and `discard()` answers `null` for a session with an `existingTitle`. A note that lives
+in the library is not this window's to throw away, and Delete is already there. `capture-store.ts`
+returns the path rather than trashing it — that module writes a session, and where a note goes
+when it is deleted is `vault-io.ts`'s rule, of which there is exactly one.
+
+**The caret survives a note switch, for as long as the library window is open** (B70). `setDoc`
+replaces the whole `EditorState` — it must, or one note's undo history leaks into the next —
+and took the caret with it, so leaving a long note and coming back started at the top.
+`Library.tsx` keeps a `Map` from note path to selection; `EditorHandle` gained `getSelection`
+and `setSelection`.
+
+**In memory and nowhere else.** Not the note file (B10, and a caret is not something to carry
+to the other machine over OneDrive), not `index.sqlite` (a derived cache that `migrate()` drops
+on a schema bump), and deliberately not `settings.json` either — surviving a relaunch is a
+second question nobody asked.
+
+**`setSelection` does not focus.** Opening a note leaves focus on the list row that was clicked
+and goes on doing so; what changes is where the caret is waiting once you Tab or click in.
+**A task ordinal wins**: clicking a row in the Tasks view names a destination, and the two
+branches in the `docToken` effect are in that order for exactly that reason — there is nowhere
+else the rule is written. `rememberCaret` runs at the two points a note stops being the one on
+screen (opening another, selecting a file) and pointedly not on the paths that trash or delete
+it, where there is nothing to come back to. An offset past the end of a note that has since got
+shorter is clamped and handed to `TextSelection.between`, which falls back to `Selection.near`
+itself — the restore sits in an effect, and an exception there takes the whole reader down.
 
 **Tags come from two places, and since B65 the body's write into the frontmatter.** The
 frontmatter `tags:` field holds what was typed in the header's tag field; `#tag` stays in the
@@ -1473,6 +1547,49 @@ it is one indexed `GROUP BY` on rows already in memory, but the only machine tha
 is the one with the business OneDrive on it. And, as always, whether two numbers and a slash
 crowd a folder name at a real sidebar width. `TEST-PROTOCOL.md` §28.
 
+**Three items from daily use landed on 19 August 2026**, and a fourth was deliberately left
+alone. Three carry decisions: **B68** — a new note can be thrown away, and it goes to the
+trash — **B69** — the note list says `[open] of [total]` under the date — and **B70** — the
+caret survives a note switch for as long as the window is open.
+
+**The fourth is `Ctrl+Shift+T` on Windows, reported dead for the third time**, with
+`Ctrl+Shift+D` working. Nothing was changed for it, on purpose, and that is the decision worth
+remembering: both chords sit in one `keys` array, go through one `matches()` call in one
+`before-input-event` handler, and end at one `COMMANDS.task` — the registration is line for
+line identical, so the asymmetry is necessarily outside this process. This project has been at
+that exact place twice before (B57 → B59, and B62's batch), and the lesson each time was that a
+diagnosis surviving its own report is incomplete rather than wrong. `--key-probe` was built in
+that batch to read the answer directly and has still never been run on Windows; its output is
+the one deliverable this round is waiting on, and a fourth guess would only bury it further.
+`TEST-PROTOCOL.md` §29 has the three log shapes and what each one means.
+
+One thing B69 is worth remembering for: **the fold now reads the per-note answer instead of
+asking its own question.** `openTaskCountsByFolder` was a second query over the same table, and
+two queries answering one question is how a folder badge and the rows inside that folder come
+to disagree. It is `openTaskCountsByPath` folded in JS now — which was not extra work, since the
+per-note map was already B67's own intermediate value, thrown away a line later.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a three-note fixture vault:
+a note with unfinished boxes reading `2 of 3` in a **real computed `rgb(26, 99, 216)`** against
+a finished note's `0 of 2` in `rgb(107, 112, 121)` — the accent and the muted token, not class
+names in the DOM — a note with no task items drawing **no element at all**, both counts sitting
+at the same right edge with and without People beside them, the folder badge reading `3 / 2` in
+the same breath, and a box ticked through `IPC.libraryToggleTask` taking the row to `1 of 3` and
+the badge to `3 / 1` with `- [x] Offerte versturen` on disk afterwards. A note opened cold
+starting at paragraph 0 offset 0, a real click placing the caret at paragraph 1 offset 14,
+another note opening at 0/0 (so `setDoc` genuinely does throw it away), the first note coming
+back to **1/14**, and its **hash and mtime both unchanged** through all of it (B10). And a draft
+typed in the capture window landing on disk after the debounce, **Discard** taking it out of the
+folder and putting it in `_trash` with the typed sentence still in it, the window resetting to
+"Nothing saved yet", the folder **still** clean two seconds later — the `finish()`-after-discard
+hazard — a discard inside the 800 ms debounce creating no file then or later, and a note handed
+over from the library offering `["Insert", "?"]` and no Discard at all.
+
+**Not confirmed live**: the Windows half of the chord, which is the whole point of §29's first
+five rows. Also unseen by a person: whether "Discard" beside "Insert" and "?" reads as a button
+you could hit by accident at a real window size, and whether a long list of attendees and a
+count share a row comfortably in a narrow note pane. All are `TEST-PROTOCOL.md` §29.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1484,7 +1601,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B67, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B70, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

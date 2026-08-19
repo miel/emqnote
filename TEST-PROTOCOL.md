@@ -905,6 +905,67 @@ notes.
 | 28h | Watch the badges in that first moment | A folder shows its note count alone until its task count arrives, never `n / 0` first and then `n / 5`. A flicker through zero is a defect |  |
 | 28i | On a real display, with your longest folder name in a narrow sidebar: do the name and the two numbers still fit? | A judgement no script can make. The name truncates and the badge stays at the right-hand edge |  |
 
+## 29. Discarding, counting and remembering (19 August 2026)
+
+Three items from daily use — **B68** (a new note can be thrown away), **B69** (the note list
+says `[open] of [total]`) and **B70** (the caret survives a note switch) — plus the one thing
+this round deliberately did *not* fix.
+
+All three were driven under `Xvfb` over CDP on Linux, with real computed colours, real files
+on disk and real hash/mtime comparisons. What is left here is what a script cannot judge, and
+the Windows machine.
+
+### The chord that is still dead — the one deliverable this round is waiting on
+
+`Ctrl+Shift+T` was reported dead on Windows for the third time, with `Ctrl+Shift+D` working.
+Nothing was changed for it, on purpose: both chords sit in one `keys` array, go through one
+`matches()` call in one `before-input-event` handler, and end at one `COMMANDS.task`. The
+registration is line-for-line identical, so the difference is necessarily outside this process
+— and a fourth guess would only cover that up further. `--key-probe` reads it directly.
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| 29a | **Quit the everyday emqnote** (this probe does not bypass the single-instance lock, unlike the others), then run `emqnote.exe --key-probe` | The app starts and the log header appears in `%LOCALAPPDATA%\emqnote\key-probe.log` |  |
+| 29b | Open the capture window, put the caret in the note, and press `Ctrl+Shift+T`, then `Ctrl+Shift+D` | Two lines in the log. **Send the log**: which of the three shapes appears for `T` decides what happens next, and no other evidence can |  |
+| 29c | If there is **no line at all** for `T` | The key never reached the window: something outside emqnote took it. Nothing in this source tree can fix that, and `Ctrl+Shift+D` becomes the chord the help sheet prints first |  |
+| 29d | If the line reads `claim=—` | It arrived with modifiers the chord does not spell — `keyMatches` needs widening to compare `input.code` as well as `event.key` |  |
+| 29e | If the line reads `claim=task:editor` | It arrives and is claimed, so the fault is downstream: the `view.hasFocus()` gate in `Editor.tsx`, or `toggleTask` itself |  |
+
+### Discard (B68)
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| 29f | Open a new note, type a subject and a sentence, wait two seconds, then click **Discard** in the status bar | The window closes. The note is **not** in the folder it was being filed into, and **is** in the trash with everything that was typed still in it |  |
+| 29g | Look in the folder again half a minute later | Still not there. Every close runs a commit, and this is the one that must not put it back |  |
+| 29h | Discard it out of the trash's own **Restore**, into the Inbox | It comes back whole. This is the way back that is why Discard asks nothing first |  |
+| 29i | Open a new note, type two letters, and click **Discard** within a second — before the 800 ms write | Nothing appears in the folder at all, then or later |  |
+| 29j | Open an existing note from the library into the capture window (double-click a row) | There is **no** Discard button. A note that lives in the library is not this window's to throw away |  |
+| 29k | **On a real vault on OneDrive**: discard a note and watch the sync icon | The file moves into `_trash` and syncs from there. It is a rename, so OneDrive should not produce a conflict copy |  |
+| 29l | Does "Discard" beside "Insert" and "?" read as a button you could hit by accident, at the real window size? | A judgement no script can make. If it does, it wants moving or restyling — not a confirmation dialog, which B54's argument already answers |  |
+
+### The note list's task count (B69)
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| 29m | Open a folder with a mix of notes | A note with unfinished boxes reads `2 of 5` in the accent colour under the date, right-aligned. A note with every box ticked reads `0 of 5` in grey. A note with no boxes at all says nothing |  |
+| 29n | Compare a note that has People with one that does not | The count sits at the same right-hand edge in both. People keep their own place on the left |  |
+| 29o | Add the numbers of the notes in one folder and compare with the folder's own badge | They agree exactly — both come from one query. A disagreement is a real bug, and worth reporting with both numbers |  |
+| 29p | Tick a box in a note and watch its row | It goes `2 of 5` → `1 of 5` within a second, and the folder badge follows |  |
+| 29q | Open a tag, a person and a search | The counts are there too — those lists come from the index, so nothing should be missing |  |
+| 29r | **The cost, on a real vault.** Open the library on the biggest vault you have | The note list must appear immediately; the counts may arrive a moment later. If the rows wait for them, that is the split this was built around failing, and worth reporting with the vault's note count |  |
+| 29s | On a real display, in a narrow note pane, with a long list of attendees: do the names and the count still fit? | A judgement no script can make. The names truncate; the count stays at the right-hand edge |  |
+
+### Caret memory (B70)
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| 29t | Open a long note, click halfway down it, open another note, then come back | The caret is where you left it — Tab or click into the note and start typing to see where it lands |  |
+| 29u | Open a note for the first time | It starts at the top, as it always has. Only a note you have already been in remembers |  |
+| 29v | Click a task in the Tasks view for a note you had open before, with the caret somewhere else in it | It goes to the **task**, not to the remembered caret. The destination you named wins |  |
+| 29w | Do all of that and then check the note's file | Nothing written: no `modified` bump, no changed bytes. Opening a note still touches nothing (B10) |  |
+| 29x | Quit and relaunch, then open that same note | Back at the top. This is in memory for one sitting only, which is what was asked for — if you find yourself wanting it to survive a restart, that is a new decision, not a bug |  |
+| 29y | Leave a note open, edit it on the **other machine**, let it reload, and look at the caret | It lands somewhere sensible rather than throwing or jumping to the end. A note that got shorter is the case this is guarding |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -914,7 +975,7 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f or §28g fails,
+§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f, §28g, §29k, §29r or §29y fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
@@ -923,8 +984,8 @@ were confirmed in it — and §18o–§18q are a gap of their own: a tray menu i
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
 judgements about how something feels or reads, which no script can make, and §25m, §26i,
-§26j, §27n, §27o and §28i join them.
-**§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
+§26j, §27n, §27o, §28i, §29l and §29s join them.
+**§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f, §26a–§26c and §29a–§29e
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the
 macOS half of the same pair). §22b and §25a are the sharpest of them, because neither bug
