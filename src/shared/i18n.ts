@@ -25,6 +25,9 @@ const DUTCH: Record<string, string> = {
   "capture.where": "Waar",
   "capture.who": "Wie",
   "capture.tagsLabel": "Tags",
+  // De chips naast het veld: tags die in de tekst zelf staan. Het veld schrijft ze niet,
+  // dus de tooltip zegt waar ze wél weggehaald worden (B65).
+  "capture.tagsInNote": "Staat in de notitie zelf — daar weghalen",
   "capture.placeholder": "Typ maar.",
   "capture.dismiss": "sluit",
   "capture.nothingSaved": "Nog niets bewaard",
@@ -379,6 +382,9 @@ const ENGLISH: Record<string, string> = {
   "capture.where": "Where",
   "capture.who": "Who",
   "capture.tagsLabel": "Tags",
+  // The chips beside the field: tags written in the note itself. The field does not own
+  // them, so the tooltip says where they do come out (B65).
+  "capture.tagsInNote": "Written in the note itself — remove it there",
   "capture.placeholder": "Just type.",
   "capture.dismiss": "closes",
   "capture.nothingSaved": "Nothing saved yet",

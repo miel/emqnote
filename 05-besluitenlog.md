@@ -2137,6 +2137,97 @@ vraagt de gebeurtenis waar hij vandaan komt, niet waar de focus geëindigd is.**
 
 ---
 
+## B65 — De `#tags` uit de tekst gaan mee de frontmatter in
+
+**Genomen** op 19 augustus 2026. Dit **herziet de tweede helft van B19**: die zei dat de twee
+plekken waar een tag kan staan — `tags:` in de frontmatter en `#tag` in de lopende tekst —
+nooit naar elkaar toe schrijven. Dat blijft kloppen voor de *lezer* (`summarise()` voegde ze
+al samen voor de lijst), maar niet meer voor het *schrijven*: bij het opslaan worden de tags
+uit de tekst in `tags:` bijgeschreven.
+
+**De aanleiding is dat de kop over de notitie loog.** `openNote` gaf alleen
+`frontmatter.tags` terug, dus een notitie waarvan alle tags in de tekst staan — precies de
+vorm die een in Obsidian geschreven vault heeft — opende met een **leeg** tagveld, terwijl de
+lijst ernaast er drie liet zien. Er was ook geen enkele manier om die tags vanuit de kop te
+zien of te beheren.
+
+**De prijs is echt en is bewust aanvaard, en dat hoort hier te staan en niet in een
+voetnoot**: de eerste echte bewerking van een notitie met tags in de tekst herschrijft haar
+frontmatter. Dat is B10's OneDrive-argument van de verkeerde kant benaderd. B10 zelf blijft
+onaangetast en dat is de grens: **openen schrijft nog steeds niets** — `openNote` leest
+alleen, en `test/note-files.test.ts` bewaakt dat ongewijzigd. Het kost bovendien één schrijf
+per notitie, niet één per opslag: zodra de tag er staat, is de volgende opslag weer een
+niets-doen (de bytevergelijking in `saveNote` is onaangeroerd).
+
+**Wat afgewezen is.** *Alleen tonen, niet schrijven* — de chips wel, de hoisting niet. Dat
+lost de leugen op zonder ook maar één byte te kosten, en het is wat B19 zou hebben gezegd;
+het is afgewezen omdat de vraag juist was of een tag uit de tekst meetelt als een tag van de
+notitie, en het antwoord daarop is ja. En *de kop schrijft in de tekst* — een tag die in het
+veld wordt getypt als `#tag` onderaan de notitie bijzetten. Dan is er één plek, maar het veld
+verandert de zin, en een kopveld dat de lopende tekst bewerkt is een verrassing die niemand
+gevraagd heeft.
+
+**Herkomst is de hele reparatie, en zonder haar is een tag onverwijderbaar.** Na één opslag
+staan de handmatige en de bijgeschreven tags ononderscheidbaar in `tags:`. Toonde het veld
+ze allemaal, dan zou `klantx` uit `tags:` blijven staan lang nadat de `#klantx` die hem daar
+bracht uit de zin verdwenen was — geschreven door een veld dat hem elke keer terugzet. Dus:
+`manualTags` (`src/markdown/note-tags.ts`) trekt de tags van de tekst van de gedeclareerde
+af, en wat overblijft is wat het veld bezit en als enige schrijft. Een tag die op beide
+plekken staat, hoort daarmee bij de tekst — hem daar weghalen haalt hem overal weg. `OpenedNote`
+draagt de twee gescheiden over (`tags` en `bodyTags`), en de tekst-tags staan naast het veld
+als chips die je niet kunt bewerken, met een tooltip die zegt waar ze wél weggaan.
+
+**Eén functie, twee schrijvers.** `mergeTags` en `bodyTagsOf` staan in `src/markdown/`, buiten
+Electron, en worden aangeroepen door `vault-io.ts`'s `saveNote` én `capture-store.ts`'s
+`buildFrontmatter` — de twee die volgens hun eigen commentaar identiek moeten blijven.
+`bodyTagsOf` leest de tags van de **geserialiseerde tekst**, niet van een wandeling door het
+ProseMirror-document: `summarise()` leest ze van de bytes op schijf, en twee lezingen van
+dezelfde syntaxis is precies hoe twee antwoorden op één vraag uit elkaar gaan lopen. Dat kost
+één stringify per opslag, wat niets is naast een ontdubbeling van 800 ms — en het is de reden
+dat de chips in beide vensters op de bestaande debounce worden herrekend en **nooit per
+aanslag**: het opnamevenster heeft een budget van 16 ms.
+
+---
+
+## B66 — Het tagveld vult aan uit de tags die de vault al heeft
+
+**Genomen** op 19 augustus 2026, naast B65. `HeaderBlock.tsx` betoogde uitgebreid dat het tag-
+en het personenveld **met opzet** geen aanvulling hadden. Twee van die drie bevindingen staan
+nog overeind en bepalen de vorm: een `<datalist>` sluit niet bij een tweede klik — Chromium's
+gedrag, hier niet bij te sturen — dus is dit een echte combobox van gewone elementen; en
+`remembered.ts`'s lijst per machine was de verkeerde bron, dun en persoonlijk waar de vault de
+echte lijst heeft.
+
+**De derde bevinding is verlopen.** Die zei dat de lijst van de vault serveren een scan op het
+opnamepad zou zetten, en dat was waar vóór fase 5. De index bestaat nu, `startScan` draait bij
+het opstarten, en `facets()` is een gewone lezing daarvan — dezelfde die het Tags-filter van
+de bibliotheek al doet. `IPC.tagSuggestions` geeft daar de `tags`-helft van terug, en staat
+op het bovenste niveau naast `linkCandidates` om diens reden: beide vensters vragen erom, en
+die groepering gaat over *welk venster*, niet over welke functie.
+
+**Er wordt pas gevraagd bij de eerste focus van het veld**, nooit bij het opstarten. Dat is
+geen zuinigheid: dit onderdeel wordt in het opnamevenster getekend lang voordat de sneltoets
+het laat zien, en een IPC-heen-en-weer op dat pad is precies waartegen de 80 ms gemeten wordt.
+
+**Personen krijgen het niet**, en dat is een besluit en geen vergetelheid: een naam komt niet
+uit een gesloten verzameling zoals een tag, en de helft ervan aanbieden is slechter dan niets.
+
+Twee dingen die makkelijk stuk te "repareren" zijn. **Het aanvullen gaat over het woord waar de
+cursor in staat**, nooit over het hele veld — het veld houdt een lijst vast, en aanvullen van
+het geheel breekt zodra er een tweede tag getypt wordt. En **Escape roept `stopPropagation()`
+aan**: `preventDefault` sluit een gebeurtenis niet af, en zonder dat draait dezelfde druk ook
+de Escape-tak van `Library.tsx` en springt de focus de kop uit — één druk, twee dingen, de
+fout die de partij van 18 augustus 2026 overal elders wegnam (B64).
+
+**Wat de notitie al heeft, wordt niet aangeboden** — het veld én de tekst. Dat de tekst-tags
+er niet in staan ziet eruit als een omissie en is het niet: B65 schrijft ze bij het opslaan
+tóch in de frontmatter, dus aanvullen tot zo'n tag zou letterlijk niets schrijven, terwijl de
+chip die zegt dat de notitie hem heeft een centimeter verderop staat. De eerste versie bood ze
+wel aan, en dat was dezelfde tag twee keer op één regel.
+
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

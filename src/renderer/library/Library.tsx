@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
+import { bodyTagsOf } from "../../markdown/note-tags.js";
 import { schema } from "../../markdown/schema.js";
 import {
   canCreateFolderIn,
@@ -374,6 +375,15 @@ export function Library(): React.ReactElement {
   const [header, setHeader] = useState<HeaderValues | null>(null);
   const headerRef = useRef<HeaderValues | null>(null);
   headerRef.current = header;
+  /**
+   * The `#tag`s the open note's body carries, drawn beside the Tags field (B65).
+   *
+   * Set from what main read off the file when the note was opened, and recomputed on the
+   * same save debounce a keystroke already waits out — never per keystroke, since
+   * `bodyTagsOf` serializes the body to read them. It is a display value: setting it
+   * neither marks the note dirty nor schedules a write.
+   */
+  const [bodyTags, setBodyTags] = useState<string[]>([]);
 
   const openRef = useRef<OpenedNote | null>(null);
   openRef.current = open;
@@ -886,6 +896,7 @@ export function Library(): React.ReactElement {
       };
       setHeader(fields);
       headerRef.current = fields;
+      setBodyTags(loaded.bodyTags);
 
       setDirty(false);
     },
@@ -1046,18 +1057,25 @@ export function Library(): React.ReactElement {
     setNotePick({ prefix, query: state });
   }, []);
 
-  const onDocChange = useCallback(() => {
-    // Belt and braces alongside the `pointer-events: none` overlay: a note can go
-    // read-only while the editor already has focus from before, and a keystroke that
-    // slips through must not schedule a save that `save()` would refuse anyway.
-    if (openRef.current === null || !openRef.current.editable) return;
-    setDirty(true);
-    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      saveTimer.current = null;
-      void save();
-    }, SAVE_DEBOUNCE_MS);
-  }, [save]);
+  const onDocChange = useCallback(
+    (doc: PMNode) => {
+      // Belt and braces alongside the `pointer-events: none` overlay: a note can go
+      // read-only while the editor already has focus from before, and a keystroke that
+      // slips through must not schedule a save that `save()` would refuse anyway.
+      if (openRef.current === null || !openRef.current.editable) return;
+      setDirty(true);
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        // Beside the save rather than in front of it: the chips follow what was typed,
+        // and paying a body serialization per keystroke to draw them is exactly the
+        // trade `bodyTagsOf`'s own comment refuses.
+        setBodyTags(bodyTagsOf(doc));
+        void save();
+      }, SAVE_DEBOUNCE_MS);
+    },
+    [save],
+  );
 
   /**
    * A header edit saves on the same debounce as the body.
@@ -2031,12 +2049,18 @@ export function Library(): React.ReactElement {
                     file by hand outside the app. */}
                 {header !== null && (
                   <HeaderBlock
+                    // Keyed on the note, so opening another one remounts the block and
+                    // takes its half-typed tag and attendee buffers with it. Without this
+                    // the leftovers are shown for the new note and committed to it on the
+                    // next blur — see `HeaderBlock`'s own comment on `attendeeText`.
+                    key={open.path}
                     variant="reader"
                     values={header}
                     onChange={onHeaderChange}
                     onLeave={() => editor.current?.focus()}
                     locale={app.locale}
                     t={app.t}
+                    bodyTags={bodyTags}
                   />
                 )}
   

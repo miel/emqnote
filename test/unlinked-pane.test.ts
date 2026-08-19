@@ -151,6 +151,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     checkAttachments: async () => [],
     pdfPageCount: async () => 1,
     linkCandidates: async () => [],
+    tagSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

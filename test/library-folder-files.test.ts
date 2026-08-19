@@ -154,6 +154,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     checkAttachments: async () => [],
     pdfPageCount: async () => 7,
     linkCandidates: async () => [],
+    tagSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

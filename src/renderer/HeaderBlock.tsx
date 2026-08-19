@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { cleanTagInput } from "../markdown/tags.js";
 import type { NoteKind } from "../shared/ipc.js";
+import type { Facet } from "../shared/vault-types.js";
 import { isoWithOffset } from "../shared/time.js";
 import { formatDateTime, type Locale } from "../shared/i18n.js";
+import { useActiveRowVisible, useHoverGuard } from "./library/palette-scroll.js";
+import { applySuggestion, rankTags, tokenAt } from "./tag-typeahead.js";
 
 export interface HeaderValues {
   kind: NoteKind;
@@ -33,6 +36,15 @@ interface Props {
   t: (key: string) => string;
   variant?: HeaderVariant;
   /**
+   * The `#tag`s the note body carries, drawn beside the field as read-only chips (B65).
+   *
+   * A separate prop and not part of `values`, because `values.tags` is what this field
+   * *writes* and these are not: they are removed in the note, where they were written.
+   * The window computes them on load and on its own save debounce — never per keystroke,
+   * `bodyTagsOf` serializing the body to get at them.
+   */
+  bodyTags?: string[];
+  /**
    * The subject input, so the capture window can put the caret there on `show()`
    * instead of in the editor. Only meaningful in the `capture` variant — the reader
    * renders no subject field at all, since its title belongs to Rename.
@@ -58,16 +70,21 @@ interface Props {
  * Rejected: chips for the people field. A free-text list of names wants to be wide and
  * to stay one line; the reader header's own history is of a header that grew and shrank.
  *
- * **The tag and people fields have no completion, deliberately.** They used to carry a
- * `<datalist>` fed from `remembered.ts` — the names and tags typed on *this machine*.
- * Two things were wrong with it and only one was fixable. The list was thin and
- * personal where the vault holds the real one, and a native datalist will not close on
- * a second click, which is Chromium's behaviour and not reachable from here. Serving
- * the vault's own list meant either putting a scan on the capture path, which B-nothing
- * permits and `CLAUDE.md` forbids outright, or building a real combobox — new UI, on
- * the one window with a 16 ms keystroke budget, to complete fields that hold a word or
- * two. Plain inputs are the better trade. The vault-wide lists still exist where they
- * belong: the library's Tags and People filters, from `facets()`.
+ * **The Tags field completes from the vault's own tag list; the people field still does
+ * not** (B66). This used to say neither did, with an argument that has since expired.
+ * Two of its three findings still hold and are why the completion is shaped as it is: a
+ * native `<datalist>` will not close on a second click, which is Chromium's behaviour and
+ * not reachable from here — so this is a real combobox drawn as plain elements — and
+ * `remembered.ts`'s per-machine list was the wrong source, thin and personal where the
+ * vault holds the real one. The third finding was that serving the vault's list would put
+ * a scan on the capture path, and that was true before phase 5: `IPC.tagSuggestions` is a
+ * read of the index the launch scan already fills, asked on the field's **first focus**
+ * and never at startup, so nothing about it is on the hotkey's way. People are left alone
+ * because a name is not drawn from a closed set the way a tag is, and offering half of one
+ * would be worse than offering none.
+ *
+ * The chips after the field are the other half of B65: tags written in the note body are
+ * shown here but not editable here, since the note is where they are removed.
  *
  * The same component serves both windows, so that the parsing of attendees and tags, and
  * the date editing, exist once. Two copies would drift, and the drift would show up as a
@@ -80,6 +97,7 @@ export function HeaderBlock({
   locale,
   t,
   variant = "capture",
+  bodyTags = [],
   subjectRef,
 }: Props): React.ReactElement {
   const inCapture = variant === "capture";
@@ -93,11 +111,52 @@ export function HeaderBlock({
    * or a comma was parsed away the instant it was typed: "Jan" + space became ["Jan"]
    * became "Jan", with the space gone. Two names could never be entered at all. The
    * text is only split into names when the field is left.
+   *
+   * **This buffer and `tagText` below belong to one note, and nothing in here knows when
+   * that note changes** — which is why both callers give this component a `key` that
+   * changes with the note, so switching remounts it and the buffers go with it. Without
+   * that, half-typed text from the note you just left is shown for the note you just
+   * opened, and the next blur *commits* it: measured in the running app, a note whose
+   * `tags: [klantx, offerte, klachten]` were replaced by the three characters left in the
+   * field from a different note. It is the same reasoning `Editor`'s `setDoc` states for
+   * replacing the whole state rather than swapping the document — leftovers from a file
+   * you are no longer looking at must not be able to reach it.
    */
   const [attendeeText, setAttendeeText] = useState<string | null>(null);
 
   /** Same for tags, and for the same reason: a separator has to survive being typed. */
   const [tagText, setTagText] = useState<string | null>(null);
+
+  /**
+   * The Tags field's completion (B66).
+   *
+   * `vaultTags` is fetched **once, on the field's first focus** — not on mount, and above
+   * all not at startup: this component is rendered into the capture window before the
+   * hotkey ever shows it, and an IPC round trip on that path is exactly what the 80 ms
+   * budget is measured against. `null` means "not asked yet".
+   *
+   * `active` is the highlighted row and `-1` means the list is up with nothing chosen, so
+   * Enter falls through to committing the field rather than accepting a suggestion
+   * nobody moved to.
+   */
+  const [vaultTags, setVaultTags] = useState<Facet[] | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [active, setActive] = useState(-1);
+  const tagInput = useRef<HTMLInputElement>(null);
+  const suggestList = useRef<HTMLUListElement>(null);
+  const hoverGuard = useHoverGuard();
+
+  const tagValue = tagText ?? values.tags.map((tag) => `#${tag}`).join(" ");
+  const caret = tagInput.current?.selectionStart ?? tagValue.length;
+  // The note's own body tags go in as *applied*, not as candidates: B65 already hoists
+  // them into the frontmatter on save, so completing the field to one would write nothing
+  // — and the chip saying so is an inch to the left.
+  const suggestions = suggesting
+    ? rankTags(vaultTags ?? [], tokenAt(tagValue, caret).value, [...values.tags, ...bodyTags])
+    : [];
+  const listOpen = suggestions.length > 0;
+
+  useActiveRowVisible(suggestList, active, suggestions);
 
   useEffect(() => {
     if (editingTime) timeInput.current?.focus();
@@ -131,6 +190,84 @@ export function HeaderBlock({
     if (tagText === null) return;
     set("tags", parseTags(tagText));
     setTagText(null);
+  };
+
+  const closeSuggestions = (): void => {
+    setSuggesting(false);
+    setActive(-1);
+  };
+
+  /**
+   * Asked once per window, on the first focus of the field. A failure is swallowed into
+   * an empty list on purpose: the field goes on working as a plain input, which is what
+   * it was, and a dialog about a completion nobody asked for would be worse than none.
+   */
+  const openSuggestions = (): void => {
+    setSuggesting(true);
+    setActive(-1);
+    if (vaultTags !== null) return;
+    setVaultTags([]);
+    void window.emqnote
+      .tagSuggestions()
+      .then(setVaultTags)
+      .catch(() => setVaultTags([]));
+  };
+
+  const accept = (tag: string): void => {
+    const input = tagInput.current;
+    const next = applySuggestion(tagValue, input?.selectionStart ?? tagValue.length, tag);
+    setTagText(next.text);
+    closeSuggestions();
+    // The caret has to be put back after React has written the new value, or the browser
+    // parks it at the end of the field — which is where it happens to belong when the
+    // completed tag was the last one, and nowhere near it when it was not.
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  /**
+   * The Tags field's own keys, which run ahead of `leaveOnEnter` below.
+   *
+   * Enter and Tab accept the highlighted suggestion *while the list is open with a row
+   * chosen*; with the list closed, or open with nothing highlighted, Enter still commits
+   * and leaves for the note, which is what the field has always done.
+   *
+   * Escape closes the list and calls `stopPropagation()`. That is not tidiness: a
+   * `preventDefault()` does not end an event, and without stopping it here the same press
+   * also runs `Library.tsx`'s window-level Escape branch and jumps out of the header
+   * entirely — one press, two things, which is the bug the 18 August 2026 batch fixed
+   * everywhere else.
+   */
+  const onTagKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === "Escape" && suggesting) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSuggestions();
+      return;
+    }
+
+    if (!listOpen) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      hoverGuard.keyboardMoved();
+      const count = suggestions.length;
+      setActive((current) =>
+        event.key === "ArrowDown"
+          ? (current + 1) % count
+          : current <= 0
+            ? count - 1
+            : current - 1,
+      );
+      return;
+    }
+
+    if ((event.key === "Enter" || event.key === "Tab") && active >= 0) {
+      event.preventDefault();
+      accept(suggestions[active]!.name);
+    }
   };
 
   // Enter moves on into the note; the header should never be a place you get stuck
@@ -215,15 +352,66 @@ export function HeaderBlock({
         </div>
 
         <span className="header-label">{t("capture.tagsLabel")}</span>
-        <div className="header-cell">
+        <div className="header-cell header-tags">
           <input
+            ref={tagInput}
             className="tags"
             placeholder={t("capture.tags")}
-            value={tagText ?? values.tags.map((tag) => `#${tag}`).join(" ")}
-            onChange={(event) => setTagText(event.target.value)}
-            onBlur={commitTags}
-            onKeyDown={leaveOnEnter}
+            value={tagValue}
+            onChange={(event) => {
+              setTagText(event.target.value);
+              openSuggestions();
+            }}
+            onFocus={openSuggestions}
+            // The list closes with the field, and committing here is what it has always
+            // done. A row's own `mousedown` is prevented, so clicking a suggestion cannot
+            // reach this first — which it otherwise would, blur running ahead of click.
+            onBlur={() => {
+              closeSuggestions();
+              commitTags();
+            }}
+            onKeyDown={(event) => {
+              onTagKeyDown(event);
+              if (!event.defaultPrevented) leaveOnEnter(event);
+            }}
           />
+
+          {/* Tags written in the note body (B65). Shown, never edited — a chip is not a
+              control, and the tooltip says where the tag does come out. */}
+          {bodyTags.map((tag) => (
+            <span key={tag} className="tag-chip" title={t("capture.tagsInNote")}>
+              #{tag}
+            </span>
+          ))}
+
+          {listOpen && (
+            <ul className="tag-suggest" ref={suggestList}>
+              {suggestions.map((facet, index) => (
+                <li key={facet.name}>
+                  {/* A real button with the tag as visible text, and the name carrying
+                      `.context-menu-label` — which is not decoration: that is the class
+                      `library-window.ts`'s `--click-button` reads a row's name off, and
+                      the button's own `textContent` runs the count on (`#klantx24`), so
+                      without it the self-test could only reach a row by a label that
+                      changes whenever the vault does. */}
+                  <button
+                    type="button"
+                    className={index === active ? "tag-suggest-on" : undefined}
+                    // Ahead of blur, which would commit the field and close this list
+                    // before the click ever landed.
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={(event) => {
+                      if (hoverGuard.hover(event)) setActive(index);
+                    }}
+                    onClick={() => accept(facet.name)}
+                  >
+                    <span className="context-menu-label tag-suggest-name">#{facet.name}</span>
+                    <span className="tag-suggest-count">{facet.count}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <span className="header-label">{t("capture.where")}</span>

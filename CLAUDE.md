@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1399 tests
+npm test               # vitest run — 1438 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -692,7 +692,42 @@ the matrix arithmetic both files need, so neither has to import the other.
 
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
 
-**Tags come from two places that never write to each other.** The frontmatter `tags:` field holds what was typed in the capture window's tag field; `#tag` in the body stays in the body. `summarise()` in `vault-io.ts` merges them for display and filtering. Copying body tags into the frontmatter would mean editing one sentence rewrites the header, which is a B10 hazard.
+**Tags come from two places, and since B65 the body's write into the frontmatter.** The
+frontmatter `tags:` field holds what was typed in the header's tag field; `#tag` stays in the
+body — and on **save** the body's tags are hoisted into `tags:` beside the typed ones. This
+paragraph used to say the two never wrote to each other, on the argument that editing one
+sentence would then rewrite the header. That cost is real, was weighed and was accepted: the
+header field was showing *nothing* for a note whose tags are all in the body, which is the
+shape an imported vault has. It costs one write per note, not one per save — once hoisted,
+the byte comparison in `saveNote` makes the next save a no-op again.
+
+**B10 is unchanged and is the boundary**: opening a note still writes nothing, and
+`test/note-files.test.ts` guards it. The hoist happens in the two frontmatter builders
+(`vault-io.ts`'s `saveNote`, `capture-store.ts`'s `buildFrontmatter`) through one shared
+`mergeTags`, never in the serializer — so the corpus round trip is untouched.
+
+**`bodyTagsOf` reads the *serialized* body, not the ProseMirror document** (`src/markdown/note-tags.ts`).
+`summarise()` reads tags off the bytes on disk, and a second reading of the same syntax is how
+two answers to one question come to differ. It costs a stringify, which is why both windows
+recompute the chips on their existing save debounce and **never per keystroke** — the capture
+window has a 16 ms budget.
+
+**Provenance is what makes a hoisted tag removable.** After one save `tags:` holds the manual
+and the hoisted tags indistinguishably, so `openNote` hands back `tags` (what `tags:` declares
+*minus* the body's) and `bodyTags` separately — `manualTags` is the rule. A tag in both places
+belongs to the body; delete it there and the next save drops it. `HeaderBlock` draws `bodyTags`
+as read-only chips beside the field for the same reason: the note is where they come out.
+
+**The tag field completes from the vault's own list** (B66), through `IPC.tagSuggestions` — the
+`tags` half of the same `facets()` the library's Tags filter reads. Top-level IPC like
+`linkCandidates`, because both windows ask. Asked on the field's **first focus**, never at
+startup: this component is rendered into the capture window long before the hotkey shows it.
+The matching is a pure module (`src/renderer/tag-typeahead.ts`) and works on the token the
+caret is in, never the whole field, which holds a list. What the note already carries — the
+field's tags *and* the body's — is not offered: the body half looks like an omission and is
+not, since B65 hoists those anyway, so completing to one would write nothing. Escape closes the
+list with `stopPropagation()`, the 18 Aug 2026 rule. People deliberately get no completion: a
+name is not drawn from a closed set the way a tag is.
 
 **Timestamps are ISO 8601 with offset, never UTC `Z`** — otherwise a summer note reads back wrong in winter.
 
@@ -1345,6 +1380,48 @@ is a *unit-test* harness, not the ability to be driven.
 probe — `--key-probe`'s own output from a real Windows machine is the deliverable this batch
 is waiting on. `TEST-PROTOCOL.md` §26.
 
+**Two changes to tags landed on 19 August 2026**, and a third thing that nobody asked for.
+Both carry decisions: **B65** — the body's `#tag`s are hoisted into `frontmatter.tags` on
+save, which reverses B19's second half — and **B66** — the Tags field completes from the
+vault's own list, which reverses `HeaderBlock`'s own "no completion, deliberately". The
+report behind B65 was that the header showed an empty Tags field for a note whose tags are
+all in the sentences, which is the shape an imported vault has; the argument behind B66 had
+simply expired, since the index it said would need a scan has existed since phase 5.
+
+**The third thing is a data-loss bug that only running it found, and it was already there.**
+`HeaderBlock` keeps its own raw text for the tag and attendee fields so a separator survives
+being typed — and nothing in that component knows when the note underneath it changes. Type
+into the Tags field, open another note without leaving the field first, and the leftovers were
+shown for the *new* note and committed to it on the next blur. Measured in the running app: a
+note whose `tags: [klantx, offerte, klachten]` became `tags: [kla]`. Both callers give the
+block a `key` that changes with the note now, so switching remounts it and the buffers go with
+it — `Editor`'s own `setDoc` reasoning ("undo history from the previous note cannot leak into
+this one") applied to the header. It is not a B65 bug; B65 is only what made anyone look.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against an imported note carrying
+only body tags and a hand-written one carrying only header tags: the imported note opening
+with an **empty field, two chips and its file's hash and mtime both unchanged** (B10); one
+keystroke producing `tags: [klantx, q3]` with the body byte-identical apart from the typed
+character, no backslash before the line-initial `#`, and the file coming back
+**byte-identical from `npm run canonical`**; deleting `#klantx` out of the sentence removing
+it from `tags:` and from the chips while `q3` stayed — the sticky-tag case the provenance rule
+exists to prevent; the completion list appearing on the field's first focus and not before,
+narrowing on `kl`, painting on top at `z-index: 20` (`elementFromPoint`, not merely a class in
+the DOM), arrow-then-Enter accepting and leaving the caret in the field, Escape closing it with
+the typed text exactly where it was and focus still in the field; `#q3` never offered because
+the note already carries it; `library-window.ts`'s own `--click-button` matcher, run verbatim
+against the page, finding the row by `#klantx` while the button's own text reads `#klantx1` —
+which is what the `.context-menu-label` on the name is for; and the leak fixed, with `kla`
+typed into one note's field not following to the next and that note's file untouched.
+
+**And all of it was driven in the capture window too** — the chips, the completion, and a
+whole note written there committing to disk as `tags: [klantx, kwartaal]`, one from the field
+and one hoisted out of the sentence.
+
+**Not confirmed live**: what the extra frontmatter rewrite costs on a real business OneDrive,
+which is B65's accepted price and the one thing a sandbox cannot weigh. And, as always, how
+the chips and the dropdown read at a real window width. `TEST-PROTOCOL.md` §27.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1356,7 +1433,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B64, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B66, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

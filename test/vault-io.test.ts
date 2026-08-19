@@ -358,9 +358,11 @@ Niets aan de hand.
     expect(readFileSync(join(vault, tagged), "utf8")).toBe(before);
   });
 
-  it("keeps an inline tag in the body byte-identical through an edit", () => {
-    // The escape exception has to hold on the way out of the editor too, or a note
-    // gains a backslash the first time it is touched.
+  it("hoists a body tag into the frontmatter and leaves the body byte-identical", () => {
+    // B65, reversing B19's second half: the body's tags are written to `tags:` too, so
+    // the header stops claiming a note has none. The body itself is untouched — and the
+    // escape exception has to hold on the way out of the editor, or the note gains a
+    // backslash the first time it is saved.
     const tagged = "00 Inbox/2026-07-26 1000 Inline.md";
     writeFileSync(
       join(vault, tagged),
@@ -377,8 +379,67 @@ created: 2026-07-26T10:00:00+02:00
     const opened = openNote(vault, tagged)!;
     const result = saveNote(vault, { ...opened });
 
-    expect(result.written).toBe(false);
-    expect(readFileSync(join(vault, tagged), "utf8")).toContain("\n#klantx staat vooraan.\n");
+    expect(result.written).toBe(true);
+    const contents = readFileSync(join(vault, tagged), "utf8");
+    expect(contents).toContain("tags:");
+    expect(contents).toContain("klantx");
+    expect(contents).toContain("\n#klantx staat vooraan.\n");
+
+    // And it settles: once hoisted, saving the same note again writes nothing, so the
+    // hoist costs one write per note rather than one per save.
+    expect(saveNote(vault, { ...openNote(vault, tagged)! }).written).toBe(false);
+  });
+
+  it("drops a hoisted tag again when the #tag leaves the body", () => {
+    // The provenance rule earning its keep. `openNote` hands back the frontmatter's tags
+    // *minus* the body's, so a tag that only ever came from a sentence is not in the set
+    // the header field writes — and deleting that sentence deletes the tag. Without it a
+    // hoisted tag can never be removed by any gesture at all.
+    const tagged = "00 Inbox/2026-07-26 1300 Weg.md";
+    writeFileSync(
+      join(vault, tagged),
+      `---
+title: Weg
+type: quick
+created: 2026-07-26T13:00:00+02:00
+tags: [handmatig, klantx]
+---
+
+#klantx is akkoord.
+`,
+    );
+
+    const opened = openNote(vault, tagged)!;
+    expect(opened.tags).toEqual(["handmatig"]);
+    expect(opened.bodyTags).toEqual(["klantx"]);
+
+    // The same note with the tag typed out of the sentence.
+    saveNote(vault, { ...opened, doc: paragraphs("Het is akkoord.").toJSON() });
+
+    const contents = readFileSync(join(vault, tagged), "utf8");
+    expect(contents).toContain("handmatig");
+    expect(contents).not.toContain("klantx");
+  });
+
+  it("keeps a tag that is only in the header when the body has none", () => {
+    const tagged = "00 Inbox/2026-07-26 1400 Alleen.md";
+    writeFileSync(
+      join(vault, tagged),
+      `---
+title: Alleen
+type: quick
+created: 2026-07-26T14:00:00+02:00
+tags: [offerte]
+---
+
+Geen tags in de tekst.
+`,
+    );
+
+    const opened = openNote(vault, tagged)!;
+    expect(opened.tags).toEqual(["offerte"]);
+    expect(opened.bodyTags).toEqual([]);
+    expect(saveNote(vault, { ...opened }).written).toBe(false);
   });
 });
 

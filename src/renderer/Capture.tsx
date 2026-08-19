@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
+import { bodyTagsOf } from "../markdown/note-tags.js";
 import { schema } from "../markdown/schema.js";
 import { buildEditorMenu, insertMenuItems } from "./editor/editor-menu.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
@@ -39,6 +40,23 @@ export function Capture(): React.ReactElement {
   const editor = useRef<EditorHandle>(null);
   const subjectInput = useRef<HTMLInputElement>(null);
   const [header, setHeader] = useState<HeaderValues>(freshHeader);
+  /**
+   * The `#tag`s the note body carries, drawn beside the Tags field (B65).
+   *
+   * Recomputed on the same 300 ms debounce the change already waits out, never per
+   * keystroke: `bodyTagsOf` serializes the body to read them, and this window has a 16 ms
+   * keystroke budget. Setting it touches neither `dirtyRef` nor `send` — it is a display
+   * value, and a note must never be written for having been looked at (B10).
+   */
+  const [bodyTags, setBodyTags] = useState<string[]>([]);
+  /**
+   * Bumped whenever this window starts on a different note — a hand-over from the library
+   * or a reset on hide. It is `HeaderBlock`'s `key`, so the block remounts and its
+   * half-typed tag and attendee buffers go with it; without that, text left in the tag
+   * field of the note just dismissed is shown for the next one and committed to it on the
+   * following blur. See `HeaderBlock`'s comment on `attendeeText`.
+   */
+  const [session, setSession] = useState(0);
   // True once an existing note has been handed over from the library window. The
   // subject field disappears then, the same way it does in the reader — the title
   // belongs to Rename, and a second way to set it would let the two drift (B20).
@@ -140,7 +158,10 @@ export function Capture(): React.ReactElement {
     (doc: PMNode) => {
       dirtyRef.current = true;
       if (timer.current !== null) clearTimeout(timer.current);
-      timer.current = setTimeout(() => send(doc), CHANGE_DEBOUNCE_MS);
+      timer.current = setTimeout(() => {
+        send(doc);
+        setBodyTags(bodyTagsOf(doc));
+      }, CHANGE_DEBOUNCE_MS);
     },
     [send],
   );
@@ -178,6 +199,8 @@ export function Capture(): React.ReactElement {
     const stopReset = window.emqnote.onReset(() => {
       editor.current?.reset();
       setHeader(freshHeader());
+      setBodyTags([]);
+      setSession((n) => n + 1);
       setExisting(false);
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: null }));
@@ -203,6 +226,10 @@ export function Capture(): React.ReactElement {
       };
       setHeader(fields);
       headerRef.current = fields;
+      // Handed over by main, which read them off the file's own text — the same reading
+      // `summarise` does, so the chips and the note list cannot disagree about one note.
+      setBodyTags(note.bodyTags);
+      setSession((n) => n + 1);
       setExisting(true);
       setLink(null);
       setStatus((previous) => ({ ...previous, savedAs: note.path }));
@@ -315,12 +342,14 @@ export function Capture(): React.ReactElement {
       />
 
       <HeaderBlock
+        key={session}
         variant={existing ? "reader" : "capture"}
         values={header}
         onChange={onHeaderChange}
         onLeave={() => editor.current?.focus()}
         locale={app.locale}
         t={app.t}
+        bodyTags={bodyTags}
         subjectRef={subjectInput}
       />
 

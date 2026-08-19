@@ -35,3 +35,4 @@ export {
   cleanTagInput,
   type FoundTag,
 } from "./tags.js";
+export { bodyTagsOf, mergeTags, manualTags } from "./note-tags.js";
