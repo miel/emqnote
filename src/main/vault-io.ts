@@ -12,9 +12,11 @@ import {
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
 import {
+  bodyTagsOf,
   cleanTagInput,
   extractTags,
-  foldTag,
+  manualTags,
+  mergeTags,
   parseFrontmatter,
   parseNote,
   schema,
@@ -172,17 +174,11 @@ export function summarise(vault: string, file: string, raw: string, mtime: Date)
   const frontmatter = yaml === "" ? null : parseFrontmatter(yaml);
   const fileName = basename(file);
 
-  const declared = frontmatter?.tags ?? [];
-  const seen = new Set(declared.map(foldTag));
-  const tags = [...declared];
-
-  // Frontmatter first, then whatever the body adds. The two are never written to each
-  // other — see B19 — so this merge is the only place they meet.
-  for (const inline of extractTags(body)) {
-    if (seen.has(foldTag(inline))) continue;
-    seen.add(foldTag(inline));
-    tags.push(inline);
-  }
+  // Frontmatter first, then whatever the body adds. Since B65 the save path hoists the
+  // body's tags into the frontmatter, so for a note this app has written since they are
+  // the same set already — this still has to merge, because a note imported or edited
+  // elsewhere has not been through that path and its body tags exist nowhere else.
+  const tags = mergeTags(frontmatter?.tags ?? [], extractTags(body));
 
   return {
     path: toPosix(relative(vault, file)),
@@ -300,7 +296,13 @@ export function openNote(vault: string, notePath: string): OpenedNote | null {
   const file = join(vault, notePath);
   if (!existsSync(file)) return null;
 
-  const { frontmatter, doc } = parseNote(readFileSync(file, "utf8"));
+  const raw = readFileSync(file, "utf8");
+  const { frontmatter, doc } = parseNote(raw);
+
+  // B65's provenance rule, and the whole reason the two are handed over separately. The
+  // tags read off the *file's own body text* rather than off `doc`, which is the same
+  // text `summarise` reads and so cannot disagree with it about one note.
+  const bodyTags = extractTags(splitNote(raw).body);
 
   return {
     path: notePath,
@@ -318,7 +320,11 @@ export function openNote(vault: string, notePath: string): OpenedNote | null {
     created: frontmatter.created === "" ? isoWithOffset(statSync(file).mtime) : frontmatter.created,
     location: frontmatter.location ?? "",
     attendees: frontmatter.attendees ?? [],
-    tags: frontmatter.tags ?? [],
+    // What the header field owns, which is not everything the frontmatter declares: a
+    // tag the body also carries belongs to the body, and showing it in the field would
+    // make it unremovable. `manualTags` has the argument.
+    tags: manualTags(frontmatter.tags ?? [], bodyTags),
+    bodyTags,
     doc: doc.toJSON(),
     editable: true,
   };
@@ -371,17 +377,25 @@ export function saveNote(vault: string, request: SaveNoteRequest): SaveResult {
   if (attendees.length > 0) frontmatter.attendees = attendees;
   else delete frontmatter.attendees;
 
+  const doc = schema.nodeFromJSON(request.doc);
+
   // Tags apply to both kinds, so they sit outside that branch. Written from the request
   // rather than left to the `...previous` spread, because the reader can now clear them —
   // and a field you can only ever add to is not an editable field.
-  const tags = request.tags.map(cleanTagInput).filter((tag) => tag !== "");
+  //
+  // The request carries only what the header field owns; the body's own `#tag`s are
+  // hoisted in beside them (B65), which is why deleting a `#tag` from the note removes
+  // it from `tags:` on the next save rather than leaving it stranded there. This is the
+  // one place besides `capture-store.ts`'s `frontmatterFor` that decides it, and the two
+  // must stay identical — see that function's own comment.
+  const tags = mergeTags(
+    request.tags.map(cleanTagInput).filter((tag) => tag !== ""),
+    bodyTagsOf(doc),
+  );
   if (tags.length > 0) frontmatter.tags = tags;
   else delete frontmatter.tags;
 
-  const contents = serializeNote({
-    frontmatter,
-    doc: schema.nodeFromJSON(request.doc),
-  });
+  const contents = serializeNote({ frontmatter, doc });
 
   // `modified` differs on every save, so compare everything else before deciding.
   if (existing !== null && sameApartFromModified(existing, contents)) {

@@ -138,8 +138,20 @@ export interface OpenedNote {
   created: string;
   location: string;
   attendees: string[];
-  /** Frontmatter tags only. Inline `#tag`s live in the body and are not touched here. */
+  /**
+   * The tags the header field owns and writes: what `tags:` declares, minus anything the
+   * body already carries as a `#tag`.
+   *
+   * The subtraction is B65's provenance rule and is what makes a hoisted tag removable —
+   * `manualTags` in `src/markdown/note-tags.ts` has the argument. It used to be the raw
+   * frontmatter list, back when the two stores never wrote to each other.
+   */
   tags: string[];
+  /**
+   * The `#tag`s in the body, drawn beside the field as read-only chips. Not editable
+   * there: they are removed in the note, which is where they are written.
+   */
+  bodyTags: string[];
   /** ProseMirror document JSON. */
   doc: unknown;
   /**

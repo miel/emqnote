@@ -3,6 +3,7 @@ import type {
   ConflictChoice,
   ConflictPair,
   DiffLine,
+  Facet,
   Facets,
   FileSummary,
   FolderNode,
@@ -54,7 +55,6 @@ export const IPC = {
    * has unsaved edits; see `Capture.tsx`'s `dirtyRef`.
    */
   captureReload: "capture:reload",
-  /** renderer → main: names and tags seen before, for autocomplete. */
   /** renderer → main: window buttons in the title bar we draw ourselves. */
   windowMinimise: "window:minimise",
   windowToggleMaximise: "window:toggle-maximise",
@@ -264,6 +264,16 @@ export const IPC = {
    * canonical spelling of a link to each note, which only main can answer (B37).
    */
   linkCandidates: "app:link-candidates",
+  /**
+   * The vault's own tag list, for the header's Tags field to complete from (B66).
+   *
+   * Top level for `linkCandidates`' reason: both windows ask, and that grouping is about
+   * which *window* an operation belongs to, not which feature. It is the `tags` half of
+   * the same `facets()` the library's Tags filter reads, counts and all — a second query
+   * would be a second answer to one question. Asked on the field's first focus and never
+   * at startup: the capture window's hotkey path must stay clear of it.
+   */
+  tagSuggestions: "app:tag-suggestions",
   /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
@@ -647,6 +657,12 @@ export interface CaptureApi {
    * shows as "no matches" — the same shape as a query nothing answers to.
    */
   linkCandidates: (query: string) => Promise<LinkCandidateSummary[]>;
+  /**
+   * Every tag the vault carries, most-used first, for the Tags field's completion (B66).
+   * An empty list when there is no vault or no index yet, which the field shows as no
+   * suggestions rather than as an error — there is nothing for this side to do about it.
+   */
+  tagSuggestions: () => Promise<Facet[]>;
   /**
    * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —

@@ -162,6 +162,82 @@ body {
   text-align: left;
 }
 
+/* The Tags cell alone, because it carries three things where the others carry one: the
+   field, the note's own tags as chips (B65) and the completion list (B66). `relative` is
+   what the list positions against; it is the cell rather than the input because the list
+   should start at the cell's left edge whatever the chips have done to the input's width. */
+.header-cell.header-tags {
+  position: relative;
+  flex-wrap: wrap;
+}
+
+/* A tag the note body carries. Deliberately not a control: it is removed in the note,
+   which is what its tooltip says. `flex: 0 0 auto` keeps it out of the `flex: 1` above —
+   a chip that grew to fill the row would read as another field. */
+.tag-chip {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+/* The completion list. Absolute, so opening it never changes the height of the header —
+   this block is a fixed two-row grid precisely so nothing moves while typing. */
+.tag-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-width: 100%;
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  /* Above the editor below it, and level with every other floating surface in this app
+     (`.overlay`, the context menus) rather than a number of its own. */
+  z-index: 20;
+}
+
+/* `.header button` already paints every button in this block as a field, and at one class
+   plus one element it *ties* a bare `.tag-suggest button` on specificity — which is B48's
+   bug and the `.overlay` bug, both of which shipped. Two classes deep, so it wins wherever
+   it sits in the file. */
+.header .tag-suggest button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: default;
+}
+
+.header .tag-suggest button:hover,
+.header .tag-suggest button.tag-suggest-on {
+  background: rgba(127, 127, 127, 0.2);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.tag-suggest-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .header input,
 .header button {
   -webkit-app-region: no-drag;

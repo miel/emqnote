@@ -165,17 +165,37 @@ describe("saving a capture", () => {
     expect(readFileSync(path!, "utf8")).not.toContain("tags:");
   });
 
-  it("keeps an inline tag in the body and out of the frontmatter", async () => {
-    // B19: the two sources stay separate. Copying body tags into the frontmatter would
-    // mean editing one sentence rewrites the header.
+  it("hoists an inline tag into the frontmatter and leaves the sentence alone", async () => {
+    // B65, reversing B19's second half. This path and `vault-io.ts`'s `saveNote` decide
+    // it through the one `mergeTags`, so a note written here and the same note saved
+    // from the library reader cannot end up with different frontmatter.
     const session = beginSession();
     session.payload = payload(paragraphs("#klantx is akkoord."), { subject: "Idee" });
 
     const { path } = await writeSession(session, vault);
     const contents = readFileSync(path!, "utf8");
 
-    expect(contents).not.toContain("tags:");
+    expect(contents).toContain("tags:");
+    expect(contents).toContain("klantx");
     expect(contents).toContain("#klantx is akkoord.");
+  });
+
+  it("writes a field tag and a body tag once each, folded", async () => {
+    // `#KlantX` in the sentence and `klantx` in the field are one tag, and the spelling
+    // that survives is the one written down first — the field, which comes first in the
+    // merge.
+    const session = beginSession();
+    session.payload = payload(paragraphs("#KlantX en #offerte."), {
+      subject: "Idee",
+      tags: ["klantx"],
+    });
+
+    const { path } = await writeSession(session, vault);
+    const contents = readFileSync(path!, "utf8");
+
+    expect(contents).toContain("klantx");
+    expect(contents).not.toContain("KlantX,");
+    expect(contents).toContain("offerte");
   });
 
   it("writes nothing when there is no title and no text", async () => {

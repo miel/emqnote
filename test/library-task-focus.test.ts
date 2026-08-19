@@ -72,6 +72,7 @@ function openedNote(): OpenedNote {
     location: "",
     attendees: [],
     tags: [],
+    bodyTags: [],
     doc: TWO_TASKS_DOC,
     editable: true,
   };
@@ -189,6 +190,7 @@ function buildFake(): CaptureApi {
     checkAttachments: async () => [],
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
+    tagSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

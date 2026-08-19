@@ -1,7 +1,14 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
-import { cleanTagInput, schema, serializeNote, type Frontmatter } from "../markdown/index.js";
+import {
+  bodyTagsOf,
+  cleanTagInput,
+  mergeTags,
+  schema,
+  serializeNote,
+  type Frontmatter,
+} from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
 import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
@@ -163,9 +170,14 @@ function buildFrontmatter(
     .filter((name) => name !== "");
   if (attendees.length > 0) frontmatter.attendees = attendees;
 
-  // Only what was typed in the field lands here — inline #tags stay in the body where
-  // they were written (B19).
-  const tags = payload.tags.map(cleanTagInput).filter((tag) => tag !== "");
+  // What was typed in the field, plus the body's own `#tag`s hoisted in beside them
+  // (B65, revising B19's second half). `saveNote` decides this identically for a note
+  // loaded from the library — the branch in `writeSession` above delegates to it — and
+  // the two must stay that way, which is what `mergeTags` being one function is for.
+  const tags = mergeTags(
+    payload.tags.map(cleanTagInput).filter((tag) => tag !== ""),
+    bodyTagsOf(doc),
+  );
   if (tags.length > 0) frontmatter.tags = tags;
 
   return frontmatter;
