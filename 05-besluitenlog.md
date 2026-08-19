@@ -2228,6 +2228,55 @@ wel aan, en dat was dezelfde tag twee keer op één regel.
 
 ---
 
+## B67 — Een map toont hoeveel notities en hoeveel openstaande taken erin zitten
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik. De mappenboom telde al notities; wat
+ontbrak was de vraag die je aan een projectmap werkelijk stelt — *staat hier nog werk?* Het
+badge leest nu `[# notities] / [# openstaande taken]`.
+
+**Alleen voor een map met notities.** Een map zonder notities heeft nooit een badge gehad, en
+dat blijft zo: er is dan niets om het getal aan op te hangen. En **er wordt niet opgeteld naar
+boven** — een map telt wat er *in die map zelf* staat, precies zoals `noteCount` dat altijd al
+deed. Zouden de taken wel opgeteld worden en de notities niet, dan telden de twee helften van
+één badge verschillende notities, en dat is erger dan een getal missen.
+
+**Het getal komt uit de index, nooit uit een wandeling over de map** — B26 in het klein. De
+kant-en-klare tabel is `note_tasks`, gevuld door `buildRecord` bij een scan of een
+watcher-herindexering; hem opnieuw uitrekenen zou betekenen dat elke notitie van een map bij
+het openen van de bibliotheek opnieuw geparseerd wordt, en dat is de hoofddraad-stilstand van
+470–535 ms waarvoor de scan een worker heeft gekregen. `openTaskCountsByFolder` groepeert per
+notitie in SQLite en vouwt daarna op de map in JavaScript: SQLite heeft geen `dirname`, en die
+regel met `instr`/`substr` naschrijven zou een tweede spelling zijn van iets wat elders al
+precies één keer staat. De koppeling met `notes` is niet decoratief — een rij waarvan de
+notitie niet meer in de index staat mag niet meetellen, of het badge belooft taken die het
+Taken-scherm niet toont.
+
+**Het is een eigen IPC-aanroep en geen veld op `IPC.libraryTree`**, en dat is de kern. De boom
+is één `readdir` en moet meteen antwoorden — "een map openen wacht nooit op een scan" is de
+regel die `vault-scan.ts` zelf opschrijft — terwijl dit achter `ensureScanned` zit. Eén aanroep
+van de twee maken zet het bladeren dus achter de scan, voor een getal. De boom komt eerst, het
+tweede getal komt erna, en `folder-tasks.ts` voegt ze samen op het pad waar beide kanten het
+al over eens zijn.
+
+**Daarom is "nog niet geteld" iets anders dan "niets open".** `openTasks` is *afwezig* tot de
+index geantwoord heeft, geen nul: anders beweert elke map een halve seconde lang dat er geen
+werk ligt, en dat is precies de mededeling waar het badge voor gemaakt is. Zodra er wél geteld
+is krijgt een schone map een echte `0` te zien — het badge is een paar of het is niets, zodat
+een map die klaar is niet te verwarren is met een map die nog geteld wordt.
+
+**Het volgt een vinkje zonder er iets van te weten.** Een aangevinkt vakje is een opslag, en
+een opslag is wat `library:refresh` opwerpt; de watcher werpt hem daarna nog eens op als hij
+diezelfde schrijfactie ziet, waarmee de telling op de bijgewerkte index landt. Een mislukte
+verversing laat staan wat er stond, dezelfde regel die het scherm voor niet-gekoppelde
+bijlagen geleerd heeft.
+
+Twee klassenamen op de tweede CSS-regel (`.branch-tasks.branch-tasks-open`), niet één. Bij één
+per stuk winnen ze op volgorde in het bestand in plaats van op specificiteit, en dat is precies
+hoe B48's verborgen chip en het dimmen van de menu's allebei uitgeleverd zijn; `jsdom` heeft
+geen cascade om in te verliezen, dus `test/styles-branch-tasks.test.ts` leest de regel zelf.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |

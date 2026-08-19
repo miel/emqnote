@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1438 tests
+npm test               # vitest run — 1457 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -691,6 +691,31 @@ pasting a rectangle *into* a rectangle is deliberately not built. `table-geometr
 the matrix arithmetic both files need, so neither has to import the other.
 
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
+
+**A folder's badge counts its notes and the open tasks in them** (B67). `[# notes] / [# open
+tasks]`, only for a folder that holds notes — a folder with none has no badge, which is what
+it has always had — and **neither half is rolled up**: both count the notes filed in that
+folder itself, exactly as `noteCount` always has, so the two halves cannot end up counting
+different notes.
+
+The task half comes out of `note_tasks` (`openTaskCountsByFolder`), never out of a walk over
+the folder: re-parsing a folder's notes on demand is B26's 470–535 ms main-thread stall, and
+the table is already filled by every scan and every watcher reindex. It joins `notes`, so a
+row whose note has left the index cannot make the badge promise tasks the Tasks view does not
+list. The fold from note path to folder path happens in JS rather than in SQL — SQLite has no
+`dirname`, and spelling that rule a second time with `instr`/`substr` is how two answers to
+one question come to differ.
+
+**It is a second IPC call, not a field on `IPC.libraryTree`**, and that is the whole shape of
+it: the tree is one `readdir` and must answer at once (`vault-scan.ts`'s own rule that
+browsing a folder never waits on a scan), while this sits behind `ensureScanned`. One call for
+both would put a folder listing behind the index. So the tree arrives first and
+`folder-tasks.ts` merges the counts in when they land — which is why `openTasks` is *absent*
+rather than zero until then. Once counted, a clear folder shows a real `0`: the badge is a
+pair or it is nothing, so a folder that is genuinely done cannot be read as one still being
+counted. A tick is a save and a save raises `library:refresh`, so the badge follows a checkbox
+without knowing anything about one; a failed refresh keeps the last counts, the rule the
+unlinked pane already learned.
 
 **Tags come from two places, and since B65 the body's write into the frontmatter.** The
 frontmatter `tags:` field holds what was typed in the header's tag field; `#tag` stays in the
@@ -1422,6 +1447,32 @@ and one hoisted out of the sentence.
 which is B65's accepted price and the one thing a sandbox cannot weigh. And, as always, how
 the chips and the dropdown read at a real window width. `TEST-PROTOCOL.md` §27.
 
+**A folder's badge grew a second number on 19 August 2026**, from daily use, and it carries
+one decision: **B67** — a folder shows `[# notes] / [# open tasks]`, out of the index, not
+rolled up.
+
+Nothing had to be built to *count* them: `note_tasks` has held every task item since B26, and
+`openTaskCountsByFolder` is one `GROUP BY` over the rows that are already there. What the work
+was about is the seam — the tree comes off disk at once and this comes from behind the index
+scan, so it is a second IPC call that the renderer merges in (`folder-tasks.ts`), and
+`openTasks` stays *absent* until it lands so a folder cannot briefly claim it is clear.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a fixture vault: `00 Inbox`
+reading `2 / 2` with two notes and one of its three boxes already ticked, `01 Projecten` — a
+folder with a note-bearing child and no notes of its own — carrying **no badge at all**, and
+`Klant X` unfolded beneath it reading `1 / 0`; the two states in real computed colours, not
+classes in the DOM (`rgb(27, 28, 31)` at weight 600 for the folder with work left against
+`rgb(107, 112, 121)` at 400 for the one without); a task ticked through
+`IPC.libraryToggleTask` taking the badge from `2 / 2` to `2 / 1` with `- [x] Offerte
+versturen` on disk afterwards; and a note carrying three open tasks written into an empty
+folder **from outside the app** making a `1 / 3` badge appear there, which is the watcher's
+own path.
+
+**Not confirmed live**: what the extra query costs on a real vault of a few thousand notes —
+it is one indexed `GROUP BY` on rows already in memory, but the only machine that can weigh it
+is the one with the business OneDrive on it. And, as always, whether two numbers and a slash
+crowd a folder name at a real sidebar width. `TEST-PROTOCOL.md` §28.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1433,7 +1484,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B66, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B67, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 
