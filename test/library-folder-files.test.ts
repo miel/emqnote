@@ -77,6 +77,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     tree: async () => tree,
     notes: async () => notes,
     folderFiles,
+    folderTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,

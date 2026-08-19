@@ -81,6 +81,7 @@ import {
 import {
   conflicts,
   facets,
+  folderTaskCounts,
   linkingNotes,
   linkingNotesUnder,
   notesMatching,
@@ -1514,6 +1515,15 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.libraryFolderFiles, (_event, folder: string) => {
     const vault = vaultPath();
     return vault === null ? [] : readFilesIn(vault, folder);
+  });
+
+  /**
+   * The open-task half of the tree's badge — out of the index, unlike `IPC.libraryTree`
+   * beside it, which is why it is a second call and not a field on that one.
+   */
+  ipcMain.handle(IPC.libraryFolderTaskCounts, async () => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null ? {} : await folderTaskCounts(vault, indexDb);
   });
 
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {

@@ -91,6 +91,10 @@ interface Props {
   emptyLabel: string;
   unavailableLabel: string;
   filterLabel: string;
+  /** "Notes here" — the first half of the count badge's tooltip. */
+  notesHereLabel: string;
+  /** "Open tasks" — the second half, named only once the index has counted them. */
+  openTasksLabel: string;
 }
 
 /**
@@ -175,6 +179,7 @@ function Branch({
   onActivate,
   onOpenMenu,
   isMac,
+  badgeTitle,
 }: {
   node: FolderNode;
   depth: number;
@@ -227,6 +232,12 @@ function Branch({
   onOpenMenu: (path: string, x: number, y: number) => void;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
+  /**
+   * The badge's tooltip, which is the only place the two numbers are named. A function
+   * rather than the two strings it is built from, so the recursion carries one prop
+   * instead of two — every row draws its own badge, so this reaches every depth.
+   */
+  badgeTitle: (node: FolderNode) => string;
 }): React.ReactElement {
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
@@ -349,7 +360,27 @@ function Branch({
 
         {glyph !== undefined && <span className="filter-glyph">{glyph}</span>}
         <span className="branch-name">{node.name}</span>
-        {node.noteCount > 0 && <span className="branch-count">{node.noteCount}</span>}
+        {/*
+          Notes in this folder, then the open tasks in them: `[# notes] / [# open tasks]`.
+          Neither number counts subfolders — the badge is about the notes filed right here,
+          which is what `noteCount` has always meant, and rolling either half up would make
+          the two halves count different things.
+
+          The task half is drawn only once it is known (`openTasks` is absent until the
+          index has answered, see `folder-tasks.ts`), and a folder with notes but nothing
+          open shows a plain `0`: the badge is a pair or it is nothing, so a folder that is
+          genuinely clear cannot be mistaken for one still being counted.
+        */}
+        {node.noteCount > 0 && (
+          <span className="branch-count" title={badgeTitle(node)}>
+            {node.noteCount}
+            {node.openTasks !== undefined && (
+              <span
+                className={`branch-tasks${node.openTasks > 0 ? " branch-tasks-open" : ""}`}
+              >{` / ${node.openTasks}`}</span>
+            )}
+          </span>
+        )}
       </div>
 
       {open && hasChildren && (
@@ -369,6 +400,7 @@ function Branch({
               onActivate={onActivate}
               onOpenMenu={onOpenMenu}
               isMac={isMac}
+              badgeTitle={badgeTitle}
             />
           ))}
         </ul>
@@ -424,7 +456,20 @@ export function FolderTree({
   emptyLabel,
   unavailableLabel,
   filterLabel,
+  notesHereLabel,
+  openTasksLabel,
 }: Props): React.ReactElement {
+  // The badge is two bare numbers with a slash between them; this is where they are said
+  // out loud. Built here rather than per row so the two label props stop at this
+  // component instead of threading through `Branch`'s recursion.
+  // A label with the number after it, rather than the number with a noun after it: the
+  // badge routinely counts exactly one note, and neither locale would then need a plural
+  // rule for a tooltip.
+  const badgeTitle = (node: FolderNode): string =>
+    node.openTasks === undefined
+      ? `${notesHereLabel}: ${node.noteCount}`
+      : `${notesHereLabel}: ${node.noteCount} · ${openTasksLabel}: ${node.openTasks}`;
+
   // The trash is a real folder in the vault, but it is not somewhere you file a note.
   // Leaving it among the children sorted it in between the folders you actually use;
   // lifted out it sits at the bottom at the vault's own level, under its UI name.
@@ -570,6 +615,7 @@ export function FolderTree({
           onActivate={setActivePath}
           onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
           isMac={isMac}
+          badgeTitle={badgeTitle}
         />
       </ul>
 
@@ -678,6 +724,7 @@ export function FolderTree({
               onActivate={setActivePath}
               onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
               isMac={isMac}
+              badgeTitle={badgeTitle}
             />
           </ul>
         )}

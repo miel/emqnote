@@ -12,6 +12,7 @@ import {
   allLinks,
   allNotes,
   getNote,
+  openTaskCountsByFolder,
   search,
   tasksIn,
   type IndexDb,
@@ -528,4 +529,24 @@ export async function tasks(
   if (!available) return [];
 
   return tasksIn(db, scope, openOnly);
+}
+
+/**
+ * Open task items per folder, for the folder tree's badge.
+ *
+ * Reads `note_tasks` like `tasks` does, and for the same reason (B26): the alternative
+ * is walking the vault and parsing every note to answer a number drawn beside a folder
+ * name, which is the main-thread stall the scan was moved into a worker to be rid of.
+ *
+ * It waits on `ensureScanned` — so the tree draws with its note counts first and this
+ * arrives after, which is exactly the split `IPC.libraryFolderTaskCounts` exists for.
+ */
+export async function folderTaskCounts(
+  vault: string,
+  db: IndexDb,
+): Promise<Record<string, number>> {
+  await ensureScanned(vault, db);
+  if (!available) return {};
+
+  return openTaskCountsByFolder(db);
 }

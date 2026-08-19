@@ -885,6 +885,26 @@ checking on a real OneDrive.
 | 27n | On a real display, with a note that has three or four body tags: does the row still read as one field with some labels beside it, or does it look crowded? | A judgement no script can make. The field keeps its own width and the chips wrap |  |
 | 27o | And does the completion list, opening under the field, cover anything you needed to see? | Same kind of question. It floats over the note rather than pushing the header taller, deliberately — the header is a fixed two-row grid so that nothing moves while you type |  |
 
+## 28. The folder tree's task count (19 August 2026)
+
+**B67**: a folder's badge reads `[# notes] / [# open tasks]`. Only for a folder that holds
+notes, and neither number is rolled up out of the subfolders — both count the notes filed in
+that folder itself. The count comes out of the index, not out of a walk over the folder, so
+what a real vault can answer that this sandbox cannot is what it *costs* on a few thousand
+notes.
+
+| # | Step | Expected | ✓ |
+|---|---|---|---|
+| 28a | Open the library on your real vault and look down the folder tree | Every folder that holds notes carries two numbers with a slash between them. Folders holding only subfolders carry nothing, as before |  |
+| 28b | Pick a folder you know has unfinished work in it | The second number is the count of unticked boxes in the notes **directly in that folder** — not in the folders under it. Count one by hand and check |  |
+| 28c | Pick a folder where every box is ticked | It reads `n / 0`, in the same muted grey as the note count. A `0` is a fact, not an alarm |  |
+| 28d | Hover the badge | A tooltip: "Notes here: 3 · Open tasks: 2" |  |
+| 28e | Open a note and tick a box | Its folder's second number goes down within a second or so. Untick it and it comes back |  |
+| 28f | On the **other machine**, tick a box in a note in a synced folder, then wait for OneDrive | The badge here follows without touching anything — that is the watcher's path, not the app's own save |  |
+| 28g | **The cost, on a real vault.** Open the library on the biggest vault you have and watch the tree appear | The folder names and their note counts must appear **immediately**; the task numbers may arrive a moment later. If the whole tree waits, that is the bug this was built to avoid, and worth reporting with the vault's note count |  |
+| 28h | Watch the badges in that first moment | A folder shows its note count alone until its task count arrives, never `n / 0` first and then `n / 5`. A flicker through zero is a defect |  |
+| 28i | On a real display, with your longest folder name in a narrow sidebar: do the name and the two numbers still fit? | A judgement no script can make. The name truncates and the badge stays at the right-hand edge |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -894,7 +914,7 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c or §27f fails,
+§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f or §28g fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
@@ -903,7 +923,7 @@ were confirmed in it — and §18o–§18q are a gap of their own: a tray menu i
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
 judgements about how something feels or reads, which no script can make, and §25m, §26i,
-§26j, §27n and §27o join them.
+§26j, §27n, §27o and §28i join them.
 **§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the

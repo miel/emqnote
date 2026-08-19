@@ -80,6 +80,7 @@ function buildFake(): Fake {
     tree: async () => tree,
     notes: async () => [noteSummary(NOTE_PATH, "Test note")],
     folderFiles: async () => [],
+    folderTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async (path) => {

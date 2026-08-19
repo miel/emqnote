@@ -427,6 +427,42 @@ export function allLinks(db: IndexDb): LinkRow[] {
     .all() as LinkRow[];
 }
 
+/**
+ * How many task items are still open, per folder — what the tree's badge counts.
+ *
+ * One row per note out of SQLite (`note_tasks_open` is exactly the index for
+ * `checked = 0`), folded onto its folder here rather than in SQL: SQLite has no
+ * `dirname`, and doing it with `instr`/`substr` on a path would be a second spelling of
+ * the rule the rest of this app states once. Folders with nothing open are simply absent.
+ *
+ * Joined with `notes` for the same reason `tasksIn` joins: a row whose note is no longer
+ * in the index must not be counted, or the badge would claim tasks the Tasks view does
+ * not list.
+ *
+ * Not rolled up: a parent's count is about the notes in the parent itself.
+ */
+export function openTaskCountsByFolder(db: IndexDb): Record<string, number> {
+  const rows = db
+    .prepare(
+      `
+      SELECT note_tasks.path AS path, COUNT(*) AS open
+      FROM note_tasks
+      JOIN notes ON notes.path = note_tasks.path
+      WHERE note_tasks.checked = 0
+      GROUP BY note_tasks.path
+      `,
+    )
+    .all() as { path: string; open: number }[];
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const cut = row.path.lastIndexOf("/");
+    const folder = cut === -1 ? "" : row.path.slice(0, cut);
+    counts[folder] = (counts[folder] ?? 0) + row.open;
+  }
+  return counts;
+}
+
 /** The links one note carries, for the rare case of asking about a single note. */
 export function linksFrom(db: IndexDb, path: string): LinkRow[] {
   return db
