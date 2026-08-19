@@ -16,6 +16,7 @@ import type {
   ScanProgress,
   Selection,
   SortKey,
+  TaskCount,
   TaskItem,
   VaultFileEvent,
   VaultLocation,
@@ -38,6 +39,12 @@ export const IPC = {
   captureChange: "capture:change",
   /** renderer → main: close (Esc or Ctrl+W). */
   captureClose: "capture:close",
+  /**
+   * renderer → main: throw this note away rather than keeping it. Only ever sent for a
+   * brand-new note — the button is not drawn for one handed over from the library, which
+   * is not this window's to delete. The file goes to the trash, not out of existence.
+   */
+  captureDiscard: "capture:discard",
   /** main → renderer: start again with a clean slate. */
   captureReset: "capture:reset",
   /** main → renderer: update the status bar. */
@@ -78,6 +85,12 @@ export const IPC = {
    * call would put a folder listing behind the scan.
    */
   libraryFolderTaskCounts: "library:folder-task-counts",
+  /**
+   * The same numbers per note, for the count the note list draws under the date. A
+   * second call for `libraryFolderTaskCounts`'s reason exactly: a folder's note list is
+   * a `readdir` that must answer at once, and this sits behind `ensureScanned`.
+   */
+  libraryNoteTaskCounts: "library:note-task-counts",
   /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
@@ -399,6 +412,12 @@ export interface LibraryApi {
    */
   folderTaskCounts: () => Promise<Record<string, number>>;
   /**
+   * Open and total task items per note, keyed by vault-relative note path. A note with
+   * no task items is absent from the map, not `{ open: 0, total: 0 }` — the difference
+   * between "nothing to say" and "all done" is what the list draws.
+   */
+  noteTaskCounts: () => Promise<Record<string, TaskCount>>;
+  /**
    * `type:meeting attendee:"Jan de Vries" tag:klantx after:2026-01-01` plus free text —
    * `search-query.ts` parses it, `vault-scan.ts`'s `searchNotes` runs it. An empty or
    * blank query still returns something (see that function's own comment on why a
@@ -597,6 +616,8 @@ export interface CaptureApi {
   painted: (token: number) => void;
   change: (payload: CapturePayload) => void;
   close: () => void;
+  /** Trashes the brand-new note being composed and puts the window away (B68). */
+  discard: () => void;
   minimise: () => void;
   toggleMaximise: () => void;
   openLibrary: () => void;

@@ -30,6 +30,11 @@ const DUTCH: Record<string, string> = {
   "capture.tagsInNote": "Staat in de notitie zelf — daar weghalen",
   "capture.placeholder": "Typ maar.",
   "capture.dismiss": "sluit",
+  // De knop die een net begonnen notitie weggooit (B68). "Weggooien" en niet
+  // "Verwijderen": het bestand gaat naar de prullenbak en is daar terug te halen, en dat
+  // is ook waarom er geen bevestiging voor staat.
+  "capture.discard": "Weggooien",
+  "capture.discardHint": "Deze notitie naar de prullenbak",
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
@@ -193,6 +198,10 @@ const DUTCH: Record<string, string> = {
   // label met een dubbele punt erachter, zodat er geen enkelvoud/meervoud in zit.
   "tree.notesHere": "Notities hier",
   "tree.openTasks": "Openstaande taken",
+  // Het woordje tussen de twee getallen van de teller in de notitielijst: "2 van 5".
+  // Los, omdat de tabellen hier geen plaatshouders kennen — de zin wordt in `NoteList`
+  // opgebouwd, net zoals `FolderTree` zijn tooltip opbouwt.
+  "notes.taskCountOf": "van",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   // Het bestandsvoorbeeld naast de notitielijst (B47).
@@ -392,6 +401,8 @@ const ENGLISH: Record<string, string> = {
   "capture.tagsInNote": "Written in the note itself — remove it there",
   "capture.placeholder": "Just type.",
   "capture.dismiss": "closes",
+  "capture.discard": "Discard",
+  "capture.discardHint": "Move this note to the trash",
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
   "capture.changeTime": "Click to change the date and time",
@@ -555,6 +566,7 @@ const ENGLISH: Record<string, string> = {
   // with the number after it, so neither string has to have a singular form.
   "tree.notesHere": "Notes here",
   "tree.openTasks": "Open tasks",
+  "notes.taskCountOf": "of",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   // The file preview beside the note list (B47).

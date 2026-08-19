@@ -2277,6 +2277,122 @@ geen cascade om in te verliezen, dus `test/styles-branch-tasks.test.ts` leest de
 
 ---
 
+## B68 — Een net begonnen notitie kan weggegooid worden, en gaat dan naar de prullenbak
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik. Het opnamevenster schrijft de notitie
+800 ms na de eerste toetsaanslag naar schijf, en *iedere* uitgang legt hem vast: het kruisje,
+Ctrl+Enter, Escape, het venster verlaten, afsluiten. Een notitie die per ongeluk begonnen was,
+was daarmee een notitie die bestond — en de enige manier om ervanaf te komen was hem daarna in
+de bibliotheek opzoeken en daar verwijderen. Er is nu een knop **Weggooien** in de statusbalk.
+
+**Hij gaat naar `_trash`, niet uit het bestaan.** Dat is precies wat het toelaat om er geen
+bevestiging voor te zetten: B54's eigen redenering, die ook is waarom een notitie op de
+prullenbak slepen niets vraagt. Een dialoog staat in voor een weg terug die er niet is, en die
+weg terug heet hier Terugzetten. De regel dat er maar twee plekken in de app zijn die iets
+werkelijk vernietigen (`emptyTrash` en `deleteFromTrash`, B24) blijft dus onaangeroerd — dit is
+er geen derde.
+
+**Alleen voor een gloednieuwe notitie.** Een notitie die de bibliotheek aan dit venster heeft
+overgedragen is niet van dit venster om weg te gooien: die staat in de bibliotheek, waar Delete
+al bestaat en al de goede vragen stelt. De knop wordt daar niet getekend, én
+`CaptureWriter.discard` antwoordt `null` voor zo'n sessie — twee onafhankelijke sloten op één
+deur, want een van de twee kan door een toekomstige verbouwing wegvallen.
+
+**De volgorde is het hele werk.** `discard()` wisselt de sessie in voordat het antwoordt —
+`finish()`'s reden precies: een toetsaanslag die binnenkomt terwijl dit loopt hoort bij de
+*volgende* notitie. Daardoor draait het `writer.finish()` dat elke sluiting uitvoert
+(`hideCaptureWindow` → `onHide`) op een lege sessie, en `writeSession` antwoordt `NOTHING` bij
+een `null`-payload in plaats van de notitie terug te zetten die zojuist is weggehaald. Zonder
+die wissel zet de sluiting het bestand er meteen weer neer, en dat is een bug die alleen dóór
+het te draaien te vinden is — vandaar dat `test/capture-writer.test.ts` de `finish()` erná
+uitschrijft in plaats van hem te veronderstellen.
+
+**Wat het níet doet is de schrijfactie overslaan die al onderweg is.** `writeSession` kiest de
+bestandsnaam bij de eerste schrijfactie en zet hem op het sessieobject, dus een weggooiing die
+antwoordde vóór die schrijfactie klaar was zou `null` melden voor een bestand dat een tik later
+verschijnt — een weesbestand dat niemand terug kan vinden. De wachtrij wordt uitgewacht; dat
+kost in het slechtste geval één debounce en maakt het antwoord waar.
+
+`capture-store.ts` doet het weggooien zelf niet: die module schrijft een sessie, en waar een
+notitie heen gaat als hij verwijderd wordt is een regel van `vault-io.ts` — daar staat er één
+van (B27/B54), en een tweede ernaast is hoe twee antwoorden op één vraag uit elkaar gaan lopen.
+
+---
+
+## B69 — De notitielijst toont per notitie `[open] van [totaal]`
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik, en het directe vervolg op B67: de map
+zegt sinds gisteren dat er werk ligt, de rijen erin zeiden niet in wélke notitie. Onder de datum
+staat nu `2 van 5`, rechts uitgelijnd.
+
+**Personen blijven staan.** De melding bood aan om de "Wie"-regel ervoor op te geven; dat is
+overwogen en niet gedaan. Een vergadernotitie die stilletjes ophoudt te zeggen wie erbij was is
+een slechtere ruil dan één extra regel — dus staan ze naast elkaar op één rij, personen links
+en de telling rechts ertegenaan. Het getal staat bewust *niet* naast de datum: die kolom is waar
+de sortering op staat en leest als één kolom door de lijst heen, en een tweede getal daarin zou
+elke keer van de datum onderscheiden moeten worden.
+
+**Twee getallen, geen één.** `0 van 5` is een notitie waarvan het werk klaar is; een notitie die
+nooit een vakje had zegt niets. Alleen `totaal` houdt die twee uit elkaar, en dat verschil is de
+hele mededeling: grijs voor "klaar", de accentkleur voor "hier ligt nog wat".
+
+**Afwezig is niet nul** — B67's regel een niveau lager, en om B67's reden: de rijen komen van
+een `readdir` en de telling komt van achter de indexscan, dus een rij mag nooit even kunnen
+beweren dat een notitie schoon is terwijl het antwoord nog onderweg is.
+
+**Het komt uit dezelfde query als het mapbadge.** `openTaskCountsByPath` is nieuw;
+`openTaskCountsByFolder` is herschreven tot de vouwing daarover in plaats van een tweede query.
+Een map die zegt dat er twee open staan met daaronder rijen die het oneens zijn is het soort
+fout dat je wegontwerpt in plaats van test — één vraag, één antwoord. Het is wel een tweede
+IPC-aanroep, om B67's reden: één aanroep van de twee zou het bladeren van een map achter de scan
+zetten.
+
+Het kan niet uit `NoteSummary` komen. `summarise` leest de frontmatter en de eerste regels
+zonder ooit een document te bouwen — bewust, dat scheelt 1,51 ms per notitie tegen 0,09 ms — en
+ziet dus geen enkel taakvakje.
+
+Twee klassenamen op de tweede CSS-regel (`.note-tasks.note-tasks-open`), niet één, om precies
+B67's reden; `test/styles-note-tasks.test.ts` leest de regel zelf.
+
+---
+
+## B70 — De cursorpositie blijft bewaard zolang het bibliotheekvenster open is
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik. `setDoc` vervangt de hele
+`EditorState` — dat moet, anders lekt de ongedaan-maken-geschiedenis van de ene notitie in de
+andere — en gooit daarmee ook de cursor weg. Een notitie verlaten en terugkomen begon dus altijd
+bovenaan, wat in een lange notitie betekent dat je je plek zelf terug moet zoeken.
+
+**In het geheugen en nergens anders.** Niet in het notitiebestand: een notitie openen schrijft
+niets (B10), en een cursorpositie is niets om via OneDrive naar de andere machine te dragen —
+het is geen eigenschap van de notitie maar van dit kijkmoment. Ook niet in `index.sqlite`: dat
+is een afgeleide cache die `migrate()` bij een schemaverhoging weggooit, dus de verkeerde plank
+voor iets wat juist niet af te leiden is. En bewust ook niet in `settings.json`: dat is wat
+gevraagd is — binnen één zitting heen en weer lopen — en een bestand op schijf zou een tweede
+vraag beantwoorden die niemand gesteld heeft.
+
+**Het neemt geen focus.** `setSelection` roept `focus()` niet aan. Een notitie openen uit de
+lijst laat de focus op de aangeklikte rij staan, en dat blijft zo; wat verandert is wáár de
+cursor staat te wachten zodra je met Tab of met een klik de notitie in gaat. Een herstelde
+cursor die de focus meeneemt zou een tweede gedrag zijn waar niemand om gevraagd heeft.
+
+**Een taak-ordinaal wint.** Een rij aanklikken in het Taken-scherm noemt een bestemming ín de
+notitie; een cursor die van een vorig bezoek is blijven staan mag die niet overrulen. De twee
+takken in het `docToken`-effect staan in die volgorde, en dat ís de regel — er is geen andere
+plek waar hij staat.
+
+**Onthouden gebeurt bij het verlaten, niet bij elke toetsaanslag.** `rememberCaret` staat op de
+twee punten waar een notitie ophoudt de notitie op het scherm te zijn: een andere openen, en een
+bestand selecteren in plaats van een notitie. Bewust *niet* op de paden die de open notitie naar
+de prullenbak doen of verwijderen — daar is niets om naar terug te keren.
+
+**Een positie voorbij het einde is geen uitzondering.** De notitie kan tussen twee bezoeken
+korter zijn geworden. De offsets worden afgekapt en aan `TextSelection.between` gegeven, dat
+zelf terugvalt op `Selection.near` als de plek geen tekstpositie meer is — het herstel zit in
+een effect, en een uitzondering daar neemt het hele leesvenster mee.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -2294,7 +2410,7 @@ geen cascade om in te verliezen, dus `test/styles-branch-tasks.test.ts` leest de
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
-| **En waarom deed Ctrl+Shift+T niets op Windows?** | Nog steeds onbekend, en de melding kwám ongewijzigd terug — de reparatie van 17 augustus 2026 (geclaimd in `before-input-event`, `editor-keys.ts`, ook in het opnamevenster) heeft hem niet weggenomen. Daarmee is dit dezelfde plek als B57/B59: een diagnose die zijn eigen melding overleeft, is onvolledig geweest. Dus is er op 18 augustus 2026 twee dingen gedaan. `paragraph`'s precedent — een tweede toetscombinatie ernaast, `Mod-Shift-D`, op Linux met echte XTEST-toetsen bevestigd: een gewone alinea wordt een echt `<li data-checked="false">`, de `D` bereikt de pagina niet terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. En **`--key-probe`** (`key-probe.ts`), dat elke toets logt die een venster krijgt aangereikt, vóórdat iets hem claimt — zodat de volgende ronde met het antwoord van het besturingssysteem aankomt in plaats van met een derde gok. **Geen regel voor een druk betekent dat de toets het venster nooit bereikt heeft**, en dat is wat de app zelf niet kan zien; het staat in de kop van het logbestand. `TEST-PROTOCOL.md` §26 |
+| **En waarom deed Ctrl+Shift+T niets op Windows?** | Nog steeds onbekend, en de melding kwám ongewijzigd terug — de reparatie van 17 augustus 2026 (geclaimd in `before-input-event`, `editor-keys.ts`, ook in het opnamevenster) heeft hem niet weggenomen. Daarmee is dit dezelfde plek als B57/B59: een diagnose die zijn eigen melding overleeft, is onvolledig geweest. Dus is er op 18 augustus 2026 twee dingen gedaan. `paragraph`'s precedent — een tweede toetscombinatie ernaast, `Mod-Shift-D`, op Linux met echte XTEST-toetsen bevestigd: een gewone alinea wordt een echt `<li data-checked="false">`, de `D` bereikt de pagina niet terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. En **`--key-probe`** (`key-probe.ts`), dat elke toets logt die een venster krijgt aangereikt, vóórdat iets hem claimt — zodat de volgende ronde met het antwoord van het besturingssysteem aankomt in plaats van met een derde gok. **Geen regel voor een druk betekent dat de toets het venster nooit bereikt heeft**, en dat is wat de app zelf niet kan zien; het staat in de kop van het logbestand. Op 19 augustus 2026 is de melding er nog steeds en is er bewust **geen** derde reparatie gedaan: de registratie van `Mod-Shift-T` en `Mod-Shift-D` is regel voor regel dezelfde — één `keys`-array, één `matches`-aanroep in dezelfde `before-input-event`, één `COMMANDS.task` — dus het verschil zit noodzakelijk buiten dit proces, en dat is precies wat de probe leest. Een vierde gok zou dat alleen verder toedekken. `TEST-PROTOCOL.md` §26, §29 |
 | **Wát houdt die map op Windows vast?** | Onbekend, en dat hoort hier te staan. B57 haalde de eigen handle van de app weg en de melding kwam ongewijzigd terug, dus de watcher was het niet (alleen). Sinds B59 noemt de weigering de code en het bestand, en `--trash-probe` loopt de map na — de eerstvolgende melding hoort de vraag te beantwoorden in plaats van te verplaatsen. `TEST-PROTOCOL.md` §24 |
 | **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |

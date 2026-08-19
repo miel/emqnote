@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
+import { TextSelection } from "prosemirror-state";
 import type { Command, EditorState } from "prosemirror-state";
 import { applyLink, COMMANDS, linkAt, selectLink, type CommandContext } from "./commands.js";
 import { createEditorState, emptyDocument } from "./state.js";
@@ -61,6 +62,19 @@ export interface EditorHandle {
   insertTable: (rows: number, columns: number) => void;
   /** Moves the caret to the ordinal-th task item and scrolls it into view. */
   focusTask: (ordinal: number) => void;
+  /**
+   * Where the caret is in the document, so a caller can put it back later (B70).
+   *
+   * Document offsets, not screen coordinates — `caretPoint` below is the other question.
+   * `null` when there is no view yet.
+   */
+  getSelection: () => { anchor: number; head: number } | null;
+  /**
+   * Puts the caret back where `getSelection` found it. Deliberately does **not** focus:
+   * a note opened from the list leaves focus on the list row, and a caret restored on
+   * that path must not be able to take it away.
+   */
+  setSelection: (selection: { anchor: number; head: number }) => void;
   /**
    * The words currently selected, as plain text — what seeds the note picker's filter
    * (B41). Empty when the selection is collapsed, which is the ordinary case.
@@ -343,6 +357,29 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (current === null) return;
       clearHighlightTimer();
       current.updateState(createEditorState(doc, commandContext()));
+    },
+    getSelection: () => {
+      const current = view.current;
+      if (current === null) return null;
+      const { anchor, head } = current.state.selection;
+      return { anchor, head };
+    },
+    setSelection: (selection) => {
+      const current = view.current;
+      if (current === null) return;
+
+      // The document may be shorter than it was when this offset was taken — the note
+      // could have been edited on the other machine, or reloaded from disk — so the
+      // offsets are clamped first. `TextSelection.between` handles the rest: a position
+      // that is no longer a text position falls back to `Selection.near` inside it,
+      // rather than throwing on the way in.
+      const { doc } = current.state;
+      const at = (position: number): number => Math.max(0, Math.min(position, doc.content.size));
+      current.dispatch(
+        current.state.tr.setSelection(
+          TextSelection.between(doc.resolve(at(selection.anchor)), doc.resolve(at(selection.head))),
+        ),
+      );
     },
     beginLinkEdit: () => {
       const current = view.current;

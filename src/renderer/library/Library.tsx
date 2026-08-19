@@ -23,6 +23,7 @@ import {
   type ScanProgress,
   type Selection,
   type SortKey,
+  type TaskCount,
   type VaultFileEvent,
 } from "../../shared/vault-types.js";
 import { buildEditorMenu, insertMenuItems } from "../editor/editor-menu.js";
@@ -136,6 +137,39 @@ export function Library(): React.ReactElement {
    */
   const pendingTaskOrdinal = useRef<number | null>(null);
   /**
+   * Where the caret was in each note this window has had open, so leaving a note and
+   * coming back does not start at the top of it again (B70).
+   *
+   * In memory and nowhere else. Not the note file — opening a note writes nothing, and
+   * a caret offset is not something the vault should be carrying to the other machine
+   * (B10). Not `index.sqlite` either: that is a derived cache and `migrate()` drops it
+   * on a schema bump, so it is the wrong shelf for something that cannot be derived.
+   * Which leaves "for as long as this window is open", and that is the whole of what was
+   * asked for — a relaunch starting each note at the top is what it has always done.
+   *
+   * Unbounded on purpose: one small object per note actually opened in one sitting is
+   * not a number worth pruning, and a bound would only make it possible to lose an
+   * entry for a note still on screen.
+   */
+  const carets = useRef(new Map<string, { anchor: number; head: number }>());
+
+  /**
+   * Notes where the caret is in the note currently on screen, if there is one.
+   *
+   * Called at the two points a note stops being the one being read — opening another, and
+   * selecting a file instead — rather than on every keystroke: a caret moves constantly
+   * and this only ever has to be right at the moment it is about to be thrown away.
+   * Deliberately *not* called on the paths that trash or delete the open note: there is
+   * nothing to come back to, and remembering an offset into a note in `_trash` would only
+   * mean restoring it into whatever gets restored over it.
+   */
+  const rememberCaret = useCallback(() => {
+    const leaving = openRef.current;
+    if (leaving === null) return;
+    const caret = editor.current?.getSelection() ?? null;
+    if (caret !== null) carets.current.set(leaving.path, caret);
+  }, []);
+  /**
    * Guards `openNote` against two calls finishing out of order — two tasks in the same
    * note sit right next to each other in the Tasks list and are the easy way to click
    * one, then the other, before the first's IPC round trip has actually returned. Each
@@ -155,6 +189,14 @@ export function Library(): React.ReactElement {
    * scan has answered — `treeWithTasks` below is where the two are put together.
    */
   const [taskCounts, setTaskCounts] = useState<Record<string, number> | null>(null);
+  /**
+   * The same answer per note, for the count the note list draws under the date. Out of
+   * the very same query in main (`openTaskCountsByPath`, which the folder fold now reads
+   * too), so a folder badge and the rows inside that folder cannot disagree about the
+   * notes they are both counting. Loaded and refreshed alongside `taskCounts` for the
+   * same reason: one call site, one set of refresh points.
+   */
+  const [noteTasks, setNoteTasks] = useState<Record<string, TaskCount> | null>(null);
   const [selection, setSelection] = useState<Selection>({ kind: "folder", path: "00 Inbox" });
   /**
    * The last folder that was selected, which is not always the current selection.
@@ -415,7 +457,12 @@ export function Library(): React.ReactElement {
    */
   const loadTaskCounts = useCallback(async () => {
     try {
-      setTaskCounts(await window.emqnote.library.folderTaskCounts());
+      const [folders, notes] = await Promise.all([
+        window.emqnote.library.folderTaskCounts(),
+        window.emqnote.library.noteTaskCounts(),
+      ]);
+      setTaskCounts(folders);
+      setNoteTasks(notes);
     } catch {
       /* keep whatever was already counted */
     }
@@ -884,6 +931,12 @@ export function Library(): React.ReactElement {
       // on `open` transitioning to `null`, since a switch between two open notes never
       // passes through `null` at all.
       setDiskEvent(null);
+
+      // Where the caret was in the note being left, before anything replaces it (B70).
+      // Beside the outgoing note's pending save, which is flushed a few lines down: the
+      // same seam, for the same reason.
+      rememberCaret();
+
       if (saveTimer.current !== null) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
@@ -933,7 +986,7 @@ export function Library(): React.ReactElement {
 
       setDirty(false);
     },
-    [dirty, save],
+    [dirty, save, rememberCaret],
   );
 
   /**
@@ -1147,15 +1200,26 @@ export function Library(): React.ReactElement {
    */
   const [docToken, setDocToken] = useState(0);
 
+
   useEffect(() => {
     const current = openRef.current;
     if (current === null) return;
     editor.current?.setDoc(schema.nodeFromJSON(current.doc) as PMNode);
 
+    // A task ordinal wins over a remembered caret, and the order of these two branches is
+    // the whole of that rule: clicking a row in the Tasks view names a destination, and a
+    // caret left behind on a previous visit must not be able to overrule it.
     if (pendingTaskOrdinal.current !== null) {
       editor.current?.focusTask(pendingTaskOrdinal.current);
       pendingTaskOrdinal.current = null;
+      return;
     }
+
+    // Silently — `setSelection` does not focus. Opening a note leaves focus on the note
+    // list row that was clicked, and it goes on doing so; what this changes is where the
+    // caret is waiting once you Tab or click into the note.
+    const caret = carets.current.get(current.path);
+    if (caret !== undefined) editor.current?.setSelection(caret);
   }, [docToken]);
 
   // Focuses and selects the title input the moment it replaces the `<h1>` — keyed on
@@ -1929,6 +1993,7 @@ export function Library(): React.ReactElement {
         ) : (
           <NoteList
             notes={sorted}
+            noteTasks={noteTasks}
             files={files}
             filesState={filesState}
             selected={open?.path ?? null}
@@ -1937,6 +2002,7 @@ export function Library(): React.ReactElement {
             // thing, so picking either has to put the other down.
             onSelectFile={(path) => {
               setOpenFile(path);
+              rememberCaret();
               // Whatever is half-typed in the editor goes to disk before the editor stops
               // being on screen — the same order every operation that puts a note away
               // uses. The reader shows one thing, so a file selection puts the note down.
