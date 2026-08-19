@@ -851,6 +851,40 @@ capture window, with real computed colours and real XTEST keys where nothing els
 | 26p | The same with the help sheet (**Ctrl+/**, then **Escape**), and with the `/` menu (type `/` on an empty line, then **Escape**) | The same: focus stays in the note. The `/` you typed stays where it was. Compare against closing the help sheet with **Ctrl+/** a second time, which was always correct |  |
 | 26q | And with nothing open, press **Escape** with the caret in a note | Focus *does* leave for the note list. That behaviour is deliberate and had to survive the fix |  |
 
+## 27. Tags in the header and the tags in the note (19 August 2026)
+
+Two changes and one bug that only running it found. **B65**: the `#tag`s in a note body are
+now written into `tags:` when the note is saved, so the header stops showing an empty Tags
+field for a note whose tags are all in the sentences. **B66**: that field completes from the
+tags the vault already has. And the third thing is why this section exists at all — the field
+keeps its own half-typed text, that text belonged to no particular note, and switching notes
+without leaving the field first showed it for the *new* note and committed it there on the
+next blur. Measured in the running app: a note whose `tags: [klantx, offerte, klachten]`
+became `tags: [kla]`.
+
+Everything below has been driven on Linux under `Xvfb`, in **both** windows, against a vault
+with an imported note (tags only in the body) and a hand-written one (tags only in the
+header). What is left for a person is what a script cannot judge, plus one thing worth
+checking on a real OneDrive.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 27a | Open a note whose tags are written in the text as `#tag` and nowhere else | The Tags field is **empty**, and the tags appear beside it as chips you cannot type in. Hovering one says where it does come out |  |
+| 27b | Without touching anything, close the note and check the file | Unchanged — same bytes, same timestamp. Looking at a note still writes nothing (B10) |  |
+| 27c | Now type one character in the body, wait a second, and look at the file | `tags:` has appeared in the frontmatter holding those same tags, and the body is exactly what it was apart from your character. In particular a line-initial `#klantx` has **not** gained a backslash |  |
+| 27d | Type in it again and check the file's timestamp | It writes once, not once per save: with the tags already hoisted, the next save compares equal and touches nothing |  |
+| 27e | Delete one of the `#tag`s out of the sentence, type something, and look again | That tag is gone from `tags:` too, and the chip beside the field is gone. This is the case the whole design exists for — without it a hoisted tag could never be removed by any gesture at all |  |
+| 27f | **The cost, on a real OneDrive.** Open a handful of imported notes carrying body tags and edit each one | Each gets one frontmatter rewrite, the first time it is touched. That is accepted (B65) — but if it produces conflict copies on a busy vault, that is the thing to report |  |
+| 27g | Click into the Tags field of any note | A short list appears under it: the vault's own tags, most-used first, with a count beside each |  |
+| 27h | Type a few letters | It narrows. Arrow keys move the highlight, **Enter** or **Tab** takes the highlighted one, and the caret is left after it ready for the next tag |  |
+| 27i | With two tags in the field, put the caret back in the *first* one and type | It completes that word, not the whole field, and leaves the other tag alone |  |
+| 27j | Press **Escape** with the list up | The list closes, the caret stays in the field, and what you had typed is still there. It must not jump out to the note list — that is one press doing two things (B64) |  |
+| 27k | Look at what is **not** offered | Tags the note already has, whether typed in the field or written in the text. Offering a body tag would be an offer to write something that is already there |  |
+| 27l | **The buffer.** Type a few letters into the Tags field of one note and then click straight onto a different note, without clicking away from the field first | The new note's own tags are in the field. Your half-typed letters are gone, and above all they are **not** written into the note you just opened. Check that note's file |  |
+| 27m | The same in the new-note window: type into the Tags field, then press Ctrl+Enter to save and dismiss, then bring the window back up | The field is empty. Nothing is carried over from the note you just put away |  |
+| 27n | On a real display, with a note that has three or four body tags: does the row still read as one field with some labels beside it, or does it look crowded? | A judgement no script can make. The field keeps its own width and the chips wrap |  |
+| 27o | And does the completion list, opening under the field, cover anything you needed to see? | Same kind of question. It floats over the note rather than pushing the header taller, deliberately — the header is a fixed two-row grid so that nothing moves while you type |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -860,7 +894,7 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j, §24a, §25a or §26a–§26c fails,
+§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c or §27f fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
 why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
 window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
@@ -868,8 +902,8 @@ it has been driven over CDP, and on 18 August the whole of §26's find bar and b
 were confirmed in it — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make, and §25m, §26i and
-§26j join them.
+judgements about how something feels or reads, which no script can make, and §25m, §26i,
+§26j, §27n and §27o join them.
 **§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the
