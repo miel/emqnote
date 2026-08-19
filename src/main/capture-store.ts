@@ -381,7 +381,7 @@ export class CaptureWriter {
    * note — the exact bug this normalises away.
    */
   activePath(): string | null {
-    return this.relativePath(this.session.path);
+    return this.relativePath(this.session, this.session.path);
   }
 
   /**
@@ -391,14 +391,18 @@ export class CaptureWriter {
    * first write has picked a path at all.
    */
   uncommittedNewPath(): string | null {
-    return this.session.existingTitle === null ? this.relativePath(this.session.path) : null;
+    return this.session.existingTitle === null
+      ? this.relativePath(this.session, this.session.path)
+      : null;
   }
 
-  private relativePath(path: string | null): string | null {
+  private relativePath(session: CaptureSession, path: string | null): string | null {
     if (path === null) return null;
     // Only a brand-new session's path needs converting; a loaded session's is already
-    // vault-relative (see the comment on `activePath`).
-    if (this.session.existingTitle !== null) return path;
+    // vault-relative (see the comment on `activePath`). The session is passed in rather
+    // than read off `this`: `discard` swaps a fresh one in before it asks, and asking the
+    // replacement about the file the replaced one wrote is how the two come to disagree.
+    if (session.existingTitle !== null) return path;
     const vault = this.vault();
     return vault === null ? null : toPosix(relative(vault, path));
   }
@@ -446,6 +450,41 @@ export class CaptureWriter {
     this.session = beginSession();
     this.cancelTimer();
     return this.enqueue(finished, true);
+  }
+
+  /**
+   * Throws the current note away: end the session without writing it, and answer the file
+   * it already left on disk so the caller can put that in the trash.
+   *
+   * The session is swapped before anything is awaited, for `finish`'s reason exactly — a
+   * keystroke landing while this is in flight must reach the new note, not the one being
+   * discarded. The timer is cancelled, so the debounced write that was scheduled never
+   * runs, and the swapped-out session is never enqueued again.
+   *
+   * What it does *not* do is skip the write already in flight. `writeSession` decides the
+   * file name on the first write and stores it on the session object, so a discard that
+   * answered before that write had finished would report `null` for a file that appears a
+   * moment later — an orphan nobody asked for. Waiting the queue out costs one debounce at
+   * worst and makes the answer true.
+   *
+   * `null` means there is nothing to trash: no file was ever written, or this session was
+   * loaded from a note that lives in the library — that one is not this window's to throw
+   * away, which is why the button offering it is not drawn there at all.
+   *
+   * The caller is left to do the trashing. This module writes a session; where a note goes
+   * when it is deleted is `vault-io.ts`'s rule, and there is one of those (B27/B54).
+   */
+  discard(): Promise<string | null> {
+    const finished = this.session;
+    this.session = beginSession();
+    this.cancelTimer();
+
+    const settled = (): string | null =>
+      finished.existingTitle !== null ? null : this.relativePath(finished, finished.path);
+
+    // Deliberately not assigned back to `this.queue`: that chain carries `WriteResult`,
+    // and nothing here writes, so there is nothing for the next write to wait on.
+    return this.queue.then(settled, settled);
   }
 
   /** Writes the current note without ending it. Used on quit, and on blur/before-install. */

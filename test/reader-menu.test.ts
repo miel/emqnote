@@ -81,6 +81,7 @@ function buildFake(): Fake {
     notes: async () => [noteSummary(NOTE_PATH, "Test note")],
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
+    noteTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async (path) => {
@@ -131,6 +132,7 @@ function buildFake(): Fake {
     painted: () => {},
     change: () => {},
     close: () => {},
+    discard: () => {},
     minimise: () => {},
     toggleMaximise: () => {},
     openLibrary: () => {},

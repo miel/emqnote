@@ -82,6 +82,7 @@ import {
   conflicts,
   facets,
   folderTaskCounts,
+  noteTaskCounts,
   linkingNotes,
   linkingNotesUnder,
   notesMatching,
@@ -1049,6 +1050,44 @@ function registerIpc(): void {
     hideCaptureWindow();
   });
 
+  /**
+   * Throws the note being composed away (B68). Every other way out of this window —
+   * the X, Ctrl+Enter, Escape, blurring it, quitting — commits, so a note started by
+   * mistake was a note that existed and had to be hunted down in the library afterwards.
+   *
+   * The ordering is the whole of it. `writer.discard()` ends the session *before* it
+   * answers, so the file it names is nobody's any more: the following
+   * `hideCaptureWindow()` runs `writer.finish()` on a fresh, empty session, and
+   * `writeSession` answers `NOTHING` for a `null` payload rather than putting the note
+   * back where it was just taken from.
+   *
+   * It goes to `_trash`, not out of existence. That is what makes it safe to offer with
+   * no confirmation in front of it — B54's own argument, which is also why dragging a
+   * note onto the trash asks nothing: the named way back is what a dialog would
+   * otherwise have to stand in for. `_trash` is also on the watcher's ignore list and
+   * `writer.activePath()` is `null` by now, so nothing needs telling that the file moved
+   * — `notifyFileEvent` has no window left to tell.
+   */
+  ipcMain.on(IPC.captureDiscard, () => {
+    void (async () => {
+      const discarded = await writer.discard();
+      const vault = loadSettings().vaultPath;
+      if (discarded !== null && vault !== null) {
+        try {
+          trashNote(vault, discarded);
+        } catch (error) {
+          // A draft that will not move is not worth a dialog over a window that is on
+          // its way out — but it must not be silent either, or the note reappears in the
+          // library with nothing having said why.
+          console.error(`Could not discard ${discarded}:`, error);
+        }
+      }
+      lastSavedAs = null;
+      hideCaptureWindow();
+      notifyLibrary();
+    })();
+  });
+
   // Reuses the exact hand-over path a fresh `captureLoad` uses: `openNote` reads the
   // current bytes, `writer.load` resets the session's `lastContent` baseline against
   // them (without that, the very next debounced write would compare against the *old*
@@ -1524,6 +1563,12 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.libraryFolderTaskCounts, async () => {
     const vault = vaultPath();
     return vault === null || indexDb === null ? {} : await folderTaskCounts(vault, indexDb);
+  });
+
+  /** The same numbers per note, for the note list's own count. Same split, same reason. */
+  ipcMain.handle(IPC.libraryNoteTaskCounts, async () => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null ? {} : await noteTaskCounts(vault, indexDb);
   });
 
   ipcMain.handle(IPC.libraryNotes, async (_event, selection: Selection) => {

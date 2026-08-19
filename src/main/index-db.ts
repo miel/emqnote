@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { TaskCount } from "../shared/vault-types.js";
 
 /**
  * The SQLite index behind phase 5 search — `02-technisch-ontwerp.md` §7.1/§7.2.
@@ -430,35 +431,59 @@ export function allLinks(db: IndexDb): LinkRow[] {
 /**
  * How many task items are still open, per folder — what the tree's badge counts.
  *
- * One row per note out of SQLite (`note_tasks_open` is exactly the index for
- * `checked = 0`), folded onto its folder here rather than in SQL: SQLite has no
- * `dirname`, and doing it with `instr`/`substr` on a path would be a second spelling of
- * the rule the rest of this app states once. Folders with nothing open are simply absent.
+ * One count per note out of `openTaskCountsByPath`, folded onto its folder here rather
+ * than in SQL: SQLite has no `dirname`, and doing it with `instr`/`substr` on a path
+ * would be a second spelling of the rule the rest of this app states once. Folders with
+ * nothing open are simply absent.
  *
- * Joined with `notes` for the same reason `tasksIn` joins: a row whose note is no longer
- * in the index must not be counted, or the badge would claim tasks the Tasks view does
- * not list.
+ * The fold reads the per-note answer rather than asking its own question, so the folder
+ * badge and the note rows inside that folder cannot come to disagree about the same
+ * notes — see `openTaskCountsByPath` for the rest of that reasoning.
  *
  * Not rolled up: a parent's count is about the notes in the parent itself.
  */
 export function openTaskCountsByFolder(db: IndexDb): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [path, count] of Object.entries(openTaskCountsByPath(db))) {
+    if (count.open === 0) continue;
+    const cut = path.lastIndexOf("/");
+    const folder = cut === -1 ? "" : path.slice(0, cut);
+    counts[folder] = (counts[folder] ?? 0) + count.open;
+  }
+  return counts;
+}
+
+/**
+ * The same question B67 asks of a folder, asked of one note — and the source both answers
+ * come from, since `openTaskCountsByFolder` is now the fold over this rather than a
+ * second query. A folder badge and the rows inside that folder disagreeing about the same
+ * notes is the failure worth designing out, and one query is how.
+ *
+ * Two numbers rather than one, because the list says `2 of 5`: a note whose work is done
+ * reads differently from a note that never had any, and only `total` can tell those apart.
+ * A note with no task items at all is simply absent — `note_tasks` has no row for it — so
+ * a missing key means "nothing to say", exactly as it does for folders.
+ *
+ * The `JOIN notes` carries B67's reason unchanged: a row whose note has left the index
+ * must not make the list promise tasks the Tasks view does not list.
+ */
+export function openTaskCountsByPath(db: IndexDb): Record<string, TaskCount> {
   const rows = db
     .prepare(
       `
-      SELECT note_tasks.path AS path, COUNT(*) AS open
+      SELECT note_tasks.path AS path,
+             COUNT(*) AS total,
+             SUM(CASE WHEN note_tasks.checked = 0 THEN 1 ELSE 0 END) AS open
       FROM note_tasks
       JOIN notes ON notes.path = note_tasks.path
-      WHERE note_tasks.checked = 0
       GROUP BY note_tasks.path
       `,
     )
-    .all() as { path: string; open: number }[];
+    .all() as { path: string; total: number; open: number }[];
 
-  const counts: Record<string, number> = {};
+  const counts: Record<string, TaskCount> = {};
   for (const row of rows) {
-    const cut = row.path.lastIndexOf("/");
-    const folder = cut === -1 ? "" : row.path.slice(0, cut);
-    counts[folder] = (counts[folder] ?? 0) + row.open;
+    counts[row.path] = { open: row.open, total: row.total };
   }
   return counts;
 }

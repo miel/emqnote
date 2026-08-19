@@ -6,18 +6,42 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-types.js";
 
 /**
- * The note list's right-click menu — Open, Move, Rename, Duplicate, Reveal, Delete — mounted
- * through a real `Library` the same way `test/library-title-edit.test.ts` does, because
- * every one of the five items reuses a handler that already lives on `Library.tsx` and
- * the point of this test is that the menu reaches the *real* one, not a stand-in.
+ * Caret memory across note switches (B70) — `Library.tsx`'s half of it.
  *
- * "Right-clicking a row selects it first" is checked by watching `openNote` — the only
- * definition "selected" has in this codebase today (see `Library.tsx`'s `open` state,
- * tied to `open?.path`); `library-title-edit.test.ts`'s own mount/flush plumbing is
- * reused for the same reason it exists there.
+ * The `Editor` is mocked out here, the way `test/library-task-focus.test.ts` mocks it:
+ * what is under test is *when* the library asks for a caret and when it puts one back,
+ * and the editor's own answer to those two questions is
+ * `test/editor-selection.test.ts`'s job. A real view would only make it possible for a
+ * ProseMirror detail to fail this file.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Every selection the library put back, in the order it did so. */
+const restored: { anchor: number; head: number }[] = [];
+/** What the mocked editor will claim its caret is when the library asks. */
+let caret: { anchor: number; head: number } | null = null;
+const focusTaskCalls: number[] = [];
+
+vi.mock("../src/renderer/editor/Editor.js", async () => {
+  const react = await import("react");
+  const Editor = react.forwardRef((_props: unknown, ref: React.Ref<unknown>) => {
+    react.useImperativeHandle(ref, () => ({
+      focus: () => {},
+      reset: () => {},
+      getDoc: () => null,
+      setDoc: () => {},
+      beginLinkEdit: () => null,
+      applyLink: () => {},
+      insertAttachment: () => {},
+      focusTask: (ordinal: number) => focusTaskCalls.push(ordinal),
+      getSelection: () => caret,
+      setSelection: (selection: { anchor: number; head: number }) => restored.push(selection),
+    }));
+    return react.createElement("div", { className: "editor" });
+  });
+  return { Editor };
+});
 
 const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
 const DUPLICATE_PATH = "00 Inbox/2026-08-06 1200 Test note-copy.md";
@@ -188,10 +212,13 @@ async function flush(rounds = 12): Promise<void> {
   }
 }
 
-describe("the note list's right-click menu", () => {
+describe("caret memory across note switches", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
+
+  const A = "00 Inbox/2026-08-19 1000 Note A.md";
+  const B = "00 Inbox/2026-08-19 1100 Note B.md";
 
   beforeAll(async () => {
     (window as unknown as { emqnote: unknown }).emqnote = buildFake().emqnote;
@@ -199,6 +226,9 @@ describe("the note list's right-click menu", () => {
   });
 
   beforeEach(() => {
+    restored.length = 0;
+    focusTaskCalls.length = 0;
+    caret = null;
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -210,7 +240,14 @@ describe("the note list's right-click menu", () => {
     container.remove();
   });
 
-  async function mount(fake: Fake): Promise<void> {
+  async function mount(): Promise<void> {
+    const fake = buildFake();
+    fake.emqnote.library.notes = async () => [
+      noteSummary(A, "Note A"),
+      noteSummary(B, "Note B"),
+    ];
+    fake.emqnote.library.openNote = async (path: string) => openedNote(path, path === A ? "Note A" : "Note B");
+
     (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
     root = createRoot(container);
     await act(async () => {
@@ -219,191 +256,96 @@ describe("the note list's right-click menu", () => {
     await flush();
   }
 
-  function row(): Element {
-    const found = container.querySelector(".notes-list .note");
-    expect(found).not.toBeNull();
-    return found!;
-  }
-
-  async function rightClickRow(): Promise<void> {
+  async function clickRow(path: string): Promise<void> {
+    const rows = Array.from(container.querySelectorAll<HTMLElement>(".notes-list .note"));
+    const row = rows[[A, B].indexOf(path)];
+    expect(row).toBeDefined();
     await act(async () => {
-      row().dispatchEvent(
-        new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
-      );
+      row!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
   }
 
-  function menuItem(label: string): HTMLButtonElement {
-    const button = Array.from(container.querySelectorAll<HTMLButtonElement>(".context-menu-item")).find(
-      (node) => node.querySelector(".context-menu-label")?.textContent === label,
+  it("puts the caret back where it was left in a note that is opened again", async () => {
+    await mount();
+
+    // Opening A the first time: nothing is remembered about it, so nothing is restored.
+    await clickRow(A);
+    expect(restored).toEqual([]);
+
+    // The caret moved to the middle of A. Leaving for B is the moment it is noted.
+    caret = { anchor: 42, head: 42 };
+    await clickRow(B);
+
+    // B has never been open either, so still nothing is put back — and crucially the
+    // caret taken off A was not applied to B.
+    expect(restored).toEqual([]);
+
+    caret = { anchor: 7, head: 7 };
+    await clickRow(A);
+    expect(restored).toEqual([{ anchor: 42, head: 42 }]);
+  });
+
+  it("keeps a caret per note rather than one for the window", async () => {
+    await mount();
+
+    await clickRow(A);
+    caret = { anchor: 42, head: 42 };
+    await clickRow(B);
+    caret = { anchor: 5, head: 5 };
+    await clickRow(A);
+    caret = { anchor: 42, head: 42 };
+    await clickRow(B);
+
+    expect(restored).toEqual([
+      { anchor: 42, head: 42 },
+      { anchor: 5, head: 5 },
+    ]);
+  });
+
+  it("lets a task ordinal win over a remembered caret", async () => {
+    // Reaching a note through the Tasks view names a destination inside it. A caret left
+    // behind on a previous visit must not be able to overrule that — the two branches in
+    // the `docToken` effect are ordered for exactly this.
+    const fake = buildFake();
+    fake.emqnote.library.notes = async () => [noteSummary(A, "Note A"), noteSummary(B, "Note B")];
+    fake.emqnote.library.openNote = async (path: string) =>
+      openedNote(path, path === A ? "Note A" : "Note B");
+    fake.emqnote.library.tasks = async () => [
+      { path: A, title: "Note A", ordinal: 0, checked: false, text: "Offerte versturen" },
+    ];
+
+    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LibraryComponent));
+    });
+    await flush();
+
+    // Open A, leave it with the caret somewhere, so there is something to overrule.
+    await clickRow(A);
+    caret = { anchor: 42, head: 42 };
+    await clickRow(B);
+    restored.length = 0;
+    focusTaskCalls.length = 0;
+
+    const tasksRow = Array.from(container.querySelectorAll(".tree-settings")).find(
+      (el) => el.querySelector(".branch-name")?.textContent === "Tasks",
     );
-    expect(button).not.toBeUndefined();
-    return button!;
-  }
-
-  it("selects the row (opens it) before the menu offers anything to act on", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    expect(fake.openNoteMock).not.toHaveBeenCalled();
-
-    await rightClickRow();
-
-    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-    expect(container.querySelector(".context-menu")).not.toBeNull();
-  });
-
-  it("shows Open, Move, Rename, Duplicate, Reveal, Delete, in that order", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
-      (node) => node.querySelector(".context-menu-label")!.textContent,
-    );
-    expect(labels).toEqual(["Open", "Move", "Rename", "Duplicate", "Reveal", "Delete"]);
-  });
-
-  it("shows Restore and Delete permanently instead, for a note in the trash", async () => {
-    // Move, Rename and Duplicate all *work* on a trashed note — nothing in main refuses
-    // one — which is precisely why they must not be offered: they are ways of tidying a
-    // vault, on a row that is no longer in it. Read off the path, so no extra state has
-    // to travel with the row.
-    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
-    await mount(fake);
-    await rightClickRow();
-
-    const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
-      (node) => node.querySelector(".context-menu-label")!.textContent,
-    );
-    expect(labels).toEqual(["Restore", "Delete permanently"]);
-  });
-
-  it("Restore asks which folder, through the same palette Move uses", async () => {
-    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
-    await mount(fake);
-    await rightClickRow();
-
+    expect(tasksRow).not.toBeUndefined();
     await act(async () => {
-      menuItem("Restore").click();
+      tasksRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
 
-    // The trash remembers nothing about where a note came from, so where it goes is a
-    // question — and `MoveDialog` is what asks it, here as everywhere else.
-    expect(container.querySelector(".palette")).not.toBeNull();
-  });
-
-  it("Delete permanently asks first, naming the note and saying it cannot be undone", async () => {
-    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
-    await mount(fake);
-    await rightClickRow();
-
+    const taskRows = container.querySelectorAll(".task-row .task-row-text");
+    expect(taskRows.length).toBe(1);
     await act(async () => {
-      menuItem("Delete permanently").click();
+      taskRows[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
 
-    const ask = container.querySelector(".ask");
-    expect(ask).not.toBeNull();
-    expect(ask!.textContent).toContain("Test note");
-    expect(ask!.textContent).toContain("cannot be undone");
-  });
-
-  it("Open re-opens the note through the same openNote path", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-    fake.openNoteMock.mockClear();
-
-    await act(async () => {
-      menuItem("Open").click();
-    });
-    await flush();
-
-    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-  });
-
-  it("Move opens the existing Move dialog", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Move").click();
-    });
-    await flush();
-
-    expect(container.querySelector(".palette")).not.toBeNull();
-  });
-
-  it("Rename opens the existing click-to-edit title field, pre-filled with the note's title", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Rename").click();
-    });
-    await flush();
-
-    const input = container.querySelector<HTMLInputElement>(".reader-title-input");
-    expect(input).not.toBeNull();
-    expect(input!.value).toBe("Test note");
-  });
-
-  it("Duplicate calls duplicateNote and opens the copy", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Duplicate").click();
-    });
-    await flush();
-
-    expect(fake.duplicateNote).toHaveBeenCalledWith(NOTE_PATH);
-    expect(fake.openNoteMock).toHaveBeenCalledWith(DUPLICATE_PATH);
-  });
-
-  it("Reveal calls the existing revealNote IPC call", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Reveal").click();
-    });
-    await flush();
-
-    expect(fake.revealNote).toHaveBeenCalledWith(NOTE_PATH);
-  });
-
-  it("Delete opens the existing delete confirmation, naming the note", async () => {
-    const fake = buildFake();
-    await mount(fake);
-    await rightClickRow();
-
-    await act(async () => {
-      menuItem("Delete").click();
-    });
-    await flush();
-
-    const dialog = container.querySelector(".ask");
-    expect(dialog).not.toBeNull();
-    expect(dialog!.textContent).toContain("Test note");
-    expect(fake.trashNote).not.toHaveBeenCalled();
-
-    const confirm = Array.from(dialog!.querySelectorAll<HTMLButtonElement>("button")).find(
-      (node) => node.textContent === "Delete" && node.className.includes("danger"),
-    );
-    expect(confirm).not.toBeUndefined();
-
-    await act(async () => {
-      confirm!.click();
-    });
-    await flush();
-
-    expect(fake.trashNote).toHaveBeenCalledWith(NOTE_PATH);
+    expect(focusTaskCalls).toEqual([0]);
+    expect(restored).toEqual([]);
   });
 });

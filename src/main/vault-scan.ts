@@ -5,6 +5,7 @@ import type {
   NoteSummary,
   ScanProgress,
   Selection,
+  TaskCount,
   TaskItem,
 } from "../shared/vault-types.js";
 import { findConflictCopies, type ConflictPair } from "./conflicts.js";
@@ -13,6 +14,7 @@ import {
   allNotes,
   getNote,
   openTaskCountsByFolder,
+  openTaskCountsByPath,
   search,
   tasksIn,
   type IndexDb,
@@ -549,4 +551,27 @@ export async function folderTaskCounts(
   if (!available) return {};
 
   return openTaskCountsByFolder(db);
+}
+
+/**
+ * Open and total task items per note, for the note list's own count.
+ *
+ * The folder badge's sibling in every respect — same table, same `ensureScanned`, same
+ * "arrives after the list is already drawn" split — and out of the same query, so a
+ * folder saying two are open and the rows inside it saying none cannot happen.
+ *
+ * It cannot come off `NoteSummary` instead: `summarise` reads the frontmatter and the
+ * first lines of a file without ever building a document, deliberately (a note costs
+ * 0.09 ms rather than 1.51 ms that way), so it cannot see a task item at all. And
+ * folder browsing goes straight to disk with no `ensureScanned` in front of it, which is
+ * the rule this would have to break to arrive with the rows.
+ */
+export async function noteTaskCounts(
+  vault: string,
+  db: IndexDb,
+): Promise<Record<string, TaskCount>> {
+  await ensureScanned(vault, db);
+  if (!available) return {};
+
+  return openTaskCountsByPath(db);
 }

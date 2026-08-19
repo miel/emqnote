@@ -464,6 +464,44 @@
   margin-right: 4px;
 }
 
+/* People on the left, the task count hard against the right edge of the row (B69).
+
+   The count carries `margin-left: auto` rather than the row carrying
+   `justify-content: space-between`: either works when both halves are there, and only
+   this one keeps the count on the right when a note has tasks and nobody attending. The
+   attendees get `min-width: 0` so their own ellipsis still fires — a flex item's default
+   `min-width: auto` refuses to shrink below its content, which would push the count off
+   the end for a long list of names. */
+.note-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.note-bottom .note-attendees {
+  min-width: 0;
+}
+
+/* Muted when there is nothing open — `0 of 5` is a fact, not a call to action — and the
+   accent when there is, so the column can be scanned for what is still owed. The same
+   pair of readings the folder badge's two halves already have.
+
+   Two class names on the second selector, not one: the element carries both, and at one
+   class each these would tie on specificity and be settled by source order — which is
+   exactly how B48's hidden chip and the overlays' dimming both shipped broken. jsdom has
+   no cascade to lose in, so `test/styles-note-tasks.test.ts` pins the doubled form. */
+.note-tasks {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-tasks.note-tasks-open {
+  color: var(--accent);
+}
+
 /* Only shown under a tag or a person, where the notes are not all from one folder. */
 .note-folder {
   font-size: 11px;

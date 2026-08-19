@@ -115,6 +115,21 @@ export interface FolderNode {
   openTasks?: number;
 }
 
+/**
+ * How many task items a note carries, and how many of those are still open — the note
+ * list's own count (`2 of 5`).
+ *
+ * Both numbers, not just the open one: a note whose work is done reads differently from
+ * a note that never had any, and only `total` tells those apart. A note with no task
+ * items at all is simply absent from the map that carries these, the same "absent, not
+ * zero" rule `FolderNode.openTasks` states above and for the same reason — it arrives
+ * after the rows are already drawn.
+ */
+export interface TaskCount {
+  open: number;
+  total: number;
+}
+
 export interface NoteSummary {
   /** Path relative to the vault root, always with forward slashes. */
   path: string;

@@ -34,6 +34,11 @@ vi.mock("../src/renderer/editor/Editor.js", async () => {
       applyLink: () => {},
       insertAttachment: () => {},
       focusTask: (ordinal: number) => focusTaskCalls.push(ordinal),
+      // B70's caret memory. Nothing here is about it — `test/library-caret-memory.test.ts`
+      // is — but `Library.tsx` asks every note it leaves for its caret, so a stub without
+      // these throws on the way out of the first note and takes this file down with it.
+      getSelection: () => null,
+      setSelection: () => {},
     }));
     return react.createElement("div", { className: "editor" });
   });
@@ -114,6 +119,7 @@ function buildFake(): CaptureApi {
     notes: async () => [],
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
+    noteTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => openedNote(),
@@ -160,6 +166,7 @@ function buildFake(): CaptureApi {
     painted: () => {},
     change: () => {},
     close: () => {},
+    discard: () => {},
     minimise: () => {},
     toggleMaximise: () => {},
     openLibrary: () => {},

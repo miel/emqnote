@@ -226,6 +226,76 @@ function basenameOf(path: string): string {
  * one — on its first write, never again after that — the folder no longer decides
  * anything, and pretending otherwise would only make this and the disk disagree.
  */
+describe("discard", () => {
+  it("names the file the draft already left on disk, and writes nothing more", async () => {
+    const { writer } = makeWriter();
+    writer.update(payload(paragraphs("Per ongeluk begonnen")));
+    const result = await writer.flush();
+    expect(notesIn()).toHaveLength(1);
+
+    const discarded = await writer.discard();
+    expect(discarded).toBe(`${INBOX}/${basenameOf(result.path!)}`);
+
+    // The session it answered about is gone, so the commit that follows every close —
+    // `hideCaptureWindow` runs `finish()` — has nothing to put back. Without the swap
+    // inside `discard`, this is the line that recreates the note that was just thrown
+    // away.
+    await writer.finish();
+    expect(notesIn()).toEqual([basenameOf(result.path!)]);
+    expect(writer.uncommittedNewPath()).toBeNull();
+  });
+
+  it("cancels the write that was still on the debounce, so no file is ever created", async () => {
+    const { writer, written } = makeWriter();
+    writer.update(payload(paragraphs("Twee letters en meteen spijt")));
+
+    // Discarded inside the 800 ms window: nothing has been written, so there is nothing
+    // to name and nothing to trash.
+    expect(await writer.discard()).toBeNull();
+
+    // Fake timers rather than a real 800 ms wait: the whole suite is meant to stay under
+    // a couple of seconds, and what is being asserted is that the callback never runs.
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(800);
+    vi.useRealTimers();
+
+    await writer.finish();
+    expect(notesIn()).toEqual([]);
+    expect(written).toEqual([]);
+  });
+
+  it("waits out a write already in flight rather than answering null for a file about to appear", async () => {
+    const { writer } = makeWriter();
+    writer.update(payload(paragraphs("Net op tijd")));
+
+    // The write is enqueued and not awaited — exactly the shape of a discard clicked a
+    // moment after the debounce fired. `writeSession` picks the file name inside that
+    // promise, so an answer taken before it settles would be `null` for a note that
+    // exists a tick later: an orphan nobody could find.
+    const inFlight = writer.flush();
+    const discarded = await writer.discard();
+    await inFlight;
+
+    expect(discarded).not.toBeNull();
+    expect(notesIn()).toEqual([basenameOf(discarded!)]);
+  });
+
+  it("refuses a note loaded from the library — that one is not this window's to throw away", async () => {
+    mkdirSync(join(vault, INBOX), { recursive: true });
+    const relativePath = join(INBOX, "2026-07-25 1432 Kickoff project Alpha.md");
+    writeFileSync(
+      join(vault, relativePath),
+      "---\ntitle: Kickoff project Alpha\ntype: quick\ncreated: 2026-07-25T14:32:00+02:00\n---\n\nEerste versie.\n",
+    );
+
+    const { writer } = makeWriter();
+    await writer.load(openNote(vault, relativePath)!);
+
+    expect(await writer.discard()).toBeNull();
+    expect(notesIn()).toEqual([basenameOf(relativePath)]);
+  });
+});
+
 describe("newNoteIn", () => {
   it("puts the next new note where the library asked", async () => {
     const { writer } = makeWriter();

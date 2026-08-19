@@ -458,15 +458,35 @@ export function Capture(): React.ReactElement {
             ? app.t("capture.nothingSaved")
             : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
         </span>
-        {/* No buttons here, deliberately — see the comment on `onVaultFileChanged`
-            above. A window where the user may be mid-sentence must never offer a
-            choice that could discard what is currently being typed. */}
+        {/* The notice carries no buttons, deliberately — see the comment on
+            `onVaultFileChanged` above. A window where the user may be mid-sentence must
+            never offer a *choice* that could discard what is currently being typed.
+            Discard below is not that: it is asked for, it is about this note rather than
+            about a disk event nobody expected, and what it does is reversible. */}
         {diskNotice !== null && <span className="disk-notice">{app.t(diskNotice)}</span>}
         {/* Moved out of the header when the tag field took its place. A learn-once
             hint belongs in the ambient chrome anyway, not in a row of fields. */}
         <span className="dismiss-hint">
           {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
         </span>
+        {/* A brand-new note only. A note handed over from the library is not this
+            window's to throw away — `existing` is exactly that state, and main answers
+            `null` for such a session anyway (`CaptureWriter.discard`), so the guard is
+            drawn here rather than relied on there.
+
+            No confirmation in front of it: the note goes to `_trash` and comes back out
+            through Restore, which is B54's own argument for why dragging a note onto the
+            trash asks nothing either. */}
+        {!existing && (
+          <button
+            type="button"
+            className="help-button"
+            title={app.t("capture.discardHint")}
+            onClick={() => window.emqnote.discard()}
+          >
+            {app.t("capture.discard")}
+          </button>
+        )}
         <button
           type="button"
           className="help-button insert-button"

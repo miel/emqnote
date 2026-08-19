@@ -14,6 +14,7 @@ import {
   needsRefresh,
   openIndex,
   openTaskCountsByFolder,
+  openTaskCountsByPath,
   search,
   tasksIn,
   upsertNote,
@@ -302,6 +303,54 @@ describe("the SQLite index", () => {
       );
 
       expect(openTaskCountsByFolder(db)).toEqual({ "10 Projects": 2, "20 Areas": 1 });
+    });
+
+    it("answers the same numbers per note, both open and total", () => {
+      // The folder fold reads this rather than asking its own question, so the badge and
+      // the rows inside that folder cannot come to disagree about the same notes.
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          tasks: [
+            { ordinal: 0, checked: false, text: "Offerte versturen" },
+            { ordinal: 1, checked: true, text: "Al gedaan" },
+          ],
+        }),
+      );
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Afgerond.md",
+          tasks: [{ ordinal: 0, checked: true, text: "Klaar" }],
+        }),
+      );
+      upsertNote(db, record({ path: "10 Projects/Zonder taken.md", tasks: [] }));
+
+      expect(openTaskCountsByPath(db)).toEqual({
+        // Both numbers: `0 of 1` is a note whose work is done, and only `total` tells
+        // that apart from a note that never had any.
+        "10 Projects/Kickoff.md": { open: 1, total: 2 },
+        "10 Projects/Afgerond.md": { open: 0, total: 1 },
+      });
+      // A note with no task items is absent, not zero — the caller draws nothing for it.
+      expect(openTaskCountsByPath(db)["10 Projects/Zonder taken.md"]).toBeUndefined();
+
+      // And the folder half still says only what it said before: one open task here.
+      expect(openTaskCountsByFolder(db)).toEqual({ "10 Projects": 1 });
+    });
+
+    it("stops counting a deleted note per note as well as per folder", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Offerte versturen" }],
+        }),
+      );
+      deleteNote(db, "10 Projects/Kickoff.md");
+
+      expect(openTaskCountsByPath(db)).toEqual({});
     });
 
     it("counts a note in the vault root under the empty folder name", () => {

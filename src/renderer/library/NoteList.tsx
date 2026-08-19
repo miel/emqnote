@@ -6,6 +6,7 @@ import {
   type NoteSummary,
   type Selection,
   type SortKey,
+  type TaskCount,
 } from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
 import { NOTE_DRAG_TYPE } from "./drag.js";
@@ -13,6 +14,15 @@ import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
 interface Props {
   notes: NoteSummary[];
+  /**
+   * Open and total task items per note path, for the count under the date.
+   *
+   * `null` is "not counted yet" and a missing key is "this note has no task items" —
+   * `FolderNode.openTasks`'s rule, for `FolderNode.openTasks`'s reason: the rows come off
+   * a `readdir` and this comes from behind the index scan, so a row must never be able to
+   * claim a note is clear while the answer is still on its way.
+   */
+  noteTasks: Record<string, TaskCount> | null;
   /**
    * The non-note files in the folder being browsed (B47) — empty for a tag, a person or a
    * search, none of which has an answer to "which files are here".
@@ -87,6 +97,7 @@ const SORTS: SortKey[] = ["modified", "created", "title"];
 
 export function NoteList({
   notes,
+  noteTasks,
   files,
   filesState,
   selected,
@@ -262,11 +273,25 @@ export function NoteList({
                   ))}
                 </div>
               )}
-              {/* No longer gated on the kind: any note can carry people now (B20), and a
-                  quick note with names on it that the list refused to show was the kind of
-                  thing that makes you doubt whether the field saved at all. */}
-              {note.attendees.length > 0 && (
-                <div className="note-attendees">{note.attendees.join(", ")}</div>
+              {/* People on the left, the task count right-aligned against it.
+                  Deliberately a row of its own rather than the count sitting up beside the
+                  date: the date is what the sort is on and reads as one column down the
+                  list, and a second number in that column would have to be told apart from
+                  it at a glance. People keep their line either way — the count was very
+                  nearly put *in* their place, and a meeting note that quietly stopped
+                  naming who was at it would have been a worse trade than one extra row.
+
+                  Drawn when either half has something to say, so a note with tasks and no
+                  attendees still gets its count. */}
+              {(note.attendees.length > 0 || noteTasks?.[note.path] !== undefined) && (
+                <div className="note-bottom">
+                  {/* Still conditional inside the row: `.note-attendees` draws a ◍ from a
+                      `::before`, so an empty one is not an empty element. */}
+                  {note.attendees.length > 0 && (
+                    <span className="note-attendees">{note.attendees.join(", ")}</span>
+                  )}
+                  {taskCount(noteTasks?.[note.path], t)}
+                </div>
               )}
             </li>
           ))}
@@ -347,6 +372,40 @@ export function NoteList({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * `2 of 5` under the date, or nothing at all.
+ *
+ * Three states, and telling the second from the third is the point (B67's rule for the
+ * folder badge, applied a level down): `undefined` covers both "this note has no task
+ * items" and "the index has not answered yet", and neither is something to draw — a row
+ * that briefly said `0 of 0` would be claiming a note is finished before anyone had
+ * looked. A note whose boxes are all ticked says `0 of 5` and says it in the muted
+ * colour, because that is a fact rather than a call to action; one with work left says it
+ * in the accent, so the column can be scanned for what is still owed.
+ *
+ * The words are composed here rather than interpolated into one string: the i18n tables
+ * are plain `Record<string, string>` with no placeholders in them, and `FolderTree`'s own
+ * `badgeTitle` builds its tooltip the same way.
+ */
+function taskCount(
+  count: TaskCount | undefined,
+  t: (key: string) => string,
+): React.ReactElement | null {
+  if (count === undefined) return null;
+
+  return (
+    <span
+      // Both class names on the "open" element, never the modifier alone: at one class
+      // each these tie on specificity in `library.css` and are settled by source order,
+      // which is how B48's hidden chip and the overlays' dimming both shipped broken.
+      className={count.open > 0 ? "note-tasks note-tasks-open" : "note-tasks"}
+      title={`${t("tree.openTasks")}: ${count.open} / ${count.total}`}
+    >
+      {count.open} {t("notes.taskCountOf")} {count.total}
+    </span>
   );
 }
 
