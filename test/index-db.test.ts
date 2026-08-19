@@ -13,6 +13,7 @@ import {
   getNote,
   needsRefresh,
   openIndex,
+  openTaskCountsByFolder,
   search,
   tasksIn,
   upsertNote,
@@ -272,6 +273,74 @@ describe("the SQLite index", () => {
       );
 
       expect(tasksIn(db, "", true).map((row) => row.text)).toEqual(["Openstaand"]);
+    });
+
+    it("counts open tasks per folder, the folder tree's badge", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          tasks: [
+            { ordinal: 0, checked: false, text: "Offerte versturen" },
+            { ordinal: 1, checked: true, text: "Al gedaan" },
+          ],
+        }),
+      );
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Terugkoppeling.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Bellen" }],
+        }),
+      );
+      upsertNote(
+        db,
+        record({
+          path: "20 Areas/Iets.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Ergens anders" }],
+        }),
+      );
+
+      expect(openTaskCountsByFolder(db)).toEqual({ "10 Projects": 2, "20 Areas": 1 });
+    });
+
+    it("counts a note in the vault root under the empty folder name", () => {
+      upsertNote(
+        db,
+        record({
+          path: "Losse notitie.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Iets doen" }],
+        }),
+      );
+
+      expect(openTaskCountsByFolder(db)).toEqual({ "": 1 });
+    });
+
+    it("leaves a folder whose tasks are all ticked out of the counts entirely", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          tasks: [{ ordinal: 0, checked: true, text: "Al gedaan" }],
+        }),
+      );
+
+      expect(openTaskCountsByFolder(db)).toEqual({});
+    });
+
+    // The join with `notes` is what does this: a badge claiming tasks the Tasks view
+    // does not list would be worse than no badge at all.
+    it("stops counting a note that has been deleted from the index", () => {
+      upsertNote(
+        db,
+        record({
+          path: "10 Projects/Kickoff.md",
+          tasks: [{ ordinal: 0, checked: false, text: "Offerte versturen" }],
+        }),
+      );
+      deleteNote(db, "10 Projects/Kickoff.md");
+
+      expect(openTaskCountsByFolder(db)).toEqual({});
     });
 
     it("scopes to a folder and everything nested under it", () => {

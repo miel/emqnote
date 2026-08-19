@@ -271,6 +271,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The open-task half of a folder's badge. Muted like the note count when there is
+   nothing open — a `0` is a fact, not a call to action — and given the text colour when
+   there is, so a folder with work left in it can be found by scanning the column.
+
+   Two class names on the second selector, not one: the element carries both, and at one
+   class each these would tie on specificity and be settled by source order — which is
+   exactly how B48's hidden chip and the overlays' dimming both shipped broken. Nothing
+   under `test/` can catch that (jsdom has no cascade), so `test/styles-branch-tasks.test.ts`
+   pins the doubled form instead. */
+.branch-tasks {
+  color: var(--muted);
+}
+
+.branch-tasks.branch-tasks-open {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ---- note list ---- */
 
 .notes {

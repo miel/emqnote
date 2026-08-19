@@ -48,6 +48,7 @@ import { FilePreview } from "./FilePreview.js";
 // editor's own insertion cannot drift into two spellings of one thing.
 import { isEmbeddableAttachment } from "../editor/attachment-view.js";
 import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
+import { withOpenTasks } from "./folder-tasks.js";
 import { Settings } from "./Settings.js";
 import { Splitter } from "./Splitter.js";
 import { TaskList } from "./TaskList.js";
@@ -145,6 +146,15 @@ export function Library(): React.ReactElement {
   const openNoteRequest = useRef(0);
 
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
+  /**
+   * Open tasks per folder, for the second half of the tree's badge.
+   *
+   * Kept beside the tree rather than folded into it, because the two arrive at different
+   * speeds: the tree is a `readdir` and this waits on the index. `null` is "not counted
+   * yet", which is what keeps a folder from briefly claiming zero open tasks before the
+   * scan has answered — `treeWithTasks` below is where the two are put together.
+   */
+  const [taskCounts, setTaskCounts] = useState<Record<string, number> | null>(null);
   const [selection, setSelection] = useState<Selection>({ kind: "folder", path: "00 Inbox" });
   /**
    * The last folder that was selected, which is not always the current selection.
@@ -393,6 +403,24 @@ export function Library(): React.ReactElement {
     setTree(await window.emqnote.library.tree());
   }, []);
 
+  /**
+   * The badge's task half. Its own call, and deliberately not awaited alongside the tree:
+   * this one sits behind `ensureScanned`, and making the folder list wait on it would put
+   * browsing behind the scan for the sake of a number.
+   *
+   * A failure leaves the last counts in place rather than blanking them — the same rule
+   * the unlinked pane learned (a refresh that fails over rows that are already right is
+   * not worth throwing them away for), and here the fallback is simply a badge that goes
+   * on showing the note count alone.
+   */
+  const loadTaskCounts = useCallback(async () => {
+    try {
+      setTaskCounts(await window.emqnote.library.folderTaskCounts());
+    } catch {
+      /* keep whatever was already counted */
+    }
+  }, []);
+
   const loadConflicts = useCallback(async () => {
     setConflicts(await window.emqnote.library.conflicts());
   }, []);
@@ -525,16 +553,20 @@ export function Library(): React.ReactElement {
 
   useEffect(() => {
     void loadTree();
+    void loadTaskCounts();
     void loadConflicts();
     const stop = window.emqnote.library.onRefresh(() => {
       void loadTree();
+      // Ticking a box is a save, and a save is what raises `library:refresh` — so the
+      // badge follows a checkbox without needing to know anything about one.
+      void loadTaskCounts();
       void loadNotes(selectionRef.current);
       refreshFacets();
       void refreshEditable();
       void loadConflicts();
     });
     return stop;
-  }, [loadTree, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
+  }, [loadTree, loadTaskCounts, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
 
   /**
    * The startup index scan, which usually ran long before this window existed — the app
@@ -553,10 +585,11 @@ export function Library(): React.ReactElement {
       if (progress === null) {
         refreshFacets();
         void loadNotes(selectionRef.current);
+        void loadTaskCounts();
         void loadConflicts();
       }
     });
-  }, [refreshFacets, loadNotes, loadConflicts]);
+  }, [refreshFacets, loadNotes, loadTaskCounts, loadConflicts]);
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
@@ -1145,6 +1178,11 @@ export function Library(): React.ReactElement {
     [tree],
   );
   const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
+
+  // The badge's two halves, joined. Only the tree pane gets this — everything else that
+  // reads `tree` (the move list, the folder lookups) is about where folders are, and a
+  // task count would be noise in it.
+  const treeWithTasks = useMemo(() => withOpenTasks(tree, taskCounts), [tree, taskCounts]);
 
   /**
    * What each dialog says. Lifted out of the JSX when the chain of ternaries there grew
@@ -1780,7 +1818,7 @@ export function Library(): React.ReactElement {
         }
       >
         <FolderTree
-          root={tree}
+          root={treeWithTasks}
           selected={selection}
           facets={facets}
           dragging={dragging}
@@ -1864,6 +1902,8 @@ export function Library(): React.ReactElement {
           emptyLabel={app.t("library.filterEmpty")}
           unavailableLabel={app.t("library.filterUnavailable")}
           filterLabel={app.t("library.filterSearch")}
+          notesHereLabel={app.t("tree.notesHere")}
+          openTasksLabel={app.t("tree.openTasks")}
         />
 
         <Splitter

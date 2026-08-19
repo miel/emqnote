@@ -77,6 +77,7 @@ function buildFake(initial: OpenedNote): Fake {
     tree: async () => tree,
     notes: async () => [noteSummary(initial.path, initial.title)],
     folderFiles: async () => [],
+    folderTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,

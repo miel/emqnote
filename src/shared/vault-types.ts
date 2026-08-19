@@ -97,6 +97,22 @@ export interface FolderNode {
   children: FolderNode[];
   /** Notes directly in this folder, excluding subfolders. */
   noteCount: number;
+  /**
+   * Open task items in the notes directly in this folder, excluding subfolders — the
+   * second half of the tree's badge.
+   *
+   * Absent, not zero, until it is known. `readFolderTree` never fills it: that walk is a
+   * `readdir` off disk and must not wait on the index (`vault-scan.ts`'s own comment on
+   * why browsing a folder never waits on a scan), while a task count can only come *from*
+   * the index (B26 — re-parsing a folder's notes on demand is the 470–535 ms main-thread
+   * stall the scan was moved into a worker to avoid). So the tree arrives first and the
+   * library merges `IPC.libraryFolderTaskCounts` into it when the index answers, and the
+   * difference between "no open tasks" and "not counted yet" stays visible in the type.
+   *
+   * Deliberately not rolled up into parents: a folder's badge says what is in *that*
+   * folder, exactly as `noteCount` already does, so the two halves count the same notes.
+   */
+  openTasks?: number;
 }
 
 export interface NoteSummary {

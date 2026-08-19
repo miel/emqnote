@@ -98,6 +98,8 @@ function mount(
         emptyLabel: "Nothing found",
         unavailableLabel: "Unavailable",
         filterLabel: "Filter",
+        notesHereLabel: "Notes here",
+        openTasksLabel: "Open tasks",
       }),
     );
   });

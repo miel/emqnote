@@ -69,6 +69,15 @@ export const IPC = {
    * this beside `libraryNotes` rather than as part of it.
    */
   libraryFolderFiles: "library:folder-files",
+  /**
+   * How many task items are still open in the notes of each folder, for the tree's badge.
+   *
+   * Its own call rather than a field on `libraryTree`, because the two come from
+   * different places at different speeds: the tree is a `readdir` that must answer at
+   * once, this is a read of `note_tasks` behind `ensureScanned`. Asking for both in one
+   * call would put a folder listing behind the scan.
+   */
+  libraryFolderTaskCounts: "library:folder-task-counts",
   /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
@@ -383,6 +392,12 @@ export interface LibraryApi {
   notes: (selection: Selection) => Promise<NoteSummary[]>;
   /** The non-note files in one folder, for the list's second section (B47). */
   folderFiles: (folder: string) => Promise<FileSummary[]>;
+  /**
+   * Open task items per folder, keyed by vault-relative folder path (`""` is the root).
+   * A folder with no open tasks is absent from the map, not zero — the caller knows which
+   * folders exist; this only says where the open tasks are.
+   */
+  folderTaskCounts: () => Promise<Record<string, number>>;
   /**
    * `type:meeting attendee:"Jan de Vries" tag:klantx after:2026-01-01` plus free text —
    * `search-query.ts` parses it, `vault-scan.ts`'s `searchNotes` runs it. An empty or

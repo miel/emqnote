@@ -188,6 +188,11 @@ const DUTCH: Record<string, string> = {
   "library.duplicateLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij gedupliceerd worden.",
   "library.tasks": "Taken",
+  // Het badge naast een mapnaam: [# notities] / [# openstaande taken]. Alleen de tooltip
+  // zegt wat de twee getallen zijn; de telling zelf staat er kaal, zoals altijd. Een
+  // label met een dubbele punt erachter, zodat er geen enkelvoud/meervoud in zit.
+  "tree.notesHere": "Notities hier",
+  "tree.openTasks": "Openstaande taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   // Het bestandsvoorbeeld naast de notitielijst (B47).
@@ -545,6 +550,11 @@ const ENGLISH: Record<string, string> = {
   "library.duplicateLocked":
     "This note is open in the note window. Close it there first, then it can be duplicated.",
   "library.tasks": "Tasks",
+  // The badge beside a folder name: [# notes] / [# open tasks]. Neither number is rolled
+  // up from subfolders — both count the notes in this folder itself. Written as a label
+  // with the number after it, so neither string has to have a singular form.
+  "tree.notesHere": "Notes here",
+  "tree.openTasks": "Open tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   // The file preview beside the note list (B47).

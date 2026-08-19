@@ -88,6 +88,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     tree: async () => tree,
     notes: async () => [noteSummary(listPath, "Test note")],
     folderFiles: async () => [],
+    folderTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,

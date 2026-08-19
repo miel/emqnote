@@ -69,6 +69,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     tree: async () => tree,
     notes: async () => [],
     folderFiles: async () => [],
+    folderTaskCounts: async () => ({}),
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,
