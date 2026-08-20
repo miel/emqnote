@@ -915,21 +915,33 @@ All three were driven under `Xvfb` over CDP on Linux, with real computed colours
 on disk and real hash/mtime comparisons. What is left here is what a script cannot judge, and
 the Windows machine.
 
-### The chord that is still dead — the one deliverable this round is waiting on
+### ~~The chord that is still dead~~ — answered and closed, 19 August 2026 (B71)
 
-`Ctrl+Shift+T` was reported dead on Windows for the third time, with `Ctrl+Shift+D` working.
-Nothing was changed for it, on purpose: both chords sit in one `keys` array, go through one
-`matches()` call in one `before-input-event` handler, and end at one `COMMANDS.task`. The
-registration is line-for-line identical, so the difference is necessarily outside this process
-— and a fourth guess would only cover that up further. `--key-probe` reads it directly.
+**Nothing to test here. It is kept for the method, not as work**, and no shortcut changed.
 
-| # | Step | Expected | ✓ |
-|---|---|---|---|
-| 29a | **Quit the everyday emqnote** (this probe does not bypass the single-instance lock, unlike the others), then run `emqnote.exe --key-probe` | The app starts and the log header appears in `%LOCALAPPDATA%\emqnote\key-probe.log` |  |
-| 29b | Open the capture window, put the caret in the note, and press `Ctrl+Shift+T`, then `Ctrl+Shift+D` | Two lines in the log. **Send the log**: which of the three shapes appears for `T` decides what happens next, and no other evidence can |  |
-| 29c | If there is **no line at all** for `T` | The key never reached the window: something outside emqnote took it. Nothing in this source tree can fix that, and `Ctrl+Shift+D` becomes the chord the help sheet prints first |  |
-| 29d | If the line reads `claim=—` | It arrived with modifiers the chord does not spell — `keyMatches` needs widening to compare `input.code` as well as `event.key` |  |
-| 29e | If the line reads `claim=task:editor` | It arrives and is claimed, so the fault is downstream: the `view.hasFocus()` gate in `Editor.tsx`, or `toggleTask` itself |  |
+`Ctrl+Shift+T` was reported dead on Windows three times and repaired twice. On the third report
+nothing was guessed and `--key-probe` was run instead:
+
+```
+capture key="T" code=KeyT ctrl=false shift=true  claim=—            ← Shift+T arrives
+capture key="t" code=KeyT ctrl=true  shift=false claim=—            ← Ctrl+T arrives
+                                                                     ← Ctrl+Shift+T: no KeyT line
+capture key="c" code=KeyC ctrl=true  shift=false claim=—            ← a Ctrl+C instead
+capture key="D" code=KeyD ctrl=true  shift=true  claim=task:editor  ← 5 of 5
+```
+
+The T key works and the Ctrl variant works; that one combination did not arrive, and it was not
+swallowed but **substituted** — a `Ctrl+C` came back in its place, Shift stripped and lowercase.
+That substitution was the clue: a passive `RegisterHotKey` grab produces silence, while an
+injected keystroke means a macro tool. **It was an AutoHotkey script the machine's own owner had
+written**, intercepting `Ctrl+Shift+T` and sending `Ctrl+C` to escape another command. Not
+Windows, not Chromium, not this source tree — so nothing was changed, and `Ctrl+Shift+T` remains
+the chord the help sheet prints first with `Ctrl+Shift+D` beside it.
+
+The lesson is for the next report of this shape, and it is the third time this project has paid
+for it (§23/§24 and §26 are the other two): **a diagnosis that survives its own report is
+incomplete rather than wrong, and the way out is to measure rather than repair again.** Two fixes
+shipped against a cause nobody had measured. The probe took one run. Reach for it earlier.
 
 ### Discard (B68)
 
@@ -966,6 +978,57 @@ registration is line-for-line identical, so the difference is necessarily outsid
 | 29x | Quit and relaunch, then open that same note | Back at the top. This is in memory for one sitting only, which is what was asked for — if you find yourself wanting it to survive a restart, that is a new decision, not a bug |  |
 | 29y | Leave a note open, edit it on the **other machine**, let it reload, and look at the caret | It lands somewhere sensible rather than throwing or jumping to the end. A note that got shorter is the case this is guarding |  |
 
+## 30. A stale clock, a row that should not be there, a star and a place (19 August 2026)
+
+Two bugs and two additions — the When field's stale time, the Unlinked attachments row,
+**B72** (a bullet can be flagged with a star) and **B73** (the Where field completes from the
+vault's own locations).
+
+**Everything in this section is unwatched.** Unlike every batch before it, none of this has
+been driven under `Xvfb` over CDP: it is built, typechecked and covered by 1539 unit tests,
+and nobody has seen it run. So this section is not "what a script cannot reach" — it is the
+whole of the batch, and the first four rows are the ones to do first.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 30a | Press the hotkey, look at When, press Escape. Wait two minutes. Press the hotkey again | The time is **now**, not two minutes ago. This is the bug: the stamp used to be taken when the previous note was put away |  |
+| 30b | Do the same but leave with **Discard** instead of Escape, which is the quickest way round the loop | Same answer. Discard is how this was noticed, being the fastest hide-and-show there is |  |
+| 30bb | Start typing a note, then press the hotkey again while that window is still open and half-typed | The When field does **not** move. The message that re-stamps it is sent on every press, so this is the case the fix has to not break |  |
+| 30c | Type a note, let it save, and look at the **filename** on disk | Its `YYYY-MM-DD HHmm` prefix matches the When field and the frontmatter's `created`. All three come from one value now; before this the filename had a clock of its own |  |
+| 30d | Before typing anything, change the date in the When field to something else, then type a note | The file is named after the date you set, not after the moment the window opened. Check the frontmatter agrees |  |
+| 30e | Type a note, let it save, then change the **subject** and close | It renames, and the timestamp in the new name is unchanged. The prefix is decided once, at the first write |  |
+| 30f | Open the library on a vault with nothing unlinked | No **Unlinked attachments** row in the sidebar footer at all |  |
+| 30g | Copy a picture into `_attachments/` from outside the app and wait for the watcher | The row appears |  |
+| 30h | Open that pane, then delete the file from it | The row **stays** while you are standing in the pane — there would otherwise be no way back out of the screen you are looking at |  |
+| 30i | Click away to a folder, then look at the footer | Now the row is gone |  |
+| 30j | Launch the library on a big vault and watch the footer for the first second | The row does not appear *late*. It is drawn until the count is known, so nothing jumps |  |
+| 30k | Type a bullet, put the caret in it, press **Ctrl+Shift+S** | The bullet is replaced by a ⭐. Not a star *beside* a bullet — the bullet is gone |  |
+| 30l | Press it again | The bullet is back |  |
+| 30m | Do it on a nested item, two and three levels deep | The star draws at every depth, and the item stays lined up with its siblings |  |
+| 30n | Save, and look at the file | `- ⭐ Bel Jan`. Then run `npm run canonical` on it — byte-identical |  |
+| 30o | Open that file in **Obsidian** | It reads as `• ⭐ Bel Jan`. That is the escape hatch working, not a defect |  |
+| 30p | Put the caret on a starred item and press **Ctrl+Shift+T** | It becomes a task and the star goes. The box stands where the star did; the two cannot both be drawn |  |
+| 30q | And the other way — Ctrl+Shift+S on a ticked task | It becomes a starred bullet and the box goes |  |
+| 30r | Ctrl+Shift+S inside a **numbered** list | Nothing happens, deliberately: the number is the marker there. Same in ordinary prose outside a list |  |
+| 30s | Right-click in a bulleted line, then in an ordinary paragraph | "Star for attention" is on the first menu and absent from the second, the way the table items are |  |
+| 30t | Press Enter at the end of a starred item | The new item is a plain bullet. A star says *this one* |  |
+| 30u | Select a starred list and copy it into a mail | The stars come with it: `- ⭐ Bel Jan` |  |
+| 30v | Write a note in Obsidian containing `- [ ] ⭐ Iets` and `1. ⭐ Iets`, then open it here | Both keep their star as ordinary text and neither draws as flagged. Save and check the bytes are untouched |  |
+| 30w | Do 30k–30n again in the **capture window** | Same throughout. It has no unit-test harness, so this is the half that only a person sees |  |
+| 30x | Click into the Where field on a vault with a few locations in it | A list appears, most-used first, and not before you click |  |
+| 30y | Type `kantoor a` | It narrows to "Kantoor Amsterdam" — matching across the space is the point, since a location is one value and not a list |  |
+| 30z | Arrow down, press Enter | The whole location goes in the field and the caret stays there. Enter did not also jump into the note |  |
+| 30aa | Type something, press **Escape** | The list closes, what you typed stays exactly as it was, and the caret is still in the field — the header did not jump |  |
+| 30ab | Open the Tags list, Tab to Where, arrow down | Only the Where list moves. Both can be open at once and they do not share a highlight |  |
+| 30ac | Do 30x–30ab in the **capture window** too | Same throughout |  |
+
+Two judgements no script can make, and they are the reason this section ends here rather than
+in a test file: **whether a ⭐ reads well against the bullets around it** at a real editor width
+and on a real display — it is a colour emoji among monochrome markers, which is either exactly
+the point or too loud — and **whether the Where dropdown sits comfortably over the Who field
+beside it**, that cell being bottom-left in the header grid with a field immediately to its
+right.
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -984,8 +1047,10 @@ were confirmed in it — and §18o–§18q are a gap of their own: a tray menu i
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
 judgements about how something feels or reads, which no script can make, and §25m, §26i,
-§26j, §27n, §27o, §28i, §29l and §29s join them.
-**§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f, §26a–§26c and §29a–§29e
+§26j, §27n, §27o, §28i, §29l and §29s join them, as do §30 &mdash; **all of it**, which
+is new: that batch shipped tested and built but never once driven in the running app, so
+every row in it is a first sighting rather than a confirmation.
+**§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the
 macOS half of the same pair). §22b and §25a are the sharpest of them, because neither bug

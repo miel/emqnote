@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1475 tests
+npm test               # vitest run — 1539 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -177,7 +177,18 @@ date" at 0.8.8 and "Update available → 0.8.8" at 0.8.0.
 
 **The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the tree → notes → editor ring from there, and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
 
-**An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway. If Windows reports it unchanged, the next step is `paragraph`'s precedent — a second alias chord beside the first.
+**An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway.
+
+**Windows reported it unchanged twice more, and `--key-probe` then closed it** (B71). On the
+reporting machine `Shift+T` logs a `KeyT` line and `Ctrl+T` logs a `KeyT` line, while
+`Ctrl+Shift+T` logs **no `KeyT` at all** — a `Ctrl+C` arrives in its place, Shift stripped and
+lowercase. That substitution was the clue: a passive `RegisterHotKey` grab produces silence,
+an injected keystroke means a macro tool. It was **an AutoHotkey script the machine's own owner
+had written**, rewriting the chord to `Ctrl+C` to escape another command. Not Windows, not
+Chromium, not this source tree — so **nothing was changed**: `Mod-Shift-t` is still first and
+`Mod-Shift-d` still sits beside it. Keep both claims above; they are correct on their own terms
+and cost nothing. What this is worth remembering for is that two repairs shipped against a cause
+nobody had measured, and the measurement took one log file.
 
 **Both global accelerators are registered by one function** (B60). `registerGlobalHotkeys` in `index.ts` reads `settings.hotkey` and `settings.libraryHotkey` and claims both; every path that changes a chord goes through it. That is not tidiness: `globalShortcut` cannot give up one claim without knowing what it was, so every caller used `unregisterAll()` — which, the moment there are two hotkeys, silently drops the other one. The handlers save first and register second, then roll the setting back if the OS refused, because the register step reads the settings file. `Mod+O` stays as the in-window form; the global chord is a *setting*, not a `shortcuts.ts` entry, and the help sheet draws it the same way it draws the capture hotkey.
 
@@ -281,6 +292,34 @@ structure and hands a plain-text target a checklist with every bullet, number an
 stripped off. The `text/html` flavour was always fine, so this is only about the plain-text
 one — and it stays plain: no escaping, nothing that would make it markdown.
 
+**A bullet can carry a star instead, and that star is in the file** (B72). `- ⭐ Bel Jan`
+on disk; `starred` on `listItem` beside `checked` in memory, so the star stands where the
+bullet stood and is not editable text — Backspace, Home, select-all, the plain-text
+clipboard, `plainText()`, the excerpt and the Tasks view all go on treating it as the
+ordinary bullet it is. `star-items.ts` reads the `⭐ ` prefix off, `pipeline.ts`'s own
+`listItem` handler writes it back, and neither half means anything without the other —
+exactly the `empty-tasks.ts` pair, and built on it. Four things are load-bearing.
+
+**It has to reach the file at all**, which is the line `list-marker-style.ts` draws from the
+other side: a marker that goes bold carries no meaning the file does not already hold, so
+that is a `DecorationSet`; a star carries the whole point, so it is content and there is no
+B6 or B10 question to answer. **An attribute and not two characters of text** — the cheap
+version puts `⭐ ` in the item and styles the bullet away, and then the star is in the
+search index, in the excerpt, in the task row's label and under the caret, which is what
+"treated as an ordinary bullet for every other purpose" rules out. **It is exclusive with a
+checkbox and with a numbered list**, because in both the marker is already taken — the box
+is positioned into the marker slot and the number is the item's meaning — and that is
+enforced at three doors rather than one: `toggleStar` clears `checked`, `toggleTask` and
+`toggleList` clear `starred`, and `liftStarMarkers` declines to read a star out of an item
+that has either, which is what lets an Obsidian-written `- [ ] ⭐ …` round-trip byte for
+byte with its star as literal text. And **the spelling was measured before anything was
+built on it**: `⭐` (U+2B50) is not in `mdast-util-to-markdown`'s unsafe set — that is
+ASCII punctuation only — so it is never escaped in any position and needs no `state.safe`
+carve-out, unlike B19's `#`. The cost is stated rather than discovered: a bullet whose text
+genuinely begins `⭐ ` cannot be expressed, there being no escaped form to tell apart the
+way `\[ ]` is told apart from `[ ]`. `test/limitations.test.ts` pins that;
+`test/corpus/29-sterretjes.md` pins the bytes.
+
 **A bullet, a number or a checkbox follows its own line's formatting** (`list-marker-style.ts`,
 17 August 2026). Bold a whole bulleted line and the `•` stayed upright, which reads as the
 marker not belonging to the line it introduces. It is a `DecorationSet` putting a class on
@@ -345,6 +384,44 @@ neither half means anything without the other. `to-mdast.ts`'s `isEmptyList` had
 the same thing: a list of empty items is editing residue and gets dropped, but a box is not
 residue. The escaped form `- \[ ]` still means literal brackets, and that is told apart by
 looking at the *source* at the node's offset — the two parse to identical text.
+
+**A new note's clock reads on the way in, not on the way out** (19 August 2026). Everything
+the capture window clears happens on hide — `hideCaptureWindow` sends `IPC.captureReset`,
+and `Capture.tsx`'s handler is where `freshHeader()` runs — and that is right for every
+value but one. `created` is about *when*, and the window is hidden for exactly as long as
+it is not being used, so When showed app-launch time for the first note of the day (this
+window is built at startup and never destroyed) and the previous note's dismissal time for
+every one after it. Discarding is what made it obvious, being the quickest way to hide and
+re-show; Escape, the X and Ctrl+Enter all left the same stale stamp, and
+`hideCaptureWindow`'s `isVisible()` guard means some paths never reset at all. The `onShow`
+handler re-stamps it now, for a brand-new note **that has not been typed into** — one handed
+over from the library owns its own date, which `onLoad` sets from the file, and `reveal()`
+sends `IPC.captureShow` on every hotkey press including one aimed at a window that is
+already open, so without `dirtyRef` the hotkey would quietly move the date of the note being
+written. `dirtyRef` over-reports by design and that bias is the right way round here. It
+updates `headerRef` in step, as `onHeaderChange` does. **The filename follows the frontmatter**, which is the other half:
+`writeSession` names the file from `frontmatter.created` rather than from
+`session.createdAt` (stamped in `beginSession`, which runs inside `finish` and `discard` —
+the main-process copy of the same bug), and assigns the decided value back onto the session
+so `renameSessionFile` reaches the same prefix on a later subject change. One source of
+truth: what the When field says is what the frontmatter says is what the filename says.
+Those three could already disagree before this, by editing the date before the first write.
+
+**The Unlinked attachments row is absent when there is nothing to clean up** (19 August
+2026). A cleanup screen for a vault with nothing to clean up is a place you open once to be
+told there is nothing there. `Library.tsx` fetches the count through the **existing**
+`IPC.libraryUnlinkedAttachments` at startup and on each `library:refresh` — not a
+count-only channel beside it, which would be two answers to one question — and keeps the
+whole reply in `unlinkedFiles`, so opening the pane afterwards draws its rows without a
+second wait. Not run while that pane *is* the selection, where `loadNotes` already fetches
+it and sets the count from the same reply; `library:refresh` arrives twice per debounced
+autosave and scanning twice for it would be the flicker bug's own cost, paid again. Three
+states rather than two: **absent is not zero** (B67's and B69's rule), so the row is drawn
+while `unlinkedCount` is `null` and a failed refresh keeps the last count rather than
+reading as an empty vault; and the row **stays while its own pane is showing** whatever the
+count says, or cleaning up the last file would leave the library on a screen with no row to
+click to get back out of — `FilterSection` answers the same objection by keeping a selected
+facet on its list.
 
 **A new note is filed where the library is standing; the hotkey keeps the Inbox** (B29).
 `CaptureWriter.newNoteIn` sets the folder for a session that has not picked a file yet, and
@@ -827,6 +904,26 @@ field's tags *and* the body's — is not offered: the body half looks like an om
 not, since B65 hoists those anyway, so completing to one would write nothing. Escape closes the
 list with `stopPropagation()`, the 18 Aug 2026 rule. People deliberately get no completion: a
 name is not drawn from a closed set the way a tag is.
+
+**The Where field does, and it completes on the whole value** (B73). That same argument
+read the other way: there are a handful of places work happens, and they are typed again
+and again with a slightly different spelling each time. `location` has been a column on
+`notes` since the table was created and `buildRecord` has always filled it, so this needed
+**no migration and no `SCHEMA_VERSION` bump** — only the tally, which is `locationFacets`
+in `vault-scan.ts`, read off `allNotes` because `toSummary` drops the field. Deliberately
+not a fourth field on `facets()`: that answer feeds the library's filter panel, which has
+no Where filter, and `IPC.tagSuggestions` was carved out of `facets().tags` for exactly
+that reason — `IPC.locationSuggestions` sits beside it. **`location-typeahead.ts` matches
+the whole field, never a token**, which is why it is a sibling module rather than another
+export in `tag-typeahead.ts`: a Tags field holds a list, so `tokenAt`/`applySuggestion`
+exist to reach the one entry the caret is in, while a location is one value that
+legitimately contains spaces ("Kantoor Amsterdam") and tokenising it would complete the
+field to a fragment of its own contents. Accepting is therefore a plain replacement with no
+caret arithmetic. **The two lists have separate state** — their own `suggesting`, `active`
+and `hoverGuard` — because Tab moves from Tags to Where without either field losing focus,
+so both panels can be up at once and one shared `active` would move the highlight in a
+panel nobody is looking at. Everything else is B66's, including the first-focus fetch and
+Escape's `stopPropagation()`.
 
 **Timestamps are ISO 8601 with offset, never UTC `Z`** — otherwise a summer note reads back wrong in winter.
 
@@ -1552,16 +1649,10 @@ alone. Three carry decisions: **B68** — a new note can be thrown away, and it 
 trash — **B69** — the note list says `[open] of [total]` under the date — and **B70** — the
 caret survives a note switch for as long as the window is open.
 
-**The fourth is `Ctrl+Shift+T` on Windows, reported dead for the third time**, with
-`Ctrl+Shift+D` working. Nothing was changed for it, on purpose, and that is the decision worth
-remembering: both chords sit in one `keys` array, go through one `matches()` call in one
-`before-input-event` handler, and end at one `COMMANDS.task` — the registration is line for
-line identical, so the asymmetry is necessarily outside this process. This project has been at
-that exact place twice before (B57 → B59, and B62's batch), and the lesson each time was that a
-diagnosis surviving its own report is incomplete rather than wrong. `--key-probe` was built in
-that batch to read the answer directly and has still never been run on Windows; its output is
-the one deliverable this round is waiting on, and a fourth guess would only bury it further.
-`TEST-PROTOCOL.md` §29 has the three log shapes and what each one means.
+**The fourth was `Ctrl+Shift+T` on Windows, reported dead for the third time**, and nothing was
+changed for it — not as a deferral, but because `--key-probe` was run instead of guessing a
+fourth time and the cause turned out to be outside the app entirely. See **B71** below, closed
+the same day.
 
 One thing B69 is worth remembering for: **the fold now reads the per-note answer instead of
 asking its own question.** `openTaskCountsByFolder` was a second query over the same table, and
@@ -1585,10 +1676,61 @@ folder and putting it in `_trash` with the typed sentence still in it, the windo
 hazard — a discard inside the 800 ms debounce creating no file then or later, and a note handed
 over from the library offering `["Insert", "?"]` and no Discard at all.
 
-**Not confirmed live**: the Windows half of the chord, which is the whole point of §29's first
-five rows. Also unseen by a person: whether "Discard" beside "Insert" and "?" reads as a button
+**Not confirmed live**: nothing about the chord any more (B71 settled it from the machine
+itself). Also unseen by a person: whether "Discard" beside "Insert" and "?" reads as a button
 you could hit by accident at a real window size, and whether a long list of attendees and a
 count share a row comfortably in a narrow note pane. All are `TEST-PROTOCOL.md` §29.
+
+**And on the same day `--key-probe` closed a question three reports old** (B71). On the
+reporting Windows machine, in the capture window: plain `Shift+T` logs a `KeyT` line, `Ctrl+T`
+logs a `KeyT` line, and `Ctrl+Shift+T` logs **no `KeyT` line at all** — a
+`key="c" code=KeyC ctrl=true shift=false` arrives in its place, while five of five
+`Ctrl+Shift+D` presses come through as `claim=task:editor`.
+
+**That something arrived *instead* was the clue.** A passive `RegisterHotKey` grab produces
+silence; an injected keystroke, Shift stripped and lowercase, means a macro tool — a much
+smaller set of suspects than "something takes it". It was **an AutoHotkey script the machine's
+own owner had written**, intercepting `Ctrl+Shift+T` and sending `Ctrl+C` to escape another
+command. Not Windows, not Chromium, not this source tree.
+
+**So nothing changed.** `Mod-Shift-t` stays first — it is the guessable one beside the other two
+list keys, and no property of the platform or of this app demotes it — with `Mod-Shift-d` beside
+it, kept rather than removed because it costs nothing and is the one that went on working while
+the cause was unknown. Both claims in `editor-keys.ts` stay too: they are correct on their own
+terms, and `before-input-event` is still the right place for a chord that has to be claimed.
+
+**The general lesson is the one this file keeps paying for, now three times over** (B57 → B59,
+B62's batch, and this): a diagnosis that survives its own report is incomplete rather than
+wrong, and the way out is to measure rather than repair again. Three reports, two fixes that
+repaired a healthy limb, one log file. The probes exist for this — reach for them earlier.
+
+**Two bugs and two additions from daily use landed on 19 August 2026**, on top of
+`v0.8.13`. Two carry decisions: **B72** — a bullet can be flagged with a star, and that
+star is in the file — and **B73** — the Where field completes from the vault's own
+locations. The two bugs are written up as constraints above: a new note's When field showed
+a stale time, and the Unlinked attachments row was there for vaults with nothing unlinked.
+
+The thing this batch is worth remembering for is that **the two bugs turned out to be the
+same bug in two places**. The When field was stamped on hide, and the filename was stamped
+from a second clock stamped at the same moment — so fixing only the visible half would have
+left the file named after the moment the *previous* note was put away, invisibly, in the
+one field nobody re-reads. The fix collapses the two clocks into one rather than
+re-stamping both, which is this file's own rule about two answers to one question, applied
+to a timestamp.
+
+Two things about B72 are worth knowing before touching it. **The spelling was measured
+before anything was built on it** — `- ⭐ Aandacht voor dit punt` was put through this
+repo's own `writeProcessor` options and came back byte-identical, which settled that `⭐`
+needs no `state.safe` carve-out the way B19's `#` does. And **the ordered-list case was
+found by running the round trip rather than by reading it**: the first version lifted a
+star out of `1. ⭐ Eerste stap` quite happily, and the file survived — but the CSS draws the
+star on `ul > li`, so the flag would have been set, saved, and invisible. Both the reader
+and `to-mdast.ts` decline it now, at the one place that knows which kind of list an item is
+in.
+
+**Not confirmed live**: none of it in the real app yet — this batch is tested and built but
+has not been driven under `Xvfb` over CDP, which every batch before it was. That is the
+outstanding work, and `TEST-PROTOCOL.md` §30 is what it should be driven against.
 
 ## The documents
 
@@ -1601,7 +1743,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B70, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B73, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

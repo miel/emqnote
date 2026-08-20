@@ -297,6 +297,16 @@ export const IPC = {
    */
   tagSuggestions: "app:tag-suggestions",
   /**
+   * The vault's own list of locations, for the header's Where field to complete from (B73).
+   *
+   * Beside `tagSuggestions` in every respect — top level because both windows ask, asked
+   * on first focus and never at startup — with one difference worth naming: this one is
+   * *not* a half of `facets()`. There is no Where filter in the library, so widening that
+   * payload would grow the filter panel's answer for a caller it knows nothing about;
+   * `locationFacets` is its own query over the same index instead.
+   */
+  locationSuggestions: "app:location-suggestions",
+  /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
    */
@@ -699,6 +709,11 @@ export interface CaptureApi {
    * suggestions rather than as an error — there is nothing for this side to do about it.
    */
   tagSuggestions: () => Promise<Facet[]>;
+  /**
+   * Every location the vault has used, most-used first, for the Where field's completion
+   * (B73). Empty on no vault or no index, exactly as above and shown the same way.
+   */
+  locationSuggestions: () => Promise<Facet[]>;
   /**
    * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —

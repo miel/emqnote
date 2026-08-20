@@ -106,6 +106,42 @@ describe("guaranteed not a limitation", () => {
     expect(roundtrip("1. Titel\n\n   ## Subtitel\n")).toBe("1. Titel\n\n   ## Subtitel\n");
   });
 
+  /**
+   * B72's own cost, stated rather than discovered.
+   *
+   * The star has no escaped spelling — `⭐` is not punctuation, so nothing escapes it and
+   * there is no `\\⭐` for a source-offset check to tell apart from a real one, which is
+   * how `restoreEmptyTasks` distinguishes `\\[ ]` from a real box. So a bullet whose text
+   * genuinely begins with a star followed by a space becomes a flagged bullet: the bytes
+   * on disk are unchanged either way, but the star stops being a word and becomes a
+   * marker. That is the trade the decision took, and it is why the rule is exactly `⭐ `.
+   */
+  it("reads a bullet that starts with a star as a flagged bullet", () => {
+    expect(roundtrip("- ⭐ Aandacht hiervoor\n")).toBe("- ⭐ Aandacht hiervoor\n");
+    expect(parseNote(header + "- ⭐ Aandacht hiervoor\n").doc.firstChild!.firstChild!.attrs.starred).toBe(
+      true,
+    );
+  });
+
+  it("leaves a star that is not the whole marker as ordinary text", () => {
+    // No space after it, so it is a word beginning with a star rather than a flag.
+    expect(roundtrip("- ⭐ster in de tekst\n")).toBe("- ⭐ster in de tekst\n");
+    expect(parseNote(header + "- ⭐ster in de tekst\n").doc.firstChild!.firstChild!.attrs.starred).toBe(
+      false,
+    );
+  });
+
+  it("leaves the star alone where the marker is already taken", () => {
+    // A task's box and a numbered item's number both stand where a star would, so neither
+    // can carry the flag — the star stays what it looks like there, which is text.
+    const task = "- [ ] ⭐ Ook een taak\n";
+    const numbered = "1. ⭐ Eerste stap\n";
+    expect(roundtrip(task)).toBe(task);
+    expect(roundtrip(numbered)).toBe(numbered);
+    expect(parseNote(header + task).doc.firstChild!.firstChild!.attrs.starred).toBe(false);
+    expect(parseNote(header + numbered).doc.firstChild!.firstChild!.attrs.starred).toBe(false);
+  });
+
   it("keeps escaping a line-start hash that does not open a tag", () => {
     // The exception is narrow: a space after the hash means a heading was meant, and a
     // purely numeric name is not a tag. Both keep the backslash they have always had.

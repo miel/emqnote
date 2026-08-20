@@ -88,13 +88,20 @@ export function toggleList(target: NodeType): Command {
 
       // Numbered task lists are not part of the dialect, so numbering a list of tasks
       // takes the boxes off rather than producing a shape that cannot be written to a
-      // file. Only this list's own items: a nested bullet list under one of them stays
-      // a bullet list, and its tasks stay tasks.
+      // file. A star goes the same way and for the same reason (B72): in a numbered list
+      // the number is the marker, so there is nowhere for one to stand, and `to-mdast.ts`
+      // would drop it on the next save anyway — better it leave visibly, here, than
+      // silently, there. Only this list's own items: a nested bullet list under one of
+      // them stays a bullet list, and its tasks and stars stay as they are.
       if (target === orderedList) {
         let itemPos = position + 1;
         node.forEach((child) => {
-          if (child.attrs.checked !== null) {
-            tr.setNodeMarkup(itemPos, undefined, { ...child.attrs, checked: null });
+          if (child.attrs.checked !== null || child.attrs.starred === true) {
+            tr.setNodeMarkup(itemPos, undefined, {
+              ...child.attrs,
+              checked: null,
+              starred: false,
+            });
           }
           itemPos += child.nodeSize;
         });
@@ -167,6 +174,10 @@ export const toggleTask: Command = (state, dispatch) => {
       tr.setNodeMarkup(pos, undefined, {
         ...node.attrs,
         checked: becomeTasks ? false : null,
+        // A box stands where the star would (B72), so gaining one gives the star up.
+        // `toggleStar` says the same sentence from the other end; enforcing it at both
+        // doors is what keeps a state the serializer would refuse from ever existing.
+        starred: becomeTasks ? false : (node.attrs.starred as boolean),
       });
     }
     dispatch(tr.scrollIntoView());
@@ -202,6 +213,47 @@ export const toggleChecked: Command = (state, dispatch) => {
     const tr = state.tr;
     for (const { pos, node } of items) {
       tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: tick });
+    }
+    dispatch(tr.scrollIntoView());
+  }
+
+  return true;
+};
+
+/**
+ * Flags a bullet for attention, and unflags it (B72).
+ *
+ * `toggleTask`'s shape throughout, because it is the same kind of thing: an attribute on
+ * `listItem`, so it works at any depth without knowing anything about depth, and a mixed
+ * selection resolves one way for all of it rather than flipping each item separately.
+ *
+ * Two differences, both deliberate. **It starts nothing**: `toggleTask` outside a list
+ * wraps the paragraph in one, because a checkbox is a way of writing a list, while a star
+ * is a remark about a bullet that already exists — there is nothing to say about a
+ * sentence. And **it declines a numbered list** rather than converting it, because the
+ * number is that list's marker: converting would silently rewrite the shape of a list the
+ * user chose in order to decorate one line of it.
+ *
+ * Taking the box off is the same sentence `toggleTask` says from its own end — a task's
+ * checkbox stands exactly where the star would, so the two cannot both be drawn, and
+ * `star-items.ts` and `to-mdast.ts` refuse the pair on disk as well.
+ */
+export const toggleStar: Command = (state, dispatch) => {
+  const list = findList(state.selection.$from);
+  if (list === null || list.type === orderedList) return false;
+
+  const items = itemsInSelection(state);
+  if (items.length === 0) return false;
+
+  if (dispatch) {
+    const flag = items.some((item) => item.node.attrs.starred !== true);
+    const tr = state.tr;
+    for (const { pos, node } of items) {
+      tr.setNodeMarkup(pos, undefined, {
+        ...node.attrs,
+        starred: flag,
+        checked: flag ? null : (node.attrs.checked as boolean | null),
+      });
     }
     dispatch(tr.scrollIntoView());
   }
@@ -347,17 +399,26 @@ export const exitList: Command = (state, dispatch) => {
  * after a finished task starts the next task, not a second one already crossed off.
  * The attrs have to be chosen per press rather than passed always, because
  * `splitListItem`'s `itemAttrs` is static and would stamp `checked: false` — a
- * checkbox — onto every ordinary bullet.
+ * checkbox — onto every ordinary bullet. Passing nothing is not the neutral option it
+ * looks like: `splitListItem` then splits the node as it stands, attrs and all.
+ *
+ * B72's star is not inherited either, and for a plainer reason than the tick: a star says
+ * *this one* needs attention. Carrying it onto the next line would mean the flag spread by
+ * pressing Enter, which is the opposite of what flagging is for.
  */
 export const enter: Command = (state, dispatch) => {
   if (exitList(state, dispatch)) return true;
   if (!isInList(state)) return false;
 
   const item = enclosingItem(state.selection.$from);
-
-  return item !== null && item.attrs.checked !== null
-    ? splitListItem(listItem!, { checked: false })(state, dispatch)
-    : splitListItem(listItem!)(state, dispatch);
+  if (item === null) return splitListItem(listItem!)(state, dispatch);
+  if (item.attrs.checked !== null) {
+    return splitListItem(listItem!, { checked: false })(state, dispatch);
+  }
+  if (item.attrs.starred === true) {
+    return splitListItem(listItem!, { checked: null, starred: false })(state, dispatch);
+  }
+  return splitListItem(listItem!)(state, dispatch);
 };
 
 /** The nearest list item around a position, if there is one. */
@@ -783,6 +844,7 @@ export const COMMANDS: Record<string, (context: CommandContext) => Command> = {
   orderedList: () => toggleOrderedList,
   task: () => toggleTask,
   tick: () => toggleChecked,
+  star: () => toggleStar,
   indent: () => indent,
   outdent: () => outdent,
 

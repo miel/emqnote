@@ -2393,6 +2393,54 @@ een effect, en een uitzondering daar neemt het hele leesvenster mee.
 
 ---
 
+## B71 — Ctrl+Shift+T bleef zoals hij was, en de oorzaak lag buiten de app
+
+**Genomen** op 19 augustus 2026. Dit is geen wijziging aan de sneltoetsen maar een afgesloten
+onderzoek, en het staat hier om de methode en niet om de uitkomst: er is **niets** veranderd aan
+`keys`, en dat is precies wat de meting voorschreef.
+
+`Mod-Shift-T` is drie keer dood gemeld op Windows en twee keer gerepareerd — geclaimd in
+`before-input-event` (`editor-keys.ts`), daarna een tweede toetscombinatie ernaast. Beide keren
+kwam de melding ongewijzigd terug. Bij de derde melding is er bewust niets geraden maar
+`--key-probe` gedraaid, en dat is precies waarvoor hij gebouwd is.
+
+**Wat het logboek zei.** Op de meldende Windows-machine, in het opnamevenster:
+
+- `Shift+T` levert een regel op — `key="T" code=KeyT shift=true`.
+- `Ctrl+T` levert een regel op — `key="t" code=KeyT ctrl=true`.
+- `Ctrl+Shift+T` levert **geen enkele `KeyT`-regel** op. Er verschijnt in plaats daarvan een
+  `key="c" code=KeyC ctrl=true shift=false`.
+- `Ctrl+Shift+D` komt vijf van de vijf keer aan, met `claim=task:editor`.
+
+**Dat er iets vóór in de plaats kwam was de aanwijzing.** Een gewone `RegisterHotKey` die een
+toetscombinatie opeist levert stilte op; hier kwam er een *andere* toetsaanslag terug, met de
+Shift eraf en een kleine letter. Dat is het handschrift van iets dat toetsen injecteert, en dat
+is een veel kleinere verzameling programma's dan "iets neemt hem weg".
+
+**De oorzaak, bevestigd door de melder zelf: een eigen AutoHotkey-script**, dat `Ctrl+Shift+T`
+onderschepte en er een `Ctrl+C` voor in de plaats stuurde om aan een ander commando te
+ontsnappen. Geen eigenschap van Windows, geen eigenschap van Chromium, en niets in deze
+broncode — één script op één machine, geschreven door degene die de melding deed.
+
+**Dus verandert er niets aan de registratie.** `Mod-Shift-T` staat waar hij altijd stond: hij is
+de raadbare van de twee naast de andere twee lijsttoetsen, en er is geen enkele eigenschap van
+het platform of van deze app die hem een tweede plaats geeft. `Mod-Shift-D` blijft ernaast staan
+in plaats van weggehaald te worden — hij kost niets, is in elke scope vrij, 'D' van *done*, en hij
+is degene die bleef werken zolang de oorzaak onbekend was. Beide worden vanuit één plek geclaimd,
+omdat `editorKeyIntent` `matches` over de hele registratie stelt en niet over één binding.
+
+**Wat er wel verandert is wat we hierover mogen zeggen.** Twee reparaties zijn uitgeleverd tegen
+een oorzaak die niemand gemeten had, en achteraf blijkt dat ze een been repareerden dat niet
+gebroken was — hetzelfde logboek laat zien dat de hele keten van toetsaanslag tot `toggleTask` op
+die machine gewoon werkt. Beide claims blijven staan: ze zijn op zichzelf correct, ze kosten
+niets, en `before-input-event` is nog steeds de juiste plek voor een toets die geclaimd moet
+worden. Maar de les is die welke dit project blijft betalen, nu voor de derde keer (B57 → B59,
+B62's serie, en deze): **een diagnose die zijn eigen melding overleeft is onvolledig geweest, en
+de uitweg is meten in plaats van nog eens repareren.** Drie meldingen, twee reparaties, één
+logbestand. De probes bestaan hiervoor; ze horen eerder gedraaid te worden, niet later.
+
+---
+
 ## Open punten
 
 | Punt | Wanneer duidelijk |
@@ -2410,7 +2458,106 @@ een effect, en een uitzondering daar neemt het hele leesvenster mee.
 | Werken de celselectie (B49), het webplaatje (B50) en het `/`-menu (B51) ook in het *opnamevenster*? | Nu — alle drie zijn op 14 augustus 2026 onder `Xvfb` in de bibliotheek bevestigd; het opnamevenster heeft nog steeds geen testharnas, zie `TEST-PROTOCOL.md` |
 | Hoe voelt een gesleepte celselectie op een echt beeldscherm? | Nu — de rechthoek, het wissen en de knoppenbalk zijn gedreven en gemeten, maar hoe het slepen zelf aanvoelt kan een script niet beoordelen |
 | **Waarom deed Ctrl+Tab niets op Windows?** | Onbekend, en dat hoort hier te staan. Op Linux is op 16 augustus 2026 met echte XTEST-toetsen gemeten dat de toetscombinatie gewoon aankomt en dat het wisselen werkt; de binding spelt `Ctrl` letterlijk, dus het is niet de platformvergelijking. De claim staat nu in `before-input-event`, het vroegste punt in het venster — een reparatie zonder vastgestelde oorzaak. De verdwenen Windows-menubalk (zelfde venster, zelfde partij) is de andere kandidaat. Te bevestigen op Windows, `TEST-PROTOCOL.md` §22 |
-| **En waarom deed Ctrl+Shift+T niets op Windows?** | Nog steeds onbekend, en de melding kwám ongewijzigd terug — de reparatie van 17 augustus 2026 (geclaimd in `before-input-event`, `editor-keys.ts`, ook in het opnamevenster) heeft hem niet weggenomen. Daarmee is dit dezelfde plek als B57/B59: een diagnose die zijn eigen melding overleeft, is onvolledig geweest. Dus is er op 18 augustus 2026 twee dingen gedaan. `paragraph`'s precedent — een tweede toetscombinatie ernaast, `Mod-Shift-D`, op Linux met echte XTEST-toetsen bevestigd: een gewone alinea wordt een echt `<li data-checked="false">`, de `D` bereikt de pagina niet terwijl een niet-geclaimde `Ctrl+Shift+L` dat wel doet. En **`--key-probe`** (`key-probe.ts`), dat elke toets logt die een venster krijgt aangereikt, vóórdat iets hem claimt — zodat de volgende ronde met het antwoord van het besturingssysteem aankomt in plaats van met een derde gok. **Geen regel voor een druk betekent dat de toets het venster nooit bereikt heeft**, en dat is wat de app zelf niet kan zien; het staat in de kop van het logbestand. Op 19 augustus 2026 is de melding er nog steeds en is er bewust **geen** derde reparatie gedaan: de registratie van `Mod-Shift-T` en `Mod-Shift-D` is regel voor regel dezelfde — één `keys`-array, één `matches`-aanroep in dezelfde `before-input-event`, één `COMMANDS.task` — dus het verschil zit noodzakelijk buiten dit proces, en dat is precies wat de probe leest. Een vierde gok zou dat alleen verder toedekken. `TEST-PROTOCOL.md` §26, §29 |
+| ~~En waarom deed Ctrl+Shift+T niets op Windows?~~ | **Beantwoord op 19 augustus 2026, door te meten in plaats van te raden.** `--key-probe` op de meldende machine: `Shift+T` komt aan, `Ctrl+T` komt aan, `Ctrl+Shift+T` levert geen enkele `KeyT`-regel op — er komt een `Ctrl+C` voor in de plaats. Dát er iets vóór in de plaats kwam wees de weg: een eigen AutoHotkey-script van de melder onderschepte de combinatie en stuurde `Ctrl+C`. Geen eigenschap van Windows en niets in deze broncode; er is dan ook niets aan de sneltoetsen veranderd. B71 |
 | **Wát houdt die map op Windows vast?** | Onbekend, en dat hoort hier te staan. B57 haalde de eigen handle van de app weg en de melding kwam ongewijzigd terug, dus de watcher was het niet (alleen). Sinds B59 noemt de weigering de code en het bestand, en `--trash-probe` loopt de map na — de eerstvolgende melding hoort de vraag te beantwoorden in plaats van te verplaatsen. `TEST-PROTOCOL.md` §24 |
 | **Is de mappenklem op Windows weg, en wat kost het pollen daar?** | Nu — B57 is op Linux gemeten (de prullenbak neemt en verwijdert een map, een geklemde map antwoordt in plaats van te weigeren), maar de klem zelf is een Windows-kernelding dat hier niet na te maken is. Ook de prijs van een stat-ronde per twee seconden op een echte, grote OneDrive-vault is alleen daar te voelen. `TEST-PROTOCOL.md` §23 |
 | Opent de vaultkiezer bij een verse installatie op een machine met precies één zakelijke OneDrive? | Nu — het pad is met een nagebootste OneDrive gemeten (zonder de reparatie geen dialoog en een aangemaakte map, met de reparatie een echt venster), maar niet op een echte werkmachine, `TEST-PROTOCOL.md` §22 |
+
+---
+
+## B72 — Een bullet kan met een ster gemarkeerd worden, en die ster staat in het bestand
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik: er was geen manier om één regel in een
+lijst aan te merken als "hier moet nog naar gekeken worden". Een vinkvakje betekent iets anders
+— een taak is af of niet — en een tag is iets over de hele notitie.
+
+**Het besluit.** Een bullet kan een gele ster dragen in plaats van zijn aanduiding. In het
+bestand staat dat als `- ⭐ Bel Jan`; in de editor is de ster een *eigenschap* van het lijstitem
+(`starred`, naast `checked`) en geen tekst. `Mod+Shift+S`, plus een regel in het
+rechtermuisknopmenu.
+
+**Waarom hij in het bestand moet staan.** `list-marker-style.ts` — dat een bullet mee laat
+vetten met zijn eigen regel — schrijft de regel op waar dit tegen gehouden wordt: dat is een
+decoratie *omdat* een vette bullet niets betekent wat niet al elders in het bestand staat. Een
+ster betekent iets wat nergens anders staat. Dus geen `DecorationSet`, en geen B10- of
+B6-discussie: het is inhoud.
+
+**Waarom een eigenschap en geen tekst.** De goedkope versie was de ster gewoon als twee tekens
+in het item te zetten en de bullet weg te stylen. Dan is de ster echter tekst: Backspace eet hem
+per teken op, `plainText()` en dus de zoekindex zien hem, hij staat in het uittreksel, hij staat
+in de regel die de takenlijst toont, en hij komt mee als je de zin selecteert. Dat is precies
+wat "verder in alles als een gewone bullet" uitsluit. Als eigenschap kost hij één CSS-regel op
+`::marker` en verder niets.
+
+**Waarom die spelling en geen andere.** Vier alternatieven, alle vier slechter:
+
+- *Een ander aanduidingsteken* (`*` in plaats van `-`): §3.4 legt `-` vast, en
+  `mdast-util-to-markdown` gebruikt het andere teken al zelf om twee lijsten naast elkaar uit
+  elkaar te houden. Er is geen kanaal per item.
+- *Een eigen syntax* (`- (*) tekst`, een sigil, een HTML-commentaar): Obsidian toont dat als
+  ruis, het vraagt om ontsnappingsregels, en het botst met het uitgangspunt van
+  `03-markdown-dialect.md` dat alles daar correct moet tonen (B7).
+- *Obsidian's eigen `- [*]`*: geen GFM. `micromark-extension-gfm-task-list-item` kent alleen
+  `[ ]` en `[x]`, dus dit leest hier als een bullet met de letterlijke tekst `[*]` — en het zou
+  "gemarkeerd" en "is een taak" op één hoop gooien, wat juist het tegenovergestelde is van wat
+  gevraagd werd.
+- *Een veld in de frontmatter*: een ster gaat over één regel, niet over de notitie.
+
+De gekozen vorm is gemeten voordat er iets op gebouwd is: `- ⭐ Aandacht voor dit punt` gaat
+byte-identiek door de stringify-opties van dit project heen. `⭐` (U+2B50) staat niet in de
+*unsafe*-verzameling van `mdast-util-to-markdown` — die bevat alleen ASCII-leestekens — dus hij
+wordt in geen enkele positie ontsnapt en heeft geen uitzondering nodig zoals B19's `#`.
+
+**Ster en vinkvakje sluiten elkaar uit.** Een taakitem heeft helemaal geen `::marker`: het
+vakje staat absoluut gepositioneerd in de aanduidingssleuf. Er is dus geen plek waar allebei
+kunnen staan. Dat is een besluit en geen opmaakprobleem, en het wordt aan drie kanten
+afgedwongen — `toggleStar` haalt het vakje weg, `toggleTask` haalt de ster weg, en
+`liftStarMarkers` weigert een ster te lezen uit een item dat al een vakje heeft. Dat laatste is
+wat een elders geschreven `- [ ] ⭐ Iets` byte-identiek laat terugkomen: de ster blijft daar
+gewone tekst. Hetzelfde geldt in een genummerde lijst, waar het nummer de aanduiding is.
+
+**De prijs, uitgesproken en niet ontdekt.** Een bullet die écht met een ster en een spatie wil
+beginnen, kan niet: die spelling *is* de aanduiding. Er is geen ontsnapte vorm om het aan te
+meten zoals `restoreEmptyTasks` `\[ ]` van `[ ]` onderscheidt — `⭐` is geen leesteken. De bytes
+blijven in beide lezingen gelijk, dus er gaat niets verloren; alleen de betekenis kantelt.
+`test/limitations.test.ts` legt het vast, en `test/corpus/29-sterretjes.md` legt de bytes vast.
+
+---
+
+## B73 — Het Waar-veld vult aan uit de locaties die de vault al kent
+
+**Genomen** op 19 augustus 2026, uit dagelijks gebruik. B66 gaf het Tags-veld aanvulling en
+schreef er in één adem bij dat Wie die *niet* krijgt: "een naam komt niet uit een gesloten
+verzameling zoals een tag dat doet". Waar wel. Er zijn een handvol plekken waar gewerkt wordt —
+Teams, kantoor, bij de klant — en die worden eindeloos herhaald, met steeds net een andere
+spelling als je ze intypt.
+
+**Het besluit.** Bij de eerste focus op het Waar-veld wordt de lijst opgehaald, dezelfde lijst
+die de vault zelf al bijhoudt, meest gebruikte eerst. Dezelfde besturing als bij Tags: pijltjes,
+Enter of Tab om te kiezen, Escape om te sluiten met `stopPropagation()` (de regel van 18 augustus
+2026), muisrij met `mousedown` voorkomen zodat blur de klik niet aftroeft.
+
+**Wie deze keer géén aanvulling krijgt, is nog steeds Wie.** Dat argument is onveranderd.
+
+**Er hoefde niets aan de index te gebeuren.** `location` is een kolom op `notes` sinds de tabel
+bestaat, en `buildRecord` vult hem al bij elke scan en elke herindexering. Geen migratie, geen
+`SCHEMA_VERSION`-ophoging, geen herbouw: er is geen nieuwe gegevensbron, alleen een vraag die
+niemand stelde. Wat ontbrak was de optelling, en die is `facets()`' eigen twee regels met een
+derde veld — al staat hij er nadrukkelijk *niet* bij in. `facets()` voedt het filterpaneel van de
+bibliotheek, en dat heeft geen Waar-filter; die uitkomst verbreden voor een aanroeper waar dat
+paneel niets van weet is precies waar `IPC.tagSuggestions` destijds uit `facets().tags` voor
+losgetrokken is. `locationFacets` staat ernaast en `IPC.locationSuggestions` ook.
+
+**Het aanvullen gaat over het hele veld, niet over een token.** Dat is het enige echte verschil
+met de tag-kant en de reden dat `location-typeahead.ts` een zustermodule is en geen extra export
+daar. Een Tags-veld bevat een *lijst*, dus bestaan `tokenAt`/`applySuggestion` om bij het ene
+woord te komen waar de cursor in staat; een locatie is één waarde die spaties mag bevatten —
+"Kantoor Amsterdam", "Bij de klant op kantoor" — en die opknippen zou aanvullingen aanbieden voor
+het woord onder de cursor en het veld aanvullen tot een fragment van zichzelf. Kiezen is daarom
+een gewone vervanging, zonder scheidingsteken en zonder cursorrekenwerk.
+
+**Twee lijsten kunnen tegelijk openstaan**, want Tab gaat van Tags naar Waar zonder dat er iets
+tussenin de focus verliest. Daarom heeft het Waar-veld zijn eigen `suggesting`, `active` en
+`hoverGuard` in plaats van die te delen: één gedeelde `active` zou de markering verplaatsen in
+een paneel waar niemand naar kijkt.
+

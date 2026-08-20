@@ -30,6 +30,7 @@ function renderFooter(
   tasksSelected = false,
   root: FolderNode = ROOT,
   unlinkedSelected = false,
+  unlinkedCount: number | null = 3,
 ): string {
   return renderToStaticMarkup(
     createElement(FolderTree, {
@@ -58,6 +59,7 @@ function renderFooter(
       tasksSelected,
       onOpenUnlinked: () => {},
       unlinkedSelected,
+      unlinkedCount,
       isMac: false,
       newFolderLabel: "New folder",
       renameFolderLabel: "Rename folder",
@@ -203,5 +205,22 @@ describe("Unlinked attachments is a footer row again", () => {
     const html = renderFooter();
     const rowStart = html.lastIndexOf('<div class="branch', html.indexOf("Unlinked label"));
     expect(html.slice(rowStart, html.indexOf("Unlinked label"))).not.toContain("branch-on");
+  });
+
+  it("is left out when there is nothing to clean up", () => {
+    expect(renderFooter(false, ROOT, false, 0)).not.toContain("Unlinked label");
+  });
+
+  it("is drawn while nobody has counted yet", () => {
+    // Absent is not zero. The count comes from behind the index scan; the sidebar is
+    // already on screen. A row that appeared a moment after the window did would read
+    // worse than one that was simply there — B67's and B69's rule, one level up.
+    expect(renderFooter(false, ROOT, false, null)).toContain("Unlinked label");
+  });
+
+  it("stays while its own pane is showing, whatever the count says", () => {
+    // The last file being cleaned up must not take away the row the pane was opened
+    // from: there would then be no way back out of the screen still on the right.
+    expect(renderFooter(false, ROOT, true, 0)).toContain("Unlinked label");
   });
 });

@@ -1,6 +1,7 @@
 import type { Mark, Node as PMNode } from "prosemirror-model";
 import type { PhrasingContent, Root, RootContent } from "mdast";
 import { MARK_NESTING_ORDER } from "./schema.js";
+import { starred } from "./star-items.js";
 import type { ExtPhrasing } from "./mdast-ext.js";
 
 /**
@@ -246,17 +247,26 @@ function isSpreadItem(item: PMNode): boolean {
   return children.slice(1).some((child) => !LIST_TYPES.has(child.type.name));
 }
 
-function listItemToMdast(item: PMNode): RootContent {
-  return {
+function listItemToMdast(item: PMNode, ordered: boolean): RootContent {
+  const node = {
     type: "listItem",
     checked: item.attrs.checked as boolean | null,
     spread: isSpreadItem(item),
     children: blocksToMdast(childrenOf(item)) as never,
   } as RootContent;
+  // mdast's `ListItem` has no field for it, so it rides as an extra property the way the
+  // phrasing side's own node types do (`mdast-ext.ts`). `pipeline.ts` reads it back.
+  //
+  // Never in a numbered list, which is where the flag is refused on the way in as well
+  // (`star-items.ts`): the number is the marker there, so a star could not be drawn and
+  // writing one would put a state on disk that reading it back would decline. The list is
+  // what knows, so this is where it is asked rather than in the handler.
+  if (item.attrs.starred === true && !ordered) starred(node, true);
+  return node;
 }
 
 function listToMdast(node: PMNode, ordered: boolean): RootContent {
-  const items = childrenOf(node).map(listItemToMdast);
+  const items = childrenOf(node).map((item) => listItemToMdast(item, ordered));
   const spread = items.some((item) => (item as { spread?: boolean }).spread === true);
 
   // CommonMark scopes looseness to the list, not the item: if one item is loose, every
@@ -344,12 +354,13 @@ function hasContent(node: PMNode): boolean {
   return found;
 }
 
-/** Does anything under here carry a checkbox? */
+/** Does anything under here carry a checkbox or a star? */
 function hasTask(node: PMNode): boolean {
   let found = false;
   node.descendants((child) => {
     if (found) return false;
-    if (child.type.name === "listItem" && child.attrs.checked !== null) found = true;
+    if (child.type.name !== "listItem") return true;
+    if (child.attrs.checked !== null || child.attrs.starred === true) found = true;
     return !found;
   });
   return found;
@@ -363,7 +374,9 @@ function hasTask(node: PMNode): boolean {
  *
  * An empty *task* is the exception, and not a grudging one: a box waiting to be filled in
  * is the ordinary way a checklist gets written, and dropping it here is what made an
- * empty checkbox come back as a plain bullet the moment the note was saved.
+ * empty checkbox come back as a plain bullet the moment the note was saved. An empty
+ * *starred* item (B72) is the same shape for the same reason — a line marked for attention
+ * before anything has been typed on it — so `hasTask` answers for both.
  */
 function isEmptyList(node: PMNode): boolean {
   return LIST_TYPES.has(node.type.name) && !hasContent(node) && !hasTask(node);

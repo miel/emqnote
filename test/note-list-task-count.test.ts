@@ -173,6 +173,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
+    locationSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

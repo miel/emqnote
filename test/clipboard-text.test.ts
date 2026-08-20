@@ -38,6 +38,22 @@ describe("copying a list", () => {
     expect(copy("- [ ]\n")).toBe("- [ ]");
   });
 
+  it("keeps the star of a flagged item", () => {
+    // B72: the flag is a marker, and carrying markers is the whole reason this module
+    // exists over ProseMirror's own `textBetween`.
+    expect(copy("- ⭐ Bel Jan\n- Gewoon\n")).toBe("- ⭐ Bel Jan\n- Gewoon");
+  });
+
+  it("keeps a bare star, the way it keeps a bare box", () => {
+    expect(copy("- ⭐\n")).toBe("- ⭐");
+  });
+
+  it("indents a flagged item's children by the width of its own marker", () => {
+    expect(copy("- ⭐ Bel Jan\n  - Nummer opzoeken\n")).toBe(
+      "- ⭐ Bel Jan\n    - Nummer opzoeken",
+    );
+  });
+
   it("indents nested levels under the marker above them", () => {
     expect(copy("- One\n  - Nested\n    1. Deep\n")).toBe("- One\n  - Nested\n    1. Deep");
   });

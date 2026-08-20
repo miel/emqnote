@@ -115,6 +115,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
+    locationSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

@@ -164,6 +164,38 @@ Letterlijke vierkante haken blijven ontsnapt — `- \[ ]` is een bullet met de t
 geen leeg vakje — en dát onderscheid wordt aan de brontekst gemeten, niet aan de
 geparste tekst, want die twee zijn identiek.
 
+**Een ster als aanduiding** is de tweede afwijking, en van dezelfde soort (B72):
+
+```markdown
+- ⭐ Offerte nalezen voordat hij de deur uit gaat
+- Deelnemerslijst controleren
+- ⭐
+```
+
+Voor markdown is dit een gewone bullet waarvan de tekst met een ster begint, en zo toont
+Obsidian hem ook: `• ⭐ Offerte nalezen`. In emqnote staat de ster wáár de bullet stond en
+is hij geen tekst — hij is een eigenschap van het item, precies zoals het vakje dat is.
+Daarmee gedraagt zo'n regel zich verder in alles als een gewone bullet: Backspace,
+Home, alles selecteren, kopiëren, het uittreksel en de takenlijst zien de ster niet.
+
+De regel is eng: **de ster, gevolgd door één spatie, aan het begin van het item**. `⭐ster`
+is een woord dat met een ster begint en blijft tekst. Een leeg item — `⭐` alleen — is het
+tegenhanger van `- [ ]` en wordt net zo geschreven, zonder sluitspatie.
+
+Twee plaatsen waar de ster gewone tekst blijft, en om dezelfde reden: de aanduiding is daar
+al bezet. Bij een taak door het vakje, bij een genummerd item door het nummer.
+
+```markdown
+- [ ] ⭐ Hier is de ster gewone tekst
+1. ⭐ En hier ook
+```
+
+De prijs staat in `test/limitations.test.ts`: een bullet die écht met een ster en een spatie
+wil beginnen, kan niet. Er is geen ontsnapte vorm — `⭐` is geen leesteken, dus niets
+ontsnapt hem en er is geen brontekst-onderscheid te maken zoals bij `\[ ]`. De bytes op
+schijf blijven in beide lezingen dezelfde; alleen betekent de ster dan aanduiding in plaats
+van woord.
+
 **Losse tegenover strakke lijsten.** CommonMark kent losheid alleen als eigenschap van
 de bróntekst, en ProseMirror bewaart die niet. De serializer moet hem dus afleiden, en
 die afleiding ís de norm:

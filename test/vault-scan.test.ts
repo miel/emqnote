@@ -7,6 +7,7 @@ import { parseSearchQuery } from "../src/main/search-query.js";
 import {
   conflicts,
   facets,
+  locationFacets,
   notesMatching,
   searchNotes,
   setScanRunner,
@@ -21,13 +22,20 @@ let db: IndexDb;
 function note(
   folder: string,
   name: string,
-  options: { tags?: string; attendees?: string; body?: string; created?: string } = {},
+  options: {
+    tags?: string;
+    attendees?: string;
+    body?: string;
+    created?: string;
+    location?: string;
+  } = {},
 ): void {
   const front = [
     "---",
     `title: ${name}`,
     options.attendees === undefined ? "type: quick" : "type: meeting",
     `created: ${options.created ?? "2026-07-26T09:00:00+02:00"}`,
+    ...(options.location === undefined ? [] : [`location: ${options.location}`]),
     ...(options.attendees === undefined ? [] : [`attendees: [${options.attendees}]`]),
     ...(options.tags === undefined ? [] : [`tags: [${options.tags}]`]),
     "---",
@@ -48,6 +56,49 @@ afterEach(() => {
   closeIndex(db);
   // Module-level state: a test that swapped the runner must not hand it to the next one.
   setScanRunner(null);
+});
+
+describe("gathering the vault's locations", () => {
+  it("counts each one, busiest first", async () => {
+    note("00 Inbox", "Een", { location: "Teams" });
+    note("00 Inbox", "Twee", { location: "Teams" });
+    note("10 Projects", "Drie", { location: "Kantoor Amsterdam" });
+
+    expect(await locationFacets(vault, db)).toEqual([
+      { name: "Teams", count: 2 },
+      { name: "Kantoor Amsterdam", count: 1 },
+    ]);
+  });
+
+  it("keeps a value with spaces in it whole", async () => {
+    // Which is why the Where field completes on the whole value and not on a token.
+    note("00 Inbox", "Een", { location: "Bij de klant op kantoor" });
+
+    expect(await locationFacets(vault, db)).toEqual([
+      { name: "Bij de klant op kantoor", count: 1 },
+    ]);
+  });
+
+  it("folds case, keeping the spelling it first met", async () => {
+    note("00 Inbox", "Een", { location: "Teams" });
+    note("00 Inbox", "Twee", { location: "teams" });
+
+    expect(await locationFacets(vault, db)).toEqual([{ name: "Teams", count: 2 }]);
+  });
+
+  it("says nothing about a note that names no location", async () => {
+    // The column stores `""` for one, which would otherwise become a facet of its own.
+    note("00 Inbox", "Een");
+    note("00 Inbox", "Twee", { location: "Teams" });
+
+    expect(await locationFacets(vault, db)).toEqual([{ name: "Teams", count: 1 }]);
+  });
+
+  it("answers an empty list for a vault with none at all", async () => {
+    note("00 Inbox", "Een");
+
+    expect(await locationFacets(vault, db)).toEqual([]);
+  });
 });
 
 describe("gathering tags and people across the vault", () => {

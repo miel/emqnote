@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   pdfPageCount: (target: string) => ipcRenderer.invoke(IPC.pdfPageCount, target),
   linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),
   tagSuggestions: () => ipcRenderer.invoke(IPC.tagSuggestions),
+  locationSuggestions: () => ipcRenderer.invoke(IPC.locationSuggestions),
   openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
   openTag: (name: string) => ipcRenderer.invoke(IPC.openTag, name),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),

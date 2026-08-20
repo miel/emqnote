@@ -80,7 +80,16 @@ function renderList(list: PMNode, indent: string, lines: string[]): void {
   list.forEach((item, _offset, index) => {
     const bullet = ordered ? `${start + index}. ` : "- ";
     const checked = item.attrs.checked as boolean | null;
-    const marker = checked === null ? bullet : `${bullet}[${checked ? "x" : " "}] `;
+    // The same three spellings the file gets, since this is the plain-text flavour of the
+    // same list: a box, B72's star, or the bare bullet. A flagged item copied out without
+    // its star would be the whole reason this module exists over `textBetween`, one line
+    // down. The two are exclusive, so the order of these branches decides nothing.
+    const marker =
+      checked !== null
+        ? `${bullet}[${checked ? "x" : " "}] `
+        : item.attrs.starred === true
+          ? `${bullet}\u2b50 `
+          : bullet;
     renderItem(item, indent, marker, lines);
   });
 }

@@ -171,6 +171,14 @@ body {
   flex-wrap: wrap;
 }
 
+/* And the Where cell, which carries a completion list of its own since B73. Only
+   `relative` — unlike the Tags cell it holds nothing but the field, so there is nothing to
+   wrap. The list itself is `.tag-suggest` verbatim: one surface, so the two completions in
+   this header cannot come to look like two different things. */
+.header-cell.header-where {
+  position: relative;
+}
+
 /* A tag the note body carries. Deliberately not a control: it is removed in the note,
    which is what its tooltip says. `flex: 0 0 auto` keeps it out of the `flex: 1` above —
    a chip that grew to fill the row would read as another field. */
@@ -483,6 +491,25 @@ body {
 
 .editor-content li > p + p {
   margin-top: 0.5em;
+}
+
+/* B72's attention flag: the star stands where the bullet stood, rather than beside it.
+
+   Keyed on `data-starred`, which `schema.ts`'s `toDOM` writes from the `starred`
+   attribute — not on a decoration class, unlike `li-strong` below, because this one is
+   in the file. `list-marker-style.ts` is a decoration precisely because a bold marker
+   carries no meaning of its own; a star carries the whole point, so it is a real
+   attribute and reaches disk as a `⭐ ` prefix.
+
+   Two classes' worth of specificity (`.editor-content` plus the attribute), so it
+   outranks the three depth rules above — which are one class and up to four elements —
+   whatever the source order. That margin is the whole lesson of B48 and the `.overlay`
+   bug, both of which shipped drawing the wrong thing because a rule merely tied.
+
+   A starred item is never also a task (the commands, `star-items.ts` and `to-mdast.ts`
+   all refuse the pair), so this can never fight the `content: none` below it. */
+.editor-content ul > li[data-starred="true"]::marker {
+  content: "\2b50" var(--marker-gap);
 }
 
 /* A task item has no marker box of its own, so the checkbox is placed into the same

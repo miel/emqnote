@@ -155,6 +155,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     pdfPageCount: async () => 1,
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
+    locationSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},
@@ -215,6 +216,12 @@ describe("the unlinked-attachments pane", () => {
     await flush();
   }
 
+  /** Every sidebar row's own label — for asking whether one is there at all. */
+  const rowLabels = (): string[] =>
+    Array.from(container.querySelectorAll<HTMLElement>(".branch .branch-name")).map(
+      (name) => name.textContent ?? "",
+    );
+
   /** The footer row, found by its own label exactly as `--click-button` would find it. */
   function unlinkedRow(): HTMLElement {
     const row = Array.from(container.querySelectorAll<HTMLElement>(".branch")).find(
@@ -251,13 +258,14 @@ describe("the unlinked-attachments pane", () => {
     const fake = buildFake();
     await mount(fake);
 
-    // Not asked until it is asked for: the scan reads the whole index, and a library
-    // opening on a folder has no business paying for it.
-    expect(fake.unlinkedAttachments).not.toHaveBeenCalled();
+    // Asked once at mount, which it was not before: the footer row is hidden when there
+    // is nothing to clean up, and that answer has to be in hand before the sidebar draws.
+    // The reply is kept, so picking the row lists its files without a second wait.
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(1);
 
     await click(unlinkedRow());
 
-    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(1);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(2);
     expect(fileRows().map((row) => row.querySelector(".note-title")!.textContent)).toEqual([
       "afbeelding-1.png",
       "contract.docx",
@@ -297,12 +305,11 @@ describe("the unlinked-attachments pane", () => {
     // typing in the capture window re-ran this scan twice a second, and each run blanked
     // the list to "Looking…" before asking.
     let release: (files: FileSummary[]) => void = () => {};
-    let first = true;
+    let answered = 0;
     const fake = buildFake(() => {
-      if (first) {
-        first = false;
-        return Promise.resolve(ORPHANS);
-      }
+      answered += 1;
+      // The mount's own count and the click's scan; the refresh's is the one left hanging.
+      if (answered <= 2) return Promise.resolve(ORPHANS);
       return new Promise<FileSummary[]>((resolve) => {
         release = resolve;
       });
@@ -317,7 +324,7 @@ describe("the unlinked-attachments pane", () => {
     await flush();
 
     // Mid-scan: the rows that are already right are still the rows on screen.
-    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(2);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(3);
     expect(container.textContent).not.toContain("Looking…");
     expect(fileRows()).toHaveLength(2);
 
@@ -344,7 +351,9 @@ describe("the unlinked-attachments pane", () => {
     let attempt = 0;
     const fake = buildFake(async () => {
       attempt += 1;
-      if (attempt === 1) throw new Error("no index");
+      // The mount's count fails too, which is why the row is still there to pick: a
+      // failed count is not evidence of an empty vault, so it leaves the count unknown.
+      if (attempt <= 2) throw new Error("no index");
       return ORPHANS;
     });
     await mount(fake);
@@ -356,16 +365,36 @@ describe("the unlinked-attachments pane", () => {
     // time and the reload has to be asked for by hand.
     await click(unlinkedRow());
 
-    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(2);
+    expect(fake.unlinkedAttachments).toHaveBeenCalledTimes(3);
     expect(fileRows()).toHaveLength(2);
     expect(container.textContent).not.toContain("The search did not finish");
   });
 
-  it("says when there are none, which is the good outcome", async () => {
+  it("takes the footer row away when there is nothing to clean up", async () => {
+    // The good outcome used to be a screen saying so, which is a place you open once to
+    // be told there is nothing there. The row is simply gone now.
     const fake = buildFake(async () => []);
     await mount(fake);
-    await click(unlinkedRow());
 
+    expect(rowLabels()).not.toContain("Unlinked attachments");
+  });
+
+  it("keeps the row, and says so in the pane, when the last file goes while it is open", async () => {
+    // The one case the empty state still has to exist for: the row cannot be taken away
+    // from under its own open pane, or the library is left on a screen with nothing to
+    // click to get back out of.
+    let answered = 0;
+    const fake = buildFake(async () => (++answered <= 2 ? ORPHANS : []));
+    await mount(fake);
+    await click(unlinkedRow());
+    expect(fileRows()).toHaveLength(2);
+
+    await act(async () => {
+      fake.refresh();
+    });
+    await flush();
+
+    expect(rowLabels()).toContain("Unlinked attachments");
     expect(container.textContent).toContain("No unlinked attachments found.");
   });
 

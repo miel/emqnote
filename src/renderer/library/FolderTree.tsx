@@ -63,6 +63,16 @@ interface Props {
   onOpenUnlinked: () => void;
   /** Whether that pane is what is showing, highlighted exactly as Tasks and Trash are. */
   unlinkedSelected: boolean;
+  /**
+   * How many unlinked attachments there are, or `null` while nobody has counted yet.
+   *
+   * `0` takes the row away: a cleanup screen for a vault with nothing to clean up is a
+   * place you open once to be told there is nothing there. `null` leaves it, because the
+   * count arrives from behind the index scan and a row that appeared a moment after the
+   * window did would read worse than one that was simply there — the "absent is not zero"
+   * rule B67's folder badge and B69's note counts already follow.
+   */
+  unlinkedCount: number | null;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   newFolderLabel: string;
@@ -435,6 +445,7 @@ export function FolderTree({
   tasksSelected,
   onOpenUnlinked,
   unlinkedSelected,
+  unlinkedCount,
   isMac,
   newFolderLabel,
   renameFolderLabel,
@@ -691,16 +702,24 @@ export function FolderTree({
             rather than a modal: a `Selection` like Tasks, drawing B47's file list in the
             note pane and B47's preview in the reader. It sits between Help and Trash
             because that is where it was asked for, and because the two rows either side
-            of it are the other two things down here that are not a filter. */}
-        <div
-          className={`branch tree-settings${unlinkedSelected ? " branch-on" : ""}`}
-          style={{ paddingLeft: "8px" }}
-          onClick={onOpenUnlinked}
-        >
-          <span className="twisty twisty-empty" />
-          <span className="filter-glyph">{unlinkedGlyph}</span>
-          <span className="branch-name">{unlinkedLabel}</span>
-        </div>
+            of it are the other two things down here that are not a filter.
+
+            Drawn only when there is something to clean up — see `unlinkedCount` — with
+            one exception: while this pane is the selection the row stays whatever the
+            count says. Taking it away from under an open pane would leave the library
+            showing a screen with no row to click to get back out of, which is the same
+            objection `FilterSection` answers by keeping a selected facet on its list. */}
+        {(unlinkedCount === null || unlinkedCount > 0 || unlinkedSelected) && (
+          <div
+            className={`branch tree-settings${unlinkedSelected ? " branch-on" : ""}`}
+            style={{ paddingLeft: "8px" }}
+            onClick={onOpenUnlinked}
+          >
+            <span className="twisty twisty-empty" />
+            <span className="filter-glyph">{unlinkedGlyph}</span>
+            <span className="branch-name">{unlinkedLabel}</span>
+          </div>
+        )}
 
         {trash !== null && (
           <ul role="tree">

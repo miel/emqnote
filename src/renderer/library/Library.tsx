@@ -241,6 +241,20 @@ export function Library(): React.ReactElement {
   const unlinkedFiles = useRef<FileSummary[] | null>(null);
   /** Only the newest scan may apply its answer; two can be in the air at once. */
   const unlinkedScan = useRef(0);
+  /**
+   * How many unlinked attachments there are, or `null` for "not counted yet".
+   *
+   * The sidebar row is hidden at `0`, so this cannot be a plain number: a vault whose
+   * count has not landed yet would read as a vault with nothing unlinked, and the row
+   * would appear a moment after the window did. Absent is not zero — the same rule
+   * `FolderNode.openTasks` (B67) and the note list's task counts (B69) already carry,
+   * for the same reason: the answer comes from behind the index scan while the thing it
+   * decorates is already on screen.
+   *
+   * A failed refresh keeps the last count rather than dropping to `null`, which is
+   * `unlinkedFiles`' own rule one line up.
+   */
+  const [unlinkedCount, setUnlinkedCount] = useState<number | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   /**
@@ -473,6 +487,37 @@ export function Library(): React.ReactElement {
   }, []);
 
   /**
+   * Counts the unlinked attachments so the sidebar row can be left out when there are
+   * none.
+   *
+   * The existing channel, not a count-only one beside it: the row and the pane would then
+   * be two answers to one question, which is how a row promising three files opens onto a
+   * list of two. The whole answer is kept in `unlinkedFiles` as well, so opening the pane
+   * afterwards draws its rows at once instead of showing "Looking…" for a scan that has
+   * already been run.
+   *
+   * Not called while that pane is the selection: `loadNotes` fetches it there and sets the
+   * count from the same reply. Running both would scan twice per refresh, and
+   * `library:refresh` already arrives twice per debounced autosave.
+   *
+   * Cost is one `_attachments` walk per refresh. `referencedTargets` is answered from the
+   * index and the walk itself is `readdir` + `stat` — metadata, which stays local even on
+   * a Files On-Demand vault; the expensive fallback in `unlinked-attachments.ts` only runs
+   * when the index cannot answer at all.
+   */
+  const loadUnlinkedCount = useCallback(async () => {
+    const generation = (unlinkedScan.current += 1);
+    try {
+      const found = await window.emqnote.library.unlinkedAttachments();
+      if (unlinkedScan.current !== generation) return;
+      unlinkedFiles.current = found;
+      setUnlinkedCount(found.length);
+    } catch {
+      /* keep the last count — a failed refresh is not evidence of an empty vault */
+    }
+  }, []);
+
+  /**
    * A search query, when there is one, wins over the tree selection entirely — reading
    * `searchQueryRef` rather than taking a parameter keeps every existing call site
    * (after a save, after a folder rename, on `library:refresh`) correct for free: they
@@ -511,6 +556,7 @@ export function Library(): React.ReactElement {
         if (unlinkedScan.current !== generation) return;
         if (selectionRef.current.kind !== "unlinked") return;
         unlinkedFiles.current = found;
+        setUnlinkedCount(found.length);
         setFiles(found);
         setFilesState("ready");
       } catch {
@@ -602,6 +648,7 @@ export function Library(): React.ReactElement {
     void loadTree();
     void loadTaskCounts();
     void loadConflicts();
+    void loadUnlinkedCount();
     const stop = window.emqnote.library.onRefresh(() => {
       void loadTree();
       // Ticking a box is a save, and a save is what raises `library:refresh` — so the
@@ -611,9 +658,20 @@ export function Library(): React.ReactElement {
       refreshFacets();
       void refreshEditable();
       void loadConflicts();
+      // `loadNotes` above already ran this scan when the pane is the selection, and set
+      // the count from the same reply.
+      if (selectionRef.current.kind !== "unlinked") void loadUnlinkedCount();
     });
     return stop;
-  }, [loadTree, loadTaskCounts, loadNotes, refreshFacets, refreshEditable, loadConflicts]);
+  }, [
+    loadTree,
+    loadTaskCounts,
+    loadNotes,
+    refreshFacets,
+    refreshEditable,
+    loadConflicts,
+    loadUnlinkedCount,
+  ]);
 
   /**
    * The startup index scan, which usually ran long before this window existed — the app
@@ -1945,6 +2003,7 @@ export function Library(): React.ReactElement {
           tasksSelected={selection.kind === "tasks"}
           onOpenUnlinked={openUnlinked}
           unlinkedSelected={selection.kind === "unlinked"}
+          unlinkedCount={unlinkedCount}
           isMac={app.isMac}
           newFolderLabel={app.t("library.newFolder")}
           renameFolderLabel={app.t("library.renameFolder")}

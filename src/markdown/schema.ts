@@ -60,6 +60,19 @@ function readChecked(dom: HTMLElement): boolean | null {
   return box.hasAttribute("checked") || (box as HTMLInputElement).checked;
 }
 
+/**
+ * Whether a parsed `<li>` is flagged with a star (B72).
+ *
+ * `readChecked`'s reason exactly and nothing more: `toDOM` writes `data-starred`, and a
+ * cut and paste *inside* the editor round-trips through the DOM, so without this the star
+ * would come back a plain bullet. There is no second spelling to accept — unlike a
+ * checkbox, nobody else writes one, and the file's own `⭐ ` prefix is read by
+ * `star-items.ts` long before any of this.
+ */
+function readStarred(dom: HTMLElement): boolean {
+  return dom.getAttribute("data-starred") === "true";
+}
+
 const nodes: Record<string, NodeSpec> = {
   doc: { content: "block+" },
 
@@ -146,15 +159,35 @@ const nodes: Record<string, NodeSpec> = {
 
   listItem: {
     content: "paragraph block*",
-    // null = not a task list item; true/false = checked or unchecked
-    attrs: { checked: { default: null } },
+    // `checked`: null = not a task list item; true/false = checked or unchecked.
+    //
+    // `starred` is B72's attention flag, written to the file as a `⭐ ` prefix inside the
+    // item and lifted back off it by `star-items.ts`. An attribute rather than text, so
+    // Backspace, Home, select-all, `plainText()`, the excerpt and the Tasks view all go
+    // on treating a starred item as the ordinary bullet it is.
+    //
+    // The two are mutually exclusive, and that is enforced by the commands and by the
+    // reader rather than by the schema: a task item has no `::marker` at all — its box is
+    // positioned into the marker slot — so there is nowhere for a star to stand.
+    attrs: { checked: { default: null }, starred: { default: false } },
     defining: true,
     parseDOM: [
-      { tag: "li", getAttrs: (dom) => ({ checked: readChecked(dom as HTMLElement) }) },
+      {
+        tag: "li",
+        getAttrs: (dom) => ({
+          checked: readChecked(dom as HTMLElement),
+          starred: readStarred(dom as HTMLElement),
+        }),
+      },
     ],
     toDOM: (node) => [
       "li",
-      node.attrs.checked === null ? {} : { "data-checked": String(node.attrs.checked) },
+      {
+        ...(node.attrs.checked === null
+          ? {}
+          : { "data-checked": String(node.attrs.checked) }),
+        ...(node.attrs.starred === true ? { "data-starred": "true" } : {}),
+      },
       0,
     ],
   },

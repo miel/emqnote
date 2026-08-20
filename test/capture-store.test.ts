@@ -18,6 +18,7 @@ import {
   writeSession,
 } from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
+import { timestampPrefix } from "../src/main/filename.js";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
 import { wasOwnWrite } from "../src/main/own-writes.js";
@@ -49,6 +50,57 @@ describe("saving a capture", () => {
     expect(basename(result.path!)).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{4} Kickoff project Alpha\.md$/,
     );
+  });
+
+  it("names the file from the note's own created, not from when the session began", async () => {
+    // The When field is what a person sees and what the frontmatter records, and until
+    // this the filename was named from a second clock — `session.createdAt`, stamped
+    // whenever the *previous* note was put away. Editing the date before the first write
+    // made the two disagree on a note nobody had touched twice.
+    const session = beginSession();
+    session.createdAt = new Date("2020-01-01T09:00:00+01:00");
+    session.payload = payload(paragraphs("Kickoff project Alpha"), {
+      created: "2026-07-25T14:32:00+02:00",
+    });
+
+    const { path } = await writeSession(session, vault);
+
+    const when = timestampPrefix(new Date("2026-07-25T14:32:00+02:00"));
+    expect(basename(path!)).toBe(`${when} Kickoff project Alpha.md`);
+    expect(basename(path!)).not.toContain("2020-01-01");
+  });
+
+  it("keeps that timestamp when a later subject change renames the file", async () => {
+    // The timestamp is decided once, at the first write: a rename is about the title, and
+    // `renameSessionFile` names the file a second time. Without `writeSession` assigning
+    // the decided value back onto the session the two would reach different prefixes.
+    const session = beginSession();
+    session.createdAt = new Date("2020-01-01T09:00:00+01:00");
+    session.payload = payload(paragraphs("Eerste regel"), {
+      created: "2026-07-25T14:32:00+02:00",
+    });
+    await writeSession(session, vault);
+
+    session.payload = payload(paragraphs("Eerste regel"), {
+      subject: "Stuurgroep Alpha",
+      created: "2026-07-25T14:32:00+02:00",
+    });
+    const renamed = await renameSessionFile(session, vault);
+
+    const when = timestampPrefix(new Date("2026-07-25T14:32:00+02:00"));
+    expect(basename(renamed!)).toBe(`${when} Stuurgroep Alpha.md`);
+  });
+
+  it("falls back to the session clock when the note carries no usable date", async () => {
+    // `created: ""` is what the payload helper sends by default and what a renderer that
+    // has not stamped yet would send; an unparseable value is the same case. Neither may
+    // produce `Invalid Date` in a filename.
+    const session = beginSession();
+    session.payload = payload(paragraphs("Zonder datum"), { created: "niet een datum" });
+
+    const { path } = await writeSession(session, vault);
+
+    expect(basename(path!)).toMatch(/^\d{4}-\d{2}-\d{2} \d{4} Zonder datum\.md$/);
   });
 
   it("produces a note our own parser recognises", async () => {
