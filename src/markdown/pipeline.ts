@@ -7,6 +7,7 @@ import type { Options as StringifyOptions } from "remark-stringify";
 import { defaultHandlers } from "mdast-util-to-markdown";
 import type { Handle, State, Info } from "mdast-util-to-markdown";
 import type { ListItem } from "mdast";
+import { isStarred } from "./star-items.js";
 import { startsWithTag } from "./tags.js";
 
 /**
@@ -130,34 +131,49 @@ const text: Handle = (node, _parent, state, info) => {
  * The non-empty path reproduces the extension's logic rather than delegating to it,
  * because a handler cannot call the one it replaces. It stays honest because the corpus
  * has task lists in it: `roundtrip.test.ts` fails the moment this drifts.
+ *
+ * B72's star is written here too, by the same machinery: it is a prefix inside the item
+ * exactly as the box is, and everything below — the tracker, the two placements, the
+ * trailing space dropped on an empty line — is the same problem with a different string.
+ * `star-items.ts` is its reading half, and the two are as inseparable as the other pair.
+ * A star and a box never appear together (see `starPrefix`), so there is only ever one.
  */
 const listItem: Handle = (node, parent, state, info) => {
   const item = node as ListItem;
   const head = item.children[0];
-  const checkable = typeof item.checked === "boolean" && head?.type === "paragraph";
+  const paragraph = head?.type === "paragraph";
 
-  if (!checkable) return defaultHandlers.listItem(item, parent, state, info);
+  const box = typeof item.checked === "boolean" && paragraph;
+  // Exclusive with the box by decision (B72): a task's checkbox already stands in the
+  // marker's place, so a starred task could not be drawn — and writing one would put a
+  // state on disk that reading it back would refuse. `liftStarMarkers` declines the same
+  // pair from the other side, where a `- [ ] ⭐ …` written elsewhere keeps its star as
+  // ordinary text.
+  const star = !box && paragraph && isStarred(item);
 
-  const checkbox = item.checked === true ? "[x] " : "[ ] ";
+  if (!box && !star) return defaultHandlers.listItem(item, parent, state, info);
+
+  const prefix = box ? (item.checked === true ? "[x] " : "[ ] ") : "\u2b50 ";
   // The tracker keeps column positions right for anything inside the item that cares
-  // (tables, wrapped links) now that the box takes four columns ahead of them.
+  // (tables, wrapped links) now that the prefix takes columns ahead of them.
   const tracker = state.createTracker(info);
-  tracker.move(checkbox);
+  tracker.move(prefix);
 
   const value = defaultHandlers.listItem(item, parent, state, {
     ...info,
     ...tracker.current(),
   });
 
-  const inline = value.replace(/^(?:[*+-]|\d+\.) {1,3}/, (marker) => marker + checkbox);
+  const inline = value.replace(/^(?:[*+-]|\d+\.) {1,3}/, (marker) => marker + prefix);
   if (inline !== value) return inline;
 
-  // Nothing followed the marker on its own line, so the box is all the line holds: an
-  // empty task, either on its own or with a sublist hanging under it. `checkbox` carries
-  // the space that would have separated it from content there is none of, so it is
-  // dropped — the dialect forbids trailing whitespace, and `roundtrip.test.ts` checks.
+  // Nothing followed the marker on its own line, so the prefix is all the line holds: an
+  // empty task or an empty starred item, either on its own or with a sublist hanging
+  // under it. `prefix` carries the space that would have separated it from content there
+  // is none of, so it is dropped — the dialect forbids trailing whitespace, and
+  // `roundtrip.test.ts` checks.
   const marker = /^(?:[*+-]|\d+\.)/.exec(value)?.[0] ?? "";
-  return `${marker} ${checkbox.trimEnd()}${value.slice(marker.length)}`;
+  return `${marker} ${prefix.trimEnd()}${value.slice(marker.length)}`;
 };
 
 type Align = "left" | "right" | "center" | null;

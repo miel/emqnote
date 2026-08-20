@@ -81,6 +81,7 @@ import {
 import {
   conflicts,
   facets,
+  locationFacets,
   folderTaskCounts,
   noteTaskCounts,
   linkingNotes,
@@ -1592,6 +1593,11 @@ function registerLibraryIpc(): void {
   // The `tags` half of the same answer `libraryFacets` gives, for the header's Tags
   // field (B66). No `excludePath`: this list is what the vault knows, and a note being
   // typed right now has nothing to contribute to its own completion.
+  ipcMain.handle(IPC.locationSuggestions, async () => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null ? [] : await locationFacets(vault, indexDb);
+  });
+
   ipcMain.handle(IPC.tagSuggestions, async () => {
     const vault = vaultPath();
     return vault === null || indexDb === null ? [] : (await facets(vault, indexDb)).tags;

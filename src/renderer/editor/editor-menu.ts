@@ -11,6 +11,7 @@ import {
   toggleHighlight,
   toggleOrderedList,
   toggleStrong,
+  toggleStar,
   toggleTask,
   toggleUnderline,
   wrapInBlockquote,
@@ -94,6 +95,7 @@ export function buildEditorMenu(
       shortcut: formatFirstKey("task", isMac),
       onSelect: () => actions.run(toggleTask),
     },
+    ...starItems(state, isMac, t, actions),
     ...insertMenuItems(isMac, t, actions),
     ...tableItems(state, t, actions),
   ];
@@ -223,6 +225,36 @@ export function slashMenuItems(
  * so the keyboard route and the pointer route land on the same items, which is what
  * `CLAUDE.md`'s rule about menus actually asks for.
  */
+/**
+ * B72's attention flag, shown only where it would do something.
+ *
+ * `tableItems`' rule below, for `tableItems`' reason: `toggleStar` declines outside a
+ * bulleted list — there is nothing to say about a sentence, and in a numbered list the
+ * number is already the marker — so an always-present entry would be a dead row on every
+ * right-click in ordinary prose. Asked by running the command with no `dispatch`, which is
+ * ProseMirror's own way of putting the question and cannot come to disagree with the
+ * answer the key gets.
+ *
+ * Deliberately absent from `slashMenuItems`: that menu opens on an empty line and lists
+ * things to *make*, while this is a remark about a line that already exists. `tick` is
+ * missing from it for the same reason.
+ */
+function starItems(
+  state: EditorState,
+  isMac: boolean,
+  t: (key: string) => string,
+  actions: EditorMenuActions,
+): MenuItem[] {
+  if (!toggleStar(state, undefined)) return [];
+  return [
+    {
+      label: t("menu.star"),
+      shortcut: formatFirstKey("star", isMac),
+      onSelect: () => actions.run(toggleStar),
+    },
+  ];
+}
+
 function tableItems(
   state: EditorState,
   t: (key: string) => string,

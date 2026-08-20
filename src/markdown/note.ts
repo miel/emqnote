@@ -3,6 +3,7 @@ import type { Root, Yaml } from "mdast";
 import { readProcessor, writeProcessor } from "./pipeline.js";
 import { mdastToDoc } from "./from-mdast.js";
 import { restoreEmptyTasks } from "./empty-tasks.js";
+import { liftStarMarkers } from "./star-items.js";
 import { docToMdast } from "./to-mdast.js";
 import {
   parseFrontmatter,
@@ -46,6 +47,9 @@ export function parseNote(markdown: string): Note {
   // Before the tree becomes a document: a box with nothing after it is a task GFM will
   // not admit, and only the source text can say whether it was escaped. See the module.
   restoreEmptyTasks(root, markdown);
+  // And after it, never before: a `- [ ] ⭐ …` is a task, and a task never takes a star.
+  // Running this first would flag the item while the box was still unread.
+  liftStarMarkers(root);
 
   const yamlNode = root.children.find(
     (child): child is Yaml => child.type === "yaml",

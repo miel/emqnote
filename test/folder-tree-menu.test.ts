@@ -77,6 +77,7 @@ function mount(
         tasksSelected: false,
         onOpenUnlinked: () => {},
         unlinkedSelected: false,
+        unlinkedCount: 3,
         isMac: false,
         newFolderLabel: "New folder",
         renameFolderLabel: "Rename folder",

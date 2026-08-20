@@ -104,13 +104,15 @@ export const SHORTCUTS: ShortcutEntry[] = [
     group: "lists",
     why:
       "Mod-Shift-t is the same family as the other two list keys, so it is guessable " +
-      "from them, and it stays first. Mod-Shift-d is `paragraph`'s precedent applied to " +
-      "the one chord that has now survived a fix: it was reported dead on Windows, " +
-      "claimed in main's `before-input-event` (`editor-keys.ts`) ahead of every native " +
-      "accelerator and ahead of the page, and reported dead again. A second chord is " +
-      "what is left when the first cannot be shown to arrive — and both are claimed " +
-      "from that same place, because `editorKeyIntent` asks `matches` about the whole " +
-      "entry rather than about one binding. 'D' for done; it is free in every scope.",
+      "from them, and it stays first. It was reported dead on Windows three times and " +
+      "repaired twice before anyone measured it; `--key-probe` then found the chord " +
+      "arriving as a `Ctrl+C` on one machine, and the cause turned out to be an " +
+      "AutoHotkey script that machine's owner had written (B71). Nothing about Windows " +
+      "and nothing here — so the order is what it always was. Mod-Shift-d stays beside " +
+      "it as a second chord rather than being removed: it costs nothing, it is free in " +
+      "every scope, 'D' for done, and it is the one that kept working while the cause " +
+      "was unknown. Both are claimed from one place, because `editorKeyIntent` asks " +
+      "`matches` about the whole entry rather than about one binding.",
   },
   {
     id: "tick",
@@ -121,6 +123,21 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "Returns false on anything that is not a task, so the key stays free there. " +
       "The capture window has to check Shift before treating Mod-Enter as close, or " +
       "this saves and dismisses the note instead of ticking the box.",
+  },
+  {
+    id: "star",
+    keys: ["Mod-Shift-s"],
+    where: "editor",
+    group: "lists",
+    why:
+      "'S' for star, and free in every scope — this app has no Save, the one letter a " +
+      "Mod-Shift chord on 'S' would ordinarily be spoken for by, because a note is " +
+      "written 800 ms after the last keystroke and there is nothing to ask for. It sits " +
+      "in the list family beside bulletList, orderedList and task because that is what " +
+      "it is: a fourth thing to say about the line the caret is on. Deliberately not " +
+      "claimed in main (`editor-keys.ts`) — that list exists for one unexplained report " +
+      "(B71) and a claim takes the key away from the page, which is a cost with no " +
+      "reason behind it here.",
   },
   { id: "indent", keys: ["Tab", "Mod-m"], where: "editor", group: "lists" },
   {

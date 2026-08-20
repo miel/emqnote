@@ -164,6 +164,7 @@ function buildFake(initial: OpenedNote): Fake {
     pdfPageCount: async () => null,
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
+    locationSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

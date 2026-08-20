@@ -84,10 +84,17 @@ describe("the registry holds together", () => {
     expect(shortcut("searchVault").why).toMatch(/B64/);
   });
 
-  it("gives the task item a second chord, and both are claimed", () => {
-    // `paragraph`'s precedent: Mod-Shift-T was reported dead on Windows, claimed in
-    // `before-input-event`, and reported dead again. The alias is what is left.
+  it("gives the task item a second chord, and claims both", () => {
+    // The order is what the help sheet prints, so first is what a person reads as *the*
+    // shortcut. Mod-Shift-T is first because nothing was ever wrong with it: B71 traced
+    // three "dead on Windows" reports to an AutoHotkey script on the one machine, not to
+    // a property of the platform or of this registry.
     expect(shortcut("task").keys).toEqual(["Mod-Shift-t", "Mod-Shift-d"]);
+
+    // Both work: `matches` asks about the whole entry, never about one binding.
+    expect(matches(shortcut("task"), press("t", { ctrlKey: true, shiftKey: true }), false)).toBe(
+      true,
+    );
 
     const alias = press("d", { ctrlKey: true, shiftKey: true });
     expect(matches(shortcut("task"), alias, false)).toBe(true);

@@ -8,6 +8,7 @@ import type {
   RootContent,
   Table as MdastTable,
 } from "mdast";
+import { isStarred } from "./star-items.js";
 import { schema } from "./schema.js";
 import { normalizePhrasing } from "./normalize-phrasing.js";
 import type { ExtPhrasing } from "./mdast-ext.js";
@@ -170,7 +171,7 @@ function listItemToPM(item: MdastListItem): PMNode {
       : [schema.nodes.paragraph!.create(), ...children];
 
   return schema.nodes.listItem!.create(
-    { checked: item.checked ?? null },
+    { checked: item.checked ?? null, starred: isStarred(item as RootContent) },
     content.length === 0 ? [schema.nodes.paragraph!.create()] : content,
   );
 }

@@ -276,6 +276,23 @@ export async function writeSession(
   const contents = serializeNote({ frontmatter, doc });
 
   if (session.path === null) {
+    // The filename's timestamp comes from the note's own `created`, not from the clock
+    // this session was begun by.
+    //
+    // They are the same value in the ordinary case, and were meant to be — but only the
+    // frontmatter follows the When field, so the two could already disagree: edit the
+    // date before the first write and the file was still named after the moment the
+    // session started. `session.createdAt` was worse than that on its own, being stamped
+    // whenever the previous note was put away (`beginSession` runs inside `finish` and
+    // `discard`), which is the main-process half of the stale When field.
+    //
+    // Assigned back onto the session rather than passed as a local, because
+    // `renameSessionFile` names the file a second time when the subject changes later and
+    // must reach the same prefix: the timestamp in a filename is decided once, at the
+    // first write, and a rename is about the title.
+    const created = new Date(frontmatter.created);
+    if (!Number.isNaN(created.getTime())) session.createdAt = created;
+
     // `""` is the vault root, and `join(vault, "")` would answer with a trailing
     // separator rather than the vault — hence the branch rather than a bare join.
     const folder =

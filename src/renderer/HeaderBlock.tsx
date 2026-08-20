@@ -6,6 +6,7 @@ import { isoWithOffset } from "../shared/time.js";
 import { formatDateTime, type Locale } from "../shared/i18n.js";
 import { useActiveRowVisible, useHoverGuard } from "./library/palette-scroll.js";
 import { applySuggestion, rankTags, tokenAt } from "./tag-typeahead.js";
+import { rankLocations } from "./location-typeahead.js";
 
 export interface HeaderValues {
   kind: NoteKind;
@@ -146,6 +147,19 @@ export function HeaderBlock({
   const suggestList = useRef<HTMLUListElement>(null);
   const hoverGuard = useHoverGuard();
 
+  /**
+   * The same four pieces again for the Where field (B73), deliberately not shared with the
+   * four above: two lists can be open at once — Tab moves from Tags to Where without either
+   * field losing focus in between — and one `active` between them would move the highlight
+   * in a panel nobody is looking at. `null` means not asked, exactly as `vaultTags` does.
+   */
+  const [vaultLocations, setVaultLocations] = useState<Facet[] | null>(null);
+  const [suggestingWhere, setSuggestingWhere] = useState(false);
+  const [activeWhere, setActiveWhere] = useState(-1);
+  const whereInput = useRef<HTMLInputElement>(null);
+  const whereList = useRef<HTMLUListElement>(null);
+  const whereHoverGuard = useHoverGuard();
+
   const tagValue = tagText ?? values.tags.map((tag) => `#${tag}`).join(" ");
   const caret = tagInput.current?.selectionStart ?? tagValue.length;
   // The note's own body tags go in as *applied*, not as candidates: B65 already hoists
@@ -156,7 +170,15 @@ export function HeaderBlock({
     : [];
   const listOpen = suggestions.length > 0;
 
+  // The whole field, not a token: a location is one value that may hold spaces, so there
+  // is no caret arithmetic here at all — see `location-typeahead.ts`.
+  const whereSuggestions = suggestingWhere
+    ? rankLocations(vaultLocations ?? [], values.location)
+    : [];
+  const whereListOpen = whereSuggestions.length > 0;
+
   useActiveRowVisible(suggestList, active, suggestions);
+  useActiveRowVisible(whereList, activeWhere, whereSuggestions);
 
   useEffect(() => {
     if (editingTime) timeInput.current?.focus();
@@ -211,6 +233,68 @@ export function HeaderBlock({
       .tagSuggestions()
       .then(setVaultTags)
       .catch(() => setVaultTags([]));
+  };
+
+  const closeWhereSuggestions = (): void => {
+    setSuggestingWhere(false);
+    setActiveWhere(-1);
+  };
+
+  /** `openSuggestions`' rule for the other field: once per window, on first focus. */
+  const openWhereSuggestions = (): void => {
+    setSuggestingWhere(true);
+    setActiveWhere(-1);
+    if (vaultLocations !== null) return;
+    setVaultLocations([]);
+    void window.emqnote
+      .locationSuggestions()
+      .then(setVaultLocations)
+      .catch(() => setVaultLocations([]));
+  };
+
+  /**
+   * Accepting is a plain replacement, and there is no caret to put back.
+   *
+   * `accept` below has to restore one because a tag lands in the middle of a list; a
+   * location *is* the field, so the browser parking the caret at the end is exactly right.
+   * The focus call stays: the row's `mousedown` is prevented, so a click never moved focus
+   * off the input, but a keyboard accept has nothing to restore and this costs nothing.
+   */
+  const acceptWhere = (location: string): void => {
+    set("location", location);
+    closeWhereSuggestions();
+    whereInput.current?.focus();
+  };
+
+  /** `onTagKeyDown`'s rules, including the Escape one, for the Where field. */
+  const onWhereKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === "Escape" && suggestingWhere) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWhereSuggestions();
+      return;
+    }
+
+    if (!whereListOpen) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      whereHoverGuard.keyboardMoved();
+      const count = whereSuggestions.length;
+      setActiveWhere((current) =>
+        event.key === "ArrowDown"
+          ? (current + 1) % count
+          : current <= 0
+            ? count - 1
+            : current - 1,
+      );
+      return;
+    }
+
+    if ((event.key === "Enter" || event.key === "Tab") && activeWhere >= 0) {
+      event.preventDefault();
+      acceptWhere(whereSuggestions[activeWhere]!.name);
+    }
   };
 
   const accept = (tag: string): void => {
@@ -415,14 +499,47 @@ export function HeaderBlock({
         </div>
 
         <span className="header-label">{t("capture.where")}</span>
-        <div className="header-cell">
+        <div className="header-cell header-where">
           <input
+            ref={whereInput}
             className="location"
             placeholder={t("capture.location")}
             value={values.location}
-            onChange={(event) => set("location", event.target.value)}
-            onKeyDown={leaveOnEnter}
+            onChange={(event) => {
+              set("location", event.target.value);
+              openWhereSuggestions();
+            }}
+            onFocus={openWhereSuggestions}
+            onBlur={closeWhereSuggestions}
+            onKeyDown={(event) => {
+              onWhereKeyDown(event);
+              if (!event.defaultPrevented) leaveOnEnter(event);
+            }}
           />
+
+          {whereListOpen && (
+            <ul className="tag-suggest" ref={whereList}>
+              {whereSuggestions.map((facet, index) => (
+                <li key={facet.name}>
+                  {/* The Tags list's row, verbatim — including `.context-menu-label` on
+                      the name, which `--click-button` reads a row off. One surface, so the
+                      two completions in this header cannot come to look like two things. */}
+                  <button
+                    type="button"
+                    className={index === activeWhere ? "tag-suggest-on" : undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={(event) => {
+                      if (whereHoverGuard.hover(event)) setActiveWhere(index);
+                    }}
+                    onClick={() => acceptWhere(facet.name)}
+                  >
+                    <span className="context-menu-label tag-suggest-name">{facet.name}</span>
+                    <span className="tag-suggest-count">{facet.count}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <span className="header-label">{t("capture.who")}</span>

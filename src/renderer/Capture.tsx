@@ -138,6 +138,8 @@ export function Capture(): React.ReactElement {
   linkOpenRef.current = link !== null;
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current = notePick !== null || tableGrid !== null;
+  const existingRef = useRef(false);
+  existingRef.current = existing;
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -187,6 +189,39 @@ export function Capture(): React.ReactElement {
       // ref is simply never attached and this falls back to the editor.
       if (subjectInput.current !== null) subjectInput.current.focus();
       else editor.current?.focus();
+
+      // The clock reads at the moment the note is begun, not at the moment the last one
+      // was put away.
+      //
+      // Everything else this window clears happens on hide, in `onReset` below, and that
+      // is right — clearing while nobody is waiting costs nothing. `created` is the one
+      // value for which it is wrong, because a stamp is about *when*, and the window is
+      // hidden for as long as it is not being used. `freshHeader()` runs at renderer
+      // mount (once, at login, since this window is created at startup and never
+      // destroyed) and again on every hide, so When showed app-launch time for the first
+      // note of the day and the previous note's dismissal time for every one after it.
+      // Discarding is what made it obvious, being the quickest way to hide and re-show,
+      // but Escape, the X and Ctrl+Enter all leave the same stale stamp behind.
+      //
+      // Only for a note this window is composing itself: one handed over from the
+      // library owns its own `created`, which `onLoad` sets from the file. `headerRef`
+      // is updated in step for `send`'s sake, exactly as `onHeaderChange` does — the
+      // render that would refresh it lands well inside the 300 ms change debounce, but
+      // depending on that ordering is not a thing to leave implicit.
+      //
+      // And only for one nothing has been typed into. `reveal()` sends this on *every*
+      // hotkey press, including one aimed at a window that is already open and already
+      // has a note in it — the `isVisible()` check in there guards `show()`, not the
+      // message — so without `dirtyRef` the hotkey would quietly move the date of the
+      // note being written. `dirtyRef` over-reports by design, and here that bias is the
+      // right way round: the cost of not re-stamping is a stale minute on a note the
+      // user is looking at, and the cost of re-stamping is rewriting a value they may
+      // have set by hand.
+      if (!existingRef.current && !dirtyRef.current) {
+        const next = { ...headerRef.current, created: isoWithOffset(new Date()) };
+        headerRef.current = next;
+        setHeader(next);
+      }
 
       // Wait two frames: the first is only scheduled, after the second something is
       // actually on screen. Only then is "hotkey to blinking caret" measured honestly.

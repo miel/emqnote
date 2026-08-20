@@ -402,6 +402,41 @@ export async function facets(vault: string, db: IndexDb, excludePath?: string): 
 }
 
 /**
+ * Every location the vault has used, busiest first — the source the Where field completes
+ * from (B73).
+ *
+ * `facets()`'s two lines with a third field, and deliberately not a third field *on*
+ * `facets()`: that answer feeds the library's filter panel, which has no Where filter and
+ * would be widened for a caller it knows nothing about. `IPC.tagSuggestions` was carved out
+ * of `facets().tags` for the same reason and this sits beside it.
+ *
+ * Read off `allNotes` rather than `toSummary`, which drops `location` on its way to a
+ * `NoteSummary` — the note list, sort, drag and the conflict check have never needed it.
+ * The column itself has been on `notes` since the table was created and `buildRecord` has
+ * always filled it, so this needs no migration and no `SCHEMA_VERSION` bump: there is no
+ * new data, only a question nobody had asked.
+ *
+ * A note with no `location:` stores `""`, which `tally` would happily count as a facet of
+ * its own, so the empties go first. `tally` keys on `foldTag`, so "Teams" and "teams" are
+ * one entry spelled the way it was first written — which is what a completion list wants,
+ * a second casing of the same room being noise rather than a choice.
+ */
+export async function locationFacets(vault: string, db: IndexDb): Promise<Facet[]> {
+  await ensureScanned(vault, db);
+  if (!available) return [];
+
+  const seen = new Map<string, Facet>();
+  tally(
+    allNotes(db)
+      .map((note) => note.location.trim())
+      .filter((location) => location !== "")
+      .map((location) => [location]),
+    seen,
+  );
+  return ranked(seen);
+}
+
+/**
  * The notes a selection stands for.
  *
  * A folder still goes straight to the filesystem: browsing one folder must not wait on a
