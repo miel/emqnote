@@ -13,7 +13,7 @@ import {
 import { ContextMenu, type MenuItem } from "./ContextMenu.js";
 import { FilterSection } from "./FilterSection.js";
 import { canDropNote, NOTE_DRAG_TYPE } from "./drag.js";
-import { isContextMenuKey, roveArrowKey } from "./roving.js";
+import { isContextMenuKey, roveArrowKey, sidebarRowProps, SIDEBAR_ROWS } from "./roving.js";
 
 interface Props {
   root: FolderNode;
@@ -185,7 +185,7 @@ function Branch({
   glyph,
   trashed,
   trashRoot,
-  activePath,
+  activeRow,
   onActivate,
   onOpenMenu,
   isMac,
@@ -234,10 +234,17 @@ function Branch({
    * Unlike `glyph`, which stops here, this one propagates.
    */
   trashRoot?: boolean;
-  /** The path currently holding this pane's one roving `tabIndex={0}`. */
-  activePath: string;
-  /** Fired on focus (a Tab landing here, or an arrow key moving here) — keeps `activePath` honest. */
-  onActivate: (path: string) => void;
+  /**
+   * The row currently holding this pane's one roving `tabIndex={0}`, as a row key.
+   *
+   * A key rather than a path, because the sidebar's rows are no longer all folders: Tags,
+   * People, each facet, Tasks, Settings, Help and Unlinked are in the same walk now, and
+   * a bare path cannot name them. Folders spell theirs `folder:<path>`, which is what
+   * `selectionKey` already calls them.
+   */
+  activeRow: string;
+  /** Fired on focus (a Tab landing here, or an arrow key moving here) — keeps `activeRow` honest. */
+  onActivate: (rowKey: string) => void;
   /** Opens the right-click menu for this row, at the given viewport point. */
   onOpenMenu: (path: string, x: number, y: number) => void;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
@@ -276,8 +283,8 @@ function Branch({
         role="treeitem"
         aria-expanded={hasChildren ? open : undefined}
         aria-selected={selectionKey(selected) === `folder:${node.path}`}
-        tabIndex={activePath === node.path ? 0 : -1}
-        onFocus={() => onActivate(node.path)}
+        tabIndex={activeRow === `folder:${node.path}` ? 0 : -1}
+        onFocus={() => onActivate(`folder:${node.path}`)}
         onClick={() => onSelect({ kind: "folder", path: node.path })}
         // Folding from the whole row, not only from the 16px twisty. A leaf does nothing,
         // deliberately: the twisty is hidden there, so there is nothing on screen a
@@ -294,7 +301,7 @@ function Branch({
         }}
         onKeyDown={(event) => {
           const container = (event.currentTarget as HTMLElement).closest(".tree");
-          const next = roveArrowKey(event, container, '[role="treeitem"]', event.currentTarget);
+          const next = roveArrowKey(event, container, SIDEBAR_ROWS, event.currentTarget);
           if (next !== null) {
             event.preventDefault();
             next.focus();
@@ -406,7 +413,7 @@ function Branch({
               dragging={dragging}
               onDropNote={onDropNote}
               trashed={trashed === true || trashRoot === true}
-              activePath={activePath}
+              activeRow={activeRow}
               onActivate={onActivate}
               onOpenMenu={onOpenMenu}
               isMac={isMac}
@@ -497,7 +504,7 @@ export function FolderTree({
   // currently a rendered row" holds without having to walk the tree to check it: it can
   // only ever change via a row's own `onFocus`, and a row that isn't rendered cannot fire
   // that in the first place.
-  const [activePath, setActivePath] = useState("");
+  const [activeRow, setActiveRow] = useState("folder:");
 
   // The right-click (or `Mod-Shift-M`/`ContextMenu`) menu for one row — folder tree rows
   // that used to instantly create a new folder inside whatever was right-clicked now open
@@ -622,8 +629,8 @@ export function FolderTree({
           onCreateFolder={onCreateFolder}
           dragging={dragging}
           onDropNote={onDropNote}
-          activePath={activePath}
-          onActivate={setActivePath}
+          activeRow={activeRow}
+          onActivate={setActiveRow}
           onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
           isMac={isMac}
           badgeTitle={badgeTitle}
@@ -641,6 +648,8 @@ export function FolderTree({
           selected={selected}
           onSelect={onSelect}
           onExpand={onExpandFilters}
+          activeRow={activeRow}
+          onActivate={setActiveRow}
           emptyLabel={emptyLabel}
           unavailableLabel={unavailableLabel}
           filterLabel={filterLabel}
@@ -655,6 +664,8 @@ export function FolderTree({
           selected={selected}
           onSelect={onSelect}
           onExpand={onExpandFilters}
+          activeRow={activeRow}
+          onActivate={setActiveRow}
           emptyLabel={emptyLabel}
           unavailableLabel={unavailableLabel}
           filterLabel={filterLabel}
@@ -668,6 +679,7 @@ export function FolderTree({
           className={`branch tree-settings${tasksSelected ? " branch-on" : ""}`}
           style={{ paddingLeft: "8px" }}
           onClick={onOpenTasks}
+          {...sidebarRowProps("tasks", activeRow, setActiveRow, onOpenTasks)}
         >
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">{tasksGlyph}</span>
@@ -682,6 +694,7 @@ export function FolderTree({
           className="branch tree-settings"
           style={{ paddingLeft: "8px" }}
           onClick={onOpenSettings}
+          {...sidebarRowProps("settings", activeRow, setActiveRow, onOpenSettings)}
         >
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">⚙</span>
@@ -692,6 +705,7 @@ export function FolderTree({
           className="branch tree-settings"
           style={{ paddingLeft: "8px" }}
           onClick={onOpenHelp}
+          {...sidebarRowProps("help", activeRow, setActiveRow, onOpenHelp)}
         >
           <span className="twisty twisty-empty" />
           <span className="filter-glyph">?</span>
@@ -714,6 +728,7 @@ export function FolderTree({
             className={`branch tree-settings${unlinkedSelected ? " branch-on" : ""}`}
             style={{ paddingLeft: "8px" }}
             onClick={onOpenUnlinked}
+            {...sidebarRowProps("unlinked", activeRow, setActiveRow, onOpenUnlinked)}
           >
             <span className="twisty twisty-empty" />
             <span className="filter-glyph">{unlinkedGlyph}</span>
@@ -739,8 +754,8 @@ export function FolderTree({
               // folder *inside* the trash, so only this one row lights up.
               onDropNote={onDropNote}
               dragging={dragging}
-              activePath={activePath}
-              onActivate={setActivePath}
+              activeRow={activeRow}
+              onActivate={setActiveRow}
               onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
               isMac={isMac}
               badgeTitle={badgeTitle}

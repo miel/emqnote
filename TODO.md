@@ -3,7 +3,25 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 13 August 2026, on top of `v0.7.0` — six items from daily use.
+Last updated 20 August 2026, on top of `v0.9.0` — seven items from daily use,
+four of them landing on the marker-alignment work that had shipped the same
+morning. One carries a decision: **B75**, a note can be pinned to the top of the
+list and the pin is in the file. The rest are constraints: the bullet, the star
+and the checkbox now hang off a baseline anchor so they stay on the line when a
+picture is pasted into it (and are aligned by ink *left edge* rather than by
+centroid, which is what the reported 3px and 4px turned out to be); an item is
+blank when it *draws* blank rather than when its content size is zero; leaving a
+nested list no longer flattens what is below it; a numbered list's gutter grows
+to fit the widest number in the note; and the sidebar's arrow keys reach Tags,
+People, Tasks, Settings, Help and Unlinked instead of stepping from the last
+folder straight to Trash. See `HISTORY.md` for the whole account and
+`TEST-PROTOCOL.md` §32 for what is still owed a human.
+
+**Two of those are not confirmed live**: the pin limit's refusal dialog and the
+widened sidebar walk. Both have real-DOM tests that dispatch real events and read
+`document.activeElement`; neither has been driven in the packaged app.
+
+The previous entry, 13 August 2026 on top of `v0.7.0` — six items from daily use.
 Two carry decisions: **B43**, a PDF embedded with `![[…]]` draws its first page
 in the note, and **B44**, renaming a folder repairs the links into it without
 asking. Two more were features: a `← Back to <note>` button after following an
@@ -36,7 +54,7 @@ open). See `TEST-PROTOCOL.md` §12–§14.
 
 | Phase | State |
 |---|---|
-| 0 — markdown round trip | Done. 27 corpus files, byte-identical both ways. |
+| 0 — markdown round trip | Done. 31 corpus files, byte-identical both ways. |
 | 1 — resident shell | Done. Hotkey → caret measured inside budget. |
 | 2 — the editor | Done. |
 | 3 — the library window | **Done, now including dragging in the tree** — the one work item that was still outstanding, built 4 August 2026. Shipped before phase 4; the two were swapped in practice. |

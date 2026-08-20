@@ -45,6 +45,8 @@ export interface NoteRecord {
   size: number;
   /** Content hash, so a mtime bump with unchanged bytes (a plain OneDrive touch) is not mistaken for a real edit. */
   hash: string;
+  /** B75's `pinned: true`, so the limit of three can be counted across the whole vault. */
+  pinned: boolean;
   /** Plain text — see `src/markdown/plain-text.ts` — for FTS5 to index; not returned by queries. */
   body: string;
   /** Every task item in the note, in document order — fills `note_tasks`, not the `notes` table itself. */
@@ -80,8 +82,14 @@ export type IndexDb = Database.Database;
  * `[[…]]` links (B45). Same reason a third time: an index built before this holds no embed
  * rows at all, so a folder rename would go on quietly leaving every picture in that folder
  * pointing at the old name — which is exactly the bug that was reported.
+ *
+ * Version 4 is `pinned` (B75), and the reason is the oldest one on this list: the column
+ * is filled from a note's frontmatter, and `needsRefresh` only re-reads a file whose
+ * `mtime` or `size` has moved — neither of which this column existing does to anything. An
+ * index built before today would report every note in the vault as unpinned, for good, and
+ * the limit of three would be counted against nothing.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * One search-only virtual table rather than the `content=''` "contentless" table
@@ -135,8 +143,13 @@ function migrate(db: IndexDb): void {
       excerpt TEXT NOT NULL,
       mtime REAL NOT NULL,
       size INTEGER NOT NULL,
-      hash TEXT NOT NULL
+      hash TEXT NOT NULL,
+      pinned INTEGER NOT NULL DEFAULT 0
     );
+
+    -- Three rows at most, asked for on every pin: worth an index only because the
+    -- alternative is a full scan of the notes table to answer "are there already three".
+    CREATE INDEX IF NOT EXISTS notes_pinned ON notes(pinned) WHERE pinned = 1;
 
     CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
       path UNINDEXED,
@@ -188,8 +201,8 @@ export function closeIndex(db: IndexDb): void {
 
 const upsertNoteStatements = (db: IndexDb) => ({
   note: db.prepare(`
-    INSERT INTO notes (path, fileName, title, type, created, modified, location, attendees, tags, excerpt, mtime, size, hash)
-    VALUES (@path, @fileName, @title, @type, @created, @modified, @location, @attendees, @tags, @excerpt, @mtime, @size, @hash)
+    INSERT INTO notes (path, fileName, title, type, created, modified, location, attendees, tags, excerpt, mtime, size, hash, pinned)
+    VALUES (@path, @fileName, @title, @type, @created, @modified, @location, @attendees, @tags, @excerpt, @mtime, @size, @hash, @pinned)
     ON CONFLICT(path) DO UPDATE SET
       fileName = excluded.fileName,
       title = excluded.title,
@@ -202,7 +215,8 @@ const upsertNoteStatements = (db: IndexDb) => ({
       excerpt = excluded.excerpt,
       mtime = excluded.mtime,
       size = excluded.size,
-      hash = excluded.hash
+      hash = excluded.hash,
+      pinned = excluded.pinned
   `),
   deleteFts: db.prepare(`DELETE FROM notes_fts WHERE path = ?`),
   insertFts: db.prepare(`
@@ -242,6 +256,7 @@ export function upsertNote(db: IndexDb, record: NoteRecord): void {
     mtime: record.mtime,
     size: record.size,
     hash: record.hash,
+    pinned: record.pinned ? 1 : 0,
   };
 
   db.transaction(() => {
@@ -329,6 +344,7 @@ interface StoredRow {
   mtime: number;
   size: number;
   hash: string;
+  pinned: number;
 }
 
 function toMeta(row: StoredRow): NoteMeta {
@@ -346,6 +362,7 @@ function toMeta(row: StoredRow): NoteMeta {
     mtime: row.mtime,
     size: row.size,
     hash: row.hash,
+    pinned: row.pinned === 1,
   };
 }
 
@@ -354,6 +371,20 @@ export function getNote(db: IndexDb, path: string): NoteMeta | null {
     | StoredRow
     | undefined;
   return row === undefined ? null : toMeta(row);
+}
+
+/**
+ * Every pinned note's path — what the limit of three is counted against.
+ *
+ * Asked in main rather than in the renderer, which only ever knows the list currently on
+ * screen: a note pinned in a folder nobody is looking at still counts, and a limit that
+ * could be walked around by browsing elsewhere first is not a limit.
+ */
+export function pinnedNotes(db: IndexDb): string[] {
+  const rows = db.prepare(`SELECT path FROM notes WHERE pinned = 1 ORDER BY path`).all() as {
+    path: string;
+  }[];
+  return rows.map((row) => row.path);
 }
 
 export function allNotes(db: IndexDb): NoteMeta[] {

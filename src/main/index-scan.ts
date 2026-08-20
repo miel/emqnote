@@ -134,6 +134,7 @@ export function buildRecord(vault: string, file: string, raw: string, stats: Sta
     mtime: stats.mtimeMs,
     size: stats.size,
     hash: hashOf(raw),
+    pinned: summary.pinned,
     body: plainText(doc),
     tasks: extractTasks(doc),
     // Same arrangement as `tasks`, and shared with the watcher for the same reason: the

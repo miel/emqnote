@@ -110,6 +110,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   const emqnote: CaptureApi = {

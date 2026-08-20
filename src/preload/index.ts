@@ -145,5 +145,7 @@ contextBridge.exposeInMainWorld("emqnote", {
       ipcRenderer.invoke(IPC.libraryTasks, scope, openOnly),
     toggleTask: (path: string, ordinal: number, expectedText: string) =>
       ipcRenderer.invoke(IPC.libraryToggleTask, path, ordinal, expectedText),
+    setPinned: (path: string, pinned: boolean) =>
+      ipcRenderer.invoke(IPC.librarySetPinned, path, pinned),
   },
 });

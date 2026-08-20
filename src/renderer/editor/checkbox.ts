@@ -3,6 +3,7 @@ import { Decoration, DecorationSet } from "prosemirror-view";
 import type { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../../markdown/schema.js";
+import { markerAnchor } from "./marker-widget.js";
 
 /**
  * Puts a real, clickable checkbox in front of every task item.
@@ -13,6 +14,9 @@ import { schema } from "../../markdown/schema.js";
  * renders an actual `<button role="checkbox">` and is absolutely positioned into
  * `--marker-slot`, so no `li > *` selector has to change — the four rules carrying the
  * outline look all match on element type.
+ *
+ * It hangs off `markerAnchor`, which is what puts it on the same line as the bullet it
+ * stands in for — see that file for why the item is the wrong thing to position against.
  *
  * Rejected: `handleClickOn`, which would mean rebuilding hit testing out of `clientX`
  * for something the DOM already does, and a `nodeView`, which forces a wrapper element
@@ -107,17 +111,18 @@ function render(
   box.addEventListener("click", (event) => {
     event.preventDefault();
 
-    // The widget sits just inside the item, so the item itself is one back. `getPos`
-    // gives up once the decoration has been removed from the document — a click
-    // landing on a box that is on its way out has nothing to toggle.
+    // The widget sits at the start of the item's first paragraph, so the item itself is
+    // two back — one for the paragraph, one for the item. `getPos` gives up once the
+    // decoration has been removed from the document: a click landing on a box that is on
+    // its way out has nothing to toggle.
     const at = getPos();
     if (at === undefined) return;
 
-    toggleAt(view, at - 1);
+    toggleAt(view, at - 2);
     view.focus();
   });
 
-  return box;
+  return markerAnchor(box);
 }
 
 function build(doc: PMNode): DecorationSet {
@@ -129,7 +134,12 @@ function build(doc: PMNode): DecorationSet {
 
     const checked = node.attrs.checked === true;
     decorations.push(
-      Decoration.widget(pos + 1, (view, getPos) => render(view, getPos, checked), {
+      // `pos + 2`, not `pos + 1`: one step is *into the item*, which is a block position
+      // and renders the widget as a sibling before the paragraph — its own line, outside
+      // the line box the marker has to sit on. Two steps is into the paragraph, at
+      // offset zero, where an inline widget joins the first line. `listItem` is
+      // `paragraph block*`, so there is always a paragraph to step into.
+      Decoration.widget(pos + 2, (view, getPos) => render(view, getPos, checked), {
         side: -1,
         // The widget is a control, not content: its events are its own and the
         // selection has no business landing inside it.

@@ -2673,3 +2673,62 @@ breedte van een vorige sessie: Ctrl+Z reikt niet verder dan het venster open sta
 waarvan een percentage? De kolombreedte verschilt per venster en per paneel, dus hetzelfde
 bestand zou op twee machines twee formaten zijn. Obsidian schrijft pixels; die keuze is al
 gemaakt.
+
+## B75 — Een notitie kan bovenaan vastgeprikt worden, en dat staat in het bestand
+
+**Genomen** op 20 augustus 2026, uit dagelijks gebruik. De notitielijst is gesorteerd op
+gewijzigd, aangemaakt of titel, en dat is precies goed voor terugvinden en precies verkeerd voor
+de twee of drie notities waar je deze week aan werkt: die zakken weg zodra je iets anders opent.
+
+**Het besluit.** Een notitie kan bovenaan vastgeprikt worden, ongeacht de sorteervolgorde.
+Maximaal drie tegelijk, met een nette weigering als er een vierde bijkomt. Het vlaggetje staat in
+de frontmatter:
+
+```yaml
+pinned: true
+```
+
+**Waarom in het bestand en niet in de instellingen.** Er zijn twee machines en geen server. Een
+lijst met paden in `settings.json` staat op één van de twee, en reist dus niet mee — je zou op de
+Mac iets vastprikken en op de Windows-machine niets zien. Bovendien breekt zo'n lijst bij elke
+verplaatsing of hernoeming, tenzij hij bij *beide* wordt bijgewerkt; dat is dezelfde boekhouding
+die B35 en B45 voor links moesten bouwen, voor een vlaggetje dat die prijs niet waard is. In het
+bestand reist het mee met OneDrive, overleeft het een herinstallatie, verhuist het gratis mee met
+de notitie zelf, en is het in Obsidian gewoon te zien — dezelfde redenering waarom `tags:` daar
+staat. B9 gaat over de *afgeleide* dingen (de index, de miniaturen); dit is er geen.
+
+**Afwezig, niet `false`.** Een notitie die niet vastgeprikt is heeft het veld niet. Anders krijgt
+elke notitie in de vault er bij de eerste de beste opslag een regel bij om iets te zeggen over een
+functie die hij niet gebruikt. Losmaken haalt de sleutel weg, zodat een notitie die vastgeprikt is
+geweest byte voor byte gelijk is aan een die dat nooit was.
+
+**Een echte boolean.** Elk ander veld gaat door `emitScalar`, dat alles aanhaalt wat als iets
+anders dan een string terug zou lezen — en een boolean langs die weg landt als `pinned: "true"`,
+een string die toevallig een boolean spelt en de volgende keer als "niet vastgeprikt" terugleest.
+Vandaar `BOOLEAN_FIELDS` in `frontmatter.ts`. Wat géén echte boolean is (`pinned: misschien`, of
+`pinned: yes`, dat in YAML 1.2 een string is) wordt niet geraden maar onaangeroerd teruggegeven
+via `extra` — schrijven aan een bestand dat je niet begrepen hebt is erger dan het niet snappen.
+
+**`modified` blijft staan.** Dit is het deel dat het makkelijkst per ongeluk ongedaan wordt
+gemaakt, en het staat daarom ook in `CONSTRAINTS.md`. Vastprikken is geen bewerking: `modified`
+ophogen zou de notitie in de standaardsortering naar boven schuiven om een reden die niets met de
+inhoud te maken heeft — precies de volgorde die het vastprikken juist moest repareren — en zou de
+andere machine vertellen dat er iets in het bestand veranderd is. `setPinned` gaat daarom niet
+door `saveNote`, dat de stempel altijd zet.
+
+**De grens van drie wordt in het hoofdproces afgedwongen, tegen de index.** De renderer kent
+alleen de lijst die op dat moment op het scherm staat; een notitie die vastgeprikt is in een map
+waar niemand naar kijkt telt gewoon mee, en een grens die je omzeilt door eerst ergens anders te
+gaan kijken is geen grens. Vandaar een `pinned`-kolom in SQLite en `SCHEMA_VERSION` van 3 naar 4:
+`needsRefresh` leest een bestand alleen opnieuw als `mtime` of `size` verschoven is, en dat doet
+het bestaan van een kolom niet — een oudere index zou elke notitie voor altijd als niet
+vastgeprikt opgeven.
+
+**Losmaken wordt nooit geweigerd**, alleen vastprikken. Als er ondanks alles vier staan — een
+halve startscan, of een vierde die via OneDrive van de andere machine binnenkomt — tekent de lijst
+er gewoon vier, en zijn ze alle vier los te maken. Het bestand zegt wat het zegt; er eentje van
+verbergen zou de app zijn die het met de vault oneens is.
+
+**Overwogen en niet gedaan.** Een eigen volgorde binnen de vastgeprikte notities. Drie rijen is
+te weinig om een handmatige volgorde te verdienen, en met de gekozen sortering *binnen* de groep
+beantwoordt de bovenkant van de lijst dezelfde vraag als de rest ervan.

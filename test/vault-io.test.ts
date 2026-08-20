@@ -30,6 +30,7 @@ import {
   renameNote,
   resolveConflict,
   saveNote,
+  setPinned,
   trashAttachment,
   trashFolder,
   trashNote,
@@ -440,6 +441,53 @@ Geen tags in de tekst.
     expect(opened.tags).toEqual(["offerte"]);
     expect(opened.bodyTags).toEqual([]);
     expect(saveNote(vault, { ...opened }).written).toBe(false);
+  });
+});
+
+/**
+ * B75's pin: one line in the frontmatter, and one thing that must *not* change with it.
+ */
+describe("pinning a note", () => {
+  const NOTE_PATH = "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md";
+  const read = (): string => readFileSync(join(vault, NOTE_PATH), "utf8");
+
+  it("writes pinned: true as a boolean, not as a quoted string", () => {
+    expect(setPinned(vault, NOTE_PATH, true)).toBe(true);
+    expect(read()).toContain("\npinned: true\n");
+    expect(read()).not.toContain('pinned: "true"');
+  });
+
+  it("reads back through the ordinary summary the list is built from", () => {
+    setPinned(vault, NOTE_PATH, true);
+    expect(readNotesIn(vault, "00 Inbox")[0]?.pinned).toBe(true);
+  });
+
+  it("removes the key on unpin rather than writing pinned: false", () => {
+    // A note that has been pinned and unpinned is byte-identical to one that never was,
+    // which is what keeps `pinned` out of every note in the vault.
+    const before = read();
+    setPinned(vault, NOTE_PATH, true);
+    setPinned(vault, NOTE_PATH, false);
+
+    expect(read()).not.toContain("pinned");
+    expect(read()).toBe(before);
+  });
+
+  it("leaves modified exactly as it was", () => {
+    // The one thing about this feature most likely to be undone by accident. A pin is not
+    // an edit: bumping `modified` would reorder the very list the pin exists to fix, and
+    // tell the other machine that something inside the note changed.
+    const opened = openNote(vault, NOTE_PATH)!;
+    saveNote(vault, { ...opened, doc: paragraphs("Iets anders.").toJSON() });
+    const stamped = /^modified: (.+)$/m.exec(read())?.[1];
+    expect(stamped).toBeDefined();
+
+    setPinned(vault, NOTE_PATH, true);
+    expect(/^modified: (.+)$/m.exec(read())?.[1]).toBe(stamped);
+  });
+
+  it("says so rather than throwing when the note is not there", () => {
+    expect(setPinned(vault, "00 Inbox/weg.md", true)).toBe(false);
   });
 });
 

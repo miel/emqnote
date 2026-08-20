@@ -375,7 +375,10 @@ body {
 }
 
 .editor-content {
-  padding: 14px 18px 25vh;
+  /* Named because the numbered list's gutter is measured against it: a marker wider than
+     its own gutter leans into this padding, and only what it needs beyond it is lost. */
+  --editor-pad-x: 18px;
+  padding: 14px var(--editor-pad-x) 25vh;
   outline: 0;
   font-size: 16px;
   /* Tighter than before: a wrapped bullet should read as one item, not as two. */
@@ -423,6 +426,27 @@ body {
 .editor-content ol {
   margin: 0 0 0.6em;
   padding-left: 1.6em;
+}
+
+/* A numbered list's gutter grows to fit the widest number in the note.
+ *
+ * The marker box is right-aligned against the content edge, so a wider number grows
+ * leftwards — out of this padding, through the editor's own, and then off the window,
+ * which is where `1000.` was losing its first two digits. `--number-digits` is set on the
+ * editor element by `number-gutter.ts`; the arithmetic is here, where `1ch` is a digit's
+ * width in the font actually in use and `1.6em` is already written down once.
+ *
+ * Measured, a marker's ink reaches one `ch` per digit plus two to the left of the text
+ * column; 2.25 is that plus a couple of pixels, because `999.` fits the bare formula with
+ * 0.05px to spare. `var(--editor-pad-x)` is the editor's own padding, which is
+ * what the marker leans into before anything is lost: subtracting it is what keeps one-
+ * and two-digit lists — every numbered list in the vault today — exactly where they are,
+ * and grows the gutter only when a digit would otherwise be cut off. */
+.editor-content ol {
+  padding-left: max(
+    1.6em,
+    calc((var(--number-digits, 1) + 2.25) * 1ch - var(--editor-pad-x))
+  );
 }
 
 /* The marker-to-text gap.
@@ -493,6 +517,33 @@ body {
   margin-top: 0.5em;
 }
 
+/* The box every hand-drawn marker hangs off (`marker-widget.ts`).
+ *
+ * The bullet is the reference and it is a native `::marker`, laid out against the
+ * **baseline of the item's first line box**. The star and the checkbox were positioned
+ * against the *item* instead, and on a plain one-line item the two frames coincide — so
+ * they measured aligned, and were. Paste a picture into the line and they come apart:
+ * `.wiki-embed-image-box` is `vertical-align: text-bottom`, so the line box grows upward
+ * and the bullet rides down to the bottom of the picture with the text, while a marker
+ * pinned to the top of the item stays a picture's height above the line it introduces.
+ *
+ * An empty inline-block of no size joins the first line box, contributes nothing to it,
+ * and takes its baseline from its bottom margin edge — so with `height: 0` it sits
+ * exactly *on* the baseline. Markers are then placed against it with `bottom`, which
+ * makes every vertical offset a distance from the baseline: the same thing the bullet is
+ * placed by, so the two cannot drift apart again whatever grows the line.
+ *
+ * `line-height: 0` as well as `height: 0`, or the anchor's own line box would set a floor
+ * under the line it joined and a one-line item would grow. */
+.editor-content .marker-anchor {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+  line-height: 0;
+  vertical-align: baseline;
+}
+
 /* B72's attention flag: the star stands where the bullet stood, rather than beside it.
 
    Keyed on `data-starred`, which `schema.ts`'s `toDOM` writes from the `starred`
@@ -509,30 +560,27 @@ body {
    A starred item is never also a task (the commands, `star-items.ts` and `to-mdast.ts`
    all refuse the pair), so this can never fight the `content: none` below it.
 
-   **It is drawn into the marker slot by hand rather than as a `::marker` glyph**, which
-   is a change from how B72 shipped and is the whole of the alignment fix. `⭐` is a
-   colour emoji: at the item's own font size its ink is 16.75px tall against the bullet's
-   4.5px, and being baseline-aligned it also sits 5px left of the bullet's column, because
-   the marker box is right-aligned against the content edge and a wider glyph pushes the
-   box leftwards. `::marker` accepts font properties and nothing else — no
-   `vertical-align` — so `font-size` alone cannot move it: shrinking the glyph to bullet
-   size measured it *lower* and further right still, the em space in `--marker-gap`
-   shrinking with it. A positioned box centres the glyph on both axes instead, which is
-   also what makes this survive a platform whose emoji font has different metrics: the
-   size varies, the centre does not. Same construction as `.task-check` below, and for the
-   same reason.
+   **The glyph is drawn into the marker slot by hand rather than as a `::marker`**, which
+   is a change from how B72 shipped. `⭐` is a colour emoji: at the item's own font size its
+   ink is 16.75px tall against the bullet's 4.5px, and being baseline-aligned it also sat
+   5px left of the bullet's column, because the marker box is right-aligned against the
+   content edge and a wider glyph pushes the box leftwards. `::marker` accepts font
+   properties and nothing else — no `vertical-align` — so `font-size` alone cannot move it:
+   shrinking the glyph to bullet size measured it *lower* and further right still, the em
+   space in `--marker-gap` shrinking with it.
+
+   It is a widget (`star-widget.ts`) and no longer a `::before`, which is the second
+   change and the one the pasted-picture report forced: `listItem` is `paragraph block*`,
+   so an inline pseudo-element on the `li` is wrapped in an anonymous block of its own and
+   never joins the paragraph's first line at all — which is exactly why the first version
+   had to be positioned against the item, and why it stayed at the top of a line that held
+   a picture.
 
    `transform: scale()` and never `font-size` for the size: `font-size` in this rule would
    make every `em` in it — `left`, `width`, `height` — resolve against the *new* size, so
-   the box would move as well as the glyph. A transform changes no layout at all.
-
-   Measured against the bullet in a real Chromium at 4× device scale, ink centroid to ink
-   centroid: bullet y 10.25 / x 43.12, star y 10.23 / x 42.88 (from y 10.48 / x 38.00
-   before), and the ◦ and ▪ of levels two and three sit on that same line and column, so
-   one set of numbers is right at every depth. */
+   the box would move as well as the glyph. A transform changes no layout at all. */
 .editor-content ul > li[data-starred="true"] {
   list-style: none;
-  position: relative;
 }
 
 /* `list-style: none` stops suppressing the marker the moment `::marker` has explicit
@@ -542,18 +590,33 @@ body {
   content: none;
 }
 
-.editor-content ul > li[data-starred="true"]::before {
-  content: "\2b50";
+.editor-content .star-mark {
   position: absolute;
-  top: 0;
-  left: calc(-1 * var(--marker-slot) - 0.305em);
+  /* The same two references as `.task-check` below: ink left edge onto the bullet's,
+     centroid onto the bullet's line. The left edge is the axis that changed — the
+     previous version centred the glyph, which is stable across emoji fonts but reads as
+     a marker standing out of the column, because a star is more than twice the bullet's
+     width and centring it puts its ink 3.25px further left. The cost is stated rather
+     than discovered: the ink extent of `⭐` varies by platform font, so what is pinned
+     here varies with it, where a centre would not. */
+  left: calc(-1 * var(--marker-slot) - 0.102em);
+  /* Measured at the editor's own 16px and nowhere else, unlike everything else in this
+     file's marker rules. The bullet and the checkbox are outlines and measure the same at
+     any size, so rendering them four times up and dividing by four reads them honestly;
+     `⭐` comes from a colour *bitmap* font, drawn from whichever fixed strike is nearest
+     and scaled, so it does not. Read at 4× this number came out 0.089em too high, which is
+     1.4px of star sitting above its own line at real size.
+
+     Its ink also snaps to whole pixels, so there is a plateau rather than a value: swept at
+     16px, −0.29em through −0.32em all land within 0.02px of the bullet's line and −0.28em
+     and −0.33em are each a whole pixel out. This is the middle of that plateau, as far from
+     both edges as it can be — a platform whose emoji strike sits differently then has a
+     pixel of room before it falls off either side. */
+  bottom: -0.305em;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 1em;
-  /* One line tall, less the 0.09em that puts the centre of the box on the centre of the
-     bullet rather than on the centre of the line — the two are not the same point, a
-     bullet sitting above the middle of its own line box. */
   height: 1.31em;
   line-height: 1;
   transform: scale(0.62);
@@ -564,7 +627,6 @@ body {
    are tasks and some are bullets, lined up on one column. */
 .editor-content li[data-checked] {
   list-style: none;
-  position: relative;
 }
 
 /* `list-style: none` stops suppressing the marker the moment `::marker` has explicit
@@ -575,18 +637,27 @@ body {
 
 .editor-content .task-check {
   position: absolute;
-  /* The two offsets that put the box on the bullet rather than merely near it, measured
-     the same way the star above was: without them the checkbox drew 6.6px right of the
-     bullet's column and 1.05px above its line, which is what a mixed list read as. The
-     slot itself is unchanged — this moves the box, so the button keeps its full 1.5em of
-     click target. */
-  left: calc(-1 * var(--marker-slot) - 0.485em);
-  top: 0.065em;
+  /* **`font: inherit` first, or every em below is a lie.** A `<button>` does not inherit
+     its font, so the UA's 13.333px was what all of them resolved against: `var(--marker-slot)`
+     came out 20px inside this rule and 24px in every other, which is the one thing the
+     variable exists to prevent, and the click target was 20px wide rather than 1.5em.
+     Measured at four times size in a real Chromium, that put the box's ink 3.4px left of
+     the bullet's — while its *centre* sat within 0.2px of the bullet's centre, which is
+     why the previous measurement, which read centroids, called it aligned and the eye
+     went on reading it as a column that does not line up. */
+  font: inherit;
+  /* Ink left edge to ink left edge with the bullet, and ink centroid to ink centroid up
+     the other axis. What a reader means by "the same column" is where the mark starts;
+     what they mean by "the same line" is where its weight is. Measured at four times
+     size: bullet ink starts at −23.10 and its centroid sits at −12.10 from the item's
+     baseline, and these two numbers put the box on both. */
+  left: calc(-1 * var(--marker-slot) - 0.018em);
+  bottom: -0.3275em;
   display: flex;
   align-items: center;
   width: var(--marker-slot);
-  /* One line tall, so the box centres on the first line of a wrapped item rather than
-     on the item as a whole. */
+  /* One line tall, so the box centres on the line rather than on a wrapped item as a
+     whole. */
   height: 1.4em;
   padding: 0;
   border: 0;
@@ -596,9 +667,12 @@ body {
   user-select: none;
 }
 
+/* 0.73em, not the 0.88em it was: `font: inherit` above changed what an em is worth here,
+   and this keeps the drawn box exactly the size it has always been. Resizing the checkbox
+   is a separate decision from putting it in the right column, and nobody asked for it. */
 .editor-content .task-check svg {
-  width: 0.88em;
-  height: 0.88em;
+  width: 0.73em;
+  height: 0.73em;
 }
 
 .editor-content li[data-checked="true"] > .task-check {

@@ -58,6 +58,7 @@ function noteSummary(path: string, title: string): NoteSummary {
     attendees: [],
     tags: [],
     excerpt: "",
+    pinned: false,
   };
 }
 
@@ -148,6 +149,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   const emqnote: CaptureApi = {

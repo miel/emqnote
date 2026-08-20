@@ -69,6 +69,7 @@ import {
   rewriteTargetPrefix,
   rewriteWikiLinks,
   saveNote,
+  setPinned,
   summariseFile,
   toggleTask,
   trashAttachment,
@@ -98,7 +99,20 @@ import {
 import { linkTargetFor } from "./link-resolve.js";
 import { folderRenameRewrites, movedPath } from "./folder-rename-links.js";
 import { stopScanWorker, workerScanRunner } from "./scan-host.js";
-import { closeIndex, getNote as getNoteMeta, openIndex, type IndexDb } from "./index-db.js";
+import {
+  closeIndex,
+  getNote as getNoteMeta,
+  openIndex,
+  pinnedNotes,
+  type IndexDb,
+} from "./index-db.js";
+
+/**
+ * How many notes may be pinned at once (B75). Three, as asked for: the feature is "keep
+ * the two or three things I am actually working on at the top", and a pinned section that
+ * can grow without limit is just the note list again, in a different order.
+ */
+const MAX_PINNED = 3;
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
@@ -1696,6 +1710,36 @@ function registerLibraryIpc(): void {
       return { toggled };
     },
   );
+
+  /**
+   * B75's pin. The capture-window guard above applies unchanged — this writes the file.
+   *
+   * The limit of three is enforced here rather than in the renderer, which only knows the
+   * list currently on screen: a note pinned in a folder nobody is looking at still counts,
+   * and a limit that could be walked around by browsing elsewhere first is not a limit.
+   * Counted from the index; the note being pinned is discounted from that count, so
+   * re-pinning something already pinned is never refused for being the fourth of three.
+   *
+   * **Unpinning is never refused for the limit.** If the index lagged a partial startup
+   * scan and a fourth pin slipped through, or a fourth arrived from the other machine
+   * through OneDrive, the list draws four pinned notes and every one of them can be
+   * unpinned — the file says what it says, and hiding one of them would be the app
+   * disagreeing with the vault.
+   */
+  ipcMain.handle(IPC.librarySetPinned, (_event, path: string, pinned: boolean) => {
+    const vault = vaultPath();
+    if (vault === null) return { pinned: !pinned };
+    if (writer.activePath() === path) return { pinned: !pinned, locked: true };
+
+    if (pinned && indexDb !== null) {
+      const already = pinnedNotes(indexDb).filter((other) => other !== path);
+      if (already.length >= MAX_PINNED) return { pinned: false, limit: MAX_PINNED };
+    }
+
+    if (!setPinned(vault, path, pinned)) return { pinned: !pinned };
+    notifyLibrary();
+    return { pinned };
+  });
 
   ipcMain.handle(IPC.libraryOpenNote, (_event, path: string) => {
     const vault = vaultPath();

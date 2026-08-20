@@ -9,21 +9,28 @@ import { describe, expect, it } from "vitest";
  * shipped wrong twice — B48's `display: none` and the `.overlay` dimming were both correct
  * rules that merely *tied* and lost on source order.
  *
- * **What the star rule has to win has changed, and the reason it can still lose has not.**
- * The star used to be `content: "\2b50"` on the item's own `::marker`; it is a positioned
- * `::before` now, because a colour emoji in a `::marker` cannot be moved onto the bullet's
- * line — see `styles-list-marker.test.ts` for that measurement. So the `::marker` rule
- * says `content: none` instead, and it has to out-rank exactly the same three rules it
- * always did: the base `•` and the two nested-depth rules (`◦` and `▪`), which come later
- * in the file. If it merely ties, a starred item at depth two or three draws a bullet
- * beside its star. It wins on class count — `.editor-content` plus the attribute selector,
- * against `.editor-content` plus elements — which holds whatever the source order.
+ * **What the star rule has to win has changed twice, and the reason it can still lose has
+ * not.** The star used to be `content: "\2b50"` on the item's own `::marker`; then a
+ * positioned `::before`, because a colour emoji in a `::marker` cannot be moved onto the
+ * bullet's line; and now a widget (`star-widget.ts`), because a `::before` on an
+ * `li` whose content is `paragraph block*` gets an anonymous block of its own and never
+ * joins the line box the bullet is placed against — which is what left it at the top of a
+ * line holding a pasted picture. See `styles-list-marker.test.ts` for both measurements.
+ *
+ * Through all three the `::marker` rule has had to out-rank exactly the same three rules:
+ * the base `•` and the two nested-depth rules (`◦` and `▪`), which come later in the file.
+ * If it merely ties, a starred item at depth two or three draws a bullet beside its star.
+ * It wins on class count — `.editor-content` plus the attribute selector, against
+ * `.editor-content` plus elements — which holds whatever the source order.
  */
 
 const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const widget = readFileSync(
+  new URL("../src/renderer/editor/star-widget.ts", import.meta.url),
+  "utf8",
+);
 
 const MARKER_RULE = /\.editor-content ul > li\[data-starred="true"\]::marker \{[^}]*\}/;
-const STAR_RULE = /\.editor-content ul > li\[data-starred="true"\]::before \{[^}]*\}/;
 
 describe("styles.css: the star replaces the bullet", () => {
   it("draws the star, with the marker it stands in for switched off", () => {
@@ -31,10 +38,12 @@ describe("styles.css: the star replaces the bullet", () => {
     expect(marker).toBeDefined();
     expect(marker).toMatch(/content:\s*none;/);
 
-    const star = css.match(STAR_RULE)?.[0];
-    expect(star).toBeDefined();
-    // `\2b50` rather than a literal ⭐, so the file stays ASCII where it can.
-    expect(star).toMatch(/content:\s*"\\2b50";/);
+    // The glyph moved out of the stylesheet with the construction; the two halves are
+    // still a pair, and a rule with nothing to position is as broken as a star with no
+    // rule. `star-widget.ts` writes it and `.star-mark` places it.
+    expect(widget).toContain("⭐");
+    expect(widget).toContain('className = "star-mark"');
+    expect(css).toMatch(/\.editor-content \.star-mark \{[^}]*position:\s*absolute;/);
   });
 
   it("out-ranks the depth rules it has to beat", () => {

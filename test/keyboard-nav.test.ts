@@ -42,6 +42,7 @@ function noteSummary(path: string, title: string): NoteSummary {
     attendees: [],
     tags: [],
     excerpt: "",
+    pinned: false,
   };
 }
 
@@ -68,6 +69,9 @@ function buildFake(): CaptureApi {
     children: [
       { path: "00 Inbox", name: "00 Inbox", noteCount: 1, children: [] },
       { path: "01 Projects", name: "01 Projects", noteCount: 0, children: [] },
+      // Lifted out of the tree and drawn at the bottom of the sidebar by `FolderTree`,
+      // which is why arrowing has to pass the whole footer to reach it.
+      { path: "_trash", name: "_trash", noteCount: 0, children: [] },
     ],
   };
 
@@ -123,6 +127,7 @@ function buildFake(): CaptureApi {
     onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   return {
@@ -273,6 +278,88 @@ describe("keyboard navigation across the library's panes", () => {
     expect(nowZeroed).toHaveLength(1);
     expect(nowZeroed[0]).not.toBe(first);
     expect(document.activeElement).toBe(nowZeroed[0]);
+  });
+
+  /**
+   * The sidebar's walk covers the footer, not only the folders and Trash.
+   *
+   * Trash was reachable and everything between it and the last folder was not, which is
+   * the report: the rover's container is the whole `<nav class="tree">`, so it skipped
+   * straight past Tags, People, Tasks, Settings and Help to the one row down there that
+   * happened to be a `role="treeitem"`.
+   */
+  function sidebarRows(): HTMLElement[] {
+    return Array.from(
+      container.querySelectorAll('.tree [role="treeitem"], .tree .tree-footer .branch'),
+    );
+  }
+
+  function nameOf(row: HTMLElement | null | undefined): string | undefined {
+    return row?.querySelector(".branch-name")?.textContent ?? undefined;
+  }
+
+  it("walks the arrow keys through the footer rows, not only the folders", async () => {
+    await mount();
+    const names = sidebarRows().map((row) => nameOf(row));
+    expect(names).toEqual(expect.arrayContaining(["Tags", "People", "Tasks", "Settings"]));
+
+    // From the last folder, straight down through everything to the bottom.
+    let current = sidebarRows().find((row) => row.tabIndex === 0)!;
+    act(() => current.focus());
+
+    const visited: (string | undefined)[] = [nameOf(current)];
+    for (let step = 0; step < sidebarRows().length + 2; step += 1) {
+      keydown(current, "ArrowDown");
+      const next = document.activeElement as HTMLElement;
+      if (next === current) break;
+      current = next;
+      visited.push(nameOf(current));
+    }
+
+    for (const label of ["Tags", "People", "Tasks", "Settings", "Trash"]) {
+      expect(visited).toContain(label);
+    }
+  });
+
+  it("keeps exactly one tab stop across the whole sidebar, footer included", async () => {
+    await mount();
+    const footer = sidebarRows().find((row) => nameOf(row) === "Tasks")!;
+    act(() => footer.focus());
+
+    expect(document.activeElement).toBe(footer);
+    expect(sidebarRows().filter((row) => row.tabIndex === 0)).toEqual([footer]);
+  });
+
+  it("comes back up out of the footer to the folders above it", async () => {
+    await mount();
+    const settings = sidebarRows().find((row) => nameOf(row) === "Settings")!;
+    act(() => settings.focus());
+
+    keydown(settings, "ArrowUp");
+    expect(nameOf(document.activeElement as HTMLElement)).toBe("Tasks");
+  });
+
+  it("Home from the footer goes to the top of the tree, End to the bottom", async () => {
+    await mount();
+    const tasks = sidebarRows().find((row) => nameOf(row) === "Tasks")!;
+    act(() => tasks.focus());
+
+    keydown(tasks, "Home");
+    expect(document.activeElement).toBe(sidebarRows()[0]);
+
+    keydown(document.activeElement as HTMLElement, "End");
+    expect(document.activeElement).toBe(sidebarRows()[sidebarRows().length - 1]);
+  });
+
+  it("Tab out of a footer row still leaves the sidebar, so the pane cycle knows where it is", async () => {
+    // `paneOf` recognises rows by selector; a focusable row it cannot classify would make
+    // Tab treat the sidebar as no pane at all.
+    await mount();
+    const tasks = sidebarRows().find((row) => nameOf(row) === "Tasks")!;
+    act(() => tasks.focus());
+
+    keydown(tasks, "Tab");
+    expect(noteRows()).toContain(document.activeElement);
   });
 
   it("Tab moves focus from the tree's active row into the note list", async () => {

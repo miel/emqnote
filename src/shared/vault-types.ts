@@ -143,6 +143,8 @@ export interface NoteSummary {
   tags: string[];
   /** First line or so of the body, for the list. */
   excerpt: string;
+  /** Pinned to the top of the list whatever the sort order (B75). */
+  pinned: boolean;
 }
 
 /**

@@ -154,6 +154,7 @@ function buildFake(): CaptureApi {
     onOpenTag: () => () => {},
     tasks: async () => [taskItem(0, "Een"), taskItem(1, "Twee")],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   return {

@@ -50,6 +50,7 @@ const NOTE: NoteSummary = {
   attendees: [],
   tags: [],
   excerpt: "Wat hier staat",
+  pinned: false,
 };
 
 interface Fake {
@@ -113,6 +114,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   const emqnote: CaptureApi = {

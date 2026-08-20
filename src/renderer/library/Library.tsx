@@ -38,6 +38,7 @@ import { Ask } from "./Ask.js";
 import { ConflictBanner } from "./ConflictBanner.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
+import { SIDEBAR_ROWS } from "./roving.js";
 import { FolderTree } from "./FolderTree.js";
 import { LinkPicker } from "./LinkPicker.js";
 import { NotePicker } from "./NotePicker.js";
@@ -63,6 +64,19 @@ function flatten(node: FolderNode): string[] {
   return [node.path, ...node.children.flatMap(flatten)];
 }
 
+/**
+ * The note list's order: pinned notes first (B75), then the chosen sort within each group.
+ *
+ * One comparator, wrapped rather than replaced, so all three sort keys inherit the pin for
+ * free and a fourth would too. Pinned notes keep the sort *among themselves* rather than a
+ * pin order of their own: three rows is few enough that a hand-kept order would be more to
+ * maintain than to read, and it means the top of the list still answers "most recent
+ * first" the way the rest of it does.
+ *
+ * It sorts whatever list it is given, so a pinned note goes to the top of a tag's notes and
+ * a search's results as well as its own folder's — the pin is a property of the note, not
+ * of one view of it.
+ */
 function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   const sorted = [...notes];
   if (key === "title") {
@@ -70,6 +84,9 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   } else {
     sorted.sort((a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
   }
+  // A stable sort, so this keeps the order above within each of the two groups — which is
+  // why it is a second pass rather than a first clause in the comparators.
+  sorted.sort((a, b) => Number(b.pinned) - Number(a.pinned));
   return sorted;
 }
 
@@ -453,6 +470,15 @@ export function Library(): React.ReactElement {
 
   const openRef = useRef<OpenedNote | null>(null);
   openRef.current = open;
+
+  /**
+   * The list as it currently stands, for the window key handler to look a row up in.
+   *
+   * That handler is registered once (`[app.isMac]`) so it cannot close over `notes`, and
+   * B75's chord needs to know whether the note it is acting on is *already* pinned — which
+   * `OpenedNote` does not say, being what the reader shows rather than what the list does.
+   */
+  const notesRef = useRef<NoteSummary[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTree = useCallback(async () => {
@@ -760,6 +786,20 @@ export function Library(): React.ReactElement {
         return;
       }
 
+      if (fires("pinNote")) {
+        // The note the reader is on, which is the row the list is standing on — the same
+        // note `focusTitle` below renames, so the two chords cannot come to mean two
+        // different rows. The pin itself lives in the list's own summary, not in the
+        // reader's `OpenedNote`, so it is read back out of the list.
+        const note = openRef.current;
+        if (note === null) return;
+        const row = notesRef.current.find((entry) => entry.path === note.path);
+        if (row === undefined) return;
+        event.preventDefault();
+        void setPinned(row, !row.pinned);
+        return;
+      }
+
       if (fires("focusTitle")) {
         // Only when there is a title to edit and this window is allowed to edit it: a note
         // the capture window has claimed must not be renamed from here, the same guard
@@ -811,7 +851,11 @@ export function Library(): React.ReactElement {
     // of their own that this must not steamroll.
     const paneOf = (element: Element | null): "tree" | "notes" | "editor" | null => {
       if (element === null) return null;
-      if (element.closest('[role="treeitem"]') !== null) return "tree";
+      // `SIDEBAR_ROWS`, and it has to be that same set: the footer's rows — Tags, People,
+      // each facet, Tasks, Settings, Help, Unlinked — are part of the sidebar's arrow walk
+      // now, and a row the walk can reach but this cannot classify is a row where Tab and
+      // Ctrl+Tab stop knowing which pane they are in.
+      if (element.closest(SIDEBAR_ROWS) !== null) return "tree";
       if (element.closest('.note[role="option"]') !== null) return "notes";
       if (element.closest('.task-row[role="option"]') !== null) return "notes";
       if (element.closest(".editor-content") !== null) return "editor";
@@ -1300,6 +1344,7 @@ export function Library(): React.ReactElement {
     [tree],
   );
   const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
+  notesRef.current = notes;
 
   // The badge's two halves, joined. Only the tree pane gets this — everything else that
   // reads `tree` (the move list, the folder lookups) is about where folders are, and a
@@ -1873,6 +1918,29 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Pins a note to the top of the list, or takes the pin off (B75).
+   *
+   * The limit and the lock are both answered by main — the renderer knows only the list
+   * currently on screen, and a note pinned in a folder nobody is looking at still counts
+   * towards three. Both refusals become the same dismiss-only dialog every other refusal
+   * in this file uses, and the number in the message is the one main actually enforced
+   * rather than a constant repeated here.
+   */
+  const setPinned = async (note: NoteSummary, pinned: boolean): Promise<void> => {
+    const result = await window.emqnote.library.setPinned(note.path, pinned);
+
+    if (result.locked === true) {
+      setDialog({ kind: "problem", message: app.t("library.pinLocked") });
+      return;
+    }
+    if (result.limit !== undefined) {
+      setDialog({ kind: "problem", message: `${app.t("library.pinLimit")} ${result.limit}.` });
+      return;
+    }
+    await loadNotes(selectionRef.current);
+  };
+
+  /**
    * The note to walk back to, or null when the open note was not reached by a link.
    *
    * Derived rather than stored: the top entry names which note it leads *to*, and it only
@@ -2360,6 +2428,13 @@ export function Library(): React.ReactElement {
                   {
                     label: app.t("library.open"),
                     onSelect: () => void openNote(noteMenu.note.path),
+                  },
+                  {
+                    // Not offered on a trashed note, which is the branch above: a note in
+                    // the trash is not in the list the pin puts things at the top of.
+                    label: app.t("library.pin"),
+                    checked: noteMenu.note.pinned,
+                    onSelect: () => void setPinned(noteMenu.note, !noteMenu.note.pinned),
                   },
                   { label: app.t("library.move"), onSelect: () => setMoving(true) },
                   {

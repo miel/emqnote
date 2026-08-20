@@ -34,6 +34,7 @@ function noteSummary(path: string, title: string): NoteSummary {
     attendees: [],
     tags: [],
     excerpt: "",
+    pinned: false,
   };
 }
 
@@ -124,6 +125,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     onOpenTag: () => () => {},
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   const emqnote: CaptureApi = {
@@ -254,7 +256,7 @@ describe("the note list's right-click menu", () => {
     expect(container.querySelector(".context-menu")).not.toBeNull();
   });
 
-  it("shows Open, Move, Rename, Duplicate, Reveal, Delete, in that order", async () => {
+  it("shows Open, Pin, Move, Rename, Duplicate, Reveal, Delete, in that order", async () => {
     const fake = buildFake();
     await mount(fake);
     await rightClickRow();
@@ -262,7 +264,17 @@ describe("the note list's right-click menu", () => {
     const labels = Array.from(container.querySelectorAll(".context-menu-item")).map(
       (node) => node.querySelector(".context-menu-label")!.textContent,
     );
-    expect(labels).toEqual(["Open", "Move", "Rename", "Duplicate", "Reveal", "Delete"]);
+    // Pin sits second, beside Open: both are things you do *to the note you are looking
+    // at*, where the four below are ways of tidying the vault around it.
+    expect(labels).toEqual([
+      "Open",
+      "Pin to top",
+      "Move",
+      "Rename",
+      "Duplicate",
+      "Reveal",
+      "Delete",
+    ]);
   });
 
   it("shows Restore and Delete permanently instead, for a note in the trash", async () => {
