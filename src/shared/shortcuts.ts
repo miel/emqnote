@@ -288,6 +288,19 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "not.",
   },
   {
+    id: "pinNote",
+    keys: ["Mod-Shift-p"],
+    where: "library",
+    group: "window",
+    why:
+      "B75's pin, and it exists for the rule rather than for the convenience: every " +
+      "action in this app has to be reachable without opening a menu, because the " +
+      "`--click-button` selftest harness cannot open one — and a context menu was the " +
+      "pin's only other route. It acts on the note the list is standing on, the same " +
+      "row the context-menu key would open a menu for, so the two gestures cannot come " +
+      "to mean different notes. `Mod-Shift-p` was free in every scope.",
+  },
+  {
     id: "searchVault",
     keys: ["Mod-f"],
     where: "library",

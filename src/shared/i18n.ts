@@ -87,6 +87,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.contextMenu": "Menu bij de gefocuste rij",
   "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
   "shortcut.newNoteHere": "Nieuwe notitie in deze map",
+  "shortcut.pinNote": "Notitie bovenaan vastprikken",
   "shortcut.searchVault": "Zoeken in alle notities",
 
   // Rechtermuisknop-menu's. De namen komen uit editor-menu.ts en de menu's op mappen/
@@ -188,6 +189,14 @@ const DUTCH: Record<string, string> = {
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kunnen de taken hier aangevinkt worden.",
   "library.renameLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij hernoemd worden.",
+  // B75. Eén label voor beide richtingen: het menu-item staat aangevinkt als de notitie
+  // al vastgeprikt is, dus "Losmaken" ernaast zou hetzelfde twee keer zeggen.
+  "library.pin": "Bovenaan vastprikken",
+  "library.pinLocked":
+    "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij vastgeprikt worden.",
+  // Het getal komt van de hoofdproces-kant, die de grens ook echt afdwingt, en wordt op
+  // de aanroepplek achter deze zin geplakt — er zit geen invulling in deze tabel.
+  "library.pinLimit": "Er kunnen niet meer notities tegelijk vastgeprikt staan dan",
   "library.duplicate": "Dupliceren",
   // Het menu van een bestandsrij (B47). Kopieert `![[pad]]` of `[[pad]]` — dezelfde
   // spelling die het invoegen zelf schrijft, zodat de twee niet uiteen kunnen lopen.
@@ -459,6 +468,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.contextMenu": "Menu for the focused row",
   "shortcut.cyclePanes": "Switch between folders, list and note",
   "shortcut.newNoteHere": "New note in this folder",
+  "shortcut.pinNote": "Pin note to top",
   "shortcut.searchVault": "Search every note",
 
   // Right-click menus. The command names come from `editor-menu.ts` and the folder/
@@ -560,6 +570,14 @@ const ENGLISH: Record<string, string> = {
     "This note is open in the note window. Close it there first, then its tasks can be ticked here.",
   "library.renameLocked":
     "This note is open in the note window. Close it there first, then it can be renamed.",
+  // B75. One label for both directions: the menu item shows a tick when the note is
+  // already pinned, so a separate "Unpin" would be saying the same thing twice.
+  "library.pin": "Pin to top",
+  "library.pinLocked":
+    "This note is open in the note window. Close it there first, then it can be pinned.",
+  // The number comes from main, which is what actually enforces the limit, and is
+  // appended at the call site — there is no interpolation in this table.
+  "library.pinLimit": "No more notes can be pinned at once than",
   "library.duplicate": "Duplicate",
   // A file row's menu (B47). Copies `![[path]]` or `[[path]]` — the very spelling
   // insertion writes, so a copied link and an inserted one cannot disagree.

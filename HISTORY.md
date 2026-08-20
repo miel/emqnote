@@ -747,3 +747,71 @@ actually read. Also unseen by a person: whether four 9px handles are comfortable
 real display, and whether a picture dragged very small still reads as deliberate rather than
 broken. `TEST-PROTOCOL.md` §31.
 
+
+**Seven items from daily use landed later on 20 August 2026**, four of them landing on work
+that had shipped that same morning. One carries a decision: **B75**, a note can be pinned to
+the top of the list, and the pin is in the file. The rest are written up as constraints
+above.
+
+**The thing this batch is worth remembering for is that a measurement can be right and
+answer the wrong question.** The morning's batch put the bullet, B72's star and the task
+checkbox into one column, measured in a real Chromium at 4× by ink centroid, and got them to
+within 0.4px of each other. It was reported still out of column by 3px and 4px — and the
+report was right. `.task-check` is a `<button>`, and a button does not inherit its font, so
+every `em` in its rule resolved against the UA's 13.333px instead of the editor's 16px:
+`var(--marker-slot)` was 20px inside that one rule and 24px in every other. That put the
+box's *ink* 3.4px left of the bullet's while its *centre* sat right on the bullet's. A
+centroid is not what a reader is reading; the left edge is. **Twenty minutes of measuring
+the previous day had turned a one-line change into a construction that was right at every
+depth and still wrong on the axis nobody had thought to read.**
+
+The second report — a checkbox sitting at the top of a pasted picture while the bullet drops
+to the bottom with the text — turned out to be the same defect seen from the other side, and
+is what forced the real fix. A marker positioned against the *item* agrees with the bullet
+only while the line is one line tall; a picture in the line is what tells them apart.
+Measured with a 240×160 picture: the bullet 13.3px above the item's bottom, the checkbox and
+the star **232px** above it. Both now hang off a zero-sized inline anchor sitting on the
+line's own baseline, which also made the star a widget rather than a `::before` — a
+pseudo-element on an `li` whose content is `paragraph block*` gets an anonymous block of its
+own and cannot join the first line at all.
+
+**And the star cannot be measured at 4× in the first place**, which is the methodological
+catch worth carrying forward. The bullet and the checkbox are outlines and read honestly at
+any size; `⭐` is a colour *bitmap* font, drawn from whichever fixed strike is nearest. The
+4× reading put it 1.4px too high at real size, and its ink snaps to whole pixels, so a sweep
+at 16px finds a plateau rather than a value. The shipped number is the middle of that
+plateau. B38's URL shapes, B71's `--key-probe` and the previous day's own marker work are
+all the same lesson; this one adds a second half to it, which is that a harness has to be
+checked against the thing it stands in for.
+
+**"No reliable way to reproduce" was reproducible, and the repro is one space.** Enter on an
+empty bullet ends the list; it was reported doing that sometimes and giving a second empty
+bullet other times. Type a word, change your mind, hold Backspace until the bullet *looks*
+empty and stop one press early: the item holds a single invisible space, and
+`content.size === 0` says it is not empty. The shape matrix written to find it
+(`test/list-enter.test.ts`) also turned up a second defect nobody had reported — leaving a
+deeply nested list flattened every item below it to the top level, as one list per level.
+The text survived and the outline did not. A matrix is the right answer to a report of the
+form "sometimes it works": it turns "sometimes" into a list of shapes that can be read.
+
+The remaining three were ordinary. A numbered list's gutter now grows to fit the widest
+number in the note, so `1000.` is not cut off at the window edge — and grows *only* when a
+digit would otherwise be lost, rather than whenever the marker outgrows the gutter, which
+would have moved the text of every numbered list already written to fix something nobody can
+see. The sidebar's arrow keys reach Tags, People, Tasks, Settings, Help and Unlinked instead
+of stepping from the last folder straight to Trash. And Enter after a starred item goes back
+to the marker the list was using rather than always to a plain bullet, which used to end a
+checklist at the flagged line.
+
+Confirmed in the real app under `Xvfb` against a four-note fixture vault and a genuine
+240×160 PNG, with the ink read off live screenshots rather than looked at: bullet, checkbox
+and star all starting at the same x **to the pixel**, at depths one, two and three, and
+within 0.42px of the same 22.4px line grid — including on the lines holding the picture,
+where two of them used to be 232px away. `1000.` drawing in full with its full stop in the
+same column as `998.`. A pinned note at the top of the list under every sort key with its
+pin drawn beside the title. And the index on disk at `user_version = 4` with a `pinned`
+column carrying a 1 for exactly the note whose frontmatter says so.
+
+**Not confirmed live**: the pin limit's refusal dialog and the sidebar's widened arrow walk.
+Both have real-DOM tests that dispatch real events and read `document.activeElement`, and
+neither has been driven in the packaged app — see `TEST-PROTOCOL.md` §17.

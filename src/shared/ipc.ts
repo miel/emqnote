@@ -190,6 +190,8 @@ export const IPC = {
   libraryTasks: "library:tasks",
   /** Ticks or unticks one task item — goes through the serializer, never the raw text. */
   libraryToggleTask: "library:toggle-task",
+  /** Pins a note to the top of the list, or takes the pin off again (B75). */
+  librarySetPinned: "library:set-pinned",
 
   /** Locale, platform and hotkey — everything a window needs before it draws. */
   bootstrap: "app:bootstrap",
@@ -602,6 +604,19 @@ export interface LibraryApi {
     ordinal: number,
     expectedText: string,
   ) => Promise<{ toggled: boolean; locked?: boolean }>;
+  /**
+   * Pins or unpins a note (B75). `locked` is `toggleTask`'s, and for the same reason: the
+   * capture window has this note claimed.
+   *
+   * `limit` is this call's own refusal — three notes are already pinned. It is answered
+   * from the index rather than from the list on screen, because a note pinned in a folder
+   * nobody is looking at still counts. **Unpinning is never refused for the limit**, only
+   * ever for the lock, so there is always a way back from a vault that somehow holds four.
+   */
+  setPinned: (
+    path: string,
+    pinned: boolean,
+  ) => Promise<{ pinned: boolean; locked?: boolean; limit?: number }>;
 }
 
 export interface CaptureApi {

@@ -70,6 +70,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     onOpenLink: () => () => {},
     onOpenTag: () => () => {},
     toggleTask: async () => ({ toggled: true }),
+    setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
   const emqnote: CaptureApi = {

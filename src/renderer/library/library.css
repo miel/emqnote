@@ -419,6 +419,28 @@
   gap: 8px;
 }
 
+/* The pin on a pinned row (B75). In front of the title rather than out at the right edge
+   beside the time: the row is at the top of the list *because of* this mark, and a reader
+   scanning down the left-hand column is where the explanation has to be.
+
+   `flex: 0 0 auto` so it never takes width from the title, and the same 12px slot the
+   folder tree's `.filter-glyph` uses, so the two icon columns in this window agree. */
+.note-pin {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  width: 12px;
+  color: var(--muted);
+  /* Baseline-aligned like everything else on this row would put a drawing's *bottom* on
+     the text baseline; the glyph is a box, so it wants its middle on the text's middle. */
+  align-self: center;
+}
+
+.note-pin svg {
+  width: 12px;
+  height: 12px;
+}
+
 .note-title {
   flex: 1;
   font-size: 13px;

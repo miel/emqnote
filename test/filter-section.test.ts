@@ -66,6 +66,8 @@ function render(
         selected,
         onSelect,
         onExpand,
+        activeRow: "section:tag",
+        onActivate: () => {},
         emptyLabel: "Nothing found",
         unavailableLabel: "Unavailable",
         filterLabel: "Filter",

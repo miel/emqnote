@@ -90,6 +90,44 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **Task state lives in the index, and the index knows its own schema version** (B26). `checked` is an attribute on `listItem`, not text, so `plainText()` drops it and FTS5 can say nothing about it — the Tasks view is answered from a `note_tasks` table filled by `buildRecord`, which the full scan and the watcher already share, and never by re-parsing a folder subtree on demand. That walk is the 470–535 ms main-thread stall that pushed the scan into a worker; reaching for it again through the back door undoes that. Because `needsRefresh` short-circuits on unchanged `mtime`+`size`, an existing index can never gain new columns on its own, so `migrate()` carries a `PRAGMA user_version` and drops its tables on a bump. That is allowed *because* of B9: the index is a derived cache outside the vault, so a rebuild costs one scan and destroys nothing. Any future column added to `NoteRecord` must bump that version.
 
+**Pinning a note does not touch `modified`** (B75, `setPinned` in `vault-io.ts`). This is
+the thing about the feature most likely to be undone by accident, since every other write in
+that file stamps it. A pin is not an edit of the note: bumping `modified` would push the
+note to the top of the default sort for a reason that has nothing to do with its contents —
+reordering the very list the pin exists to fix — and would tell the other machine that
+something inside the file changed. It is why `setPinned` cannot go through `saveNote`, which
+always stamps. Otherwise it is `toggleTask`'s shape exactly: read, `parseNote`, change one
+thing, `serializeNote`, `writeAtomic` — never a text substitution (B6), and `writeAtomic`
+calls `rememberOwnWrite` so the watcher does not flash a "changed on disk" bar at the person
+who just clicked Pin. Unpinning removes the key rather than writing `pinned: false`, so a
+note that has been pinned and unpinned is byte-identical to one that never was.
+
+**The limit of three is counted in main, against the index.** The renderer only ever knows
+the list currently on screen; a note pinned in a folder nobody is looking at still counts,
+and a limit you could walk around by browsing elsewhere first is not a limit. Hence a
+`pinned` column and `SCHEMA_VERSION` 3 → 4 — `needsRefresh` only re-reads a file whose
+`mtime` or `size` moved, and a column coming into existence does neither, so an older index
+would report every note in the vault as unpinned for good. **Unpinning is never refused for
+the limit**, only for the capture-window lock: if four ever exist — a half-finished startup
+scan, or a fourth arriving from the other machine through OneDrive — the list draws four and
+every one of them can be taken off. The file says what it says, and hiding one would be the
+app disagreeing with the vault.
+
+**Every row the sidebar's arrows walk through is named in one place** (`SIDEBAR_ROWS` in
+`roving.ts`, 20 August 2026). Arrowing down the folder tree used to reach Trash and nothing
+in between, skipping Tags, People, every facet, Tasks, Settings, Help and Unlinked — those
+were click-only, with no `tabIndex`, no `onFocus` and no key handler, and `roveArrowKey`'s
+selector was `[role="treeitem"]`, which only the tree's own rows carry. Trash was reachable
+only because the rover's container is the whole `<nav class="tree">` and Trash is a second
+`<ul role="tree">` past the footer. The footer's rows deliberately do **not** gain
+`role="treeitem"`: they are destinations sitting beside a tree, not items in one, and saying
+otherwise to a screen reader for the sake of a `querySelectorAll` would be a lie. So the two
+sets are named together in one constant instead. **`Library.tsx`'s `paneOf` has to recognise
+that same constant**, or Tab and Ctrl+Tab stop knowing which pane focus is in the moment it
+lands on one of the new rows. A row needs all three of `tabIndex`, `onFocus` and `onKeyDown`
+or it stops the walk dead, which is why `sidebarRowProps` hands out the trio rather than
+each row spelling them out.
+
 **Ticking a checkbox from the Tasks view re-reads and re-checks first.** `toggleTask` in `vault-io.ts` re-parses the file, walks to the n-th task item, and **verifies its text still matches what the caller was shown** before flipping anything. An index row can lag the disk, and flipping the wrong line in a file the user does not have open is the one failure mode worth designing against. Then `serializeNote` + `writeAtomic`, never a text edit — B6 applies here like everywhere else. The IPC handler refuses a note the capture window has claimed, same as `IPC.libraryMoveNote`.
 
 **Deleting a folder is a rename into `_trash`** (B27), never `rmSync`. `trashFolder` reproduces `renameFolder`'s refusals code for code, so the renderer decodes both through one `folderErrorOf`, and the handler refuses a folder holding a note the capture window has claimed.
@@ -141,6 +179,70 @@ pictures stayed). And **a `data:` address goes the same way** rather than straig
 `<img>`: the capture window's CSP allows no `data:` in `img-src`, so the short cut would draw
 in one window and not the other.
 
+**An item is blank when it *draws* blank, not when its content size is zero**
+(`commands.ts`'s `drawsBlank`, 20 August 2026). Enter on an empty bullet ends the list; it
+was reported doing that sometimes and producing a second empty bullet other times, with no
+reliable way to reproduce it. The difference is one space. Type a word on a bullet, change
+your mind and hold Backspace until the bullet *looks* empty — stop one press early and the
+item holds a single space, which is invisible on screen and is not `content.size === 0`, so
+Enter fell through to `splitListItem`. The two cases are indistinguishable to look at, which
+is the whole of the "sometimes". `exitList` also clears the whitespace it forgave, or the
+caret lands after two invisible spaces on a line that is not empty and is not at its own
+start. A `hardBreak` is deliberately *not* blank, and neither is an inline atom: an empty
+second line is something Shift+Enter was pressed on purpose to make, and an item holding
+only a picture has content even though it has no text.
+
+**The direct-child check in `onEmptyListItem` is measured, not assumed.** A blank paragraph
+deeper inside an item — inside a quote in a bullet — must not end the list, and needs no
+handling here at all: `baseKeymap.Enter`'s own `liftEmptyBlock` takes it out of the quote
+and leaves it in the item, which is the useful reading and the one every other editor has.
+
+**Leaving a list must not flatten what is below it** (`nothingIsFlattened`, same day).
+`exitList` escapes by lifting repeatedly, and every lift splits the list it climbs out of —
+so anything still to come at a *nested* level was carried up with it and arrived at the top,
+one list per level. Measured on `- A / - B / - C, ▮, - D / - E`: one press left `- A`,
+`- B`, `- C`, the new line, and then `- D` and `- E` both at the top level as two separate
+lists. The text survived and the outline did not, which is the one thing a note in this app
+is for. It now climbs one level per press — Shift+Tab's step — whenever something nested
+follows, and only takes the one-press exit when nothing does. A following item at the
+*outermost* level is not counted, since it is already where the lift would leave it: that is
+what keeps the common shape, an empty item at the bottom of an outline, a single press.
+
+**And `exitList` returns `false` when it dispatched nothing.** It used to answer `true` on
+the strength of having *tried*, so a lift that declined swallowed the key and Enter did
+nothing at all. Whether the lift will work is asked with a dry run before anything is
+dispatched, so the key falls through to `splitListItem` instead. `test/list-enter.test.ts`
+is the shape matrix all three came out of — the answer to a report of the form "sometimes it
+works", since it turns "sometimes" into a list of shapes that can be read.
+
+**A star hands the marker back to the list it interrupted** (`markerBeforeStar`, B75's
+neighbour, 20 August 2026). B72's star stands *where the bullet stood* rather than beside
+it, so it replaces a marker instead of adding one — and Enter after one used to hand back a
+plain bullet, which ends a checklist at the flagged line. It reads the marker off the items
+*before* it rather than remembering anything on the node, so nothing new reaches the file
+(B6) and a star that arrived from Obsidian, from a paste or from an undo answers the same as
+one just typed. Starred siblings are skipped, so several flagged lines in a row still know
+what they interrupted. A numbered list never reaches it: `toggleStar` declines one and
+`to-mdast.ts` would drop the star anyway, the number being the marker already.
+
+**A numbered list's gutter grows to fit the widest number in the note** (`number-gutter.ts`,
+20 August 2026). An `ol` marker box is right-aligned against the content edge, so a wider
+number grows *leftwards*: out of the list's 1.6em gutter, through the editor's 18px of
+padding, and then off the window, which is where `1000.` was losing its first digits.
+Measured at four times size, a marker's ink reaches one `ch` per digit plus two to the left
+of the text column. **The floor stays 1.6em and the gutter grows only when a digit would
+otherwise be cut off**, rather than whenever the marker outgrows the gutter — it outgrows it
+immediately, even at one digit, and every numbered list in the vault has always leaned that
+little way into the padding beside it with nothing to show for it. Sizing the gutter to
+contain the marker outright would have been the tidier rule and would have moved the text of
+every numbered list already written, two digits by fifteen pixels, to fix something nobody
+can see. Subtracting `var(--editor-pad-x)` is what keeps one- and two-digit lists exactly
+where they are. The plugin reports a **digit count and nothing else**; the arithmetic is in
+`styles.css`, where `1ch` is a digit's width in the font actually in use and `1.6em` is
+already written down once. Per note rather than per list, as asked. Presentation only —
+nothing reaches the serializer, so there is no B6 or B10 question, the same as
+`list-marker-style.ts`.
+
 **One list stays one list.** Two lists of the same kind cannot sit against each other in a
 file: the serializer alternates the bullet character to keep them apart, so `- one` is
 followed by `* two`, which reads back as two lists and draws with a gap down the middle.
@@ -186,30 +288,80 @@ genuinely begins `⭐ ` cannot be expressed, there being no escaped form to tell
 way `\[ ]` is told apart from `[ ]`. `test/limitations.test.ts` pins that;
 `test/corpus/29-sterretjes.md` pins the bytes.
 
-**Bullet, star and checkbox sit on one line and in one column** (20 August 2026). Three things
-can stand in the marker slot and they were drawn three ways: the bullet is a native `::marker`,
-B72's star *was* a `::marker` with a colour emoji in it, and the task checkbox is a positioned
-widget. Measured in a real Chromium at 4× device scale, ink centroid to ink centroid: the star
-was 16.75px tall against the bullet's 4.5px and sat 5px out of column, the checkbox 6.6px right
-of the bullet and 1.05px above its line.
+**Bullet, star and checkbox sit on one line and in one column** (20 August 2026, rewritten
+the same day). Three things can stand in the marker slot: the bullet is a native `::marker`,
+B72's star was a `::marker` with a colour emoji in it, and the task checkbox is a positioned
+widget. The first attempt tuned the other two onto the bullet by **ink centroid**, measured
+in a real Chromium at 4x, and got them within 0.4px of it. It was reported still wrong, in
+two ways, and both reports were right.
 
-**The bullet is the reference and does not move.** The other two are tuned onto it — the
-checkbox with two offsets on `.task-check`'s `left` and `top`, the star by being **drawn into
-the slot by hand** rather than as a `::marker` glyph. That last part is the change to B72's
-mechanism, and it was forced: `::marker` accepts font properties and nothing else, no
-`vertical-align`, so shrinking the star with `font-size` measured it *lower* and further right
-still — the em space in `--marker-gap` shrinks with the glyph. A positioned `::before` with
-`align-items`/`justify-content: center` centres it on both axes, which is also what makes this
-survive an emoji font with different metrics: the size varies, the centre does not.
+**A centroid is not what a reader is reading.** A `<button>` does not inherit its font, so
+every `em` in `.task-check`'s rule resolved against the UA's 13.333px rather than the
+editor's 16px — `var(--marker-slot)` came out 20px inside that one rule and 24px in every
+other, which is the single thing that variable exists to prevent, and the click target was
+20px wide rather than 1.5em. It put the box's *ink* 3.4px left of the bullet's while its
+*centre* sat within 0.2px of the bullet's centre. So the measurement said aligned, the
+column did not look aligned, and the reported "3px too far left" was exactly right.
+`font: inherit` is the fix, and **ink left edge to ink left edge** is the reference on that
+axis now: what "the same column" means to a reader is where the mark starts, not where its
+middle is. Vertically the centroid is still the reference — that is where its weight is.
+The star moved the same way for the same reason, its glyph being more than twice the
+bullet's width. The cost is stated rather than discovered: the ink extent of `⭐` varies by
+platform font, so the left edge is now what is pinned where the centre would have been
+stable.
 
-`transform: scale()` and never `font-size` for that size, or every `em` in the rule — `left`,
-`width`, `height` — would resolve against the new size and move the box along with the glyph.
-The `::marker` still needs `content: none` beside `list-style: none`, since `list-style` stops
-suppressing a marker the moment one has explicit content and the three depth rules give it
-some. `styles-star.test.ts` pins that the `content: none` rule still out-ranks those three;
-`styles-list-marker.test.ts` pins the construction. Verified in the running app at every depth:
-the `◦` and `▪` of levels two and three sit on the same line and column as `•`, so one set of
-numbers is right everywhere.
+**A marker positioned against the *item* is only right while the line is one line tall.**
+The bullet is laid out against the **baseline of the item's first line box**; the star and
+the checkbox were `position: absolute` against the `li`, at `top: 0`. On a plain item those
+two frames coincide, which is why the first measurement could not tell them apart. Paste a
+picture into the line and they come apart entirely: `.wiki-embed-image-box` is
+`vertical-align: text-bottom`, so the line box grows *upward*, the bullet and the text ride
+down to the bottom of the picture together, and the other two stay pinned to the top.
+Measured with a 240x160 picture in the line: bullet 13.3px above the item's bottom, checkbox
+and star **232px** above it.
+
+**`marker-widget.ts`'s anchor is the fix, and it is why the star is a widget now.** An empty
+inline-block of no size (`width: 0; height: 0; line-height: 0; vertical-align: baseline`)
+joins the first line box, contributes nothing to it, and — an empty inline-block taking its
+baseline from its bottom margin edge — sits exactly *on* that line's baseline. Markers hang
+off it and are placed with **`bottom`**, so every vertical offset is a distance from the
+baseline, the same thing the bullet is placed by. A `top` in either rule is the bug coming
+back, and `styles-list-marker.test.ts` asserts the absence of one. The star could not stay a
+`::before` and do this: `listItem` is `paragraph block*`, so an inline pseudo-element on the
+`li` is wrapped in an anonymous block of its own and never joins the paragraph's first line
+at all — which is exactly why B72's version had to be absolutely positioned in the first
+place. It is a widget decoration now (`star-widget.ts`), at `pos + 2` — into the
+*paragraph*, not into the item, since `pos + 1` is a block position and renders as a sibling
+before the paragraph, on a line of its own. `checkbox.ts` moved from `pos + 1` to `pos + 2`
+for the same reason, and its click handler walks back two positions instead of one.
+**Nothing about B72's file format moves with it**: the star is still the `starred` attribute
+and still reaches disk as a `⭐ ` prefix, and a widget is not content, so Backspace, Home,
+select-all, `clipboard-text.ts`, `plainText()`, the excerpt and the Tasks view all go on
+treating a starred item as the ordinary bullet it is.
+
+`transform: scale()` and never `font-size` for the star's size, or every `em` in that rule —
+`left`, `width`, `height` — would resolve against the new size and move the box along with
+the glyph. The `::marker` still needs `content: none` beside `list-style: none`, since
+`list-style` stops suppressing a marker the moment one has explicit content and the three
+depth rules give it some. `styles-star.test.ts` pins that the `content: none` rule still
+out-ranks those three; `styles-list-marker.test.ts` pins the construction.
+
+**And `⭐` cannot be measured at 4x at all, which is the methodological catch.** The bullet
+and the checkbox are outlines and measure the same at any size, so rendering them four times
+up and dividing by four reads them honestly. `⭐` comes from a colour *bitmap* font, drawn
+from whichever fixed strike is nearest and then scaled: read at 4x, `bottom` came out
+0.089em too high, which is 1.4px of star sitting above its own line at real size. Its ink
+also snaps to whole pixels, so a sweep at 16px finds a plateau rather than a value —
+`-0.29em` through `-0.32em` all land within 0.02px of the bullet's line, while `-0.28em` and
+`-0.33em` are each a whole pixel out. The shipped value is the middle of that plateau, as
+far from both edges as it can be, so a platform whose emoji strike sits differently has a
+pixel of room either way. **Anything touching that rule has to be checked in the running app
+at 16px**, never in a magnified harness.
+
+Verified in the running app under `Xvfb`, ink read off a live screenshot: all three markers
+start at the same x to the pixel, at depths one, two and three, and sit within 0.42px of the
+same 22.4px line grid — including on the lines holding a picture, where two of them used to
+be 232px away.
 
 **A bullet, a number or a checkbox follows its own line's formatting** (`list-marker-style.ts`,
 17 August 2026). Bold a whole bulleted line and the `•` stayed upright, which reads as the

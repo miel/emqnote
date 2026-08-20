@@ -7,7 +7,7 @@ a working checklist, not part of the design.
 
 ## What this is for
 
-The suite covers 799 cases and CI runs it on Linux, Windows and macOS. What it cannot do is
+The suite covers 1636 cases and CI runs it on Linux, Windows and macOS. What it cannot do is
 press a key, drag a file from Explorer, watch OneDrive sync a folder between two machines,
 or look at a screen and see that an image is actually there. Everything below is in that
 gap. Nothing here duplicates a test that already exists — if `npm test` covers it, it is
@@ -1071,6 +1071,48 @@ real mouse or trackpad at a real display density, and **whether a picture dragge
 still reads as deliberate** rather than as something that failed to load. The floor is 40px,
 which was chosen so there is always something left to grab; whether that is also the point
 below which it stops looking intentional is a thing only using it can say.
+
+## 32. Markers on a picture's line, big numbers, the sidebar walk and the pin (20 August 2026)
+
+Seven items from daily use, four of them landing on §31's own work the same day. One carries
+a decision: **B75**, a note can be pinned to the top of the list and the pin is in the file.
+
+**Two things here have never been driven live**, and they are §32k–§32m and §32n: the
+sidebar's widened arrow walk and the pin limit's refusal. Both have real-DOM tests that
+dispatch real events and read `document.activeElement`, which is not the same as pressing the
+key. Everything else in this section was measured off live screenshots under `Xvfb` — the
+markers to the pixel — so a failure elsewhere here is a genuine surprise.
+
+**And §32a is a whole platform, again and sharply.** §31a asked the same question and was
+answered by *centring* the star, which is stable across emoji fonts. The alignment is by
+**ink left edge** now, which is not: the width of `⭐` varies by platform font, and the value
+that places it was swept on Noto Color Emoji, where it sits in the middle of a four-step
+plateau. Apple Color Emoji and Segoe UI Emoji are what §32a and §32b are for.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 32a | On **both** macOS and Windows, write a plain bullet, a starred bullet and a task item, one under the other | All three markers starting in the same vertical column and sitting on the same line. The reference is where the *ink starts*, not where its middle is |  |
+| 32b | Same three, nested two and three levels deep | Still one column at that level. The `▪` of level three is a wider glyph and legitimately starts further left; the star and the checkbox must not |  |
+| 32c | Paste a picture into a bulleted line, so the line is much taller than one line | The bullet sits at the **bottom** of the picture, level with the text on that line |  |
+| 32d | Do the same on a task line and on a starred line | The checkbox and the star sit at the bottom too, level with the bullet and the text. They used to sit at the top of the picture |  |
+| 32e | Click the checkbox on that line | It still ticks. It moved into the paragraph as a widget; it is still a control |  |
+| 32f | Write a numbered list running past 999 (`998.` as a first line is enough) | `1000.` draws in full, with its full stop in the same column as `998.`. Nothing is cut off at the left edge |  |
+| 32g | Look at an ordinary short numbered list in the same note | Indented exactly as it always was — the gutter grows for the whole note, but only past three digits |  |
+| 32h | Type a word on a bullet, then hold Backspace until it *looks* empty, stopping while one space is left. Press Enter | The bullet is discarded and the caret is on an empty line at its start. This is the reported bug, and the one space is the whole of it |  |
+| 32i | Build an outline three deep with items still to come below the caret, then Enter on an empty item in the middle of it | Nothing below is flattened to the top level. It climbs one level per press instead |  |
+| 32j | Press Enter after a starred item in a **checklist** | The next line is an unticked checkbox, not a plain bullet |  |
+| 32k | From the vault root, hold ArrowDown all the way to the bottom of the sidebar | Focus passes through every folder, then Tags, People, Tasks, Settings, Keyboard shortcuts, and finally Trash. It used to jump from the last folder straight to Trash |  |
+| 32l | Unfold Tags, then arrow down through it | Each tag is a stop of its own. Enter on one selects it |  |
+| 32m | Land on Settings with the arrows, then press Tab | Focus goes to the note list, as it does from a folder row. A row the arrows reach but Tab does not understand is the bug this is for |  |
+| 32n | Pin four notes | The fourth is refused with a message naming three. Then unpin one and pin it again: allowed |  |
+| 32o | Pin a note in one folder and a note in another, then try a fourth from a third folder | Still refused. The count is the vault's, not the list's |  |
+| 32p | Pin a note and `cat` the file | `pinned: true`, unquoted, and **`modified` is exactly what it was**. This is the row most likely to fail after an innocent-looking change |  |
+| 32q | Note the file's timestamp in Explorer/Finder before and after pinning | The note does not move to the top of a folder sorted by date modified |  |
+| 32r | Unpin it and `cat` again | The `pinned` line is gone entirely — not `pinned: false` |  |
+| 32s | Switch the list between Modified, Created and Title | The pinned note stays at the top under all three |  |
+| 32t | Open the same note in **Obsidian** | `pinned: true` shows in its properties and the note is otherwise untouched |  |
+| 32u | Let OneDrive sync, then look on the **other machine** | The note is pinned there too. This is the whole reason the flag is in the file rather than in settings |  |
+| 32v | Open a pinned note in the capture window, then try to unpin it from the library | Refused, with the "open in the note window" message — the same lock every other write in the library carries |  |
 
 ## Reporting
 

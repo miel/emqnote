@@ -95,6 +95,26 @@ interface Props {
 
 const SORTS: SortKey[] = ["modified", "created", "title"];
 
+/**
+ * The mark on a pinned row (B75) — a drawing pin, drawn rather than typed.
+ *
+ * The house style `FolderTree.tsx`'s three glyphs already set: an inline SVG in
+ * `currentColor`, not an emoji. 📌 comes from a different fallback font on each of the two
+ * machines this runs on and would be the only colour thing in the list.
+ */
+const pinGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M9.6 1.9 14.1 6.4M11 4.3 8.2 7.1a3.6 3.6 0 0 0-.9 3.4l-.6.6-4.1-4.1.6-.6a3.6 3.6 0 0 0 3.4-.9L9.4 2.7M4.8 11.2 2 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export function NoteList({
   notes,
   noteTasks,
@@ -252,6 +272,11 @@ export function NoteList({
               }}
             >
               <div className="note-top">
+                {note.pinned && (
+                  <span className="note-pin" title={t("library.pin")}>
+                    {pinGlyph}
+                  </span>
+                )}
                 <span className="note-title">{note.title}</span>
                 <span className="note-when">
                   {formatListTime(locale, sort === "created" ? note.created : note.modified)}

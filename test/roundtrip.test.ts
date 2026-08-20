@@ -23,7 +23,7 @@ const files = readdirSync(CORPUS)
  */
 describe("round trip: file to document to file", () => {
   it("finds the complete corpus", () => {
-    expect(files.length).toBe(30);
+    expect(files.length).toBe(31);
   });
 
   for (const name of files) {

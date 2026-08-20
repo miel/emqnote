@@ -14,6 +14,7 @@ import {
   needsRefresh,
   openIndex,
   openTaskCountsByFolder,
+  pinnedNotes,
   openTaskCountsByPath,
   search,
   tasksIn,
@@ -33,6 +34,7 @@ function record(overrides: Partial<NoteRecord> = {}): NoteRecord {
     location: "Teams",
     attendees: ["Jan de Vries"],
     tags: ["klantx"],
+    pinned: false,
     excerpt: "Kickoff met de klant over project Alpha.",
     mtime: 1_000,
     size: 200,
@@ -76,7 +78,21 @@ describe("the SQLite index", () => {
       mtime: 1_000,
       size: 200,
       hash: "abc123",
+      pinned: false,
     });
+  });
+
+  it("round-trips B75's pin, and answers which notes carry one", () => {
+    upsertNote(db, record());
+    upsertNote(db, record({ path: "01 Projects/Vastgeprikt.md", pinned: true }));
+
+    expect(getNote(db, "01 Projects/Vastgeprikt.md")?.pinned).toBe(true);
+    expect(pinnedNotes(db)).toEqual(["01 Projects/Vastgeprikt.md"]);
+
+    // Unpinning is an ordinary re-index of the file, not a second write path — the flag
+    // comes off the note's frontmatter like every other column here.
+    upsertNote(db, record({ path: "01 Projects/Vastgeprikt.md", pinned: false }));
+    expect(pinnedNotes(db)).toEqual([]);
   });
 
   it("does not return the indexed body from a metadata read", () => {

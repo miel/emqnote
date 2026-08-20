@@ -190,6 +190,7 @@ export function summarise(vault: string, file: string, raw: string, mtime: Date)
     attendees: frontmatter?.attendees ?? [],
     tags,
     excerpt: excerptOf(body),
+    pinned: frontmatter?.pinned === true,
   };
 }
 
@@ -468,6 +469,40 @@ export function toggleTask(
   });
 
   if (!sameApartFromModified(existing, contents)) writeAtomic(file, contents);
+  return true;
+}
+
+/**
+ * Pins a note to the top of the list, or takes the pin off again (B75).
+ *
+ * `toggleTask`'s shape and for the same reasons: read, `parseNote`, change one thing,
+ * `serializeNote`, `writeAtomic` — never a text substitution on the file (B6), because the
+ * serializer is the one thing that knows how frontmatter is spelled, and `writeAtomic`
+ * calls `rememberOwnWrite` so the watcher recognises this as the app's own write (B31)
+ * rather than flashing a "changed on disk" bar at the user who just clicked Pin.
+ *
+ * **`modified` is carried through untouched, which is the whole difference from every
+ * other write in this file.** A pin is not an edit of the note: bumping `modified` would
+ * reorder the very list the pin exists to fix, move the note to the top under the default
+ * sort for a reason that has nothing to do with its contents, and tell the other machine
+ * that something changed inside it. It is also why this cannot go through `saveNote`.
+ *
+ * Unpinning removes the key rather than writing `pinned: false`, so a note that has been
+ * pinned and unpinned is byte-identical to one that never was.
+ */
+export function setPinned(vault: string, notePath: string, pinned: boolean): boolean {
+  const file = join(vault, notePath);
+  if (!existsSync(file)) return false;
+
+  const existing = readFileSync(file, "utf8");
+  const note = parseNote(existing);
+
+  const frontmatter = { ...note.frontmatter };
+  if (pinned) frontmatter.pinned = true;
+  else delete frontmatter.pinned;
+
+  const contents = serializeNote({ frontmatter, doc: note.doc });
+  if (contents !== existing) writeAtomic(file, contents);
   return true;
 }
 

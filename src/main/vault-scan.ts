@@ -135,6 +135,7 @@ function toSummary(note: NoteMeta): NoteSummary {
     attendees: note.attendees,
     tags: note.tags,
     excerpt: note.excerpt,
+    pinned: note.pinned,
   };
 }
 

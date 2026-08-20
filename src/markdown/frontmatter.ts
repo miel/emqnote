@@ -13,6 +13,15 @@ export interface Frontmatter {
   attachments?: string[];
   tags?: string[];
   source?: NoteSource;
+  /**
+   * Pinned to the top of the note list, whatever the sort order (B75).
+   *
+   * In the file rather than in app settings, so it follows the note to the other machine
+   * through OneDrive, survives a move or a rename with no path bookkeeping, and is visible
+   * in Obsidian — the same reasoning `tags` is here for. Absent rather than `false` when a
+   * note is not pinned, so no existing note gains a line.
+   */
+  pinned?: boolean;
   /** Fields we do not know about — added by Obsidian, for instance. Preserved as-is. */
   extra?: Record<string, unknown>;
 }
@@ -28,9 +37,19 @@ const FIELD_ORDER = [
   "attachments",
   "tags",
   "source",
+  "pinned",
 ] as const;
 
 const ARRAY_FIELDS = new Set(["attendees", "attachments", "tags"]);
+
+/**
+ * The one field that is a type rather than a shape.
+ *
+ * Every other field is written through `emitScalar`, which quotes anything that would
+ * re-parse as something other than a string — so a boolean sent that way comes out as
+ * `pinned: "true"`, a string, which is not what it is.
+ */
+const BOOLEAN_FIELDS = new Set(["pinned"]);
 
 const MAX_INLINE_ARRAY_WIDTH = 100;
 
@@ -114,6 +133,8 @@ export function serializeFrontmatter(frontmatter: Frontmatter): string {
       const items = value as string[];
       if (items.length === 0) continue;
       lines.push(...emitArray(key, items));
+    } else if (BOOLEAN_FIELDS.has(key)) {
+      lines.push(`${key}: ${value === true ? "true" : "false"}`);
     } else {
       const text = String(value);
       if (text === "") continue;
@@ -161,6 +182,12 @@ export function parseFrontmatter(yaml: string): Frontmatter {
   if (tags) frontmatter.tags = tags;
 
   if (raw.source !== undefined) frontmatter.source = String(raw.source) as NoteSource;
+  // A real boolean is ours to read; anything else under that key is somebody else's and
+  // goes back out the way it came in, which is what `extra` is for. `pinned: yes` is not
+  // a boolean in YAML 1.2, and guessing at it would be writing to a file we did not
+  // understand.
+  if (typeof raw.pinned === "boolean") frontmatter.pinned = raw.pinned;
+  else if (raw.pinned !== undefined) extra.pinned = raw.pinned;
   if (Object.keys(extra).length > 0) frontmatter.extra = extra;
 
   return frontmatter;

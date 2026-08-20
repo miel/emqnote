@@ -10,6 +10,8 @@ import { outlookKeymap } from "./keymap.js";
 import { tagHighlight } from "./tag-decoration.js";
 import { linkTitleHint } from "./link-title.js";
 import { taskCheckboxes } from "./checkbox.js";
+import { starMarkers } from "./star-widget.js";
+import { numberGutter } from "./number-gutter.js";
 import { taskHighlight } from "./task-highlight.js";
 import { remoteImages } from "./paste-images.js";
 import { trailingParagraph, withTrailingParagraph } from "./trailing-paragraph.js";
@@ -181,6 +183,7 @@ export function createEditorState(
       tagHighlight(),
       linkTitleHint(),
       taskCheckboxes(),
+      starMarkers(),
       taskHighlight(),
       // Pictures that came in with a pasted web page: downloaded into `_attachments/`
       // and turned into embeds — see `paste-images.ts`.
@@ -193,6 +196,9 @@ export function createEditorState(
       // A bullet, number or checkbox follows the formatting of its own line, when the
       // whole line carries it. Presentation only — nothing reaches the file.
       listMarkerStyle(),
+      // A numbered list's gutter grows to fit the widest number in the note, so a
+      // four-digit marker is not cut off at the window edge. Presentation only.
+      numberGutter(),
       // Column alignment, the caret's own cell and a selected rectangle — none of the
       // three reachable from a stylesheet.
       tableDecorations(),

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { foldTag } from "../../markdown/tags.js";
 import { selectionKey, type Facet, type Selection } from "../../shared/vault-types.js";
 import { score } from "./fuzzy.js";
+import { sidebarRowProps } from "./roving.js";
 
 /** Above this many entries, scrolling stops being a way to find anything. */
 const FILTER_FROM = 15;
@@ -19,6 +20,13 @@ interface Props {
   onSelect: (selection: Selection) => void;
   /** Called the first time this section is unfolded. */
   onExpand: () => void;
+  /**
+   * The sidebar's one roving `tabIndex={0}`, and how to move it — the header and every
+   * facet row take part in the same Up/Down walk as the folders above them, so the state
+   * has to live above both and `FolderTree` is the only thing above both.
+   */
+  activeRow: string;
+  onActivate: (rowKey: string) => void;
   emptyLabel: string;
   unavailableLabel: string;
   filterLabel: string;
@@ -44,6 +52,8 @@ export function FilterSection({
   selected,
   onSelect,
   onExpand,
+  activeRow,
+  onActivate,
   emptyLabel,
   unavailableLabel,
   filterLabel,
@@ -133,7 +143,12 @@ export function FilterSection({
 
   return (
     <div className="filter-section">
-      <div className="branch" style={{ paddingLeft: "8px" }} onClick={toggle}>
+      <div
+        className="branch"
+        style={{ paddingLeft: "8px" }}
+        onClick={toggle}
+        {...sidebarRowProps(`section:${kind}`, activeRow, onActivate, toggle)}
+      >
         <button type="button" className="twisty" aria-label={open ? "Collapse" : "Expand"}>
           {open ? "▾" : "▸"}
         </button>
@@ -167,6 +182,12 @@ export function FilterSection({
                 <li key={facet.name}>
                   <div
                     className={`branch${isSelected(facet) ? " branch-on" : ""}`}
+                    {...sidebarRowProps(
+                      selectionKey(target),
+                      activeRow,
+                      onActivate,
+                      () => onSelect(target),
+                    )}
                     // Clears the heading's own text column: 8px padding + the 16px
                     // twisty + 12px glyph + two 4px gaps put "Tags" and "People" at
                     // 44px, and an item with neither twisty nor glyph needs the same
