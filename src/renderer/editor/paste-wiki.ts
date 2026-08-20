@@ -45,7 +45,11 @@ function splitText(node: PMNode): PMNode[] | null {
     // of a parsed file: a link inside a bold run stays inside it.
     pieces.push(
       match.embed
-        ? schema.nodes.wikiEmbed!.create({ target: match.target }, null, node.marks)
+        ? schema.nodes.wikiEmbed!.create(
+            { target: match.target, ...match.field },
+            null,
+            node.marks,
+          )
         : schema.nodes.wikiLink!.create(
             { target: match.target, alias: match.alias },
             null,

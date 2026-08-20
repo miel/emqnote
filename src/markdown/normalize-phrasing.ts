@@ -1,5 +1,7 @@
 import type { PhrasingContent } from "mdast";
 import type { ExtPhrasing } from "./mdast-ext.js";
+import { readEmbedField } from "./embed-field.js";
+import type { EmbedField } from "./embed-field.js";
 
 /**
  * After remark has parsed, underline, highlight and wikilinks do not exist as nodes
@@ -33,8 +35,21 @@ export interface WikiSyntax {
   /** `![[…]]` rather than `[[…]]` — an attachment drawn in place, not a link to follow. */
   embed: boolean;
   target: string;
-  /** Always `null` for an embed: `![[…|…]]` has no meaning in the dialect. */
+  /**
+   * Always `null` for an embed. `![[…|…]]` is not an alias there — there is nothing to
+   * read *instead of* a picture — and since B74 that half is a field with three possible
+   * meanings, which is the separate answer below.
+   */
   alias: string | null;
+  /**
+   * What an embed's pipe field turned out to mean: a width, a width and a height, or alt
+   * text (B74). All three are `null` for a link, where that half is the alias and a number
+   * in it is a perfectly ordinary thing to call a note.
+   *
+   * `embed-field.ts` decides which of the three it is, so the reading and the writing
+   * cannot drift. Nothing in the slot is dropped: what this app cannot draw it still keeps.
+   */
+  field: EmbedField;
 }
 
 /**
@@ -51,12 +66,21 @@ export function matchWikiSyntax(value: string, from = 0): WikiSyntax | null {
   if (match === null) return null;
 
   const [full, bang, target, alias] = match;
+  const embed = bang !== undefined;
+
+  // An embed's pipe half is a field and a link's is an alias, so exactly one of the two is
+  // ever read. What the field *means* is `embed-field.ts`'s answer, never this module's.
+  const field: EmbedField = embed
+    ? readEmbedField(alias)
+    : { width: null, height: null, alt: null };
+
   return {
     index: from + match.index,
     length: full.length,
-    embed: bang !== undefined,
+    embed,
     target: target!.trim(),
-    alias: bang !== undefined || alias === undefined ? null : alias.trim(),
+    alias: embed || alias === undefined ? null : alias.trim(),
+    field,
   };
 }
 
@@ -90,7 +114,7 @@ function tokenizeText(value: string): Token[] {
     if (wiki !== null && wiki.index === 0) {
       flush();
       if (wiki.embed) {
-        tokens.push({ type: "wikiEmbed", target: wiki.target });
+        tokens.push({ type: "wikiEmbed", target: wiki.target, ...wiki.field });
       } else {
         tokens.push({ type: "wikiLink", target: wiki.target, alias: wiki.alias });
       }

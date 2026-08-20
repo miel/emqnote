@@ -1,5 +1,6 @@
 import { Schema } from "prosemirror-model";
 import type { MarkSpec, Node as PMNode, NodeSpec } from "prosemirror-model";
+import { normaliseDimension } from "./embed-field.js";
 
 /**
  * The ProseMirror schema of emqnote, derived one-to-one from 03-markdown-dialect.md.
@@ -248,7 +249,14 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: () => ["br"],
   },
 
-  /** An external image: ![alt](url). Attachments use wikiEmbed instead. */
+  /**
+   * An external image: ![alt](url). Attachments use wikiEmbed instead.
+   *
+   * `width`/`height` are B74's, and they are in the file: `![alt|400](url)` or
+   * `![alt|400x300](url)`, the same suffix `wikiEmbed` carries and the same one Obsidian
+   * writes. There is no `alt` half to store here — the alt *is* the head of that suffix —
+   * so only a tail that reads as a size is ever taken off. See `embed-field.ts`.
+   */
   image: {
     group: "inline",
     inline: true,
@@ -257,6 +265,8 @@ const nodes: Record<string, NodeSpec> = {
       src: { default: "" },
       alt: { default: null },
       title: { default: null },
+      width: { default: null },
+      height: { default: null },
     },
     parseDOM: [
       {
@@ -265,6 +275,8 @@ const nodes: Record<string, NodeSpec> = {
           src: (dom as HTMLElement).getAttribute("src"),
           alt: (dom as HTMLElement).getAttribute("alt"),
           title: (dom as HTMLElement).getAttribute("title"),
+          width: normaliseDimension(Number((dom as HTMLElement).getAttribute("width"))),
+          height: normaliseDimension(Number((dom as HTMLElement).getAttribute("height"))),
         }),
       },
     ],
@@ -274,20 +286,48 @@ const nodes: Record<string, NodeSpec> = {
         src: node.attrs.src as string,
         alt: (node.attrs.alt as string | null) ?? undefined,
         title: (node.attrs.title as string | null) ?? undefined,
+        width: (node.attrs.width as number | null) ?? undefined,
+        height: (node.attrs.height as number | null) ?? undefined,
       },
     ],
   },
 
-  /** ![[file.png]] — an attachment from _attachments/, resolved by name. */
+  /**
+   * ![[file.png]] — an attachment from _attachments/, resolved by name.
+   *
+   * `width`, `height` and `alt` are the three readings of B74's pipe field, which
+   * `embed-field.ts` tells apart: `|400`, `|400x300`, or anything else as Obsidian's alt
+   * text. At most one of a size and an alt is ever set, the file having one slot.
+   *
+   * They are attributes rather than part of the target because the target is what
+   * `resolveAttachment` resolves and what a folder rename rewrites (B45) — a size folded
+   * into it would travel through both.
+   *
+   * **`alt` is stored and deliberately never shown**: not on the `<img>`, not in the
+   * excerpt, not in the index. It is here so a note written in Obsidian survives being
+   * saved by this app, which it did not before — every non-numeric suffix was dropped on
+   * the first save, from the first markdown commit until B74.
+   */
   wikiEmbed: {
     group: "inline",
     inline: true,
     draggable: true,
     atom: true,
-    attrs: { target: { default: "" } },
+    attrs: {
+      target: { default: "" },
+      width: { default: null },
+      height: { default: null },
+      alt: { default: null },
+    },
     toDOM: (node) => [
       "span",
-      { class: "wiki-embed", "data-target": node.attrs.target as string },
+      {
+        class: "wiki-embed",
+        "data-target": node.attrs.target as string,
+        "data-width": (node.attrs.width as number | null) ?? undefined,
+        "data-height": (node.attrs.height as number | null) ?? undefined,
+        "data-alt": (node.attrs.alt as string | null) ?? undefined,
+      },
       node.attrs.target as string,
     ],
   },

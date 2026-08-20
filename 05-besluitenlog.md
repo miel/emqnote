@@ -2354,6 +2354,24 @@ ziet dus geen enkel taakvakje.
 Twee klassenamen op de tweede CSS-regel (`.note-tasks.note-tasks-open`), niet één, om precies
 B67's reden; `test/styles-note-tasks.test.ts` leest de regel zelf.
 
+**Herzien op 20 augustus 2026, uit dagelijks gebruik: alleen wat openstaat, en niets als er
+niets openstaat.** Er staat nu `Taken: 2`, en een notitie waarvan alle vakjes zijn afgevinkt
+tekent helemaal niets meer. Dat draait de "twee getallen, geen één"-alinea hierboven om, en het
+argument dat hem vervangt is dit: het getal is een oproep om iets te doen, een notitie die klaar
+is heeft die niet, en een kolom getallen die grotendeels zeggen dat er niets ligt is een kolom
+die niet meer gelezen wordt. Het totaal is niet verdwenen maar één hover ver — de `title` spelt
+`2 / 5` nog steeds uit, wat meteen `tree.openTasks` de enige plek houdt waar die woorden staan.
+
+**Afwezig is nog steeds niet nul**, en om precies dezelfde reden: dat de twee nu hetzelfde
+tekenen is een gevolg van deze regel, geen samenvoeging van de twee toestanden.
+
+**En de telling schuift een rij omhoog als er niemand naast staat.** `.note-bottom` bestaat om
+personen links en de telling rechts te zetten; zonder personen was het een rij met één getal
+erin. Die rij wordt nu helemaal niet getekend en de telling staat rechts op de *tekstregel*.
+Personen blijven staan waar ze stonden, dus de alinea hierboven geldt onverkort — de regel gaat
+over Wie, niet over tags, die nooit een rij met de telling deelden. De grijze variant en de
+`.note-tasks-open`-klasse konden ermee weg: er is nog één toestand om te tekenen.
+
 ---
 
 ## B70 — De cursorpositie blijft bewaard zolang het bibliotheekvenster open is
@@ -2561,3 +2579,97 @@ tussenin de focus verliest. Daarom heeft het Waar-veld zijn eigen `suggesting`, 
 `hoverGuard` in plaats van die te delen: één gedeelde `active` zou de markering verplaatsen in
 een paneel waar niemand naar kijkt.
 
+## B74 — Een afbeelding kan versleept worden, en dat formaat staat in het bestand
+
+**Genomen** op 20 augustus 2026, uit dagelijks gebruik. Een schermafbeelding die in een notitie
+wordt geplakt komt binnen op de grootte die hij toevallig heeft; `styles.css` zette er een
+plafond op (`max-width: 100%`, `max-height: 480px`) en verder was er niets. Een kleine
+verduidelijking naast een alinea nam daarmee net zoveel ruimte als het onderwerp zelf.
+
+**Het besluit.** Vier handvatten op de hoeken van een geselecteerde afbeelding. Slepen bepaalt
+een *breedte*; de verhoudingen liggen vast. Het formaat gaat naar het bestand, in de vorm die
+Obsidian zelf schrijft:
+
+```markdown
+![[2026-08-20-0915-schermafbeelding.png|400]]
+![Het logo|320](https://voorbeeld.nl/logo.png)
+```
+
+**Waarom het in het bestand staat en niet ergens anders.** Een breedte die alleen op het scherm
+bestaat is bij de volgende keer openen weer weg, en de vault is de enige plek waar deze app iets
+bewaart dat over een notitie gaat (B9 zegt waar de *afgeleide* dingen staan, en dit is er geen).
+Dus is het inhoud, en dan is het meteen ook een dialectbeslissing — §5.1.
+
+**Waarom Obsidians spelling.** B7: de vault blijft leesbaar in Obsidian, en Obsidian kent deze
+vorm al. Een eigen spelling verzinnen zou betekenen dat een notitie in de ene app op formaat
+staat en in de andere niet, terwijl de vorm die het al doet gewoon voorhanden lag.
+
+**Het is één gleufje met drie lezingen, en alle drie worden ze gevolgd.** Obsidian kijkt wát er
+achter de streep staat: enkel cijfers is een breedte, `250x180` is een breedte én hoogte, en al
+het overige is alt-tekst. Een eerste versie van dit besluit las alleen het eerste geval en gooide
+de andere twee weg; dat is dezelfde dag nog rechtgezet, want het was de bug herhalen die dit
+besluit hoorde op te lossen.
+
+**Er gaat niets in dat gleufje verloren.** Dat is de kern. Vanaf de allereerste markdown-commit
+(`18d1122`) gooide de parser *alles* achter de streep van een `![[…]]` weg — hij las het wel, er
+was alleen geen plek om het te bewaren — dus een in Obsidian geschreven notitie verloor zijn
+alt-tekst zodra er in deze app één teken in die notitie veranderde, zonder dat er iets over
+gezegd werd. Iets niet begrijpen is nooit een reden om het niet te bewaren. Wat níét als formaat
+leest blijft daarom letterlijk staan: een getal buiten de grenzen, een leeg gleufje dat er wél
+is, en `250X180` met een hoofdletter.
+
+**Dat laatste is in Obsidian nagekeken en niet beredeneerd**, en dat is een correctie waard: de
+eerste versie van deze tekst bewéérde dat Obsidian hier ruimer is en dat dit dus een bewuste
+afwijking was, zonder dat iemand had gekeken. Obsidian verandert de grootte bij een
+hoofdletter-`X` óók niet. Het is dus overeenstemming, geen afwijking, en hem letterlijk bewaren
+in plaats van hem naar `250x180` recht te trekken is daarmee gratis. Dezelfde les als B71: een
+bewering over andermans software is een meting, geen gevolgtrekking.
+
+**Alt-tekst wordt bewaard en voorlopig nergens getoond** — niet op de `<img>`, niet in het
+uittreksel, niet in de index. Hij staat er om de rondgang te overleven, niet om iets te doen; wat
+hij ooit wél moet doen is een aparte vraag die niemand nu stelt.
+
+**Deze app schrijft zelf nooit een hoogte.** De handvatten houden de verhoudingen vast, dus wat
+zij opleveren is `|400`: een hoogte die deze app zelf verzint zou een tweede bron van waarheid
+zijn die niet meer klopt zodra het bestand erachter wordt vervangen. Een hoogte die iemand ánders
+schreef is iets heel anders — die is een bewuste daad geweest — en wordt wél getekend en bewaard.
+Een sleep op zo'n afbeelding schaalt daarom *beide* getallen met dezelfde factor en schrijft weer
+`|WxH` terug: iemands afbeelding rechttrekken omdat hij toevallig een hoekje beetpakte is iets
+besluiten wat deze app niet kan weten. Alleen een afbeelding zonder opgeslagen hoogte wordt naar
+een kale breedte gesleept.
+
+**Wat dit kost, en dat is opgeschreven in plaats van ontdekt.** Eén gleufje betekent één ding
+tegelijk, dus een afbeelding kan geen formaat én alt-tekst dragen. Dat is de grens van het
+formaat en geen keuze hier, maar het heeft een gevolg: een afbeelding met alt-tekst die je
+versleept raakt die tekst kwijt. Dat gebeurt op één plek, met opzet (`image-resize.ts` wist `alt`
+als hij een breedte schrijft) in plaats van het aan de serializer over te laten. En andersom
+wordt `![Grafiek|2024](…)` als een breedte van 2024 gelezen, omdat er geen ontsnapte vorm bestaat
+om de twee uit elkaar te houden; dezelfde afweging als bij B72's ster.
+`test/limitations.test.ts` pint beide vast.
+
+**Eén plek waar de syntax gespeld wordt.** `src/markdown/embed-field.ts`, in beide richtingen en
+voor beide vormen. Twee spellingen van één syntax is hoe een plakactie en een heropening het over
+dezelfde tekens oneens worden — de bug waar B58 voor bestaat.
+
+**Een attribuut naast het doel, niet erin.** `target` is wat `resolveAttachment` oplost en wat
+een mapnaamwijziging herschrijft (B45); een formaat dat erin verstopt zat zou door beide heen
+reizen. Nu overleeft de breedte zo'n hernoeming gratis, omdat `rewriteTargetPrefix` de knoop
+opbouwt uit `{ ...attrs, target }` — vastgelegd in `test/folder-rename-links.test.ts`, want een
+hernoeming die stilletjes elke afbeelding in een map op ware grootte terugzet is precies het
+soort verlies dat niemand opmerkt.
+
+**Afbeeldingen wel, een PDF-pagina niet.** De ingesloten PDF heeft sinds B46 zijn eigen
+Passend-keuze, en dat is een bewust genomen besluit *tegen* zoomen: de pagina is één al
+gerenderde PNG, dus een zoom zou een vast aantal pixels vergroten. Handvatten daar zouden met dat
+besluit vechten. Een chip heeft geen verhoudingen en dus niets om aan te trekken.
+
+**De transactie landt één keer, bij loslaten.** Tijdens het slepen gaat de breedte alleen naar
+`img.style`, zodat een sleep één stap in de geschiedenis is in plaats van één per pixel — en een
+afbeelding waar iemand zich halverwege op bedenkt kost het bestand niets tot de knop omhoog komt.
+Dubbelklikken op een handvat zet hem terug op ware grootte, wat de enige weg terug is voor een
+breedte van een vorige sessie: Ctrl+Z reikt niet verder dan het venster open staat.
+
+**Overwogen en niet gedaan.** Een percentage in plaats van pixels — leest prettiger, maar
+waarvan een percentage? De kolombreedte verschilt per venster en per paneel, dus hetzelfde
+bestand zou op twee machines twee formaten zijn. Obsidian schrijft pixels; die keuze is al
+gemaakt.

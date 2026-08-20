@@ -9,6 +9,7 @@ import type { Handle, State, Info } from "mdast-util-to-markdown";
 import type { ListItem } from "mdast";
 import { isStarred } from "./star-items.js";
 import { startsWithTag } from "./tags.js";
+import { writeEmbedField } from "./embed-field.js";
 
 /**
  * Every write option is spelled out here, including the ones that happen to match the
@@ -56,7 +57,30 @@ const underline: Handle = (node, _parent, state, info) =>
 const highlight: Handle = (node, _parent, state, info) =>
   `==${phrasing(node as ChildrenNode, state, info, "=")}==`;
 
-const wikiEmbed: Handle = (node) => `![[${(node as { target: string }).target}]]`;
+/**
+ * `![[foto.png]]`, or `![[foto.png|400]]` / `![[foto.png|400x300]]` / `![[foto.png|een
+ * foto van het kantoor]]` — the one slot with its three readings (B74).
+ *
+ * The field goes through `writeEmbedField` rather than being composed here, so the one
+ * place that spells the syntax is the one place that reads it back — `embed-field.ts`.
+ * `""` is a real answer and not the same as `null`: `![[foto.png|]]` had an empty slot in
+ * the file and gets it back, which is what "nothing in that slot is discarded" means down
+ * to the byte.
+ *
+ * Nothing is escaped: a target may not contain `]` or `|` (the parser's own regex says
+ * so), a size is digits, and alt text that contained a `]` could not have been read as
+ * this node in the first place.
+ */
+const wikiEmbed: Handle = (node) => {
+  const { target, width, height, alt } = node as {
+    target: string;
+    width: number | null;
+    height: number | null;
+    alt: string | null;
+  };
+  const field = writeEmbedField({ width, height, alt });
+  return field === null ? `![[${target}]]` : `![[${target}|${field}]]`;
+};
 
 const wikiLink: Handle = (node) => {
   const { target, alias } = node as { target: string; alias: string | null };

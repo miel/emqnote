@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1539 tests
+npm test               # vitest run — 1578 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -320,6 +320,31 @@ genuinely begins `⭐ ` cannot be expressed, there being no escaped form to tell
 way `\[ ]` is told apart from `[ ]`. `test/limitations.test.ts` pins that;
 `test/corpus/29-sterretjes.md` pins the bytes.
 
+**Bullet, star and checkbox sit on one line and in one column** (20 August 2026). Three things
+can stand in the marker slot and they were drawn three ways: the bullet is a native `::marker`,
+B72's star *was* a `::marker` with a colour emoji in it, and the task checkbox is a positioned
+widget. Measured in a real Chromium at 4× device scale, ink centroid to ink centroid: the star
+was 16.75px tall against the bullet's 4.5px and sat 5px out of column, the checkbox 6.6px right
+of the bullet and 1.05px above its line.
+
+**The bullet is the reference and does not move.** The other two are tuned onto it — the
+checkbox with two offsets on `.task-check`'s `left` and `top`, the star by being **drawn into
+the slot by hand** rather than as a `::marker` glyph. That last part is the change to B72's
+mechanism, and it was forced: `::marker` accepts font properties and nothing else, no
+`vertical-align`, so shrinking the star with `font-size` measured it *lower* and further right
+still — the em space in `--marker-gap` shrinks with the glyph. A positioned `::before` with
+`align-items`/`justify-content: center` centres it on both axes, which is also what makes this
+survive an emoji font with different metrics: the size varies, the centre does not.
+
+`transform: scale()` and never `font-size` for that size, or every `em` in the rule — `left`,
+`width`, `height` — would resolve against the new size and move the box along with the glyph.
+The `::marker` still needs `content: none` beside `list-style: none`, since `list-style` stops
+suppressing a marker the moment one has explicit content and the three depth rules give it
+some. `styles-star.test.ts` pins that the `content: none` rule still out-ranks those three;
+`styles-list-marker.test.ts` pins the construction. Verified in the running app at every depth:
+the `◦` and `▪` of levels two and three sit on the same line and column as `•`, so one set of
+numbers is right everywhere.
+
 **A bullet, a number or a checkbox follows its own line's formatting** (`list-marker-style.ts`,
 17 August 2026). Bold a whole bulleted line and the `•` stayed upright, which reads as the
 marker not belonging to the line it introduces. It is a `DecorationSet` putting a class on
@@ -510,6 +535,63 @@ already says it is for. The page box means the bar now holds an `<input>` inside
 bar** — `checkbox.ts` and `table-toolbar.ts` both answer `true` unconditionally because their
 DOM *is* the widget, while here the page beside it must keep reaching ProseMirror, since
 clicking it is how the embed gets selected and deleted.
+
+**An embed's pipe field means three things, and none of them is thrown away** (B74).
+`![[foto.png|…]]` has one slot, and Obsidian decides what it means by pattern-matching the
+string in it — a bare number is a width, `250x180` is a box, anything else is alt text. This
+app follows that exactly rather than inventing a spelling (B7), on the remote form too:
+`![Het logo|320](url)`. Four corner handles do the resizing, drawn only while the node is
+selected; `image-resize.ts` is that half, and `embed-field.ts` is the one place the slot is
+spelled, in both directions and for both node types — two spellings of one syntax is how a
+paste and a reopen come to disagree about the same characters (B58).
+
+**Nothing in that slot is discarded, and that is the point.** From the first markdown commit
+(`18d1122`) the parser read the pipe half of an embed and had nowhere to put it, so every
+non-numeric suffix vanished on the first save — an Obsidian note lost its alt text the moment
+one character in it was edited here, silently. Understanding something and keeping it are two
+different jobs, and only the first is optional. So what does not read as a size is kept
+verbatim: a number outside the bounds, an empty slot that is genuinely there, and a capital
+`X`. That last one is **checked in Obsidian rather than reasoned about** — `250X180` does not
+resize there either, so both apps show the same thing and this is agreement, not divergence;
+keeping the string instead of canonicalising it to `250x180` is then free. The comment here
+first claimed the opposite, that Obsidian was looser and this was a deliberate departure from
+it, with nobody having looked. B71's lesson: a claim about somebody else's software is a
+measurement, not a deduction. **Alt text is stored and deliberately shown nowhere** — not on the `<img>`,
+not in the excerpt, not in the index. It survives the round trip; what it should eventually
+*do* is a separate question nobody is asking yet.
+
+**This app never writes a height of its own.** The handles lock the proportions, so what a
+drag produces is `|400`; a height it invented would be a second source of truth that stops
+being true the moment the file behind it is replaced. A height *somebody else* wrote is a
+different matter — a deliberate act — so it is drawn and kept, and a drag on such a picture
+scales both numbers by the same factor and writes `|WxH` back. Undistorting somebody's picture
+because they grabbed a corner would be deciding something this app cannot know.
+
+Four more things are load-bearing. **The size is an attribute beside the target and not inside
+it**, since `target` is what `resolveAttachment` resolves and what a folder rename rewrites
+(B45); `rewriteTargetPrefix` rebuilds from `{ ...attrs, target }`, so it survives a rename for
+free and `folder-rename-links.test.ts` says so. **The transaction lands once, on release** — the
+size goes onto `img.style` during the drag and nowhere else, so a drag is one undo step and a
+picture somebody thinks better of costs the file nothing. **Both NodeViews get an `update`**, or
+ProseMirror destroys and rebuilds on every attribute change and the picture flashes away and
+back on each release (a second probe `Image`, in the remote case). And **`stopEvent` is scoped
+to the handles**, unlike `checkbox.ts` and `table-toolbar.ts` whose DOM *is* the widget: the
+picture beside them must go on reaching ProseMirror or clicking it no longer selects the node
+and there is no way to delete it.
+
+**Pictures only.** The embedded PDF page keeps B46's Fit control, which is a decision taken
+deliberately *against* a zoom (the page is one already-rendered PNG), so handles there would
+fight it. `.wiki-embed-image-box` became `inline-block` + `position: relative` to be the
+containing block — measured against a mid-sentence embed before and after, the line height and
+the picture's own rect are unchanged, as long as exactly one of the box and the `<img>` carries
+`vertical-align: text-bottom`.
+
+**One slot means one thing at a time**, so a picture cannot carry both a size and alt text.
+That is the format's limit, not a choice made here, and it has a consequence: resizing a
+picture that has alt text replaces it. It happens in one place and on purpose —
+`image-resize.ts` clears `alt` when it writes a width — rather than being left to the
+serializer. The other way round, `![Grafiek|2024](…)` reads as a width, there being no escaped
+form to tell the two apart; same shape as B72's star. `test/limitations.test.ts` pins both.
 
 **A plain `[[…]]` link standing next to its own `![[…]]` embed is not drawn** (B48).
 Obsidian writes both when it inserts a PDF, so an imported note reads as a full page with a
@@ -799,17 +881,31 @@ counted. A tick is a save and a save raises `library:refresh`, so the badge foll
 without knowing anything about one; a failed refresh keeps the last counts, the rule the
 unlinked pane already learned.
 
-**The note list says `[open] of [total]` under the date** (B69). B67's answer a level down,
-out of the same `openTaskCountsByPath`, so the folder badge and the rows inside that folder
-cannot disagree about the notes they are both counting. Accent while there is work left, muted
-once `open` is `0`.
+**The note list says `Tasks: 2` under the date** (B69, revised 20 August 2026). B67's answer a
+level down, out of the same `openTaskCountsByPath`, so the folder badge and the rows inside
+that folder cannot disagree about the notes they are both counting. Always the accent, because
+the badge is now only ever drawn for a note that has work left.
 
-**Two numbers, not one, and absent is not zero.** `0 of 5` is a note whose work is done; a
-note that never had a checkbox says nothing at all, and only `total` tells those apart. A note
-missing from the map draws nothing — the same "absent, not zero" rule `FolderNode.openTasks`
-carries, for the same reason: the rows come off a `readdir` and the counts come from behind
-`ensureScanned`, so a row must never be able to claim a note is clear while the answer is
-still on its way. It is a second IPC call for B67's reason exactly.
+**Only what is open, and silence when nothing is.** It read `2 of 5`, and said `0 of 5` in
+muted grey for a note whose boxes were all ticked, on the argument that only `total` tells
+"done" apart from "never had any". Daily use answered that the other way: the badge is a call
+to action, a finished note has none, and a column of numbers mostly saying nothing is owed is
+a column that stops being read. The total is not lost — the `title` still spells `2 / 5` out,
+which is also what keeps `tree.openTasks` the one place those words are written.
+
+**Absent is still not zero**, for the reason it always was: a note missing from the map covers
+both "no task items" and "the index has not answered yet", and a row must never claim a note
+is clear while the answer is still on its way — the rows come off a `readdir` and the counts
+come from behind `ensureScanned`. That the two now draw the same thing is a consequence of the
+rule above, not a merging of the two states. It is a second IPC call for B67's reason exactly.
+
+**The badge moves up a row when there is nobody to sit beside.** `.note-bottom` exists to put
+People on the left and the count on the right; with no attendees it was a row holding one
+number, on every note in the vault. So the count sits right-aligned on the *excerpt* row
+(`.note-middle`) instead and that row is simply absent. One rule, and it is about People —
+tags have never shared a row with the count. One DOM shape and not two: the excerpt is always
+wrapped, so a note without tasks is geometrically what it was. The muted variant and the
+`.note-tasks-open` class went with it, there being one state left to draw.
 
 **It cannot come off `NoteSummary`.** `summarise` reads the frontmatter and the first lines of
 a file without ever building a document — deliberately, 0.09 ms against 1.51 ms per note — so
@@ -1022,7 +1118,7 @@ B42's row, column and alignment commands were the exception that proved it: they
 
 ## Tests
 
-`test/corpus/` is **the specification**, not a set of examples. Each of the 28 files is written exactly as the serializer is meant to write it. `test/roundtrip.test.ts` asserts byte-identity in both directions plus formal file shape (LF only, exactly one trailing newline, frontmatter first, no trailing whitespace). If output differs from the corpus, one of the two is wrong — decide which, deliberately. Do not relax the assertion.
+`test/corpus/` is **the specification**, not a set of examples. Each of the 30 files is written exactly as the serializer is meant to write it. `test/roundtrip.test.ts` asserts byte-identity in both directions plus formal file shape (LF only, exactly one trailing newline, frontmatter first, no trailing whitespace). If output differs from the corpus, one of the two is wrong — decide which, deliberately. Do not relax the assertion.
 
 `test/limitations.test.ts` pins what the dialect deliberately *cannot* express, so the boundary is visible rather than discovered later.
 
@@ -1732,6 +1828,84 @@ in.
 has not been driven under `Xvfb` over CDP, which every batch before it was. That is the
 outstanding work, and `TEST-PROTOCOL.md` §30 is what it should be driven against.
 
+**Three items from daily use landed on 20 August 2026**, and only one of them is new work.
+One carries a decision: **B74** — an embed's pipe field means three things and none of them is
+thrown away, with a corner drag as the way to set the first. The other two are written up as constraints above:
+the note list's task badge says `Tasks: 2` and says nothing at all for a finished note (B69
+revised), moving up onto the excerpt row when a note names nobody; and the bullet, B72's star
+and the task checkbox now sit on one line and in one column.
+
+**A fourth was dropped at the reporter's request**: the Where field's type-ahead. It is worth
+recording what happened around it, because the investigation went wrong in a way that is easy
+to repeat. B73 is fully implemented (`location-typeahead.ts`, `HeaderBlock.tsx`,
+`IPC.locationSuggestions` → `locationFacets`) and its two test files pass, so the report was
+answered with "it is built but never released" — on the strength of `git tag | tail -6`, which
+sorts **lexically**: `v0.8.9` comes after `v0.8.14` in that ordering, so the newest tag looked
+five releases older than it was. `v0.8.14` exists, is published, and contains B73.
+
+**Use `git tag --sort=-v:refname`, or `gh release list`.** A version is not a string, and the
+one command that made this look like a delivery problem is the default one. The 6 August 2026
+batch — where "aggregated tasks not visible" really was an untagged PR — is what made the wrong
+answer plausible, which is exactly why it needed checking rather than pattern-matching.
+
+So the report stands unexplained: it was made against a build that does carry the feature. It
+was dropped at the reporter's request and nothing was investigated further; the next person to
+pick it up should start from `--key-probe`'s lesson (B71) and measure on the reporting machine
+rather than reason from here.
+
+The thing this batch is worth remembering for is that **the marker alignment was measured
+rather than guessed, and the measurement changed the design**. The obvious fix for a star that
+sits wrong is `font-size` on its `::marker`; rendering the real stylesheet in a real Chromium
+at 4× and reading the ink centroids out of the PNG showed that shrinking it moved it *lower*
+and further out of column, because the em space in `--marker-gap` scales with the glyph and
+`::marker` accepts no `vertical-align` to compensate with. Twenty minutes of measuring turned a
+one-line change that would have shipped wrong into a construction that is right at every depth
+and on any emoji font. B38's URL shapes and B71's `--key-probe` are the same lesson.
+
+Confirmed in the real app under `Xvfb`, driven over CDP, against a five-note fixture vault and
+a genuine 240×160 PNG: a note with People reading `Tasks: 2` on `.note-bottom` beside them, a
+note with none reading `Tasks: 1` on `.note-middle` with **no `.note-bottom` element at all**, a
+note whose boxes are all ticked and a note that never had one both drawing **nothing**, both
+counts at the same right edge, and the surviving badge in a real computed `rgb(26, 99, 216)`
+with `Open tasks: 2 / 3` in its `title`. The three markers' ink centroids measured off a live
+screenshot at x 18.75 / 18.88 / 18.75 and y 9.75 / 9.23 / 9.97, against a star that was 5px out
+of column before. And a picture selected by a **real click** growing four handles that sit on
+its own corners (the SE handle's centre on the picture's bottom-right, not the paragraph's), a
+**real corner drag** tracking the pointer live at 212 → 172 → 140, the file coming back
+`![[_attachments/foto.png|140]]` and **byte-identical from `npm run canonical`**, the note
+closed and reopened still at 140px with its hash and mtime unchanged (B10), and a double-click
+on a handle putting it back to 242px with the suffix gone from the file.
+
+**And all of it in the capture window as well**: a pasted `![[…]]` there drew a real picture
+with four hidden handles, a real click selected it, a real corner drag took it to 152×102 with
+the proportions kept, and the committed note landed on disk as `![[_attachments/foto.png|152]]`.
+
+**B74 shipped narrow and was widened the same day, and that is the part worth remembering.**
+The first version read only `|400` and went on discarding `|250x180` and `|een foto van het
+kantoor` — which is the very bug the decision existed to fix, reproduced one case narrower. The
+mistake was reading the *feature* (resize the picture) instead of the *format* (one slot, three
+readings): a syntax with a slot in it has to be handled at the slot, not at the one meaning
+that happened to be wanted. Understanding something and keeping it are two different jobs, and
+`readEmbedField` now answers "not a size" by putting the string in `alt` rather than by
+dropping it — which is also how a capital `X`, an out-of-bounds number and an empty slot all
+survive without being understood at all.
+
+Confirmed in the real app after that widening, driven over CDP: `|250x180` drawing at exactly
+250×180 (deliberately distorted from the file's own 240×160 natural size, because the file said
+so), `|een foto van het kantoor` drawing at its own size with **nothing on the `<img>`**, and
+`|140` at 140×94 with the proportions kept — then a real edit and save leaving **all three
+suffixes intact on disk**, which is the sentence this whole change is about. A corner drag on
+the box took it to `|170x122`, the same shape it started with (1.389 → 1.393); a corner drag on
+the alt-text picture wrote `|182` and replaced the text, the documented cost of one slot. The
+file byte-identical from `npm run canonical` throughout.
+
+**Not confirmed live**: how the star and checkbox land against **Apple Color Emoji and Segoe UI
+Emoji** — the box centres the glyph whatever its metrics, which is why the construction was
+chosen over a tuned `font-size`, but only a Mac and a Windows machine can say how the two
+actually read. Also unseen by a person: whether four 9px handles are comfortable to grab on a
+real display, and whether a picture dragged very small still reads as deliberate rather than
+broken. `TEST-PROTOCOL.md` §31.
+
 ## The documents
 
 Read these before making structural changes; they carry the reasoning that the code assumes.
@@ -1743,7 +1917,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B73, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B74, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 

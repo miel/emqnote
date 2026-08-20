@@ -6,8 +6,7 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode, NoteSummary, OpenedNote, TaskCount } from "../src/shared/vault-types.js";
 
 /**
- * The note list's own task count: `2 of 5` under the date, right-aligned against the
- * People line beside it.
+ * The note list's own task count: `Tasks: 2`, and where on the row it sits.
  *
  * Mounted through a real `Library`, the way `test/note-list-menu.test.ts` does, because
  * the whole of what is being tested is the seam — the rows come off a `readdir` and the
@@ -15,10 +14,16 @@ import type { FolderNode, NoteSummary, OpenedNote, TaskCount } from "../src/shar
  * A test that rendered `NoteList` with the counts already in hand would assert the one
  * part that was never in doubt.
  *
- * Three states, and telling the second from the third is the point (B67's rule a level
- * down): a note with work left, a note whose boxes are all ticked, and a note with no
- * task items at all — which draws nothing, exactly as it does while the answer is still
- * on its way.
+ * Two things are pinned. **Only open tasks are drawn**, so a note whose boxes are all
+ * ticked says nothing at all — which reverses B69's `0 of 5` and is why the finished note
+ * below is asserted to be as silent as the note that never had a checkbox. The total is
+ * not gone; it is in the `title`, and that is asserted too, or "the tooltip still says it"
+ * would be a claim nothing checks.
+ *
+ * And **the count moves up a row when there is nobody to sit beside**: on `.note-middle`
+ * with the excerpt for a note with no attendees, on `.note-bottom` beside them when there
+ * are. That is one rule about People, and the placement is the whole of what was reported
+ * — a line of every note in the vault spent on a single number.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -219,10 +224,13 @@ describe("the note list's task count", () => {
   const FINISHED = "00 Inbox/2026-08-19 1100 Afgerond.md";
   const PLAIN = "00 Inbox/2026-08-19 1200 Zonder taken.md";
 
-  async function mountWith(counts: Record<string, TaskCount>): Promise<void> {
+  async function mountWith(
+    counts: Record<string, TaskCount>,
+    attendees: string[] = [],
+  ): Promise<void> {
     const fake = buildFake();
     fake.emqnote.library.notes = async () => [
-      noteSummary(WORKING, "Offerte"),
+      { ...noteSummary(WORKING, "Offerte"), attendees },
       noteSummary(FINISHED, "Afgerond"),
       noteSummary(PLAIN, "Zonder taken"),
     ];
@@ -236,29 +244,43 @@ describe("the note list's task count", () => {
     await flush();
   }
 
-  function countOn(path: string): HTMLElement | null {
+  function rowFor(path: string): HTMLElement {
     const rows = Array.from(container.querySelectorAll<HTMLElement>(".notes-list .note"));
     const titles = [WORKING, FINISHED, PLAIN];
     const row = rows[titles.indexOf(path)];
     expect(row).toBeDefined();
-    return row!.querySelector<HTMLElement>(".note-tasks");
+    return row!;
   }
 
-  it("says how many of a note's tasks are still open, and marks the ones with work left", async () => {
+  function countOn(path: string): HTMLElement | null {
+    return rowFor(path).querySelector<HTMLElement>(".note-tasks");
+  }
+
+  it("says how many tasks are still open, and keeps the total in the tooltip", async () => {
     await mountWith({
       [WORKING]: { open: 2, total: 5 },
       [FINISHED]: { open: 0, total: 3 },
     });
 
     const working = countOn(WORKING);
-    expect(working?.textContent?.replace(/\s+/g, " ").trim()).toBe("2 of 5");
-    // Both class names, never the modifier alone — see test/styles-note-tasks.test.ts
-    // for why the CSS depends on it.
-    expect(working?.className).toBe("note-tasks note-tasks-open");
+    expect(working?.textContent?.replace(/\s+/g, " ").trim()).toBe("Tasks: 2");
+    // One class, because there is one state left to draw — see
+    // test/styles-note-tasks.test.ts for why the stylesheet depends on that.
+    expect(working?.className).toBe("note-tasks");
+    // The total is not lost, it is a hover away. Asserted, or "it is still in the
+    // tooltip" would be a claim nothing checks.
+    expect(working?.title).toBe("Open tasks: 2 / 5");
+  });
 
-    const finished = countOn(FINISHED);
-    expect(finished?.textContent?.replace(/\s+/g, " ").trim()).toBe("0 of 3");
-    expect(finished?.className).toBe("note-tasks");
+  it("says nothing for a note whose boxes are all ticked", async () => {
+    await mountWith({
+      [WORKING]: { open: 2, total: 5 },
+      [FINISHED]: { open: 0, total: 3 },
+    });
+
+    // `0 of 3` until now. The badge is a call to action and a finished note has none —
+    // which makes it as quiet as the note below that never had a checkbox.
+    expect(countOn(FINISHED)).toBeNull();
   });
 
   it("draws nothing at all for a note that has no task items", async () => {
@@ -267,9 +289,26 @@ describe("the note list's task count", () => {
       [FINISHED]: { open: 0, total: 3 },
     });
 
-    // Not `0 of 0`: a note that never had a checkbox has nothing to report, and a zero
-    // there would read as work finished.
     expect(countOn(PLAIN)).toBeNull();
+  });
+
+  it("puts the count on the excerpt row when there is nobody to sit beside", async () => {
+    await mountWith({ [WORKING]: { open: 2, total: 5 } });
+
+    const row = rowFor(WORKING);
+    expect(row.querySelector(".note-middle > .note-tasks")).not.toBeNull();
+    // And the row that used to hold it is simply not there — which is the whole report:
+    // a line of every note in the vault spent on one number.
+    expect(row.querySelector(".note-bottom")).toBeNull();
+  });
+
+  it("keeps the count beside the People line when a note has one", async () => {
+    await mountWith({ [WORKING]: { open: 2, total: 5 } }, ["Jan de Vries"]);
+
+    const row = rowFor(WORKING);
+    expect(row.querySelector(".note-bottom > .note-tasks")).not.toBeNull();
+    expect(row.querySelector(".note-middle > .note-tasks")).toBeNull();
+    expect(row.querySelector(".note-attendees")?.textContent).toBe("Jan de Vries");
   });
 
   it("says nothing for any note until the index has answered", async () => {

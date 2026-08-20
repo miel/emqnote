@@ -507,9 +507,56 @@ body {
    bug, both of which shipped drawing the wrong thing because a rule merely tied.
 
    A starred item is never also a task (the commands, `star-items.ts` and `to-mdast.ts`
-   all refuse the pair), so this can never fight the `content: none` below it. */
+   all refuse the pair), so this can never fight the `content: none` below it.
+
+   **It is drawn into the marker slot by hand rather than as a `::marker` glyph**, which
+   is a change from how B72 shipped and is the whole of the alignment fix. `⭐` is a
+   colour emoji: at the item's own font size its ink is 16.75px tall against the bullet's
+   4.5px, and being baseline-aligned it also sits 5px left of the bullet's column, because
+   the marker box is right-aligned against the content edge and a wider glyph pushes the
+   box leftwards. `::marker` accepts font properties and nothing else — no
+   `vertical-align` — so `font-size` alone cannot move it: shrinking the glyph to bullet
+   size measured it *lower* and further right still, the em space in `--marker-gap`
+   shrinking with it. A positioned box centres the glyph on both axes instead, which is
+   also what makes this survive a platform whose emoji font has different metrics: the
+   size varies, the centre does not. Same construction as `.task-check` below, and for the
+   same reason.
+
+   `transform: scale()` and never `font-size` for the size: `font-size` in this rule would
+   make every `em` in it — `left`, `width`, `height` — resolve against the *new* size, so
+   the box would move as well as the glyph. A transform changes no layout at all.
+
+   Measured against the bullet in a real Chromium at 4× device scale, ink centroid to ink
+   centroid: bullet y 10.25 / x 43.12, star y 10.23 / x 42.88 (from y 10.48 / x 38.00
+   before), and the ◦ and ▪ of levels two and three sit on that same line and column, so
+   one set of numbers is right at every depth. */
+.editor-content ul > li[data-starred="true"] {
+  list-style: none;
+  position: relative;
+}
+
+/* `list-style: none` stops suppressing the marker the moment `::marker` has explicit
+   content, and the depth rules above give it some — so without this a starred item draws
+   a bullet next to its star. The same line the task item needs below. */
 .editor-content ul > li[data-starred="true"]::marker {
-  content: "\2b50" var(--marker-gap);
+  content: none;
+}
+
+.editor-content ul > li[data-starred="true"]::before {
+  content: "\2b50";
+  position: absolute;
+  top: 0;
+  left: calc(-1 * var(--marker-slot) - 0.305em);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  /* One line tall, less the 0.09em that puts the centre of the box on the centre of the
+     bullet rather than on the centre of the line — the two are not the same point, a
+     bullet sitting above the middle of its own line box. */
+  height: 1.31em;
+  line-height: 1;
+  transform: scale(0.62);
 }
 
 /* A task item has no marker box of its own, so the checkbox is placed into the same
@@ -528,8 +575,13 @@ body {
 
 .editor-content .task-check {
   position: absolute;
-  left: calc(-1 * var(--marker-slot));
-  top: 0;
+  /* The two offsets that put the box on the bullet rather than merely near it, measured
+     the same way the star above was: without them the checkbox drew 6.6px right of the
+     bullet's column and 1.05px above its line, which is what a mixed list read as. The
+     slot itself is unchanged — this moves the box, so the button keeps its full 1.5em of
+     click target. */
+  left: calc(-1 * var(--marker-slot) - 0.485em);
+  top: 0.065em;
   display: flex;
   align-items: center;
   width: var(--marker-slot);
@@ -935,11 +987,19 @@ body {
 }
 
 /* The wrapper `imageView` puts around the picture so the chip can take its place when the
-   file turns out to be gone. Plain `inline` and nothing else: an inline span around an
-   inline replaced element changes no layout, which is what keeps every rule below — the
-   size caps, the border, the alignment — matching the `<img>` exactly as before. */
+   file turns out to be gone.
+
+   It was plain `inline` and nothing else, on the argument that an inline span around an
+   inline replaced element changes no layout. B74's handles need a containing block to be
+   positioned against, which an inline box cannot reliably be — it fragments across lines,
+   and then so does the rectangle its children are placed in. So `inline-block`, with the
+   `vertical-align` moved up here from the `<img>` below: measured against
+   `test/corpus/21-links-en-bijlagen.md`'s mid-sentence embed, the two sit on the same
+   baseline as long as exactly one of the pair carries it. Both would double it. */
 .editor-content .wiki-embed-image-box {
-  display: inline;
+  display: inline-block;
+  position: relative;
+  vertical-align: text-bottom;
 }
 
 /* The NodeView in `attachment-view.ts` swaps this in for `.wiki-embed` when the
@@ -951,9 +1011,78 @@ body {
 .editor-content .wiki-embed-image {
   max-width: 100%;
   max-height: 480px;
-  vertical-align: text-bottom;
+  /* `bottom`, not `text-bottom`: the picture is the whole content of an inline-block that
+     carries the `text-bottom` itself now, so stating it twice would offset it twice. */
+  vertical-align: bottom;
   border: 1px solid var(--border);
   border-radius: 4px;
+}
+
+/* A picture that has been given a width (B74) is a picture whose proportions are the
+   point, so the stylesheet's own ceiling stands down for it: `max-height` would crop it
+   to a shape neither the file nor the drag asked for. `max-width: 100%` above is
+   deliberately left in place — a stored width wider than the column still draws inside
+   it, and that is a better answer than a picture running off the edge.
+
+   Keyed on an attribute `image-resize.ts` sets beside the inline width, rather than on a
+   `[style*="width"]` sniff, so the rule says what it means. */
+.editor-content .wiki-embed-image-box[data-sized="true"] .wiki-embed-image {
+  max-height: none;
+  height: auto;
+}
+
+/* B74's four corner handles. Drawn only while the node is selected — a picture is an atom,
+   so one click selects it and the handles appear where the outline does; showing them on
+   hover instead would put eight pixels of furniture on every picture in a note being read.
+
+   The box they are positioned against is `.wiki-embed-image-box` above, which is why that
+   became `inline-block` and `position: relative`. */
+.editor-content .image-resize-handle {
+  display: none;
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--background);
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  /* Above the outline the selected box draws, and above the picture itself. */
+  z-index: 1;
+}
+
+.editor-content .wiki-embed-image-box.ProseMirror-selectednode .image-resize-handle,
+.editor-content .wiki-embed-image-box.image-resizing .image-resize-handle {
+  display: block;
+}
+
+/* Kept visible for the length of a drag even though the pointer has left the handle, and
+   even if the selection is lost along the way — a handle that vanished under the hand
+   mid-drag would read as the drag having been dropped. */
+.editor-content .wiki-embed-image-box.image-resizing {
+  user-select: none;
+}
+
+.editor-content .image-resize-handle[data-corner="nw"] {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.editor-content .image-resize-handle[data-corner="ne"] {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.editor-content .image-resize-handle[data-corner="sw"] {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.editor-content .image-resize-handle[data-corner="se"] {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
 }
 
 /* B43: a PDF embedded with `![[…]]`, drawn as its first page at the width of the column.

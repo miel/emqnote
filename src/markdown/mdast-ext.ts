@@ -25,6 +25,14 @@ export interface WikiLinkNode {
 export interface WikiEmbedNode {
   type: "wikiEmbed";
   target: string;
+  /**
+   * B74's pipe field, taken apart: `![[foto.png|400]]`, `![[foto.png|400x300]]` or
+   * `![[foto.png|een foto van het kantoor]]`. At most one of a size and an alt is ever
+   * set; all three `null` is a picture at its own size with nothing after the pipe.
+   */
+  width: number | null;
+  height: number | null;
+  alt: string | null;
 }
 
 export type ExtPhrasing =

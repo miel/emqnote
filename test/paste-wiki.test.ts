@@ -37,7 +37,30 @@ describe("pasted wiki syntax", () => {
     const children = childrenOf(transformPastedWikiSyntax(paragraph("![[_attachments/foto.png]]")));
 
     expect(children).toEqual([
-      { type: "wikiEmbed", attrs: { target: "_attachments/foto.png" } },
+      { type: "wikiEmbed", attrs: { target: "_attachments/foto.png", width: null, height: null, alt: null } },
+    ]);
+  });
+
+  it("reads an embed's pipe field the way a file is read", () => {
+    // The paste path and the reader share `matchWikiSyntax` for exactly this reason: a
+    // `![[foto.png|400]]` on the clipboard has to become the same node the same text
+    // becomes on the way off disk, or the two disagree about the same characters (B58).
+    const size = childrenOf(transformPastedWikiSyntax(paragraph("![[foto.png|400]]")));
+    expect(size).toEqual([
+      { type: "wikiEmbed", attrs: { target: "foto.png", width: 400, height: null, alt: null } },
+    ]);
+
+    const box = childrenOf(transformPastedWikiSyntax(paragraph("![[foto.png|250x180]]")));
+    expect(box).toEqual([
+      { type: "wikiEmbed", attrs: { target: "foto.png", width: 250, height: 180, alt: null } },
+    ]);
+
+    const text = childrenOf(transformPastedWikiSyntax(paragraph("![[foto.png|het kantoor]]")));
+    expect(text).toEqual([
+      {
+        type: "wikiEmbed",
+        attrs: { target: "foto.png", width: null, height: null, alt: "het kantoor" },
+      },
     ]);
   });
 
@@ -60,7 +83,7 @@ describe("pasted wiki syntax", () => {
       { type: "text", attrs: {}, text: "Zie " },
       { type: "wikiLink", attrs: { target: "Notitie", alias: null } },
       { type: "text", attrs: {}, text: " en " },
-      { type: "wikiEmbed", attrs: { target: "foto.png" } },
+      { type: "wikiEmbed", attrs: { target: "foto.png", width: null, height: null, alt: null } },
       { type: "text", attrs: {}, text: " hierboven." },
     ]);
   });
