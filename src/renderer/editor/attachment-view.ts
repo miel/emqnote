@@ -4,6 +4,15 @@ import { attachmentUrl } from "../../shared/attachment-url.js";
 import { isFetchableImageSrc } from "./paste-images.js";
 import { translate } from "../../shared/i18n.js";
 import { checkAttachment } from "./missing-attachments.js";
+import { attachImageResize, type ImageResize, type ImageSize } from "./image-resize.js";
+
+/** B74's two stored numbers, off whichever node type is carrying them. */
+function sizeOf(node: PMNode): ImageSize {
+  return {
+    width: node.attrs.width as number | null,
+    height: node.attrs.height as number | null,
+  };
+}
 
 /**
  * `wikiEmbed`'s real face in the editor: the picture itself for an image, the
@@ -151,7 +160,9 @@ function setChipLabel(element: HTMLElement, label: string): void {
  * replaced element is layout-neutral: every rule in `styles.css` still matches the `<img>`
  * itself, so nothing about how a present picture draws has changed.
  */
-function imageView(target: string): NodeView {
+function imageView(node: PMNode, view: EditorView, getPos: () => number | undefined): NodeView {
+  const target = node.attrs.target as string;
+
   const box = document.createElement("span");
   box.className = "wiki-embed-image-box";
 
@@ -162,6 +173,9 @@ function imageView(target: string): NodeView {
   img.draggable = true;
   box.appendChild(img);
 
+  const resize = attachImageResize({ box, img, view, getPos });
+  resize.show(sizeOf(node));
+
   // Two routes to the same fact, kept both on purpose. The load failing is the protocol
   // handler's own 404, decided by the very `resolveAttachment` the check below asks
   // about, and it arrives without a round trip; the check catches the case the browser
@@ -171,7 +185,24 @@ function imageView(target: string): NodeView {
     if (missing) showMissingImage(box, target);
   });
 
-  return { dom: box };
+  return {
+    dom: box,
+    /**
+     * A new width is drawn in place, never by rebuilding.
+     *
+     * Without this ProseMirror answers `false` to every attribute change, destroys the
+     * NodeView and makes another — which sets `img.src` again and flashes the picture
+     * away and back on the release of every drag. A different *target* is a different
+     * picture and genuinely does need a rebuild.
+     */
+    update: (updated) => {
+      if (updated.type !== node.type || (updated.attrs.target as string) !== target) return false;
+      if (box.dataset.link !== "missing") resize.show(sizeOf(updated));
+      return true;
+    },
+    stopEvent: (event) => resize.owns(event),
+    destroy: () => resize.destroy(),
+  };
 }
 
 function showMissingImage(box: HTMLElement, target: string): void {
@@ -514,7 +545,9 @@ export function attachmentNodeView(
   t?: (key: string) => string,
 ): NodeView {
   const target = node.attrs.target as string;
-  if (isImageAttachment(target)) return imageView(target);
+  // Only a picture resizes (B74). A PDF page keeps B46's Fit control, which is a decision
+  // taken deliberately against a zoom, and a chip has no size to speak of.
+  if (isImageAttachment(target)) return imageView(node, _view, _getPos);
   return isPreviewableTarget(target) ? pdfPageView(target, t) : chipView(target);
 }
 
@@ -565,10 +598,22 @@ function externalImageLabel(node: PMNode): string {
  * everything but http(s) — so a `data:` src, which this node can also hold, declines
  * silently rather than being filtered twice.
  */
-export function externalImageView(node: PMNode, loadRemoteImages = true): NodeView {
+export function externalImageView(
+  node: PMNode,
+  view: EditorView,
+  getPos: () => number | undefined,
+  loadRemoteImages = true,
+): NodeView {
   const span = document.createElement("span");
   span.className = "external-image";
   span.textContent = externalImageLabel(node);
+
+  // B74's handles, but only once there is a picture to put them on. A chip is a label with
+  // no proportions and nothing to drag, and this NodeView begins life as one and may never
+  // become anything else — a refusal in main, the setting being off, or a cold cache
+  // offline all end there.
+  let resize: ImageResize | null = null;
+  let size = sizeOf(node);
 
   const src = (node.attrs.src as string | null) ?? "";
   span.title = src;
@@ -629,11 +674,26 @@ export function externalImageView(node: PMNode, loadRemoteImages = true): NodeVi
       span.removeEventListener("mousedown", hold);
       span.removeEventListener("click", open);
       span.append(picture);
+
+      resize = attachImageResize({ box: span, img: picture, view, getPos });
+      resize.show(size);
     });
     probe.src = url;
   }
 
-  return { dom: span };
+  return {
+    dom: span,
+    // `imageView`'s reason exactly: without this the release of every drag rebuilds the
+    // NodeView, and here that costs a second probe `Image` as well as the flash.
+    update: (updated) => {
+      if (updated.type !== node.type || (updated.attrs.src as string) !== src) return false;
+      size = sizeOf(updated);
+      resize?.show(size);
+      return true;
+    },
+    stopEvent: (event) => resize?.owns(event) === true,
+    destroy: () => resize?.destroy(),
+  };
 }
 
 /**

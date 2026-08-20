@@ -3,6 +3,7 @@ import type { PhrasingContent, Root, RootContent } from "mdast";
 import { MARK_NESTING_ORDER } from "./schema.js";
 import { starred } from "./star-items.js";
 import type { ExtPhrasing } from "./mdast-ext.js";
+import { withSizeSuffix } from "./embed-field.js";
 
 /**
  * ProseMirror stores marks as an unordered set per text node; markdown is a tree. This
@@ -45,15 +46,31 @@ function leafToMdast(node: PMNode): ExtPhrasing | null {
       return { type: "text", value: normaliseText(node.text ?? "") } as PhrasingContent;
     case "hardBreak":
       return { type: "break" } as PhrasingContent;
-    case "image":
+    case "image": {
+      // B74: the size goes back onto the end of the alt, which is where Obsidian keeps it.
+      // An unsized picture is untouched, so every note written before this serializes byte
+      // for byte as it did — including one whose alt is genuinely empty, where `null` and
+      // `""` are not the same thing to remark.
+      const width = node.attrs.width as number | null;
+      const alt = (node.attrs.alt as string | null) ?? null;
       return {
         type: "image",
         url: node.attrs.src as string,
-        alt: (node.attrs.alt as string | null) ?? null,
+        alt:
+          width === null
+            ? alt
+            : withSizeSuffix(alt ?? "", width, node.attrs.height as number | null),
         title: (node.attrs.title as string | null) ?? null,
       } as PhrasingContent;
+    }
     case "wikiEmbed":
-      return { type: "wikiEmbed", target: node.attrs.target as string };
+      return {
+        type: "wikiEmbed",
+        target: node.attrs.target as string,
+        width: node.attrs.width as number | null,
+        height: node.attrs.height as number | null,
+        alt: node.attrs.alt as string | null,
+      };
     case "wikiLink":
       return {
         type: "wikiLink",

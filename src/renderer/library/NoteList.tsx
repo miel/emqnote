@@ -257,7 +257,16 @@ export function NoteList({
                   {formatListTime(locale, sort === "created" ? note.created : note.modified)}
                 </span>
               </div>
-              <div className="note-excerpt">{note.excerpt}</div>
+              {/* The excerpt, with the task count against the right edge when there is
+                  nobody to put it beside. One DOM shape and not two: the row is always
+                  drawn, so a note with no tasks is geometrically exactly what it was.
+                  `.note-excerpt` keeps its own ellipsis — see `.note-middle` in
+                  `library.css` for why it needs `min-width: 0` to do so inside a flex
+                  row. */}
+              <div className="note-middle">
+                <span className="note-excerpt">{note.excerpt}</span>
+                {note.attendees.length === 0 && taskCount(noteTasks?.[note.path], t)}
+              </div>
               {/* Under a tag, a person or a search the notes come from all over the
                   vault, and a list of titles with no idea where they live is hard to
                   read. */}
@@ -281,15 +290,15 @@ export function NoteList({
                   nearly put *in* their place, and a meeting note that quietly stopped
                   naming who was at it would have been a worse trade than one extra row.
 
-                  Drawn when either half has something to say, so a note with tasks and no
-                  attendees still gets its count. */}
-              {(note.attendees.length > 0 || noteTasks?.[note.path] !== undefined) && (
+                  **Attendees are the whole condition now.** This row used to be drawn when
+                  either half had something to say, which spent a line of every note in the
+                  vault on a single number with nothing beside it. So the count moves up to
+                  the excerpt row when there is nobody here to sit next to, and this row is
+                  simply absent — one rule, and it is about People rather than about Tags,
+                  which have never shared a row with the count. */}
+              {note.attendees.length > 0 && (
                 <div className="note-bottom">
-                  {/* Still conditional inside the row: `.note-attendees` draws a ◍ from a
-                      `::before`, so an empty one is not an empty element. */}
-                  {note.attendees.length > 0 && (
-                    <span className="note-attendees">{note.attendees.join(", ")}</span>
-                  )}
+                  <span className="note-attendees">{note.attendees.join(", ")}</span>
                   {taskCount(noteTasks?.[note.path], t)}
                 </div>
               )}
@@ -376,15 +385,21 @@ export function NoteList({
 }
 
 /**
- * `2 of 5` under the date, or nothing at all.
+ * `Tasks: 2`, or nothing at all.
  *
- * Three states, and telling the second from the third is the point (B67's rule for the
- * folder badge, applied a level down): `undefined` covers both "this note has no task
- * items" and "the index has not answered yet", and neither is something to draw — a row
- * that briefly said `0 of 0` would be claiming a note is finished before anyone had
- * looked. A note whose boxes are all ticked says `0 of 5` and says it in the muted
- * colour, because that is a fact rather than a call to action; one with work left says it
- * in the accent, so the column can be scanned for what is still owed.
+ * **Only what is still open, and silence when nothing is.** This used to read `2 of 5`,
+ * and to say `0 of 5` in the muted colour for a note whose boxes were all ticked — B69's
+ * argument being that a finished note is a fact worth stating and that only the total
+ * tells "done" apart from "never had any". Daily use answered that the other way: the
+ * badge is a call to action, a note with nothing owed has none, and a column of numbers
+ * that mostly say nothing is owed is a column that stops being read. The total is not
+ * lost, it is one hover away — the `title` still spells `2 / 5` out, which is also what
+ * keeps `tree.openTasks` the one place the words "open tasks" are written.
+ *
+ * `undefined` is still absent rather than zero, and for B67's reason unchanged: it covers
+ * both "this note has no task items" and "the index has not answered yet", and a row must
+ * never claim a note is clear while the answer is still on its way. That the two now draw
+ * the same thing is a coincidence of this rule, not a merging of the two states.
  *
  * The words are composed here rather than interpolated into one string: the i18n tables
  * are plain `Record<string, string>` with no placeholders in them, and `FolderTree`'s own
@@ -394,17 +409,11 @@ function taskCount(
   count: TaskCount | undefined,
   t: (key: string) => string,
 ): React.ReactElement | null {
-  if (count === undefined) return null;
+  if (count === undefined || count.open === 0) return null;
 
   return (
-    <span
-      // Both class names on the "open" element, never the modifier alone: at one class
-      // each these tie on specificity in `library.css` and are settled by source order,
-      // which is how B48's hidden chip and the overlays' dimming both shipped broken.
-      className={count.open > 0 ? "note-tasks note-tasks-open" : "note-tasks"}
-      title={`${t("tree.openTasks")}: ${count.open} / ${count.total}`}
-    >
-      {count.open} {t("notes.taskCountOf")} {count.total}
+    <span className="note-tasks" title={`${t("tree.openTasks")}: ${count.open} / ${count.total}`}>
+      {t("notes.tasks")}: {count.open}
     </span>
   );
 }

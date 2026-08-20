@@ -12,6 +12,7 @@ import { isStarred } from "./star-items.js";
 import { schema } from "./schema.js";
 import { normalizePhrasing } from "./normalize-phrasing.js";
 import type { ExtPhrasing } from "./mdast-ext.js";
+import { splitSizeSuffix } from "./embed-field.js";
 
 type BlockNode = BlockContent | DefinitionContent;
 
@@ -96,23 +97,35 @@ function inlineToPM(nodes: ExtPhrasing[], marks: readonly Mark[]): PMNode[] {
         result.push(schema.nodes.hardBreak!.create(null, null, marks as Mark[]));
         break;
 
-      case "image":
+      case "image": {
+        // B74's size lives on the end of the alt text for a remote picture —
+        // `![alt|400](url)` or `![alt|400x300](url)`, Obsidian's own spelling — so the two
+        // have to be told apart here rather than in the schema. `splitSizeSuffix` leaves an
+        // alt whose tail is not a size entirely alone, pipe and all.
+        const sized = splitSizeSuffix(node.alt ?? "");
         result.push(
           schema.nodes.image!.create(
             {
               src: node.url,
-              alt: node.alt ?? null,
+              alt: node.alt === null || node.alt === undefined ? null : sized.text,
               title: node.title ?? null,
+              width: sized.width,
+              height: sized.height,
             },
             null,
             marks as Mark[],
           ),
         );
         break;
+      }
 
       case "wikiEmbed":
         result.push(
-          schema.nodes.wikiEmbed!.create({ target: node.target }, null, marks as Mark[]),
+          schema.nodes.wikiEmbed!.create(
+            { target: node.target, width: node.width, height: node.height, alt: node.alt },
+            null,
+            marks as Mark[],
+          ),
         );
         break;
 

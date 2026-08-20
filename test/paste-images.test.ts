@@ -66,7 +66,7 @@ function mount(): EditorView {
     // `image-pending` decoration has to reach. `false` for B50's own setting: this file is
     // about the paste pipeline, and a NodeView that started probing `emqnote-remote://`
     // would be asking a protocol that does not exist under jsdom.
-    nodeViews: { image: (node) => externalImageView(node, false) },
+    nodeViews: { image: (node, view, getPos) => externalImageView(node, view, getPos, false) },
   });
 }
 

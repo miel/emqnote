@@ -239,7 +239,8 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         wikiLink: wikiLinkNodeView,
         // A remote `![alt](https://…)`: the chip, and the picture itself once main has
         // fetched and cached it (B50). See `attachment-view.ts`.
-        image: (node) => externalImageView(node, handlers.current.loadRemoteImages !== false),
+        image: (node, view, getPos) =>
+          externalImageView(node, view, getPos, handlers.current.loadRemoteImages !== false),
       },
       // Two passes, both synchronous and both before the slice lands. Pictures inside a
       // pasted web page: the half that needs no network runs here, the download half is

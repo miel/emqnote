@@ -200,10 +200,12 @@ const DUTCH: Record<string, string> = {
   // label met een dubbele punt erachter, zodat er geen enkelvoud/meervoud in zit.
   "tree.notesHere": "Notities hier",
   "tree.openTasks": "Openstaande taken",
-  // Het woordje tussen de twee getallen van de teller in de notitielijst: "2 van 5".
-  // Los, omdat de tabellen hier geen plaatshouders kennen — de zin wordt in `NoteList`
-  // opgebouwd, net zoals `FolderTree` zijn tooltip opbouwt.
-  "notes.taskCountOf": "van",
+  // Het label vóór het getal in de notitielijst: "Taken: 2". Alleen wat nog openstaat —
+  // een notitie waarin alles is afgevinkt toont niets. Los van het getal, omdat de
+  // tabellen hier geen plaatshouders kennen; `NoteList` bouwt de zin op, net zoals
+  // `FolderTree` zijn tooltip opbouwt. Het totaal staat nog in de tooltip, en die
+  // gebruikt `tree.openTasks` hierboven.
+  "notes.tasks": "Taken",
   "library.indexing": "Vault doorzoekbaar maken…",
   "library.reveal": "Tonen in map",
   // Het bestandsvoorbeeld naast de notitielijst (B47).
@@ -570,7 +572,7 @@ const ENGLISH: Record<string, string> = {
   // with the number after it, so neither string has to have a singular form.
   "tree.notesHere": "Notes here",
   "tree.openTasks": "Open tasks",
-  "notes.taskCountOf": "of",
+  "notes.tasks": "Tasks",
   "library.indexing": "Making the vault searchable…",
   "library.reveal": "Reveal",
   // The file preview beside the note list (B47).

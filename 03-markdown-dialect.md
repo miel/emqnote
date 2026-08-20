@@ -348,6 +348,64 @@ Niet-afbeeldingen als gewone wikilink:
 [[2026-07-25-1432-offerte.pdf]]
 ```
 
+**Het gleufje achter de streep van een `![[…]]`** (B74). Obsidian leest dat ene gleufje op
+drie manieren, door te kijken wát erin staat, en dit dialect doet precies hetzelfde — B7: de
+vault blijft leesbaar in Obsidian, en Obsidian doet dit al.
+
+| In het bestand | Betekent |
+|---|---|
+| `\|250` | een breedte in pixels; de hoogte volgt de afbeelding |
+| `\|250x180` | een breedte én hoogte in pixels |
+| iets anders | alt-tekst |
+
+```markdown
+![[2026-07-25-1432-schermafbeelding.png|400]]
+![[2026-07-25-1432-plattegrond.png|250x180]]
+![[2026-07-25-1432-schermafbeelding.png|een foto van het kantoor]]
+```
+
+Bij een externe afbeelding staat datzelfde achtervoegsel achter de alt-tekst, opnieuw zoals
+Obsidian het schrijft. Daar bestaat het "alles is alt-tekst"-geval niet: de alt-tekst is de
+*kop*, dus alleen een staart die als formaat leest wordt eraf gehaald, en
+`![Voor|na](…)` is gewoon een alt-tekst met een streep erin.
+
+```markdown
+![Het logo|320](https://voorbeeld.nl/logo.png)
+![Het logo|250x180](https://voorbeeld.nl/logo.png)
+```
+
+**Er gaat niets in dat gleufje verloren.** Een breedte en een hoogte worden getekend;
+alt-tekst wordt bewaard en — voorlopig met opzet — nergens getoond: niet op de `<img>`, niet
+in het uittreksel, niet in de index. Dat is het verschil met hoe het tot B74 was, en het was
+een echt verlies: vanaf de allereerste markdown-commit werd *alles* achter de streep van een
+`![[…]]` weggegooid, dus een in Obsidian geschreven notitie verloor zijn alt-tekst zodra er
+in deze app iets in die notitie werd gewijzigd. Iets niet begrijpen is nooit een reden om het
+niet te bewaren.
+
+Wat níét als formaat leest blijft daarom letterlijk staan: een getal buiten de grenzen zoals
+`|4`, een leeg gleufje `![[foto.png|]]` dat er wél is, en `250X180` met een hoofdletter — dat
+laatste **in Obsidian nagekeken: daar verandert een hoofdletter-`X` de grootte ook niet**, dus
+beide apps tonen hetzelfde en dit is overeenstemming en geen afwijking. Hem letterlijk bewaren
+in plaats van hem naar `250x180` recht te trekken is dan gratis, en scheelt een teken dat
+niemand deze app gevraagd heeft aan te raken. Andersom is `![Grafiek|2024](…)` wél een breedte,
+omdat er geen ontsnapte vorm bestaat om de twee uit elkaar te houden; diezelfde afweging staat
+bij de ster in §3.
+
+**Eén gleufje betekent één ding tegelijk.** Een afbeelding kan dus geen formaat én alt-tekst
+dragen: dat is de grens van het formaat, niet een keuze hier, en het is de reden dat een
+afbeelding die je versleept zijn alt-tekst kwijtraakt. `test/limitations.test.ts` legt het vast.
+
+**Deze app schrijft zelf nooit een hoogte.** De handvatten houden de verhoudingen vast, dus wat
+zij opleveren is `|400`, één getal: een hoogte die deze app zelf verzint zou een tweede bron van
+waarheid zijn die niet meer klopt zodra het bestand erachter wordt vervangen. Een hoogte die
+iemand ánders schreef is iets heel anders en wordt wél getekend en bewaard — en een sleep op zo'n
+afbeelding schaalt beide getallen met dezelfde factor, want iemands afbeelding rechttrekken omdat
+hij toevallig een hoekje beetpakte is iets besluiten wat deze app niet kan weten.
+
+`src/markdown/embed-field.ts` is de enige plek waar dit gleufje wordt gespeld, in beide
+richtingen en voor beide vormen — twee spellingen van één syntax is hoe een plakactie en een
+heropening het over dezelfde tekens oneens worden.
+
 ### 5.2 Notities onderling
 
 ```markdown

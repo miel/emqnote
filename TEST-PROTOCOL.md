@@ -985,7 +985,7 @@ Two bugs and two additions — the When field's stale time, the Unlinked attachm
 vault's own locations).
 
 **Everything in this section is unwatched.** Unlike every batch before it, none of this has
-been driven under `Xvfb` over CDP: it is built, typechecked and covered by 1539 unit tests,
+been driven under `Xvfb` over CDP: it is built, typechecked and covered by unit tests,
 and nobody has seen it run. So this section is not "what a script cannot reach" — it is the
 whole of the batch, and the first four rows are the ones to do first.
 
@@ -1029,6 +1029,49 @@ the point or too loud — and **whether the Where dropdown sits comfortably over
 beside it**, that cell being bottom-left in the header grid with a field immediately to its
 right.
 
+## 31. Task counts, marker alignment and resizable images (20 August 2026)
+
+Two constraint changes and **B74** (a picture can be dragged smaller by a corner, and that
+width is in the file). All three were driven under `Xvfb` over CDP, including in the capture
+window, so this section is back to being what a script cannot reach — with one exception that
+is the reason it exists at all.
+
+**The exception is the emoji, and it is the first row.** The star and the checkbox are aligned
+onto the bullet by a positioned box rather than by a tuned font size, precisely so a different
+emoji font changes the star's *size* and not its *centre*. That reasoning has been measured on
+Noto Color Emoji and nowhere else. Apple Color Emoji and Segoe UI Emoji are what §31a is for,
+and a bad answer there is a real bug, not a taste question.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 31a | On **both** macOS and Windows, write a list with a plain bullet, a starred bullet (`- ⭐ `) and a task item, one under the other | All three markers on one horizontal line and in one vertical column. Hold a straightedge to the screen if it is close. This is the one thing Linux could not answer |  |
+| 31b | Same list, but nest the starred item two and three levels deep | Still in that level's own column, against the `◦` and `▪` of its siblings |  |
+| 31c | Bold a whole starred line | The star does not change — an emoji has no bold. Nothing is lost: it never did |  |
+| 31d | Look at a note in the list that has open tasks | `Tasks: 2` in the accent colour. Hover it: the tooltip still says `Open tasks: 2 / 5` |  |
+| 31e | Tick the last open box in that note | The badge disappears entirely. It used to read `0 of 5` |  |
+| 31f | Compare a note with attendees against one without, both with open tasks | With: the count sits right of the People line. Without: right of the excerpt, and there is no third row at all |  |
+| 31g | Insert a picture, click it once | Four small handles on its corners — on the picture's corners, not the paragraph's |  |
+| 31h | Drag a corner inwards | It follows the pointer, keeps its proportions, and the rest of the note reflows around it |  |
+| 31i | Let it save and `cat` the file | `![[…|400]]` or thereabouts. Reopen the note: the same size |  |
+| 31j | Open that note in **Obsidian** | The picture is the size the file says. This is the whole reason for the spelling |  |
+| 31k | Drag a corner outwards, past the width of the pane | It stops at the column and does not run off the edge |  |
+| 31l | Double-click a handle | Back to the picture's own size, and the suffix is gone from the file |  |
+| 31m | Resize, then press Ctrl+Z once | One undo step, not one per pixel |  |
+| 31n | Do 31g–31i in the **capture window**, on a pasted screenshot | Same behaviour. This is where notes are actually written |  |
+| 31o | Put a resized picture inside a folder of attachments and rename the folder | The link is repaired **and the width is still there** |  |
+| 31p | Click an embedded PDF page | No handles. It has the Fit control instead, which is B46's deliberate answer |  |
+| 31q | Open a note written in Obsidian holding `![[foto.png|250x180]]` | The picture draws at exactly that box, even if it distorts it — the file said so |  |
+| 31r | Open one holding `![[foto.png|een foto van het kantoor]]`, type a character anywhere in it, let it save, and `cat` the file | **The suffix is still there.** Until B74 it vanished on that save, silently, and that is the bug this row exists for |  |
+| 31s | Drag a corner of the `250x180` one | Both numbers scale together — it keeps the shape the file gave it and comes back `|WxH`, not a bare width |  |
+| 31t | Drag a corner of the one carrying alt text | It becomes a width and **the alt text is gone**. One slot, one meaning: the accepted cost of B74, pinned in `test/limitations.test.ts` — check it does not surprise you on a real vault |  |
+| 31u | Put `![[foto.png|250X180]]` in a note, open it here and in Obsidian | Full size in both. A capital `X` is not a size to either app — checked in Obsidian on 20 August 2026, which is what makes it agreement rather than a divergence. It also survives a save here, being kept as alt text |  |
+
+Two judgements no script can make: **whether four 9px handles are comfortable to grab** with a
+real mouse or trackpad at a real display density, and **whether a picture dragged very small
+still reads as deliberate** rather than as something that failed to load. The floor is 40px,
+which was chosen so there is always something left to grab; whether that is also the point
+below which it stops looking intentional is a thing only using it can say.
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -1049,7 +1092,17 @@ genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §2
 judgements about how something feels or reads, which no script can make, and §25m, §26i,
 §26j, §27n, §27o, §28i, §29l and §29s join them, as do §30 &mdash; **all of it**, which
 is new: that batch shipped tested and built but never once driven in the running app, so
-every row in it is a first sighting rather than a confirmation.
+every row in it is a first sighting rather than a confirmation — with one narrow exception,
+since 20 August: a starred bullet has now been seen drawing in the real reader, which says
+nothing about §30's toggling, round trip or Where field. **§31a and §31b are a whole platform
+again**, and sharply so: the star and the checkbox are aligned onto the bullet by a positioned
+box precisely so a different emoji font changes the star's size and not its centre, and that
+reasoning has been measured on Noto Color Emoji and nowhere else. §31j is a fifth kind — it
+asks another *application* what it makes of a file this one wrote, which is the only check B7
+can ever really get. §31t is a cost to confirm rather than a behaviour to check, like §23c; §31r is the opposite —
+a loss that used to happen and must not any more, so a failure there is the original bug back.
+§31 is otherwise confirmed: every other row in it was driven under `Xvfb` over CDP, in both
+windows, so a failure there is a genuine surprise.
 **§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the

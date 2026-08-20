@@ -290,6 +290,20 @@ describe("a folder holding attachments", () => {
     expect(read(notitie)).toContain("[[Bijlagen/offerte.pdf|de offerte]]");
   });
 
+  it("keeps a resized picture's width across the rename", async () => {
+    // B74's width is an attribute beside the target and not part of it, which is exactly
+    // why this works: `rewriteTargetPrefix` rebuilds the node from `{ ...attrs, target }`.
+    // Asserted rather than assumed, because a rename that silently reset every picture in
+    // a folder to full size is the kind of loss nobody notices until the note is reopened.
+    const foto = attachment("99 - Attachments", "foto.png");
+    const notitie = note("00 Inbox", "Notitie", `Kijk: ![[${foto}|360]]`);
+
+    await renameFolderRepairingLinks("99 - Attachments", "Bijlagen");
+
+    expect(read(notitie)).toContain("![[Bijlagen/foto.png|360]]");
+    expect(resolveAttachment(vault, "Bijlagen/foto.png")).not.toBeNull();
+  });
+
   it("repoints a file nested deeper inside the folder", async () => {
     const foto = attachment("99 - Attachments/2026/07", "foto.png");
     const notitie = note("00 Inbox", "Notitie", `Kijk: ![[${foto}]]`);

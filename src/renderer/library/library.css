@@ -435,6 +435,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The excerpt, with the task count against the right edge when there are no attendees to
+   put it beside — `.note-bottom`'s layout a row further up, and for the same reason: a
+   count belongs at the end of a line that already exists rather than on one of its own.
+
+   `.note-excerpt` needs `min-width: 0` to keep its ellipsis here, a flex item's default
+   `min-width: auto` refusing to shrink below its content — the very line `.note-bottom`
+   already needs for the attendees. The row is drawn whether or not the count is, so a
+   note without tasks is geometrically exactly what it was before. */
+.note-middle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.note-middle .note-excerpt {
+  min-width: 0;
+}
+
 /* Shared geometry only. They used to share the colour as well — both 11px `--accent` at
    the same opacity — which made a line of body text and a list of names literally
    indistinguishable in a column of titles. */
@@ -482,24 +500,22 @@
   min-width: 0;
 }
 
-/* Muted when there is nothing open — `0 of 5` is a fact, not a call to action — and the
-   accent when there is, so the column can be scanned for what is still owed. The same
-   pair of readings the folder badge's two halves already have.
+/* Always the accent, because the badge is now only ever drawn for a note that has work
+   left — `taskCount` returns null at zero. There used to be a muted variant for `0 of 5`
+   and a `.note-tasks.note-tasks-open` pair to out-rank it, written doubled so the two
+   could not tie on specificity and be settled by source order (B48's family). With one
+   state there is nothing to out-rank; `test/styles-note-tasks.test.ts` pins the colour
+   and pins the *absence* of the second class, so the pair cannot come back halfway.
 
-   Two class names on the second selector, not one: the element carries both, and at one
-   class each these would tie on specificity and be settled by source order — which is
-   exactly how B48's hidden chip and the overlays' dimming both shipped broken. jsdom has
-   no cascade to lose in, so `test/styles-note-tasks.test.ts` pins the doubled form. */
+   `margin-left: auto` rather than the row carrying `justify-content: space-between`:
+   either works when both halves are there, and only this one keeps the count on the
+   right when it is alone on the excerpt row. */
 .note-tasks {
   margin-left: auto;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--accent);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-.note-tasks.note-tasks-open {
-  color: var(--accent);
 }
 
 /* Only shown under a tag or a person, where the notes are not all from one folder. */

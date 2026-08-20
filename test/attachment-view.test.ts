@@ -904,7 +904,7 @@ describe("externalImageView", () => {
   function chip(src: string, alt: string | null = null): HTMLElement {
     // `false` — B50's own setting off, which is also the only state jsdom can model: it
     // has no `emqnote-remote://` to load from, so an `Image` probe would sit unresolved.
-    return externalImageView({ attrs: { src, alt, title: null } } as never, false)
+    return externalImageView({ attrs: { src, alt, title: null, width: null } } as never, undefined as never, () => 0, false)
       .dom as HTMLElement;
   }
 
@@ -940,10 +940,10 @@ describe("externalImageView", () => {
     const created = spyOnImageSrc();
 
     try {
-      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null } } as never, false);
+      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null, width: null } } as never, undefined as never, () => 0, false);
       expect(created.seen).toEqual([]);
 
-      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null } } as never, true);
+      externalImageView({ attrs: { src: "https://example.com/a.png", alt: null, title: null, width: null } } as never, undefined as never, () => 0, true);
       expect(created.seen).toEqual(["emqnote-remote://vault/https%3A%2F%2Fexample.com%2Fa.png"]);
     } finally {
       created.restore();
@@ -954,7 +954,7 @@ describe("externalImageView", () => {
     const created = spyOnImageSrc();
 
     try {
-      externalImageView({ attrs: { src: "data:image/png;base64,AAA", alt: null, title: null } } as never, true);
+      externalImageView({ attrs: { src: "data:image/png;base64,AAA", alt: null, title: null, width: null } } as never, undefined as never, () => 0, true);
       // `index.html`'s CSP allows no `data:` in `img-src` — only `library.html` does — so
       // an inline picture in a note would draw in one window and not the other if this
       // took a short cut. Through main it is decoded, sniffed and cached like any other.

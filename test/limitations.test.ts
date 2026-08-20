@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseNote, serializeNote } from "../src/markdown/index.js";
+import { parseNote, serializeBody, serializeNote } from "../src/markdown/index.js";
+import { schema } from "../src/markdown/schema.js";
 
 /**
  * Known limitations, recorded as tests.
@@ -140,6 +141,24 @@ describe("guaranteed not a limitation", () => {
     expect(roundtrip(numbered)).toBe(numbered);
     expect(parseNote(header + task).doc.firstChild!.firstChild!.attrs.starred).toBe(false);
     expect(parseNote(header + numbered).doc.firstChild!.firstChild!.attrs.starred).toBe(false);
+  });
+
+  it("cannot give a picture a size and alt text at once", () => {
+    // Obsidian's embed syntax has one slot after the pipe and reads it three ways, so a
+    // size and alt text are mutually exclusive *in the file*. That is the format's limit
+    // and not a choice made here, but it has a consequence worth pinning: a node that
+    // somehow carries both writes only the size, and the alt is gone. Which is why
+    // `image-resize.ts` clears `alt` when a drag writes a width — dropping it deliberately
+    // in the one place that can cause it, rather than leaving it to the serializer.
+    const both = schema.nodes.wikiEmbed!.create({
+      target: "foto.png",
+      width: 400,
+      height: null,
+      alt: "een foto van het kantoor",
+    });
+    const document = schema.nodes.doc!.create(null, schema.nodes.paragraph!.create(null, both));
+
+    expect(serializeBody(document).trim()).toBe("![[foto.png|400]]");
   });
 
   it("keeps escaping a line-start hash that does not open a tag", () => {
