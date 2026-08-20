@@ -30,6 +30,36 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Waits for something to have actually happened on disk, rather than for a length of time.
+ *
+ * The debounced write is kicked off by a timer, and `vi.advanceTimersByTimeAsync` fakes
+ * the timer and nothing else — the disk I/O its callback starts is real, and on a shared
+ * CI runner it takes as long as it takes. This used to be a flat `sleep(20)`, which is the
+ * wrong way round in exactly the way `index-watch.test.ts` already learned: it failed a
+ * release on Windows while the same tests on the same commit passed in the `build`
+ * workflow twenty minutes earlier.
+ *
+ * The failure was not a slow assertion, either — it was a write racing itself. Both writes
+ * go to `<path>.tmp` before being renamed into place, so a second `update` starting while
+ * the first was still in flight left the second renaming a temporary file the first had
+ * already consumed: `ENOENT … rename '…Eerste titel.md.tmp'`, surfacing as an unhandled
+ * rejection in whichever test happened to be running by then. Waiting for the *result* of
+ * a write before provoking the next one is what removes the race, not a bigger number.
+ *
+ * The ceiling is deliberately generous. This returns the moment the condition holds, so a
+ * high ceiling costs nothing on the happy path and is only ever reached by a genuine
+ * breakage or a runner having a bad minute — and a wrong red is worse than a slow one.
+ */
+async function waitFor(condition: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(5);
+  }
+}
+
 /** The Inbox is only created when there is actually something to write. */
 function notesIn(): string[] {
   const inbox = join(vault, INBOX);
@@ -375,14 +405,14 @@ describe("renaming on a changed subject", () => {
   it("never renames from the debounced write, even though the subject changed", async () => {
     const { writer } = makeWriter();
 
-    // `vi.advanceTimersByTimeAsync` only fakes the timer itself, not the real disk I/O
-    // its callback kicks off, so a short real wait follows each advance — the same
-    // margin `sleep(20)` gives real-timer tests elsewhere in this suite.
+    // `vi.advanceTimersByTimeAsync` only fakes the timer itself, not the real disk I/O its
+    // callback kicks off — see `waitFor`, and note that the second `update` must not be
+    // provoked until the first write has actually landed, or the two race for one `.tmp`.
     vi.useFakeTimers();
     writer.update(payload(paragraphs("Eerste titel")));
     await vi.advanceTimersByTimeAsync(800);
     vi.useRealTimers();
-    await sleep(20);
+    await waitFor(() => notesIn().length === 1, "the first debounced write to land");
 
     expect(notesIn()).toEqual([expect.stringContaining("Eerste titel")]);
 
@@ -390,7 +420,11 @@ describe("renaming on a changed subject", () => {
     writer.update(payload(paragraphs("Tweede titel")));
     await vi.advanceTimersByTimeAsync(800);
     vi.useRealTimers();
-    await sleep(20);
+    await waitFor(() => {
+      const notes = notesIn();
+      if (notes.length !== 1) return false;
+      return readFileSync(join(vault, INBOX, notes[0]!), "utf8").includes("title: Tweede titel");
+    }, "the second debounced write to land");
 
     // The content caught up (a real write happened), but the file name did not.
     const afterDebounce = notesIn();

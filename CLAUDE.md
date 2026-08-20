@@ -171,6 +171,21 @@ slow red — especially in the file whose whole job is watching a filesystem. Th
 assert something is *not* indexed go through it too: a missed event makes those pass for the
 wrong reason, which is worse than failing.
 
+**And it was not the only file waiting on a number.** `capture-writer.test.ts` failed the
+`v0.10.0` release on Windows while the same tests on the same commit had passed in `build`
+twenty minutes earlier — the identical shape, one file over. `vi.advanceTimersByTimeAsync`
+fakes the *timer* and nothing else, so the disk I/O the debounce callback starts is real,
+and a flat `sleep(20)` after it was the whole margin. **The failure was a write racing
+itself, not a slow assertion**: `writeAtomic` goes to `<path>.tmp` and then renames, so a
+second `update` provoked while the first was still in flight renamed a temporary file the
+first had already consumed — `ENOENT … rename '….md.tmp'`, arriving as an unhandled
+rejection attributed to whichever test was running by then, which is why the reported test
+and the broken one were two different tests. The rule is the one above: **wait for the
+result of a write before provoking the next one**, never for a duration. Only that one test
+needed it — every other test in the file already goes through `await writer.flush()`, which
+awaits the write itself. `capture-store.test.ts`'s own `sleep(20)` is a different thing and
+is fine: a deliberate gap between two *awaited* writes so an mtime change would be visible.
+
 ## Where the project stands
 
 Phases 0–5 of `04-bouwplan.md` are done: the byte-identical markdown round trip, the resident
