@@ -1,0 +1,984 @@
+# Constraints
+
+This file is referenced from `CLAUDE.md`. Read it before touching code in an area a
+constraint below names — each one records a rule, why it exists, and what broke when it
+wasn't followed. Entries are appended as they're discovered, not reorganized, so the order
+is roughly chronological rather than topical; the bold lead sentence of each is the rule
+itself. Decision numbers (B1, B2, …) refer to `05-besluitenlog.md`, which has the fuller
+reasoning and rejected alternatives, in Dutch per this project's language convention.
+
+
+**Opening a note must not touch the file** (B10). No reformatting, no `modified` bump, no normalisation. Writes happen 800 ms after the last keystroke (or on blur/close), atomically via `.tmp` + `rename()`, and only when the serialized bytes actually differ. This is the cheapest and most effective OneDrive conflict prevention there is, and it costs only discipline — the great majority of conflict copies come from apps touching files the user did not change. `test/vault-io.test.ts` guards it.
+
+**`package.json` `dependencies` is kept minimal on purpose.** electron-vite externalises everything listed there, so a listed package produces a bare `import` in the bundle without the folder being shipped — `ERR_MODULE_NOT_FOUND` on startup, and invisible when tested from the project directory where `node_modules` happens to exist. Build packages live in `devDependencies`. `npm run check:bundle` is the static guard and runs as part of `npm run build`. A genuine runtime package that can't be bundled (`electron-updater`, since B22; a native module like `better-sqlite3` in phase 5) *does* belong in `dependencies`, and electron-builder ships it via its own dependency walk — `electron-builder.yml`'s `files` list no longer excludes `node_modules` wholesale for exactly this reason.
+
+**Windows gets a real installer and auto-updater; macOS gets a version check and a link** (B22). `electron-builder.yml`'s `win.target` is a per-user NSIS installer (`perMachine: false` — no admin rights needed, same as unzipping a folder), and `src/main/updater.ts` drives `electron-updater` on that path with two explicit confirmations: one before downloading, one before restarting to install. macOS deliberately does not get that: no Developer ID, no notarization, so no Squirrel.Mac-based silent install. Instead it does a plain `fetch` against the GitHub releases API and opens the release page for a manual reinstall, the same upgrade step as before. Both paths read the same public GitHub repo; `src/main/update-check.ts` holds the Electron-free parsing/comparison logic, tested directly.
+
+**`autoUpdater` is reached with `require`, never with `await import`** (17 August 2026). That
+one line is why "Check for updates…" did nothing at all on Windows for every release since
+B22. electron-updater is CJS, and `autoUpdater` is its single export written as a lazy
+`Object.defineProperty(exports, "autoUpdater", { get })` rather than a plain assignment —
+a shape `cjs-module-lexer` does not recognise, so Node leaves it out of the ESM namespace it
+synthesises while all seventeen other exports come through. `const { autoUpdater } = await
+import(…)` therefore yielded `undefined`, the next line threw on `undefined.autoDownload`,
+and both callers are `void checkForUpdates(…)`, so the throw became an unhandled rejection
+and the tray click produced nothing. Three things follow. **It could only ever fail on
+Windows**, because `checkMac` is a plain `fetch` and `checkWindows` is the only code in the
+app that loads electron-updater at all — so the one platform running that line was the one
+platform nobody could debug. **No test could have caught it, and the obvious test would have
+asserted it away**: under vitest the import goes through Vite's own interop, which builds the
+namespace by reading the exports object, so `autoUpdater` is right there and passing —
+`test/updater-import.test.ts` spawns a real `node` for that case specifically. Same family as
+B36's trailing slash and B40's missing `corsEnabled`: a property of the runtime, not of this
+source tree. And **`checkForUpdates` now catches its own failures** and routes them through
+`reportError`, so the next thing that goes wrong on this path says so instead of doing
+nothing — `trash-delete.ts`'s "a refusal names itself", applied to the one feature whose only
+output is a dialog. Verified by driving the built bundle's own `createRequire` line inside
+the real packaged `app.asar` against the live GitHub release: a genuine `NsisUpdater`, "Up to
+date" at 0.8.8 and "Update available → 0.8.8" at 0.8.0.
+
+**Electron's default application menu is removed** (`installMinimalMenu`). Its accelerators are the reason: it claimed Ctrl+M for Minimise, so indenting inside a list minimised the window. This entry used to say the menu was "invisible on a frameless window", which is true of the capture window and of nothing else — and saying it here, in the one place that sets the menu for the whole app, is what kept a Windows bug invisible for months: on Windows the menu is drawn *per window*, so the library and PDF windows, both natively framed, grew a real "Edit" strip above their contents. Both carry `autoHideMenuBar: true` now — a no-op on macOS, and deliberately not `setMenu(null)`, which would take the Edit roles with it. Only the Edit clipboard roles stay, because on macOS the menu is what makes Cmd+C/Cmd+V work at all. macOS additionally gets an application submenu, because without one Cmd+Q was dead — but its Quit item is a custom click, never `{ role: "quit" }`: **Cmd+Q closes a window, it does not quit the app** (B25). The library window closes; the capture window commits and hides; the resident process survives both, which is the whole premise of B2/B3. The item is still labelled "Quit emqnote" for muscle memory, and the tray item of that name remains the only real exit.
+
+**The capture window is hidden, never destroyed.** `capture-window.ts` holds exactly one `BrowserWindow` reference, assigned once, so a destroyed window is unrecoverable: `reveal()` fails on `isDestroyed()` forever — hotkey and New note silently dead — and `hideCaptureWindow()` never runs, so `writer.finish()` never releases the loaded note and the library reports it "open for editing" in a window that no longer exists. On macOS the traffic lights are real (`titleBarStyle: "hidden"`), so the red button would do exactly that. The `close` handler therefore calls `preventDefault()` and routes to `hideCaptureWindow()`, the same commit-and-put-away path `IPC.captureClose` uses. A `quitting` flag, set from `before-quit`, lets a genuine quit through — without it the tray's Quit hangs on that `preventDefault()`. `reveal()` keeps its `isDestroyed()` guard but now recreates the window rather than returning.
+
+**The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the tree → notes → editor ring from there, and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
+
+**An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway.
+
+**Windows reported it unchanged twice more, and `--key-probe` then closed it** (B71). On the
+reporting machine `Shift+T` logs a `KeyT` line and `Ctrl+T` logs a `KeyT` line, while
+`Ctrl+Shift+T` logs **no `KeyT` at all** — a `Ctrl+C` arrives in its place, Shift stripped and
+lowercase. That substitution was the clue: a passive `RegisterHotKey` grab produces silence,
+an injected keystroke means a macro tool. It was **an AutoHotkey script the machine's own owner
+had written**, rewriting the chord to `Ctrl+C` to escape another command. Not Windows, not
+Chromium, not this source tree — so **nothing was changed**: `Mod-Shift-t` is still first and
+`Mod-Shift-d` still sits beside it. Keep both claims above; they are correct on their own terms
+and cost nothing. What this is worth remembering for is that two repairs shipped against a cause
+nobody had measured, and the measurement took one log file.
+
+**Both global accelerators are registered by one function** (B60). `registerGlobalHotkeys` in `index.ts` reads `settings.hotkey` and `settings.libraryHotkey` and claims both; every path that changes a chord goes through it. That is not tidiness: `globalShortcut` cannot give up one claim without knowing what it was, so every caller used `unregisterAll()` — which, the moment there are two hotkeys, silently drops the other one. The handlers save first and register second, then roll the setting back if the OS refused, because the register step reads the settings file. `Mod+O` stays as the in-window form; the global chord is a *setting*, not a `shortcuts.ts` entry, and the help sheet draws it the same way it draws the capture hotkey.
+
+**A deliberate launch opens the library; a login start stays silent** (B61). `shouldOpenLibraryAtLaunch` in `launch-options.ts` is the whole rule, pure and separate from the launch that carries it out, because two entry points ask it: the first instance about its own argv, and `second-instance` about the argv the relaunch handed over — clicking the shortcut of a running app is the same gesture as clicking the shortcut of a stopped one. macOS asks a third time through `activate`, since an `LSUIElement` app with no dock icon never sees a second instance. **The signal is an argument on the login item**, written by `applyLoginItem` and nowhere else: `setLoginItemSettings` used to be called with `{ openAtLogin }` alone, so nothing distinguished the two launches, and the tray's own checkbox set it directly — a second call site that would have dropped the argument on the first toggle. macOS's `wasOpenedAtLogin` is read alongside the flag rather than instead of it, because an entry written by an older version carries no flag until it is rewritten.
+
+**Windows path limits and reserved names.** Filenames follow `YYYY-MM-DD HHmm Subject.md`, truncated at 80 chars, forbidden characters `\ / : * ? " < > |` replaced by `-`, reserved names (`CON`, `PRN`, `COM1`…) suffixed with `_`, no trailing dot or space. `src/main/filename.ts`, tested in `test/filename.test.ts`.
+
+**A `#` that opens a tag is not escaped at the start of a line** (B19). Everywhere else a line-initial `#` becomes `\#`, because it could begin a heading — but `\#klantx` is not a tag to Obsidian, and half the tags in the vault being silently inert is exactly what B7 forbids. The exception is narrow: `startsWithTag` in `src/markdown/tags.ts` requires a tag character immediately after the hash, so `\# Dit is geen kop` keeps its backslash. It is implemented as a custom `text` handler in `pipeline.ts` that cuts the value around the hash and runs the pieces through `state.safe` separately — never by unescaping the output afterwards, which would eat a literal backslash the user typed.
+
+**`HeaderBlock` serves two windows, through a `variant` prop.** One shape now, not two: a fixed two-row grid of When / Tags / Where / Who, on every note, in both windows (B20). `capture` adds the subject field; `reader` has none, because the title belongs to Rename, which renames the file with it, and a second way to change it would let the two drift. One component so the attendee/tag parsing and the date editing exist once.
+
+**There is no meeting button** (B23). A meeting is marked with a tag like anything else. `type:` stays in the format — required field, both values, seven corpus fixtures, and `type:meeting` still works in the search bar — but nothing in the UI sets it, and `HeaderValues.kind` only ever passes through whatever the note already had. Removing the field from the format instead would rewrite every existing meeting note's frontmatter on the first save, which is B10 approached from the wrong side.
+
+**The four header fields are the same width, and the grid is what makes them so.** `grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr)` — the `minmax(0, …)` matters: a plain `1fr` is `minmax(auto, 1fr)`, so the When cell's nowrap date button sets a min-content floor and widens its column past the other. `.header-cell input, .header-cell button` share `flex: 1`, so the date control fills its cell like the text fields do rather than sitting at its intrinsic width.
+
+The English word for the `attendees:` field is **People** in the UI and **attendees** everywhere else, and that asymmetry is deliberate: the frontmatter key is `attendees:`, and renaming it would break every existing note and Obsidian compatibility (B7). Only `capture.people` — the placeholder — carries the new word.
+
+In the library the header values live in their own `header` state, deliberately not folded into `open`: an effect reloads the document into the editor whenever `open` changes, so header values there would rebuild the document on every keystroke and throw the caret away.
+
+**The index scan starts at launch, not at the first question.** `main()` calls `vault-scan.ts`'s `startScan` right after `prepareVault()` — beside the watcher, skipped during `--selftest` for the same reason, and deliberately not awaited, so it never sits in front of the tray, the hotkey or the capture window's first paint. It shares `ensureScanned`'s collapse, so a library opened mid-walk joins the scan already running rather than starting a rival one over the same files on the thread the hotkey also uses. Progress goes to a thin bar at the top of the library (`IPC.libraryScanProgress`, throttled; `IPC.libraryScanState` for a window that opened partway through and missed the events).
+
+**The walk itself runs in a worker thread** (`scan-worker.ts`, started by `scan-host.ts`) — the last thing §7.2 asked for. `vault-scan.ts` does not know that: it owns *when* a scan happens and the collapse that keeps two from running at once, and calls a `ScanRunner`; `index.ts` installs the worker one, and the default is the plain in-process `fullScan`, which is what keeps the whole module testable without a build. Three things this forced, each of which is load-bearing:
+
+- **The worker opens the index a second time**, because a `better-sqlite3` handle cannot cross a thread. That works because of WAL (`index-db.ts`'s `migrate`): a reader never waits on a writer, and every library question is a read. Two *writers* (the worker, and the watcher on the main thread) can still collide, so `busy_timeout` is set — without it the loser throws `SQLITE_BUSY` and silently drops an update.
+- **The worker must reach no Electron module**, since a worker thread has none. That is not a source-tree property but a rollup-chunking one, so `check:bundle` walks the worker's import graph and fails on `electron`; it also walks every emitted chunk now, not just the two entries, or a bare import could hide one indirection away.
+- **The fallback is deliberate and logs.** If the worker cannot start, `scan-host.ts` scans on the main thread instead. A missing worker entry is the same class of bug as a missing `dependencies` entry (invisible from the project directory, fatal in the package), and without the fallback the symptom would be an empty index — no tags, no people, no search, no conflict banner — with nothing on screen saying why.
+
+Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): the worst single main-thread stall went from ~470–535 ms to 7–29 ms, with the total scan time unchanged. The old figure is the honest one to remember about the in-process version — `fullScan` yields every hundred files, but a hundred files is half a second of work, so the yielding bounded nothing that mattered next to an 80 ms hotkey budget. ESM workers were confirmed to load from inside a packaged `app.asar`, shared chunks and all, before this was built on.
+
+**Dragging a note onto a folder and "Move to…" are one operation, not two.** `Library.tsx`'s `moveNoteTo` is what both call; the dialog reaches a folder four levels deep without hunting for it, the drag reaches one already in front of you. The rules live in `src/renderer/library/drag.ts` — `canDropNote` answers for the drop *and* for the highlight that precedes it, so a folder can never light up and then refuse. **The trash is a destination since B54**, and the drop routes through the same `trashNote` Delete uses rather than through `moveNoteTo`, so there is one way into `_trash`. It takes no confirmation, which reverses this file's own earlier reasoning on purpose: that argument ("the one gesture with no confirmation must not be the one that destroys something") held only while there was no way back, and Restore is now the named handling that undoes it. Only the trash *root* is a destination, never a folder inside it — Delete files everything flat, so a deeper drop would mean nothing. Nothing drags out of the trash, which is the same sentence read the other way: restoring is a deliberate act, not a consequence of having grabbed the wrong row. The drag type is private (`application/x-emqnote-path`), never `text/plain`, which would make every row draggable into any text field on the machine. `onDrop` re-checks `canDropNote` against the path in the drop rather than trusting the highlight's state, so the consequential half never depends on a render having landed.
+
+**`IPC.libraryMoveNote` refuses a note the capture window has claimed.** `CaptureWriter`'s session holds the path it will write to, decided when the note was loaded; moving the file does not update it, so the next debounced write recreates the note where it used to be — one note in two folders, the second written by a window that thinks it is still editing the first. The move dialog could only ever reach a note the reader had open; dragging can reach any row in the list, which is what turned this from a note into a guard.
+
+**Task state lives in the index, and the index knows its own schema version** (B26). `checked` is an attribute on `listItem`, not text, so `plainText()` drops it and FTS5 can say nothing about it — the Tasks view is answered from a `note_tasks` table filled by `buildRecord`, which the full scan and the watcher already share, and never by re-parsing a folder subtree on demand. That walk is the 470–535 ms main-thread stall that pushed the scan into a worker; reaching for it again through the back door undoes that. Because `needsRefresh` short-circuits on unchanged `mtime`+`size`, an existing index can never gain new columns on its own, so `migrate()` carries a `PRAGMA user_version` and drops its tables on a bump. That is allowed *because* of B9: the index is a derived cache outside the vault, so a rebuild costs one scan and destroys nothing. Any future column added to `NoteRecord` must bump that version.
+
+**Ticking a checkbox from the Tasks view re-reads and re-checks first.** `toggleTask` in `vault-io.ts` re-parses the file, walks to the n-th task item, and **verifies its text still matches what the caller was shown** before flipping anything. An index row can lag the disk, and flipping the wrong line in a file the user does not have open is the one failure mode worth designing against. Then `serializeNote` + `writeAtomic`, never a text edit — B6 applies here like everywhere else. The IPC handler refuses a note the capture window has claimed, same as `IPC.libraryMoveNote`.
+
+**Deleting a folder is a rename into `_trash`** (B27), never `rmSync`. `trashFolder` reproduces `renameFolder`'s refusals code for code, so the renderer decodes both through one `folderErrorOf`, and the handler refuses a folder holding a note the capture window has claimed.
+
+**Anything in the trash comes back out, and one thing at a time can be destroyed** (B54). `moveFolder` is what Restore needs that did not exist — a rename never changes which parent a folder hangs off — and it repeats `trashFolder`'s refusals with three differences that are the whole operation: the *source* may be inside `_trash`, the *destination* may not (that is `trashFolder`, and two routes to one act is how they drift), and a folder cannot move inside itself. A collision is survived rather than refused, unlike in `renameFolder`, because nobody typed this name. Its handler *is* `IPC.libraryRenameFolder`'s, extracted into one shared function so B44's and B45's two link-repair passes cannot come to differ between them. `deleteFromTrash` is `emptyTrash` at a smaller scale and sits directly beside it, sharing its guard exactly — `realpathSync` on both sides, and the target resolved as well as the folder, which `emptyTrash` never has to do because it works on `readdirSync`'s own entries while this one takes a path off IPC. **Those two are now the only code in the app that permanently deletes anything**, which is B24 restated rather than relaxed: same folder, same guard, same confirmation naming what goes. Restore and Delete permanently both keep a non-menu route — the folder toolbar swaps its three buttons for them in the trash, exactly as `NoteList` swaps *New note* for *Clear trash* there, and the reader's Actions menu does the same for a note — because `--click-button` cannot open a right-click menu, so anything living only behind one does not exist for the self-test.
+
+**Attachments are served over `emqnote-attachment://`, not as `data:` URLs** (B28). A note with three screenshots would otherwise push each one through IPC a third larger, on every render; the orphaned-attachments screen's thumbnail kept its `data:` URL because it was one file, once — that screen is B55's pane now and draws off the protocol like everything else. `resolveAttachment` refuses anything that lands outside the vault after `realpathSync` — following the symlinks *is* the guard, the same reasoning as `emptyTrash`, which is also why its tests compare against the real path and not the one `mkdtemp` returned. Both windows carry `emqnote-attachment:` in `img-src`; the capture window had no `img-src` at all before.
+
+**An attachment is found anywhere in the vault, and the protocol URL carries its name in the path** (B38). `resolveAttachment` tries `_attachments/` first and then the vault itself, so `![[99 - Attachments/foo.png]]` — the shape an Obsidian-written vault is full of — draws. **It never resolves a note file**, which is what keeps `IPC.openWikiLink`'s two halves apart: it asks this first and falls through to the index only on `null`, so without the exclusion `[[01 Projecten/Rules.md]]` would go to the OS viewer instead of the library. The URL shape is the other half and is not cosmetic: Chromium canonicalises the host of a `standard: true` scheme, which was **measured against a real Electron build, not reasoned about** — it lowercases the host (so every name this app did not itself write came back wrong, invisibly on macOS/Windows and fatally on Linux), and it refuses a `%2F` in one outright, `fetch` throwing "Failed to parse URL" before anything is sent. A path-form target therefore could not be *expressed*, whatever resolution was willing to find. `src/shared/attachment-url.ts` is the one place such a URL is composed and read back; the old host form is still parsed because clipboard HTML copied inside the app carries it, and `paste-images.ts` reads exactly that.
+
+**A note says when the file it names is gone** (B39). A missing picture drew the browser's broken-image glyph and a missing file drew an ordinary chip that did nothing when clicked — both read as the app being broken. The question is asked **at draw time, but only for a target that names a file** (an extension, and not a note's): looking a file up is one `statSync`, while looking a note up needs the whole index, and a link to a note not yet written is a normal thing to have — so a note link keeps B35's click-time answer, and `styles.css`'s note on `[data-link="missing"]` still describes that case correctly. Three things hold it up: one IPC per note rather than one per chip (`missing-attachments.ts` batches on a microtask, since `setDoc` builds every NodeView in one synchronous pass); **nothing is remembered between two openings**, because an attachment can appear — a OneDrive file finishing its download, a picture just pasted — where B36's thumbnail cache remembers for the opposite reason, a render failure being a property of the bytes; and an unanswerable question marks nothing, since the marker is an accusation. The marker is B36's own ⚠, deliberately not a second one. `imageView`'s `<img>` gained a plain inline wrapper so the chip can take the picture's place — a NodeView cannot swap the element ProseMirror mounted — which is why `.wiki-embed-image-box` is in the `.ProseMirror-selectednode` list.
+
+**Paste claims image files only.** `handlePaste` returns false for everything else so the existing text/HTML path is untouched. The Outlook `mso-list` reconstruction (§6.3) is deferred, not abandoned, and this must not preempt or complicate it. Inserting an attachment also deliberately does **not** write the `attachments:` frontmatter array: `saveNote` does not manage that field, and writing it would rewrite the header of every note that gains an image — B10 from the other side, the same objection that keeps body tags out of the frontmatter. **If that deferred work ever claims the paste itself, it must call `transformPastedImages(slice)` and dispatch with `.setMeta("paste", true)`, or the image pipeline below stops running.**
+
+**Pasted `[[…]]`/`![[…]]` text becomes the node it names, on the spot** (B58). Nothing
+claimed a plain-text paste before, so ProseMirror's stock parser put the characters in as
+characters, and they only turned into a picture or a chip on the way back *off disk*, where
+`normalize-phrasing.ts` reads the same syntax — which is why the app's own **Copy link**
+appeared to do nothing until the note was closed and opened again. `paste-wiki.ts` is a
+second `transformPasted` pass composed with the image one in `Editor.tsx`, so both windows
+get it from `createEditorState`. Two things hold it up. **The syntax is not written down
+twice**: `matchWikiSyntax` is the parser's own matcher, exported for exactly this, because
+two spellings of one syntax is how a paste and a reopen come to disagree about the same
+characters. And **this does not reopen the no-markdown-autoformat rule** — `**bold**` still
+pastes as five characters and two asterisks. The `[[…]]` family is the exception because it
+is the spelling this app itself puts on the clipboard, and because the literal text is not a
+plainer rendering of the same thing but a broken one. A code block is left alone, its
+contents being characters by definition.
+
+**A pasted picture is downloaded into `_attachments/`, never left pointing at the web.** ProseMirror's stock HTML paste produces an `image` node holding the remote address, which serializes to `![alt](https://…)` — a note that is empty offline, empty on the other machine, and blocked by the CSP even online. `paste-images.ts` is the two halves this takes: `transformPastedImages` runs inside `transformPasted` and turns an `emqnote-attachment://` image into a `wikiEmbed` on the spot (an in-app copy, never re-downloaded), and the `remoteImages()` plugin asks main for the rest and swaps in the `wikiEmbed` when the file lands. In-flight images are tracked as a `DecorationSet`, not as positions: a download takes seconds, and `DecorationSet.map` moves the marker with the text while the user types — and collapses it away if the image is deleted or undone, so a late resolution finds nothing and does nothing. The side effect lives in the plugin's `view.update`, never in `appendTransaction`, which runs inside the dispatch cycle. **Everything the renderer might be talked into is decided again in main**, which is the point: `remote-image.ts` (Electron-free, tested directly) holds the scheme allowlist — `https:`, `http:`, `data:`, and `file:` conspicuously not — the content-type allowlist, the magic-byte sniff and the naming; `fetch-attachment.ts` does the I/O with `redirect: "manual"` and **re-checks the allowlist on every `Location` header**, which is the single check standing between a pasted URL and `file:///etc/passwd` or `http://169.254.169.254/…`. Also `credentials: "omit"`, a 10 s timeout, a 20 MB cap checked against `Content-Length` *and* while streaming, and three downloads at a time. Two asymmetries are deliberate and easy to "fix" by mistake: **SVG is refused on this path though the picker still allows one** (the user chose the picker's file; nobody chose what a pasted page's server returns, and `openAttachment` hands attachments to a viewer where script in an SVG runs), and the extension comes from the sniff, then the header, then `.png` — **never from the URL path**, so a `.png` address whose bytes are JPEG cannot produce a lying filename. A refusal answers `null`, the remote `image` node stays put, and `externalImageView` draws it as a label rather than a broken-image glyph — which also fixes the same glyph for notes written in Obsidian that already carried remote image markdown.
+
+**A picture a note names by its web address is fetched by main, cached outside the vault, and
+never fetched by the renderer** (B50). A vault written elsewhere is full of
+`![Name](https://…)`, and every one of them used to draw as a grey chip. The CSP is still
+closed to `https:` — what changed is *who* asks: `emqnote-remote://vault/<url>` carries the
+whole address in the path (B38's measurement is why it cannot be a host: case and `%2F`), the
+handler runs it through the very same `fetchImageBytes` a pasted image goes through, and the
+bytes land in `<userData>/remote-images` (B9 — not `_attachments/`, which would mean opening a
+note wrote into the vault, B10 from the wrong side). A note read once reads offline
+afterwards. Four things are load-bearing. **The scheme has no `corsEnabled`** because nothing
+`fetch()`es it — an `<img>` loads it — and that is the privilege whose absence has twice
+killed a shipped feature (B36, B40), so it is the first line to change if a renderer ever
+does. **The chip is drawn first and stays on any refusal**, so a blocked address, an empty
+cache offline, or the setting being off all end in the state this NodeView always had.
+**`loadRemoteImages` is enforced in main**, in the handler — but the renderer holds a copy and
+stops asking when it is off, because Chromium answers a URL it has already drawn out of its
+own image cache without consulting the handler at all (measured: the switch went off and the
+pictures stayed). And **a `data:` address goes the same way** rather than straight into an
+`<img>`: the capture window's CSP allows no `data:` in `img-src`, so the short cut would draw
+in one window and not the other.
+
+**One list stays one list.** Two lists of the same kind cannot sit against each other in a
+file: the serializer alternates the bullet character to keep them apart, so `- one` is
+followed by `* two`, which reads back as two lists and draws with a gap down the middle.
+`liftListItem` — what Backspace does to a list item everywhere else — opens exactly that
+gap when it is used from the *middle* of a list, which is how "press Enter for a new task,
+change your mind, press Backspace" produced two task lists. `commands.ts` closes it from
+both ends: `deleteEmptyItemBetweenSiblings` removes an empty item with items on either side
+of it rather than lifting it out, and `joinAdjacentLists` rejoins the halves when a
+paragraph between them is removed. An empty item at the *end* of a list still lifts out —
+nothing follows, so nothing can split, and leaving the list is the useful reading there.
+
+**Copying a list carries its markers.** `clipboardTextSerializer` is
+`clipboard-text.ts`, not ProseMirror's default `textBetween`, which knows nothing about
+structure and hands a plain-text target a checklist with every bullet, number and box
+stripped off. The `text/html` flavour was always fine, so this is only about the plain-text
+one — and it stays plain: no escaping, nothing that would make it markdown.
+
+**A bullet can carry a star instead, and that star is in the file** (B72). `- ⭐ Bel Jan`
+on disk; `starred` on `listItem` beside `checked` in memory, so the star stands where the
+bullet stood and is not editable text — Backspace, Home, select-all, the plain-text
+clipboard, `plainText()`, the excerpt and the Tasks view all go on treating it as the
+ordinary bullet it is. `star-items.ts` reads the `⭐ ` prefix off, `pipeline.ts`'s own
+`listItem` handler writes it back, and neither half means anything without the other —
+exactly the `empty-tasks.ts` pair, and built on it. Four things are load-bearing.
+
+**It has to reach the file at all**, which is the line `list-marker-style.ts` draws from the
+other side: a marker that goes bold carries no meaning the file does not already hold, so
+that is a `DecorationSet`; a star carries the whole point, so it is content and there is no
+B6 or B10 question to answer. **An attribute and not two characters of text** — the cheap
+version puts `⭐ ` in the item and styles the bullet away, and then the star is in the
+search index, in the excerpt, in the task row's label and under the caret, which is what
+"treated as an ordinary bullet for every other purpose" rules out. **It is exclusive with a
+checkbox and with a numbered list**, because in both the marker is already taken — the box
+is positioned into the marker slot and the number is the item's meaning — and that is
+enforced at three doors rather than one: `toggleStar` clears `checked`, `toggleTask` and
+`toggleList` clear `starred`, and `liftStarMarkers` declines to read a star out of an item
+that has either, which is what lets an Obsidian-written `- [ ] ⭐ …` round-trip byte for
+byte with its star as literal text. And **the spelling was measured before anything was
+built on it**: `⭐` (U+2B50) is not in `mdast-util-to-markdown`'s unsafe set — that is
+ASCII punctuation only — so it is never escaped in any position and needs no `state.safe`
+carve-out, unlike B19's `#`. The cost is stated rather than discovered: a bullet whose text
+genuinely begins `⭐ ` cannot be expressed, there being no escaped form to tell apart the
+way `\[ ]` is told apart from `[ ]`. `test/limitations.test.ts` pins that;
+`test/corpus/29-sterretjes.md` pins the bytes.
+
+**Bullet, star and checkbox sit on one line and in one column** (20 August 2026). Three things
+can stand in the marker slot and they were drawn three ways: the bullet is a native `::marker`,
+B72's star *was* a `::marker` with a colour emoji in it, and the task checkbox is a positioned
+widget. Measured in a real Chromium at 4× device scale, ink centroid to ink centroid: the star
+was 16.75px tall against the bullet's 4.5px and sat 5px out of column, the checkbox 6.6px right
+of the bullet and 1.05px above its line.
+
+**The bullet is the reference and does not move.** The other two are tuned onto it — the
+checkbox with two offsets on `.task-check`'s `left` and `top`, the star by being **drawn into
+the slot by hand** rather than as a `::marker` glyph. That last part is the change to B72's
+mechanism, and it was forced: `::marker` accepts font properties and nothing else, no
+`vertical-align`, so shrinking the star with `font-size` measured it *lower* and further right
+still — the em space in `--marker-gap` shrinks with the glyph. A positioned `::before` with
+`align-items`/`justify-content: center` centres it on both axes, which is also what makes this
+survive an emoji font with different metrics: the size varies, the centre does not.
+
+`transform: scale()` and never `font-size` for that size, or every `em` in the rule — `left`,
+`width`, `height` — would resolve against the new size and move the box along with the glyph.
+The `::marker` still needs `content: none` beside `list-style: none`, since `list-style` stops
+suppressing a marker the moment one has explicit content and the three depth rules give it
+some. `styles-star.test.ts` pins that the `content: none` rule still out-ranks those three;
+`styles-list-marker.test.ts` pins the construction. Verified in the running app at every depth:
+the `◦` and `▪` of levels two and three sit on the same line and column as `•`, so one set of
+numbers is right everywhere.
+
+**A bullet, a number or a checkbox follows its own line's formatting** (`list-marker-style.ts`,
+17 August 2026). Bold a whole bulleted line and the `•` stayed upright, which reads as the
+marker not belonging to the line it introduces. It is a `DecorationSet` putting a class on
+the `listItem` and nothing else — no schema change, nothing reaching the serializer, nothing
+on disk, so there is no B6 or B10 question to answer. Four things are decided rather than
+incidental. **Only when the whole line carries it**: half a bold line is a formatted phrase,
+and a marker that went bold for it would claim something about the item that is not true —
+`isMarkActive` is no help there, being selection-based and *any* rather than all.
+**Whitespace outside the run is ignored**, or a trailing space would make the marker flicker
+while typing. **The CSS sets the properties on `::marker`, never on the `li`**: `font-weight`
+on the item is inherited, so a plain sub-item nested inside a bold one would draw a bold
+bullet of its own — the same family as B48's `display: none` and the `.overlay` dimming, and
+the reason `test/styles-list-marker.test.ts` asserts the bare-`li` form is *absent*. A task
+item has no marker at all, so the same pair of rules lands on `.task-check`'s SVG instead,
+where CSS outranks the presentation attributes `checkbox.ts` writes. Bold and italic only:
+strikethrough was asked about and refused, since a `::marker` cannot draw a line through
+itself and it would mean giving up the native marker for a `::before`.
+
+**Whoever handles a key stops it; a window listener asks the event where it happened**
+(18 August 2026). Two reported bugs with one cause, and the cause is that
+`preventDefault()` does not end an event. An overlay handled its own Escape and, on the way
+out, restored focus to whatever opened it — so by the time the still-bubbling key reached
+`Library.tsx`'s window listener, `document.activeElement` read as the editor, and the same
+press *also* ran "leave the editor for the note list". One press, two things. `Mod-/` a
+second time never did it, because it is not Escape: that asymmetry is the report. The same
+mechanism made `Ctrl+F` open the find bar and then immediately take the caret back out of it
+and put it in the vault search box, because a ProseMirror keymap command returning `true`
+likewise only calls `preventDefault()` (B64). Both halves of the rule are in place and each
+is correct alone: `Help.tsx`, `ContextMenu.tsx`, `slash-menu.ts` and `find-in-note.ts` call
+`stopPropagation()` on the key they handled — `ContextMenu` for **every** key, since an open
+menu owns the keyboard, which is the rule `Capture.tsx`'s own guard already stated for the
+overlays it knew about — and the Escape branch in `Library.tsx` reads `paneOf(event.target)`
+rather than `paneOf(document.activeElement)`. The Tab branch beside it deliberately keeps
+`document.activeElement`: Tab genuinely is a question about where focus *is*. `slash-menu.ts`
+is worth remembering for on its own — its comment asserted the key "does not reach the
+window", which is exactly what kept the bug there invisible. **jsdom only reproduces half of
+this**: `ContextMenu` restores focus synchronously inside its own `close()` and so fails a
+test without the fix, while `Help` restores it from an unmount cleanup that jsdom runs after
+the event has finished bubbling — `test/keyboard-nav.test.ts` says so where it would
+otherwise look like two guards.
+
+**A modal gives focus back, and it does it on unmount.** `Help.tsx` and `Settings.tsx` record
+`document.activeElement` on mount and refocus it when they go away, which is `ContextMenu.tsx`'s
+recipe with one difference that matters: `ContextMenu` restores in its own `close()`, and the
+help sheet has a way out that never calls `onClose` at all — `Mod-/` a second time is caught
+by the window-level listener in `Capture.tsx`/`Library.tsx`, which just flips its flag. Before
+this the focused panel was simply removed, focus collapsed to `document.body`, and the next
+Tab started at the top of the document: the folder tree's `+ New` button, whatever pane the
+sheet was opened from. `Capture.tsx` no longer focuses the editor in its `onClose` either —
+with the opener restored that only takes focus away from the subject field. `Settings.tsx`
+additionally never focused its panel, so its own `trapTab` trapped nothing and Escape only
+worked once something inside had been clicked.
+
+**An empty task item is written `- [ ]`, and reading it back takes its own code.** GFM
+requires a checkbox to be followed by whitespace *and* content, so a box on its own is an
+ordinary bullet whose text happens to be `[ ]` — and `mdast-util-gfm-task-list-item`
+inserts the box by finding the space after the bullet, which an empty item does not have,
+so it dropped the box without a word. A half-written checklist therefore came back from
+disk as plain bullets. `pipeline.ts`'s own `listItem` handler writes it (no trailing space
+— the dialect forbids that, and `roundtrip.test.ts` checks), `empty-tasks.ts` reads it, and
+neither half means anything without the other. `to-mdast.ts`'s `isEmptyList` had to learn
+the same thing: a list of empty items is editing residue and gets dropped, but a box is not
+residue. The escaped form `- \[ ]` still means literal brackets, and that is told apart by
+looking at the *source* at the node's offset — the two parse to identical text.
+
+**A new note's clock reads on the way in, not on the way out** (19 August 2026). Everything
+the capture window clears happens on hide — `hideCaptureWindow` sends `IPC.captureReset`,
+and `Capture.tsx`'s handler is where `freshHeader()` runs — and that is right for every
+value but one. `created` is about *when*, and the window is hidden for exactly as long as
+it is not being used, so When showed app-launch time for the first note of the day (this
+window is built at startup and never destroyed) and the previous note's dismissal time for
+every one after it. Discarding is what made it obvious, being the quickest way to hide and
+re-show; Escape, the X and Ctrl+Enter all left the same stale stamp, and
+`hideCaptureWindow`'s `isVisible()` guard means some paths never reset at all. The `onShow`
+handler re-stamps it now, for a brand-new note **that has not been typed into** — one handed
+over from the library owns its own date, which `onLoad` sets from the file, and `reveal()`
+sends `IPC.captureShow` on every hotkey press including one aimed at a window that is
+already open, so without `dirtyRef` the hotkey would quietly move the date of the note being
+written. `dirtyRef` over-reports by design and that bias is the right way round here. It
+updates `headerRef` in step, as `onHeaderChange` does. **The filename follows the frontmatter**, which is the other half:
+`writeSession` names the file from `frontmatter.created` rather than from
+`session.createdAt` (stamped in `beginSession`, which runs inside `finish` and `discard` —
+the main-process copy of the same bug), and assigns the decided value back onto the session
+so `renameSessionFile` reaches the same prefix on a later subject change. One source of
+truth: what the When field says is what the frontmatter says is what the filename says.
+Those three could already disagree before this, by editing the date before the first write.
+
+**The Unlinked attachments row is absent when there is nothing to clean up** (19 August
+2026). A cleanup screen for a vault with nothing to clean up is a place you open once to be
+told there is nothing there. `Library.tsx` fetches the count through the **existing**
+`IPC.libraryUnlinkedAttachments` at startup and on each `library:refresh` — not a
+count-only channel beside it, which would be two answers to one question — and keeps the
+whole reply in `unlinkedFiles`, so opening the pane afterwards draws its rows without a
+second wait. Not run while that pane *is* the selection, where `loadNotes` already fetches
+it and sets the count from the same reply; `library:refresh` arrives twice per debounced
+autosave and scanning twice for it would be the flicker bug's own cost, paid again. Three
+states rather than two: **absent is not zero** (B67's and B69's rule), so the row is drawn
+while `unlinkedCount` is `null` and a failed refresh keeps the last count rather than
+reading as an empty vault; and the row **stays while its own pane is showing** whatever the
+count says, or cleaning up the last file would leave the library on a screen with no row to
+click to get back out of — `FilterSection` answers the same objection by keeping a selected
+facet on its list.
+
+**A new note is filed where the library is standing; the hotkey keeps the Inbox** (B29).
+`CaptureWriter.newNoteIn` sets the folder for a session that has not picked a file yet, and
+`newNoteFolder` vets what arrives over IPC — absolute paths, `..` and the trash all fall
+back to the Inbox rather than being refused, because a typed note has to land somewhere.
+`""` is the vault root, which was browsable but unwritable before this. Moving a note
+deliberately does *not* move the tree selection with it: filing an Inbox means moving one
+note after another out of the same folder.
+
+**A note file is `.md` or `.markdown`, and it keeps the extension it arrived with** (B37). `note-files.ts` is the one place that decides what counts as a note file — `isNoteFile`, `noteStem`, `noteExtension` — and every scan, watcher, folder listing, conflict check and orphan check goes through it rather than testing `endsWith(".md")` for itself. The app still writes `.md` for everything it creates (`noteFileName` is deliberately untouched), but rename, duplicate and `uniquePath`'s disambiguation all preserve the file's own extension: quietly turning someone's `.markdown` into a `.md` is not the app's call. `conflicts.ts` pairs within one extension too — a `.md` and a `.markdown` of the same name are two files, and claiming they are one note would offer a button that throws one of them away.
+
+**An imported note gets its title from its filename, in both windows or in neither.** `titleOf` in `vault-io.ts` is shared by `summarise` and `openNote` because the two used to disagree: the list fell back to the filename stem, `openNote` returned `frontmatter.title` raw, so a note written outside this app showed a title in the list and an empty field in the editor. `created` falls back to the file's mtime for the same reason, and `HeaderBlock` draws a "Set a date…" placeholder rather than an empty button whatever it is handed — a control with no label reads as a broken layout. All of it is display-only: B10 still holds, and `test/note-files.test.ts` pins that opening such a note touches nothing.
+
+**A `[[…]]` link's target is a path, its alias is what you read, and moving the note rewrites both** (B35). `link-resolve.ts` (Electron-free, tested directly) resolves a target in three stages — path, then title, then filename stem — and **a stage that matches does not fall through to the next one even when it matched several notes**: that is the difference between "ambiguous" (the picker) and "not found", and collapsing them would let a third note be chosen when two genuinely share a title. `note_links` in the index feeds `linkingNotes`, which resolves the whole table against one prepared index; `rewriteWikiLinks` in `vault-io.ts` does the writing through `parseNote` → mutate → `serializeNote` → `writeAtomic`, never a text substitution (B6), skipping any note `writer.activePath()` has claimed. Two things about it are load-bearing and easy to "fix" by mistake: **the confirmation is raised before the move, and dismissing it still carries the move out** — a target resolves against where the note is *now*, so after `moveNote` there is nothing left to find, and a question about a side effect must not silently undo the thing it is a side effect of — and **a link with no alias gains one spelled with its old target**, or a note nobody is looking at silently starts displaying a path where a word used to be. `IPC.openWikiLink` replaced `IPC.openAttachment` rather than sitting beside it: one click, one answer, attachment tried first because a filename is exact where the three note rules are progressively looser.
+
+**A PDF is read in the app, in a window of its own** (B40, extending B36 rather than
+replacing it). Clicking a `.pdf` opens emqnote's own viewer — `src/renderer/pdfview.ts`, a
+fourth renderer entry running pdf.js against the same `pdfjs-dist` devDependency the
+thumbnail uses — instead of handing the file to `shell.openPath`. `attachment-route.ts` is
+the whole of the rule and draws the split from `isPreviewable`, so a `.docx` still goes to
+the OS; **Open in system viewer** inside the viewer is the way back out for printing and
+annotating. **The ⧉ above an *embedded* page no longer comes here** (B56): it goes straight
+to the OS through `IPC.openInSystemViewer`, because B43 and B46 gave the inline page its
+first page, its other pages, a Fit choice and a page box — leaving zoom, text selection and
+printing as the difference, which is what the system viewer is better at anyway. This window
+stays, reached from a plain `[[file.pdf]]` chip and from the file list's Open. Changing only
+the *label* was refused: the button called `openWikiLink`, which sends a `.pdf` here by
+definition, so it would have said one thing and done another. Three things are load-bearing. **`emqnote-attachment` needed `corsEnabled: true`
+adding to its privileges**: the viewer reads the bytes with `fetch()`, and a `fetch`
+enforces CORS even for a scheme this app owns end to end — the exact trap B36 already fell
+into once, where every test passed and every thumbnail was silently broken in the real app.
+**`openExternally` takes no argument**, because main tracks which attachment it told the
+window to show and resolves it through `resolveAttachment` itself; a viewer that could name
+a path would hand a malicious PDF the one capability worth having. And **nothing in the
+thumbnail pipeline changed** — `pdf-thumb.ts`'s single-slot queue, `thumbnailKey` and the
+404/422 handler are untouched, which is precisely why a separate window was cheaper than a
+paged widget inside the note (that would have needed a per-page render and cache through
+that one-deep queue, and a tall atom fighting the editor for the wheel and the caret).
+
+**A PDF embedded with `![[…]]` draws a page in the note, and turns them** (B43, B46). The
+two spellings mean two different things: `![[offerte.pdf]]` is the page at the width of the
+column, `[[offerte.pdf]]` is B36's small chip that opens B40's window. The file format needed no
+change at all — `from-mdast.ts` never looked at the extension behind a `![[…]]` — only a
+NodeView and a bigger render. **pdf.js does not enter the editor bundle**: the capture window
+draws this same NodeView and is the one that must appear inside 80 ms, so the embed asks the
+existing hidden-window pipeline for a second size (`emqnote-thumb://vault/<name>?size=page`,
+`PAGE_SIZE`) instead. One scheme with a size on it, not a second scheme — `resolveAttachment`'s
+traversal guard, `isPreviewable` and the 404/422 split are the same decisions for both, and
+the size lives in the *query* because the name is one opaque path segment (B38). Two things
+are easy to get wrong. **Only a 422 is remembered, never a missing file**: a render failure is
+a property of the bytes, but absence is a property of this moment (B39) — a OneDrive file
+finishing its download makes it false, and the first version of this did keep a returned PDF
+as a chip until the app was restarted, which is a bug that only running it can find. And
+**inserting a PDF now writes `![[…]]`**, because otherwise the feature is reachable only by
+typing `![[…]]` by hand, which a WYSIWYG editor does not allow; a `.docx` is still a link,
+and a hand-written `[[offerte.pdf]]` is still valid and still untouched on open (B10).
+
+B46 adds page turning to that bar — previous/next, "Page 2 of 7", a Fit toggle — and adds
+**a number, not a pipeline**: `?size=page&page=3` is the same request through the same
+handler, the same traversal guard, the same 404/422 split and the same one-slot hidden
+window. Still no pdf.js in the capture window's bundle, which is what made it allowable at
+all. Three things are load-bearing. **Page 1 is spelled without the parameter**, in the URL
+and so in the cache key, or every first page already rendered into `userData` is orphaned —
+one pdf.js render each to make again. **The page count comes over `IPC.pdfPageCount`, never
+as a response header**: it is free at render time but has to outlive the render (after a
+restart page 1 is a cache hit with nothing to ask), so it is kept as `<page-1 key>.pages`
+beside the PNG — same staleness rule, same eviction — and *carried* over IPC because a
+custom response header on a custom scheme is the next rung of the ladder B36 and B40 each
+fell off once, invisible to every test and fatal in the real window. And **`ensureThumbnail`
+now collapses concurrent identical renders**, since the embed asks for its page and its
+count at once and three NodeViews of one PDF already asked three times. Fit is a second size
+*on screen* — the PNG stays `PAGE_SIZE` — and zoom, text selection and the way out to the
+system viewer stay in B40's window, which is what the ⧉ is still for.
+
+That bar sits **above** the page since 14 August 2026 and is shaped like the viewer window's
+own toolbar (`pdfview.css`'s `.pdfview-toolbar`), which is the bar the person using both asked
+for by name: `◀ ▶`, a typed page box with its total beside it, a Fit width/Fit page select
+where the window puts zoom, the filename, and a ⧉ that carries its words as well as its glyph.
+It was below the page on the argument that a bar over a picture is a caption arguing with it —
+true for a caption, wrong for a control strip: at `data-fit="width"` an A4 page is two or three
+screens tall, so the way to reach page 2 was to scroll past page 1 first. **There is
+deliberately no percentage zoom**: the page is one already-rendered `PAGE_SIZE` PNG, so a zoom
+could only magnify a fixed number of pixels — real zoom stays behind the ⧉, which is what B46
+already says it is for. The page box means the bar now holds an `<input>` inside a
+`contenteditable`, so it needs `contentEditable = "false"` and a **`stopEvent` scoped to the
+bar** — `checkbox.ts` and `table-toolbar.ts` both answer `true` unconditionally because their
+DOM *is* the widget, while here the page beside it must keep reaching ProseMirror, since
+clicking it is how the embed gets selected and deleted.
+
+**An embed's pipe field means three things, and none of them is thrown away** (B74).
+`![[foto.png|…]]` has one slot, and Obsidian decides what it means by pattern-matching the
+string in it — a bare number is a width, `250x180` is a box, anything else is alt text. This
+app follows that exactly rather than inventing a spelling (B7), on the remote form too:
+`![Het logo|320](url)`. Four corner handles do the resizing, drawn only while the node is
+selected; `image-resize.ts` is that half, and `embed-field.ts` is the one place the slot is
+spelled, in both directions and for both node types — two spellings of one syntax is how a
+paste and a reopen come to disagree about the same characters (B58).
+
+**Nothing in that slot is discarded, and that is the point.** From the first markdown commit
+(`18d1122`) the parser read the pipe half of an embed and had nowhere to put it, so every
+non-numeric suffix vanished on the first save — an Obsidian note lost its alt text the moment
+one character in it was edited here, silently. Understanding something and keeping it are two
+different jobs, and only the first is optional. So what does not read as a size is kept
+verbatim: a number outside the bounds, an empty slot that is genuinely there, and a capital
+`X`. That last one is **checked in Obsidian rather than reasoned about** — `250X180` does not
+resize there either, so both apps show the same thing and this is agreement, not divergence;
+keeping the string instead of canonicalising it to `250x180` is then free. The comment here
+first claimed the opposite, that Obsidian was looser and this was a deliberate departure from
+it, with nobody having looked. B71's lesson: a claim about somebody else's software is a
+measurement, not a deduction. **Alt text is stored and deliberately shown nowhere** — not on the `<img>`,
+not in the excerpt, not in the index. It survives the round trip; what it should eventually
+*do* is a separate question nobody is asking yet.
+
+**This app never writes a height of its own.** The handles lock the proportions, so what a
+drag produces is `|400`; a height it invented would be a second source of truth that stops
+being true the moment the file behind it is replaced. A height *somebody else* wrote is a
+different matter — a deliberate act — so it is drawn and kept, and a drag on such a picture
+scales both numbers by the same factor and writes `|WxH` back. Undistorting somebody's picture
+because they grabbed a corner would be deciding something this app cannot know.
+
+Four more things are load-bearing. **The size is an attribute beside the target and not inside
+it**, since `target` is what `resolveAttachment` resolves and what a folder rename rewrites
+(B45); `rewriteTargetPrefix` rebuilds from `{ ...attrs, target }`, so it survives a rename for
+free and `folder-rename-links.test.ts` says so. **The transaction lands once, on release** — the
+size goes onto `img.style` during the drag and nowhere else, so a drag is one undo step and a
+picture somebody thinks better of costs the file nothing. **Both NodeViews get an `update`**, or
+ProseMirror destroys and rebuilds on every attribute change and the picture flashes away and
+back on each release (a second probe `Image`, in the remote case). And **`stopEvent` is scoped
+to the handles**, unlike `checkbox.ts` and `table-toolbar.ts` whose DOM *is* the widget: the
+picture beside them must go on reaching ProseMirror or clicking it no longer selects the node
+and there is no way to delete it.
+
+**Pictures only.** The embedded PDF page keeps B46's Fit control, which is a decision taken
+deliberately *against* a zoom (the page is one already-rendered PNG), so handles there would
+fight it. `.wiki-embed-image-box` became `inline-block` + `position: relative` to be the
+containing block — measured against a mid-sentence embed before and after, the line height and
+the picture's own rect are unchanged, as long as exactly one of the box and the `<img>` carries
+`vertical-align: text-bottom`.
+
+**One slot means one thing at a time**, so a picture cannot carry both a size and alt text.
+That is the format's limit, not a choice made here, and it has a consequence: resizing a
+picture that has alt text replaces it. It happens in one place and on purpose —
+`image-resize.ts` clears `alt` when it writes a width — rather than being left to the
+serializer. The other way round, `![Grafiek|2024](…)` reads as a width, there being no escaped
+form to tell the two apart; same shape as B72's star. `test/limitations.test.ts` pins both.
+
+**A plain `[[…]]` link standing next to its own `![[…]]` embed is not drawn** (B48).
+Obsidian writes both when it inserts a PDF, so an imported note reads as a full page with a
+chip underneath pointing back at the page above it. `duplicate-embed.ts` is a `DecorationSet`
+and nothing else: **the file keeps both spellings**, which is what makes this legal without a
+B10 or B6 argument at all, and the hidden node is still a real atom so Backspace removes it
+for good if that was the intent. **Adjacent only** — same textblock, nothing between them but
+whitespace or a `hardBreak`, either order — because a link and an embed at opposite ends of a
+long note are two deliberate mentions and swallowing the second would be this rule deciding
+something it cannot know. One trap, found by running it and not by reading it: `display: none`
+on `.wiki-link-duplicated` alone ties `.wiki-link-preview`'s `display: inline-flex` on
+specificity and loses on source order, so the one kind of chip this pair is ever written for —
+a `.pdf`, which has a thumbnail — went on being drawn. Both class names on one selector.
+
+**An overlay that means not to dim says so with two class names, not one** (15 August 2026).
+The same trap as B48, sprung a second time and shipped for months. `.overlay` carries the
+`rgba(0, 0, 0, 0.35)` veil every modal wants; `ContextMenu.tsx` and `TableGrid.tsx` render
+`class="overlay context-menu-overlay"` / `class="overlay overlay-bare"` to opt out of it, and
+at one class each those tie `.overlay` on specificity and lose on source order — `.overlay`
+sits several hundred lines below both in `styles.css`, having moved there from `library.css`
+for B41 while the comments beside them went on naming the old file. Every right-click menu,
+every Actions and Insert dropdown and the table size grid therefore dimmed the whole window,
+in both windows, exactly contrary to the sentence written above the rule. They are
+`.overlay.context-menu-overlay` and `.overlay.overlay-bare` now, which wins whatever the
+order; `test/styles-overlay.test.ts` pins both the doubled form and the absence of the bare
+one. Nothing under `test/` could have caught it before that: jsdom has no cascade to lose in,
+which is what this and B48 and B36's trailing slash all have in common.
+
+**A dividing line can be inserted** (14 August 2026). `horizontalRule` has been in the schema,
+the parser, the serializer and `.editor-content hr` since the dialect was written; nothing
+could *make* one, which imported notes made visible by arriving full of them. It is the fifth
+entry in `insertMenuItems`, so the toolbar's Insert button in both windows and the note
+panel's right-click menu all get it from one list. **No shortcut and no `---` input rule**:
+the Insert menu opens from a plain button so `--click-button` reaches it, and a `---`
+autoformat would be a markdown spelling, which `state.ts`'s `autoformat` refuses on principle.
+
+**Typing `/` at the start of a line opens the insert menu, and typing on filters it** (B51).
+`slash-menu.ts` is a plugin drawing **plain DOM**, not a React overlay, and that is the
+decision: the caret has to stay in the note while the list narrows, which is exactly what a
+modal picker with its own input takes away (`NotePicker` is right for searching a vault and
+wrong for reading what is already being typed). It also means the plugin goes into
+`createEditorState` once and appears in both windows, since everything it needs is already on
+`CommandContext`. Four things are easy to break. **It opens only on a `/` that is the whole of
+an empty textblock**, and never inside a table cell, where a heading, a list and a rule are
+all impossible — noticed in `apply` rather than by an input rule, so nothing has to reach out
+of ProseMirror's own dispatch. **The `/` stays in the document** while the menu is up, as
+`[[` does (B41), so Escape leaves precisely what was typed. **The prefix is deleted before the
+item runs**, because four items open a picker of their own and insert later. And the rows
+carry `.context-menu-label` with visible text, which is what keeps `--click-button` able to
+reach them. `slashMenuItems` is built on `insertMenuItems` verbatim, so the toolbar's Insert
+button, the right-click menu and this cannot drift; the mark toggles are deliberately absent,
+since a mark on an empty line only arms the next thing typed. **`insertHorizontalRule` puts
+the caret on the line below the rule** — `replaceSelectionWith` leaves a `NodeSelection` on a
+selectable leaf, so before this the next character typed replaced the divider that had just
+been made; only running it found that.
+
+**Renaming a folder repairs the links into it, without asking** (B44). `renameFolder`'s own
+comment used to say nothing inside needed rewriting because wikilinks carried bare names —
+true when written, false since B35, and the sentence is what kept the breakage invisible. The
+handler asks `linkingNotesUnder` **before** the rename (a target resolves against where a note
+is now) and rewrites after, exactly `IPC.libraryMoveNote`'s ordering. It does **not** confirm,
+unlike the single-note case: a folder rename is not a gesture about one note, and a dialog
+counting notes the user never thought about stands in front of a repair nobody can reasonably
+decline. `folder-rename-links.ts` is Electron-free and holds the two things easy to get wrong
+— **a referring note may itself be inside the folder** and must be rewritten at its *new*
+path, and **the new target is composed rather than re-resolved**, since re-resolving would
+need a scan and the answer is one prefix swapped for another. The handler also gained the
+`writer.activePath()` guard `IPC.libraryTrashFolder` already had. Deleting a folder still
+breaks its links on purpose: those notes are in the trash.
+
+**That repair has a second half, and shipping without it was a bug** (B45). It repaired only
+what resolved to a *note*, and an attachment never does — so renaming a folder of images left
+every `![[99 - Attachments/foto.png]]` in the vault pointing at the old name, which is what
+was reported. Two gaps at once: `note_links` held `[[…]]` only (`wiki-targets.ts` said why —
+"an attachment never moves as a consequence of a note moving", true until a *folder* could be
+renamed), and `rewriteWikiLinks` only ever touched `wikiLink` nodes. The index now stores
+embeds too behind a `kind` column (`SCHEMA_VERSION` 3, so one rebuild — B26 allows it), and
+`linkingNotes`/`linkingNotesUnder` filter to `kind='link'` so B35's question means exactly
+what it meant. The attachment half is deliberately **not** resolution: `targetsUnder` matches
+the *path in the target* as a string, because that is what `resolveAttachment` resolves and
+what a rename changes, and `rewriteTargetPrefix` swaps the one prefix in both node types. No
+alias is invented (a path-form target was never what the reader saw, and an embed has no
+alias) and a bare `![[foto.png]]` is left alone, carrying no folder to rewrite. The prefix
+matched is `Bijlagen/`, never `Bijlagen`, or a sibling folder called `Bijlagen extra` would
+move with it.
+
+**A folder's files that are not notes are listed and previewed** (B47). A vault started in
+Obsidian keeps its pictures and PDFs in an ordinary folder beside the notes — `99 - Attachments`,
+usually — and that folder was browsable and completely empty: a `0` badge in the tree,
+"No notes" on clicking it. **Nothing had to be built to *show* them**: `resolveAttachment`
+resolves an arbitrary vault-relative path (B38), `emqnote-attachment://` serves it (B28),
+`emqnote-thumb://…?size=page` draws a PDF page (B36/B43) and `openWikiLink` already routes a
+`.docx` to the OS and a `.pdf` to B40's window. `readFilesIn` is the only new piece.
+**A separate call and a separate type, never a widened `NoteSummary`**: sort, drag, move,
+duplicate, tasks and the conflict check all take one, and none of those questions means
+anything for a `.png` — a file row answering half that menu would read worse than one that
+plainly is not a note. `_attachments` stays hidden and unbrowsable; it is the app's own
+folder and has §6.5's screen — which is now a place rather than a screen, see B55 below. The
+reader pane's PDF preview asks the hidden window for its page like the inline embed does —
+**no pdf.js in the library bundle**, the same line B43 draws.
+
+A file row has a right-click menu of its own since 16 August 2026, and what is *not* on it is
+the decision: **Copy link** (`![[path]]` when `isEmbeddableAttachment` says the app can draw
+it, `[[path]]` otherwise — the same function `insert-attachment.ts` spells an insertion with,
+so a copied link and an inserted one cannot disagree), **Reveal**, and **Delete only in the
+unlinked pane**. Delete is absent elsewhere rather than present and disabled: a file a note
+still names is not a thing to offer to remove, and a permanently greyed row on every picture
+is noise. Copying goes through `IPC.copyText` in main rather than `navigator.clipboard`,
+which is not dependable in a sandboxed `file://` renderer.
+
+**Unlinked attachments are a place in the sidebar, not a modal** (B55). `{ kind: "unlinked" }`
+is a `Selection` like `{ kind: "tasks" }`; the note pane is B47's file list, the reader is
+B47's preview, and `IPC.libraryUnlinkedAttachments` answers `FileSummary[]` through the same
+`summariseFile` `readFilesIn` uses. That deleted a whole screen rather than moving one. It has
+been in three places now — tree footer, then a row inside Settings (6 August), now the footer
+again — and the third is not a revert: what came back is a destination, where what left was a
+button opening a grid with its own previews and its own delete. **Its loading and failure
+states are load-bearing**, because this is the one file list that is a search over the whole
+index rather than one `readdir`, and the screen it replaces hung on "Looking…" for four
+separate reasons at once. It was called *Orphaned* until 16 August 2026, in the strings and
+in the code alike (`unlinked-attachments.ts`, `unlinked.*` in `i18n.ts`): the old word named
+the file's predicament in a metaphor, the new one names what is actually missing.
+
+**That loading state is for the first answer, not for every refresh.** `library:refresh`
+arrives twice for every debounced autosave — once from the `CaptureWriter` callback, once
+from the watcher observing that same write ~300 ms later — and each one re-runs this scan,
+which is right: a note that just started naming an attachment changes the answer. Clearing
+the rows and re-drawing "Looking…" each time was not, and is what "the list flickers while
+typing in the new-note window" meant. `Library.tsx` keeps the last answer in `unlinkedFiles`
+and swaps the rows when the next one lands; `unlinkedScan` is a generation counter, since two
+scans can be in the air at once. A refresh that *fails* over rows that are already right
+keeps them — only a first answer with nothing to fall back on shows the failure line.
+
+**A reference counts in either spelling.** `findUnlinkedAttachments` compared the bare
+filename alone, so a picture linked as `![[_attachments/2026/07/foto.png]]` — which is exactly
+what a file row's own **Copy link** writes, and what a vault written in Obsidian is full of
+(B38) — went on being listed here as unlinked, an offer to delete a file a note is drawing.
+It matches the vault-relative path *and* the bare name now.
+
+**The unlinked-attachment scan is answered from the index, and it has an error state.** It
+stalled at "Looking…" for four separate reasons, and all four are worth not reintroducing:
+there was no `.catch` at all, so a rejected `invoke` left the one loading state set forever;
+it walked the whole vault and `readFileSync` + `parseNote`d every note synchronously inside
+`ipcMain.handle`, which on a Files On-Demand vault blocks on one network hydration per note;
+that walk honoured neither `isHidden` nor `_trash`, so a `_templates` note naming a picture
+counted as a reference to it; and each preview came back as the whole file base64'd through
+IPC with `Promise.all` over all of them, so nothing appeared until the last one landed.
+`note_links` has held exactly the reference set since B45, so `referencedTargets` hands it
+over — **the trash is still read separately**, because `index-scan.ts` leaves it out on
+purpose (a deleted note must not resurface under its tags) and this question counts a trashed
+note as a reference on purpose (it can be restored). Both are right; they just are not the
+same question.
+
+**A weblink's mark is resolved from both sides of the click position.** The `link` mark is
+`inclusive: false` (`schema.ts`), which is what stops typing past a link from extending it —
+and it also means `$pos.marks()` is empty at the *trailing* boundary of a run, where the text
+after carries no link. That boundary is the right-hand half of a link's last character, which
+is exactly where a pointer aimed at a short link lands, so Mod+click there resolved nothing,
+ProseMirror fell through to selecting the node (Mod is also its `selectNodeModifier`), and the
+link opened only on the second or third try further left. `linkRangeAt` asks `nodeBefore` as
+well as `nodeAfter` now, which fixes Ctrl+K at the end of a link along with it. A bare URL
+ending a paragraph — the common Obsidian shape — was unopenable outright.
+
+**A `#tag` in the body opens the library on Mod+click, and the answer comes out of the
+decoration set** (B52). The gesture is B33's for B33's reason: a tag is ordinary editable text
+(B19) and stays that way, so a plain click has to go on placing the caret or a typo inside a
+tag becomes unfixable by the one gesture everybody reaches for — which is also why the tag
+still gets no pill and no background, and why `.link-mod-hover` covering `.tag` is the whole
+affordance. `tag-decoration.ts` carries the name in each `Decoration`'s **spec** and exports
+`tagAt`, so the click is answered from the very set that draws the colour: a `#` in code is
+excluded once, not twice, and the two can never disagree about where a tag begins. `handleClick`
+in `Editor.tsx` asks the link first and the tag second. Three things on the other side are
+load-bearing. **`IPC.openTag` goes through main even for a click in the library's own reader**,
+copying `openWikiLink` including its `isLoading()` / `did-finish-load` deferral — the first
+Mod+click from the capture window is very often the call that creates the library window, and
+letting that window shortcut its own clicks is how one gesture grows two behaviours. **Main
+resolves nothing**: a tag is a name, and `foldTag` already decides what matches where the list
+is built. And **`FilterSection` unfolds itself** when a selection of its own kind arrives,
+matches a tag through `foldTag` (or `#KlantX` filters correctly while lighting no row) and
+keeps the selected facet on the list even when `SHOWN` or the filter box would cut it — a note
+list filtered by something the side panel does not show has no row to click to get back out of.
+
+**The chip drawn for `![](https://…)` opens its address on a plain click.** Not every
+`![…](…)` in a vault points at a picture: `![](https://www.youtube.com/watch?v=…)` is a video
+written with the image spelling, and `externalImageView` had no listener at all, so it was the
+one thing in a note that could be seen and not reached. A *plain* click, unlike a weblink in
+prose (B33): that rule exists because a link's own text has to stay editable, and a chip is an
+atom with no text to put a caret in — `chipView` and `wikiLinkNodeView` have always opened on a
+plain click for the same reason. Main's `isOpenableUrl` still decides the scheme.
+
+**The vault can be switched from the tray, through the same function Settings uses** (B21,
+extended). `switchVaultTo` is that function; a second sequence written out beside it is how
+one of B21's four pieces of state gets forgotten on the path nobody tested. The tray's flat
+`Vault: <path>` row is a submenu — reveal, the vaults `listVaults` knows, the picker — and
+what it *contains* lives in an Electron-free `vault-menu.ts`, because a `Menu` template cannot
+be built under `vitest` and `--click-button` cannot reach a native menu at all. Two things this
+route needed that Settings did not: a confirmation naming the restart (one click two rows into
+a menu of harmless neighbours is easier to make by accident than a two-step dialog), and
+**`IPC.libraryFlushSaves`**, a bounded round trip that makes the library write its debounced
+save before `app.relaunch()`. Settings flushed in its own renderer because the click was there;
+the tray has no window in the loop, and that is B21's third hazard exactly.
+
+**A `[[…]]` link is written by picking a note, always as `[[path|Title]]`** (B41).
+`NotePicker.tsx` opens on `[[`, on `Mod+Shift+K`, from a toolbar button and from the editor
+menu, in **both** windows. Never a bare `[[Title]]`: a path matches in `link-resolve.ts`'s
+first stage and cannot be ambiguous, a title matches in the second and two notes may share
+one — which would raise B35's picker on every future click over a question already answered
+at insertion. Two halves are easy to "fix" into a bug. **The input rule returns `null`**, so
+the two brackets are typed normally and simply stay there if the picker is cancelled;
+`insertNoteLinkOverPrefix` removes them on the way in and *checks they are still there*
+rather than assuming, because eating two characters of someone's sentence is worse than
+leaving two behind. **It opens from a `queueMicrotask`**, never inline — the rule runs inside
+`handleTextInput`, and mounting a React overlay mid-dispatch is the hazard `paste-images.ts`
+documents for `appendTransaction`. Candidates come from `IPC.linkCandidates`, which runs the
+same `searchNotes` the search bar does and adds `target` (`linkTargetFor`, main-side because
+B37 decides what a note extension is).
+
+**Tables are hand-rolled on the existing schema; `prosemirror-tables` is refused** (B42,
+closing the loose end B17 left). That library needs `tableRole`, a separate `table_header`
+and `colspan`/`rowspan`/`colwidth` on every cell — and *this schema is the file format*, while
+GFM cannot express a merged cell at all, so the editor could build what the serializer must
+refuse. `table-commands.ts` **rebuilds the table node and replaces it whole** on every
+operation rather than splicing at computed positions: a column insert touches every row, and
+the splicing version is correct right up until a ragged row makes it not. **Ragged rows are
+real** — `from-mdast.ts` does not pad to a common width — so every column operation squares
+the table up first, and the per-column `align` array is spliced in step or every column past
+the edit inherits its neighbour's. **`goToCell` must be chained in front of `tabIndent`** in
+`keymap.ts`: that one returns true unconditionally, so ordering is the entire mechanism and
+swapping the two lines silently removes cell navigation. Enter in a cell inserts a
+`hardBreak` (`tableCell` is `inline*`, so there is nothing to split, and `<br>` is what §3.5
+prescribes). `trailing-paragraph.ts` keeps an empty paragraph after a trailing table, code
+block, HTML block or rule so there is always somewhere to type; it never reaches a file
+because `withoutTrailingBlanks` already strips one on write, which is what makes the
+invariant free.
+
+**A rectangle of cells is selectable, and one function answers what an operation is about**
+(B49). `table-selection.ts` is a hand-rolled `Selection` subclass — refused from
+`prosemirror-tables` for exactly B42's reason, since its `CellSelection` arrives with the
+`TableMap`, the `tableRole`s and the `colspan`/`rowspan` this schema cannot hold. Three
+things carry it. **`selectedRect(state)` is the single question every command reads**: a
+caret makes a one-cell rectangle and a selection makes a bigger one, so B42's dozen commands
+gained the whole feature without a second code path — and "Row ↓" adds as many rows as are
+selected, which is the only reading where a rectangle does not mean less than a caret.
+**`visible = false`**, so the browser paints nothing over it and `table-align.ts`'s
+decoration is the entire affordance — which is also why that fill has to out-rank the
+header-row background on specificity (`test/styles-table.test.ts` guards it; same family as
+B48's bug). And **`createSelectionBetween` is what makes the drag work at all**: the button
+is still down, so Chromium goes on extending its own text selection and `prosemirror-view`
+reads it back over the `CellSelection` on every `selectionchange` — measured in the running
+app, where a slow drag ended with nothing selected. Backspace/Delete clear the cells one
+replace at a time (a single step across an `isolating` boundary is refused, which is the
+original bug), and typing over a rectangle clears it first in `handleTextInput` — the
+insertion is done there rather than handed back, because the `from`/`to` ProseMirror passed
+belong to the document before the cells were emptied. Merged cells stay impossible (B6), and
+pasting a rectangle *into* a rectangle is deliberately not built. `table-geometry.ts` holds
+the matrix arithmetic both files need, so neither has to import the other.
+
+**PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
+
+**A folder's badge counts its notes and the open tasks in them** (B67). `[# notes] / [# open
+tasks]`, only for a folder that holds notes — a folder with none has no badge, which is what
+it has always had — and **neither half is rolled up**: both count the notes filed in that
+folder itself, exactly as `noteCount` always has, so the two halves cannot end up counting
+different notes.
+
+The task half comes out of `note_tasks`, never out of a walk over the folder: re-parsing a
+folder's notes on demand is B26's 470–535 ms main-thread stall, and the table is already
+filled by every scan and every watcher reindex. It joins `notes`, so a row whose note has left
+the index cannot make the badge promise tasks the Tasks view does not list. The fold from note
+path to folder path happens in JS rather than in SQL — SQLite has no `dirname`, and spelling
+that rule a second time with `instr`/`substr` is how two answers to one question come to
+differ.
+
+**Since B69 the fold reads the per-note answer rather than asking its own question.**
+`openTaskCountsByPath` is the query; `openTaskCountsByFolder` is the fold over it. That is not
+tidiness — a folder saying two are open with rows beneath it that disagree is the failure
+worth designing out rather than testing for, and one query is how.
+
+**It is a second IPC call, not a field on `IPC.libraryTree`**, and that is the whole shape of
+it: the tree is one `readdir` and must answer at once (`vault-scan.ts`'s own rule that
+browsing a folder never waits on a scan), while this sits behind `ensureScanned`. One call for
+both would put a folder listing behind the index. So the tree arrives first and
+`folder-tasks.ts` merges the counts in when they land — which is why `openTasks` is *absent*
+rather than zero until then. Once counted, a clear folder shows a real `0`: the badge is a
+pair or it is nothing, so a folder that is genuinely done cannot be read as one still being
+counted. A tick is a save and a save raises `library:refresh`, so the badge follows a checkbox
+without knowing anything about one; a failed refresh keeps the last counts, the rule the
+unlinked pane already learned.
+
+**The note list says `Tasks: 2` under the date** (B69, revised 20 August 2026). B67's answer a
+level down, out of the same `openTaskCountsByPath`, so the folder badge and the rows inside
+that folder cannot disagree about the notes they are both counting. Always the accent, because
+the badge is now only ever drawn for a note that has work left.
+
+**Only what is open, and silence when nothing is.** It read `2 of 5`, and said `0 of 5` in
+muted grey for a note whose boxes were all ticked, on the argument that only `total` tells
+"done" apart from "never had any". Daily use answered that the other way: the badge is a call
+to action, a finished note has none, and a column of numbers mostly saying nothing is owed is
+a column that stops being read. The total is not lost — the `title` still spells `2 / 5` out,
+which is also what keeps `tree.openTasks` the one place those words are written.
+
+**Absent is still not zero**, for the reason it always was: a note missing from the map covers
+both "no task items" and "the index has not answered yet", and a row must never claim a note
+is clear while the answer is still on its way — the rows come off a `readdir` and the counts
+come from behind `ensureScanned`. That the two now draw the same thing is a consequence of the
+rule above, not a merging of the two states. It is a second IPC call for B67's reason exactly.
+
+**The badge moves up a row when there is nobody to sit beside.** `.note-bottom` exists to put
+People on the left and the count on the right; with no attendees it was a row holding one
+number, on every note in the vault. So the count sits right-aligned on the *excerpt* row
+(`.note-middle`) instead and that row is simply absent. One rule, and it is about People —
+tags have never shared a row with the count. One DOM shape and not two: the excerpt is always
+wrapped, so a note without tasks is geometrically what it was. The muted variant and the
+`.note-tasks-open` class went with it, there being one state left to draw.
+
+**It cannot come off `NoteSummary`.** `summarise` reads the frontmatter and the first lines of
+a file without ever building a document — deliberately, 0.09 ms against 1.51 ms per note — so
+it cannot see a task item at all.
+
+**People keep their line**, which was the alternative and was refused: a meeting note that
+quietly stopped naming who was at it is a worse trade than one more row. The count sits
+right-aligned on that same row, carrying `margin-left: auto` rather than the row carrying
+`justify-content: space-between` — either works when both halves are there, and only that one
+keeps the count on the right for a note with tasks and nobody attending. `.note-tasks-open` is
+written as a doubled selector for B48's reason; `test/styles-note-tasks.test.ts` pins it.
+
+**A new note can be thrown away, and it goes to the trash** (B68). Every other way out of the
+capture window commits — the X, Ctrl+Enter, Escape, blur, quit — and the draft is on disk 800 ms
+after the first keystroke, so a note begun by mistake was a note that existed. **Discard** is a
+button in the status bar, for a brand-new note only.
+
+**No confirmation, and that is B54's argument rather than an oversight**: the file is renamed
+into `_trash` and comes back through Restore, which is also why dragging a note onto the trash
+asks nothing. B24 is untouched — this is not a third place that permanently deletes.
+
+**The ordering is the whole of it.** `CaptureWriter.discard` swaps a fresh session in *before*
+it answers, `finish()`'s reason exactly, so the `writer.finish()` that every close runs
+(`hideCaptureWindow` → `onHide`) works on an empty session and `writeSession` returns `NOTHING`
+for a `null` payload instead of putting the note back where it was just taken from. Only
+running it finds that one, which is why `test/capture-writer.test.ts` spells the following
+`finish()` out rather than assuming it. What discard does **not** skip is a write already in
+flight: `writeSession` decides the file name on the first write and stores it on the session,
+so an answer taken before that settles is `null` for a file that appears a tick later — an
+orphan nobody can find. It waits the queue out.
+
+**Two independent locks on the loaded-note case**: the button is not drawn when `existing` is
+true, and `discard()` answers `null` for a session with an `existingTitle`. A note that lives
+in the library is not this window's to throw away, and Delete is already there. `capture-store.ts`
+returns the path rather than trashing it — that module writes a session, and where a note goes
+when it is deleted is `vault-io.ts`'s rule, of which there is exactly one.
+
+**The caret survives a note switch, for as long as the library window is open** (B70). `setDoc`
+replaces the whole `EditorState` — it must, or one note's undo history leaks into the next —
+and took the caret with it, so leaving a long note and coming back started at the top.
+`Library.tsx` keeps a `Map` from note path to selection; `EditorHandle` gained `getSelection`
+and `setSelection`.
+
+**In memory and nowhere else.** Not the note file (B10, and a caret is not something to carry
+to the other machine over OneDrive), not `index.sqlite` (a derived cache that `migrate()` drops
+on a schema bump), and deliberately not `settings.json` either — surviving a relaunch is a
+second question nobody asked.
+
+**`setSelection` does not focus.** Opening a note leaves focus on the list row that was clicked
+and goes on doing so; what changes is where the caret is waiting once you Tab or click in.
+**A task ordinal wins**: clicking a row in the Tasks view names a destination, and the two
+branches in the `docToken` effect are in that order for exactly that reason — there is nowhere
+else the rule is written. `rememberCaret` runs at the two points a note stops being the one on
+screen (opening another, selecting a file) and pointedly not on the paths that trash or delete
+it, where there is nothing to come back to. An offset past the end of a note that has since got
+shorter is clamped and handed to `TextSelection.between`, which falls back to `Selection.near`
+itself — the restore sits in an effect, and an exception there takes the whole reader down.
+
+**Tags come from two places, and since B65 the body's write into the frontmatter.** The
+frontmatter `tags:` field holds what was typed in the header's tag field; `#tag` stays in the
+body — and on **save** the body's tags are hoisted into `tags:` beside the typed ones. This
+paragraph used to say the two never wrote to each other, on the argument that editing one
+sentence would then rewrite the header. That cost is real, was weighed and was accepted: the
+header field was showing *nothing* for a note whose tags are all in the body, which is the
+shape an imported vault has. It costs one write per note, not one per save — once hoisted,
+the byte comparison in `saveNote` makes the next save a no-op again.
+
+**B10 is unchanged and is the boundary**: opening a note still writes nothing, and
+`test/note-files.test.ts` guards it. The hoist happens in the two frontmatter builders
+(`vault-io.ts`'s `saveNote`, `capture-store.ts`'s `buildFrontmatter`) through one shared
+`mergeTags`, never in the serializer — so the corpus round trip is untouched.
+
+**`bodyTagsOf` reads the *serialized* body, not the ProseMirror document** (`src/markdown/note-tags.ts`).
+`summarise()` reads tags off the bytes on disk, and a second reading of the same syntax is how
+two answers to one question come to differ. It costs a stringify, which is why both windows
+recompute the chips on their existing save debounce and **never per keystroke** — the capture
+window has a 16 ms budget.
+
+**Provenance is what makes a hoisted tag removable.** After one save `tags:` holds the manual
+and the hoisted tags indistinguishably, so `openNote` hands back `tags` (what `tags:` declares
+*minus* the body's) and `bodyTags` separately — `manualTags` is the rule. A tag in both places
+belongs to the body; delete it there and the next save drops it. `HeaderBlock` draws `bodyTags`
+as read-only chips beside the field for the same reason: the note is where they come out.
+
+**The tag field completes from the vault's own list** (B66), through `IPC.tagSuggestions` — the
+`tags` half of the same `facets()` the library's Tags filter reads. Top-level IPC like
+`linkCandidates`, because both windows ask. Asked on the field's **first focus**, never at
+startup: this component is rendered into the capture window long before the hotkey shows it.
+The matching is a pure module (`src/renderer/tag-typeahead.ts`) and works on the token the
+caret is in, never the whole field, which holds a list. What the note already carries — the
+field's tags *and* the body's — is not offered: the body half looks like an omission and is
+not, since B65 hoists those anyway, so completing to one would write nothing. Escape closes the
+list with `stopPropagation()`, the 18 Aug 2026 rule. People deliberately get no completion: a
+name is not drawn from a closed set the way a tag is.
+
+**The Where field does, and it completes on the whole value** (B73). That same argument
+read the other way: there are a handful of places work happens, and they are typed again
+and again with a slightly different spelling each time. `location` has been a column on
+`notes` since the table was created and `buildRecord` has always filled it, so this needed
+**no migration and no `SCHEMA_VERSION` bump** — only the tally, which is `locationFacets`
+in `vault-scan.ts`, read off `allNotes` because `toSummary` drops the field. Deliberately
+not a fourth field on `facets()`: that answer feeds the library's filter panel, which has
+no Where filter, and `IPC.tagSuggestions` was carved out of `facets().tags` for exactly
+that reason — `IPC.locationSuggestions` sits beside it. **`location-typeahead.ts` matches
+the whole field, never a token**, which is why it is a sibling module rather than another
+export in `tag-typeahead.ts`: a Tags field holds a list, so `tokenAt`/`applySuggestion`
+exist to reach the one entry the caret is in, while a location is one value that
+legitimately contains spaces ("Kantoor Amsterdam") and tokenising it would complete the
+field to a fragment of its own contents. Accepting is therefore a plain replacement with no
+caret arithmetic. **The two lists have separate state** — their own `suggesting`, `active`
+and `hoverGuard` — because Tab moves from Tags to Where without either field losing focus,
+so both panels can be up at once and one shared `active` would move the highlight in a
+panel nobody is looking at. Everything else is B66's, including the first-focus fetch and
+Escape's `stopPropagation()`.
+
+**Timestamps are ISO 8601 with offset, never UTC `Z`** — otherwise a summer note reads back wrong in winter.
+
+**Where the vault goes is asked, never assumed.** `settings.ts`'s `defaults()` seeded `vaultPath` with `defaultVaultPath()` — which answers `<OneDrive>/emqnote` whenever the machine has exactly one business OneDrive, the common case — and `prepareVault` only asks when it finds `null`. So on a fresh install the folder was chosen, created and populated in silence, and the chooser existed without anybody ever being shown it. That is what "the vault location seems to be hardcoded" meant. The default is `null` now and the guess moved into `askForVault`, which offers it as a confirmable suggestion with the full path spelled out; `defaultVaultPath` keeps its name but is nobody's default any more. `prepareVault` returns early when a `--selftest` run finds no vault, or an unattended CI job would block on a dialog instead of failing.
+
+**Index, settings and window state live outside the vault**, in the local app data folder (B9). On Windows that is `%LOCALAPPDATA%`, forced in `src/main/index.ts` before `ready`, because Roaming AppData can be synced by a corporate profile. A half-synced SQLite database is a broken SQLite database.
+
+**Trash is the vault's own `_trash` folder**, not the system recycle bin: a OneDrive file in the Windows recycle bin is not synced, so it would be gone from the other machine with no way back. Deleting a note is still only a rename into it. Emptying it is a separate, explicit action — the trash folder's note list carries a **Clear trash** button where every other folder has *New note*, behind a confirmation that names the count and says it cannot be undone (B24). `emptyTrash` in `vault-io.ts` and `deleteFromTrash` beside it (B54) are the only code in the app that permanently deletes anything, and both check with `realpathSync` that the target really is inside `<vault>/_trash` before removing a byte — `resolve()` alone would happily follow a `_trash` that turned out to be a symlink. There is deliberately no age-based prune. Since B54 the trash is also a place things come *out* of: a note or a folder restores through the Move to… picker with the Inbox offered first, since the trash is flat and nothing records where anything came from.
+
+**The app's own writes are told apart from a real external change by content hash, never by a timer** (B31). `own-writes.ts` remembers `sha256(contents)` per resolved path (lowercased on `win32`, the usual reason) after every `writeAtomic`, so the watcher can suppress the notification for its own debounced autosave without suppressing the *indexing* — those are two different things, and only the notification is ever skipped. A TTL ("ignore writes for N ms after our own save") was rejected because it turns a correctness property into a timing property, and OneDrive's own re-materialisation schedule is the one clock this app cannot trust. The library gets every `vault:file-changed` event unconditionally and filters against its own `open` state, because main has no reliable view of what the reader currently shows; the capture window is filtered in main instead, against `writer.activePath()`, because that path genuinely is main's own state. A clean note reloads silently; a dirty one gets a **Reload** / **Keep mine** bar; a deletion gets **Close** / **Keep mine** and — deliberately, asymmetrically — never auto-closes even when clean, because closing yanks away a window someone may be looking at and a transient OneDrive hiccup must not be able to do that unasked. The capture window cannot know from main alone whether it has unsaved edits (main only sees what has already crossed the 300 ms debounce), so it keeps its own `dirtyRef` that deliberately over-reports rather than risk discarding a half-typed sentence. `unlinkDir` is handled too, via `deleteNotesUnder` (a `substr`-based prefix match, not `LIKE` or `GLOB`, both of whose metacharacters real folder names can legitimately contain) — before this, a folder deleted outside the app left every note under it still indexed.
+
+**That map is keyed by path, so every rename has to carry the entry over.** `renameOwnWrite`
+is what does it, and leaving it out of a rename is a silent bug with a loud symptom: the
+watcher sees an `add` at a path nothing was ever written to, answers `own: false`, and main
+tells the capture window that the note it has open changed outside the app. It sticks, too —
+the bytes are unchanged, so the next debounced write is a no-op and no hash is ever
+registered for the new path. That is exactly what "a message pops up even though the note was
+not edited outside emqnote" was: `renameSessionFile` renames the file on *commit*, and blur
+commits, so alt-tabbing away from a note whose subject had changed produced it every time.
+Called from `capture-store.ts`'s `renameSessionFile` and from `vault-io.ts`'s `renameNote`
+and `moveNote`. Confirmed in the running app both ways round — with the call disabled the
+reported sentence appears, with it there it does not.
+
+**On Windows the vault is watched by polling** (B57). chokidar's native handler opens an
+`fs.watch` handle on every *directory* it watches and none on a file, which on Windows is a
+kernel handle held for as long as the app is resident — and this app is resident all day by
+design. Two reports came out of that, both matching the asymmetry exactly: OneDrive could not
+replace a folder renamed on the other machine, and permanently deleting a folder out of the
+trash failed while deleting a file worked. A handle follows the file object rather than the
+path, so `trashFolder`'s rename carried the watcher's handles into `_trash` along with the
+folder, `_trash` being on the ignore list notwithstanding. `pollingOptions()` in
+`index-watch.ts` is the whole change and it is `win32`-only; macOS keeps native watching,
+where a watch descriptor blocks nothing. The cost is real and accepted — a stat sweep of the
+vault every two seconds, forever — because the alternative is an app that blocks the sync
+tool its own vault lives on. `awaitWriteFinish` still applies in polling mode, so the reason
+it is set (OneDrive writing a synced file over several passes) is unaffected.
+
+**Nothing this app deletes gets one attempt, and a refusal names itself.**
+`trash-delete.ts` is the whole of permanent deletion now, and it exists because the *first*
+fix for "deleting a folder from the trash does not work" (B57, above) shipped and the report
+came back word for word unchanged. That is how a diagnosis is shown to have been incomplete
+rather than wrong — chokidar really did hold a handle per directory, and removing it really
+did not fix this. So the code stopped asserting a cause and started reporting one. Four
+parts, and the last two are the ones that matter:
+
+- `REMOVE_OPTIONS` gives `rmSync` `maxRetries: 10, retryDelay: 100`. Node's default is zero
+  and its Windows backoff for EBUSY/EPERM/ENOTEMPTY only engages above zero; `force: true`
+  suppresses `ENOENT` and nothing else.
+- `clearReadOnly` clears the read-only attribute first, because **retrying is no use against
+  an attribute** — it is still read-only a second later, and `EPERM` from one reads exactly
+  like a lock held by another process. Files everywhere; *directories only on `win32`*,
+  where `RemoveDirectory` refuses one carrying `FILE_ATTRIBUTE_READONLY`. On POSIX a
+  directory's mode is a real permission this app has no business rewriting on its way past.
+- **`findRemovalCulprit` names the entry that refused, not the folder that was asked for.**
+  It runs only after `rmSync` has already failed, walking bottom-up and removing as it goes,
+  so it costs nothing on the path that works. "`_trash/Alpha/offerte.pdf` — EBUSY" points at
+  whatever has that file open; "this folder could not be removed" points at nothing.
+- Both handlers **answer** (`{ deleted: false, failed: true, reason }`,
+  `{ removed, failed, firstFailure }`) rather than rejecting, because the renderer calls
+  them as `void …` — a rejection became an unhandled promise rejection, the dialog closed,
+  and the folder was still there, which is what "does not work" looked like from outside.
+  The dialog carries the code and the path verbatim. An error code in a dialog is not how
+  this app talks, and it earns the exception: the next report has to arrive with the
+  operating system's own word for what happened.
+
+`emptyTrash` counts what would not go instead of stopping at it — one locked folder must not
+keep the rest of the trash — and `IPC.libraryEmptyTrash` gained the `writer.activePath()`
+guard its sibling already had. **The message no longer claims a holder**: it says the
+operating system refused and leaves the code to say why, because the version that asserted
+"something else has it open" was wrong for every `EACCES`.
+
+**`--trash-probe=<path>` is how the next round gets settled** (`trash-probe.ts`), and it is
+`--thumbnail-probe`'s reasoning applied to this: walk what the delete would walk, and report
+per entry rather than guess. **It deletes nothing** — the evidence is the point on the one
+operation with no way back (B24). Two blind spots belong in its output rather than in a
+footnote, and are printed there: a handle on a *directory* is invisible to it (a directory
+cannot be opened for writing, and that is exactly what B57 was about), and on POSIX the
+held check means almost nothing because locking there is advisory. It never asks whether a
+read-only file is held, either — that fails with `EACCES` for a reason that has nothing to
+do with holders, and the first version of the probe duly reported a read-only file as
+"held", which is the same confident wrong answer it exists to replace.
+
+**Letting go before deleting, not after.** `deletePermanently` clears the reader and the
+file preview *before* calling main, since the trash is browsable and B47 puts a preview in
+the reader — on Windows an open handle inside a folder is what stops the folder going. A
+finished `<img>` load holds nothing, so this is not claimed as the cause of anything. The
+first version of it waited for `requestAnimationFrame` before continuing, which **hung the
+delete outright** on an occluded or minimised window, where frames are throttled: the button
+did nothing at all, which is the very bug it sits inside. Only running it found that.
+
+**Every panel has a right-click menu, and every action behind one has a non-menu route too.** The folder tree, the note list and the note panel (both windows) each get a `ContextMenu.tsx` — a React component, not `Menu.popup`, for the same reason `Ask.tsx` is a component and not `window.prompt`: nothing under `test/` can drive a native menu, it costs an IPC round trip per open, and `--click-button` (`library-window.ts`) has no way to reach into one. `--click-button` matching on `.branch`/`.branch-name` text is why nothing may move exclusively behind a menu. A roving `tabIndex` (`roving.ts`) keeps exactly one row per pane a Tab stop; Mod-Shift-M and the `ContextMenu` key open the menu at the focused row's own position, so the keyboard route and the mouse route land on the same component. `onRenameFolder`/`onDeleteFolder` take a `path` now, not the toolbar's `lastFolder` — a per-row menu has to act on the row that was actually right-clicked, and the toolbar keeps its old behaviour by passing `lastFolder` explicitly.
+
+The reader toolbar's Rename/Move/Duplicate/Reveal/Delete collapsed into one **"Actions"** `ContextMenu` for the same crowding reason the folder tree's rows did — and the four insert glyphs (🖼 🔗 ▦ 📎) beside them collapsed into an **"Insert"** one, built from `editor-menu.ts`'s `insertMenuItems` so the toolbar and the note panel's right-click menu cannot drift; the capture window's status bar carries the same Insert button, since leaving its four glyphs there would give one app two vocabularies for one action. Both were labelled with a glyph until a second glyph-labelled menu appeared next to the first and neither said anything. A menu *opened by a plain button* is a reachable route for `--click-button` (`"Actions>Rename"` works, matched two levels deep by `library-window.ts`'s selector, which now also reads `.context-menu-label`), so this does not violate the rule above. That only holds because a step taken while a menu is open searches **inside** the menu rather than the whole page: the folder toolbar's buttons carry the same `library.rename`/`library.delete` strings and sit earlier in document order, so an unscoped match would turn `"Actions>Delete"` into *Delete folder*. Any future panel that reuses a label a menu also uses depends on that scoping. The rule is unchanged for a menu that only opens on right-click or `Mod-Shift-M`/`ContextMenu`: `--click-button` still cannot reach one of those, which is why every one of *those* actions keeps a non-menu route too.
+
+B42's row, column and alignment commands were the exception that proved it: they existed from the start and lived *only* in the note panel's right-click menu, and were duly reported as missing features. `table-toolbar.ts` is the second route — a widget decoration above whichever table the caret is in, built on `checkbox.ts`'s recipe (`contentEditable="false"`, `stopEvent`, `ignoreSelection`, and a `preventDefault`ed `mousedown` so the command acts on the cell you clicked from). Its labels are short *visible* text (`table.rowAbove` → "Row ↑") with the menu's full sentence as the `title`, because `--click-button` matches a button on its own `textContent` — a glyph beside the word would put these straight back out of reach. Delete-table stays menu-only, being the destructive one. `t` reaches the plugin through `CommandContext` as its one optional field, falling back to English, so the half-dozen tests that build a context by hand need not carry a translator.
+
