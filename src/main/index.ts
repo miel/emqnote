@@ -1149,6 +1149,7 @@ function registerAppIpc(): void {
       libraryPaneWidths: settings.libraryPaneWidths,
       librarySort: settings.librarySort,
       loadRemoteImages: settings.loadRemoteImages,
+      keepPinnedInView: settings.keepPinnedInView,
     };
   });
 
@@ -1158,6 +1159,12 @@ function registerAppIpc(): void {
   // two windows to redraw every picture in them.
   ipcMain.handle(IPC.setLoadRemoteImages, (_event, load: boolean) => {
     saveSettings({ loadRemoteImages: load });
+  });
+
+  // B76. Saved and nothing else: the library redraws from its own bootstrap the moment
+  // the panel refreshes it, and no window but that list has anything to reconsider.
+  ipcMain.handle(IPC.setKeepPinnedInView, (_event, keep: boolean) => {
+    saveSettings({ keepPinnedInView: keep });
   });
 
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {

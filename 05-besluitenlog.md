@@ -2732,3 +2732,52 @@ verbergen zou de app zijn die het met de vault oneens is.
 **Overwogen en niet gedaan.** Een eigen volgorde binnen de vastgeprikte notities. Drie rijen is
 te weinig om een handmatige volgorde te verdienen, en met de gekozen sortering *binnen* de groep
 beantwoordt de bovenkant van de lijst dezelfde vraag als de rest ervan.
+
+---
+
+## B76 — Vastgeprikte notities kunnen ook tegen de bovenrand blijven staan, en dat is een keuze
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik. B75 zet vastgeprikte notities bovenaan de
+lijst, en dat is precies genoeg zolang de lijst op één scherm past. In een map met veertig
+notities is het dat niet: zodra je scrolt schuiven ze mee omhoog en zijn ze weg, terwijl ze juist
+vastgeprikt zijn omdat je er deze week telkens naartoe wilt.
+
+**Het besluit.** Er komt een schakelaar in de instellingen, `keepPinnedInView`. Uit — de stand
+waarmee B75 is geleverd — betekent: vastgeprikt *ten opzichte van de andere notities*, en verder
+een rij als alle andere. Aan betekent: vastgeprikt ten opzichte van het venster, dus de rijen
+blijven tegen de bovenrand staan terwijl de rest van de lijst eronder doorschuift.
+
+**Een instelling en geen verandering.** Beide antwoorden zijn te verdedigen, en welk je wilt
+hangt af van hoe lang de lijsten zijn waar je in scrolt. Aan kost de plank drie rijen van de
+hoogte van het paneel, of je er nu naar kijkt of niet; uit kost je de notities waar je het vaakst
+in bent. Dat is geen vraag die de app namens iemand hoort te beantwoorden, en het is er ook geen
+waar één van de twee standen "verkeerd" in is.
+
+**Per machine, in `settings.json`, en niet in de vault** — anders dan het vastprikken zelf. Het
+onderscheid is dat van B75 omgedraaid: `pinned:` staat in het bestand omdat het iets over de
+*notitie* zegt en dus meereist met OneDrive, en dit zegt iets over een *venster*. Het hoort thuis
+naast `libraryPaneWidths` en `librarySort`, en de twee machines mogen het oneens zijn — een groot
+scherm en een laptop hoeven hier niet hetzelfde te willen.
+
+**Eén omhulsel, geen drie plakkende rijen.** De vastgeprikte rijen krijgen samen één `li` met
+`position: sticky` eromheen, met de rijen zelf in een `ul` daarbinnen. Drie rijen die ieder apart
+op `top: 0` plakken, tekenen over elkaar heen zodra de tweede de eerste inhaalt; ze ieder hun
+eigen `top` geven betekent drie rijen van wisselende hoogte opmeten en dat na elke verandering van
+paneelbreedte opnieuw doen. Eén omhulsel heeft geen van beide nodig.
+
+De prijs ervan is dat er een element tussen de lijst en zijn rijen staat, en dat is precies wat
+`role="presentation"` op de `li` en `role="group"` op de `ul` erbinnen opvangen: een listbox mag
+zijn opties in een group hebben zitten, en in een lijstitem niet. Voor het toetsenbord verandert
+er niets — `roveArrowKey` verzamelt de rijen met `querySelectorAll` vanaf `.notes-list`, dus ze
+komen in documentvolgorde terug of ze nu een niveau dieper staan of niet. `test/note-list-pin.test.ts`
+loopt met de pijltoets over de rand van de plank heen, want dat is het enige dat dit omhulsel
+plausibel kon breken.
+
+**De ondoorzichtige achtergrond is het mechanisme, geen opsmuk.** `.note-on` en de hover zijn
+doorschijnend grijs, bedoeld om óp het paneel te liggen. Zonder een dekkende achtergrond onder de
+plank lees je de rijen die eronder doorschuiven dwars door de vastgeprikte rijen heen — dat ziet
+er niet uit als een vergeten kleur, dat ziet eruit alsof de notities dubbel staan.
+
+**Staat de schakelaar uit, dan is er geen omhulsel.** `NoteList` tekent de `li` alleen als er iets
+op de plank hoort; de lijst is dan tot op de byte de lijst van vóór dit besluit. Zo kan geen enkele
+regel hierboven een venster bereiken dat er niet om gevraagd heeft.

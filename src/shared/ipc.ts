@@ -205,6 +205,12 @@ export const IPC = {
    * in the `emqnote-remote` handler, which reads the same setting.
    */
   setLoadRemoteImages: "app:set-load-remote-images",
+  /**
+   * renderer → main: whether the pinned rows stay against the top of the note list while
+   * the rest of it scrolls (B76). Nothing but the note list reads it back — it travels
+   * through main only so it survives a relaunch, and so both windows' bootstrap agrees.
+   */
+  setKeepPinnedInView: "app:set-keep-pinned-in-view",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
   /** renderer → main, fire-and-forget: the note list's sort order changed. */
@@ -353,6 +359,8 @@ export interface Bootstrap {
   librarySort: SortKey;
   /** Whether a `![…](https://…)` picture is fetched and drawn (B50) — for the Settings row. */
   loadRemoteImages: boolean;
+  /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
+  keepPinnedInView: boolean;
 }
 
 /**
@@ -652,6 +660,9 @@ export interface CaptureApi {
   /** The library's global accelerator (B60). False when the chord was refused. */
   setLibraryHotkey: (hotkey: string) => Promise<boolean>;
   setLoadRemoteImages: (load: boolean) => Promise<void>;
+  /** B76's switch. Awaited like `setLoadRemoteImages`, so the panel can refresh the
+   * bootstrap once it has landed rather than guessing that it did. */
+  setKeepPinnedInView: (keep: boolean) => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */

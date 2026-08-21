@@ -50,6 +50,7 @@ interface Fake {
 function buildFake(
   sortKey: SortKey,
   answer: { pinned: boolean; locked?: boolean; limit?: number } = { pinned: true },
+  keepPinnedInView = false,
 ): Fake {
   const tree: FolderNode = {
     path: "",
@@ -126,9 +127,11 @@ function buildFake(
       libraryPaneWidths: null,
       librarySort: sortKey,
       loadRemoteImages: true,
+      keepPinnedInView,
     }),
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
+    setKeepPinnedInView: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
@@ -262,6 +265,75 @@ describe("a pinned note in the list", () => {
     await flush();
 
     expect(container.textContent).toContain("open in the note window");
+  });
+
+  /**
+   * B76: the same three notes, in the same order, with the shelf switched on and off.
+   *
+   * What is worth testing here is not that the pinned note is first — the tests above
+   * already own that, and it is first either way — but that turning the shelf on changes
+   * *only* where the row is drawn. So each of these asserts against the flat run of
+   * `.notes-list .note`, which is a descendant query and therefore reads straight through
+   * the wrapper: order, count and the arrow walk all have to come out identical.
+   */
+  describe("with the pinned rows kept in view", () => {
+    it("draws no shelf at all while the setting is off", async () => {
+      await mount(buildFake("modified"));
+
+      expect(container.querySelector(".notes-pinned")).toBeNull();
+      expect(container.querySelectorAll(".notes-list > .note")).toHaveLength(3);
+    });
+
+    it("lifts the pinned row onto a shelf, and only the pinned row", async () => {
+      await mount(buildFake("modified", { pinned: true }, true));
+
+      const shelf = container.querySelector(".notes-pinned");
+      expect(shelf).not.toBeNull();
+
+      const shelved = Array.from(shelf!.querySelectorAll(".note-title")).map(
+        (node) => node.textContent,
+      );
+      expect(shelved).toEqual(["Vastgeprikt"]);
+      // The rest stay where they were, as direct children of the list itself.
+      expect(container.querySelectorAll(".notes-list > .note")).toHaveLength(2);
+    });
+
+    it("leaves the reading order of the list exactly as it was", async () => {
+      await mount(buildFake("modified", { pinned: true }, true));
+      expect(titles()).toEqual(["Vastgeprikt", "Nieuwste", "Middelste"]);
+    });
+
+    it("names the wrapper so a listbox may hold it", async () => {
+      // An `li` carrying its own implicit role would be a list item inside a listbox,
+      // which is not a shape ARIA has; a group is the one wrapper it allows around
+      // options. Cheap to assert and cheap to lose in a refactor.
+      await mount(buildFake("modified", { pinned: true }, true));
+
+      const shelf = container.querySelector(".notes-pinned")!;
+      expect(shelf.getAttribute("role")).toBe("presentation");
+      expect(shelf.querySelector("ul")?.getAttribute("role")).toBe("group");
+    });
+
+    it("keeps ArrowDown walking across the shelf's edge", async () => {
+      // The one thing the wrapper could plausibly break: `roveArrowKey` collects rows with
+      // `querySelectorAll` from the `.notes-list`, so a row nested one level deeper has to
+      // still come back in document order — otherwise the walk stops dead at the last
+      // pinned row, which is precisely where the boundary is.
+      await mount(buildFake("modified", { pinned: true }, true));
+
+      const rows = Array.from(container.querySelectorAll<HTMLElement>(".notes-list .note"));
+      expect(rows).toHaveLength(3);
+
+      act(() => rows[0]!.focus());
+      act(() => {
+        rows[0]!.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+        );
+      });
+
+      expect(document.activeElement).toBe(rows[1]);
+      expect(rows[1]!.querySelector(".note-title")?.textContent).toBe("Nieuwste");
+    });
   });
 
   it("shows a tick beside Pin for a note that already carries one", async () => {

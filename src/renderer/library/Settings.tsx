@@ -10,6 +10,8 @@ interface Props {
   libraryHotkey: string;
   /** Whether a picture named by a web address is fetched and drawn (B50). */
   loadRemoteImages: boolean;
+  /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
+  keepPinnedInView: boolean;
   vaultPath: string | null;
   t: (key: string) => string;
   onChanged: () => void;
@@ -133,6 +135,7 @@ export function Settings({
   hotkey,
   libraryHotkey,
   loadRemoteImages,
+  keepPinnedInView,
   vaultPath,
   t,
   onChanged,
@@ -142,6 +145,8 @@ export function Settings({
   /** Which row is recording, if any. One at a time: they all swallow every key. */
   const [recording, setRecording] = useState<"capture" | "library" | null>(null);
   const [remoteImages, setRemoteImages] = useState(loadRemoteImages);
+  /** B76, held locally for the same reason `remoteImages` is — see its comment below. */
+  const [keepPinned, setKeepPinned] = useState(keepPinnedInView);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -252,6 +257,24 @@ export function Settings({
         </label>
 
         <p className="settings-note">{t("settings.remoteImagesWhy")}</p>
+
+        {/* B76. Deliberately below the pictures row rather than up beside the shortcuts:
+            those two rows are about the whole app, and this one is about one list in one
+            window. Its own state, same as the row above and for the same reason. */}
+        <label className="settings-row">
+          <span>{t("settings.keepPinned")}</span>
+          <input
+            type="checkbox"
+            checked={keepPinned}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setKeepPinned(next);
+              void window.emqnote.setKeepPinnedInView(next).then(() => onChanged());
+            }}
+          />
+        </label>
+
+        <p className="settings-note">{t("settings.keepPinnedWhy")}</p>
 
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is

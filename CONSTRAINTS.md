@@ -113,6 +113,22 @@ scan, or a fourth arriving from the other machine through OneDrive — the list 
 every one of them can be taken off. The file says what it says, and hiding one would be the
 app disagreeing with the vault.
 
+**The shelf of pinned rows is one wrapper, and drawn only when it is asked for** (B76,
+`.notes-pinned` in `library.css`, `NoteList.tsx`). Keeping the pinned rows against the top
+edge while the list scrolls is `position: sticky` on a single `li` holding them all, not on
+each row: rows stuck at the same `top` paint over one another, and giving each its own
+offset means measuring three variable-height rows and re-measuring on every resize. Three
+things about it are load-bearing and each looks like tidying-up. The **opaque background**
+is the mechanism, not styling — `.note-on` and the hover are translucent, so without it the
+rows scrolling underneath read straight through the shelf and the pinned notes appear
+twice. The **`role="presentation"` / `role="group"` pair** is what lets a listbox hold that
+wrapper at all; the rows themselves stay in document order, which is the one thing
+`roveArrowKey`'s `querySelectorAll` needs to keep Up and Down walking across the shelf's
+edge. And with the setting off **no wrapper is rendered at all**, so the list is exactly
+what it was before B76 — which is why the tests assert against the flat `.notes-list .note`
+run in both states, and why `styles-pinned-shelf.test.ts` reads the rule rather than trusting
+jsdom, which has neither a cascade nor scrolling to lose it in.
+
 **Every row the sidebar's arrows walk through is named in one place** (`SIDEBAR_ROWS` in
 `roving.ts`, 20 August 2026). Arrowing down the folder tree used to reach Trash and nothing
 in between, skipping Tags, People, every facet, Tasks, Settings, Help and Unlinked — those

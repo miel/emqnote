@@ -332,6 +332,12 @@ const DUTCH: Record<string, string> = {
   "settings.remoteImages": "Afbeeldingen van het web laden",
   "settings.remoteImagesWhy":
     "Een notitie kan naar een afbeelding op internet verwijzen. emqnote haalt die \u00e9\u00e9n keer op en bewaart hem lokaal, zodat de notitie ook zonder internet klopt.",
+  // B76. De schakelaar heet naar wat je ziet gebeuren, niet naar hoe hij werkt: "in beeld
+  // houden" is de belofte, en het woord "vastzetten" zou naast "vastprikken" gaan staan en
+  // twee verschillende dingen bijna hetzelfde noemen.
+  "settings.keepPinned": "Vastgeprikte notities in beeld houden",
+  "settings.keepPinnedWhy":
+    "Vastgeprikte notities staan altijd bovenaan de lijst. Staat dit aan, dan blijven ze tegen de bovenrand staan terwijl de rest van de lijst eronder doorschuift; staat het uit, dan schuiven ze bij het scrollen gewoon mee omhoog.",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -696,6 +702,12 @@ const ENGLISH: Record<string, string> = {
   "settings.remoteImages": "Load images from the web",
   "settings.remoteImagesWhy":
     "A note can point at a picture on the internet. emqnote fetches it once and keeps a local copy, so the note still reads offline.",
+  // B76. Named after what you watch happen rather than after how it is done: "keep in
+  // view" is the promise, and "stick" or "freeze" would sit next to "Pin to top" calling
+  // two different things nearly the same name.
+  "settings.keepPinned": "Keep pinned notes in view while scrolling",
+  "settings.keepPinnedWhy":
+    "Pinned notes always sit at the top of the list. With this on they stay against the top edge while the rest of the list scrolls underneath them; with it off they scroll up out of sight along with everything else.",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

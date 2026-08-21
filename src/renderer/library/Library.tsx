@@ -2159,6 +2159,10 @@ export function Library(): React.ReactElement {
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
             onFileContextMenu={(file, x, y) => setFileMenu({ file, x, y })}
+            // B76. Read straight from the bootstrap rather than mirrored into state here:
+            // the settings panel refreshes it (`onChanged` → `app.reload()`), so the list
+            // redraws with the new answer the moment the checkbox lands.
+            keepPinnedInView={app.keepPinnedInView}
             isMac={app.isMac}
             locale={app.locale}
             t={app.t}
@@ -2698,6 +2702,7 @@ export function Library(): React.ReactElement {
           hotkey={app.hotkey}
           libraryHotkey={app.libraryHotkey}
           loadRemoteImages={app.loadRemoteImages}
+          keepPinnedInView={app.keepPinnedInView}
           vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}
