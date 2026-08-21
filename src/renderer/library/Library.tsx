@@ -73,11 +73,16 @@ function flatten(node: FolderNode): string[] {
  * maintain than to read, and it means the top of the list still answers "most recent
  * first" the way the rest of it does.
  *
- * It sorts whatever list it is given, so a pinned note goes to the top of a tag's notes and
- * a search's results as well as its own folder's — the pin is a property of the note, not
- * of one view of it.
+ * **`pins` says whether the pin means anything to this list at all** (B77). It used to
+ * mean something to every list — the comment here said in so many words that a pinned note
+ * goes to the top of a tag's notes and a search's results as well as its own folder's,
+ * because the pin is a property of the note. That reading stopped holding when the limit
+ * became per folder: three pins in each of eight folders is one tag away from a list whose
+ * top two dozen rows are pinned, which is not a shortcut to anything. A pin orders a
+ * folder, so it is honoured where the list *is* a folder and disregarded where the rows
+ * come from everywhere.
  */
-function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
+function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSummary[] {
   const sorted = [...notes];
   if (key === "title") {
     sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
@@ -86,8 +91,19 @@ function sortNotes(notes: NoteSummary[], key: SortKey): NoteSummary[] {
   }
   // A stable sort, so this keeps the order above within each of the two groups — which is
   // why it is a second pass rather than a first clause in the comparators.
-  sorted.sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  if (pins) sorted.sort((a, b) => Number(b.pinned) - Number(a.pinned));
   return sorted;
+}
+
+/**
+ * Whether pins order this list (B77).
+ *
+ * A folder, and no search running. The query matters because a search wins over the tree
+ * selection entirely (`loadNotes`) — the tree still says "folder" while the rows on screen
+ * came from the whole vault, and that is exactly the list a pin must not reorder.
+ */
+function pinsApplyTo(selection: Selection, searchQuery: string): boolean {
+  return selection.kind === "folder" && searchQuery.trim() === "";
 }
 
 /**
@@ -1343,7 +1359,11 @@ export function Library(): React.ReactElement {
       ),
     [tree],
   );
-  const sorted = useMemo(() => sortNotes(notes, sort), [notes, sort]);
+  const pinsApply = pinsApplyTo(selection, searchQuery);
+  const sorted = useMemo(
+    () => sortNotes(notes, sort, pinsApply),
+    [notes, sort, pinsApply],
+  );
   notesRef.current = notes;
 
   // The badge's two halves, joined. Only the tree pane gets this — everything else that
@@ -2156,6 +2176,7 @@ export function Library(): React.ReactElement {
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             searchRef={searchInput}
             onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
+            onOpenTasks={openTasks}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
             onFileContextMenu={(file, x, y) => setFileMenu({ file, x, y })}
@@ -2163,6 +2184,7 @@ export function Library(): React.ReactElement {
             // the settings panel refreshes it (`onChanged` → `app.reload()`), so the list
             // redraws with the new answer the moment the checkbox lands.
             keepPinnedInView={app.keepPinnedInView}
+            pinsApply={pinsApply}
             isMac={app.isMac}
             locale={app.locale}
             t={app.t}

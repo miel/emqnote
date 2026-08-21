@@ -15,6 +15,7 @@ import {
   openIndex,
   openTaskCountsByFolder,
   pinnedNotes,
+  pinnedNotesIn,
   openTaskCountsByPath,
   search,
   tasksIn,
@@ -93,6 +94,38 @@ describe("the SQLite index", () => {
     // comes off the note's frontmatter like every other column here.
     upsertNote(db, record({ path: "01 Projects/Vastgeprikt.md", pinned: false }));
     expect(pinnedNotes(db)).toEqual([]);
+  });
+
+  it("counts the pins of one folder without its subfolders or its neighbours (B77)", () => {
+    // The limit is three per folder, so what this function answers *is* the limit. Four
+    // places at once: the folder in question, a subfolder of it, an unrelated folder, and
+    // the vault root — each of which has been the wrong answer in some other design of
+    // this feature.
+    upsertNote(db, record({ path: "01 Projects/Alpha.md", pinned: true }));
+    upsertNote(db, record({ path: "01 Projects/Beta.md", pinned: true }));
+    upsertNote(db, record({ path: "01 Projects/Gamma.md", pinned: false }));
+    upsertNote(db, record({ path: "01 Projects/Klant X/Diep.md", pinned: true }));
+    upsertNote(db, record({ path: "02 Areas/Elders.md", pinned: true }));
+    upsertNote(db, record({ path: "Losse notitie.md", pinned: true }));
+
+    expect(pinnedNotesIn(db, "01 Projects")).toEqual([
+      "01 Projects/Alpha.md",
+      "01 Projects/Beta.md",
+    ]);
+
+    // A subfolder keeps an allowance of its own. Rolling it into its parent would make the
+    // same note count against two folders, and then the answer would depend on which of
+    // them you happened to be standing in when you pinned it.
+    expect(pinnedNotesIn(db, "01 Projects/Klant X")).toEqual(["01 Projects/Klant X/Diep.md"]);
+
+    // The vault root is a folder like any other, and it is the one `folderOf` spells "".
+    expect(pinnedNotesIn(db, "")).toEqual(["Losse notitie.md"]);
+
+    // A folder with nothing pinned in it has a full allowance, not an empty vault.
+    expect(pinnedNotesIn(db, "03 Resources")).toEqual([]);
+
+    // And the vault-wide answer still exists beside it, unchanged.
+    expect(pinnedNotes(db)).toHaveLength(5);
   });
 
   it("does not return the indexed body from a metadata read", () => {

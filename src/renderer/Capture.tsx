@@ -341,6 +341,18 @@ export function Capture(): React.ReactElement {
         return;
       }
 
+      if (fires("discard")) {
+        // The same rule the button below is drawn under, spelled here as well rather than
+        // left to main: a note handed over from the library is not this window's to throw
+        // away. `CaptureWriter.discard` answers `null` for such a session anyway, so this
+        // is the outer of two independent locks, not the only one — but a chord that
+        // silently does nothing is better than one that reaches a handler to be refused.
+        if (existingRef.current) return;
+        event.preventDefault();
+        window.emqnote.discard();
+        return;
+      }
+
       if (fires("openLibrary")) {
         event.preventDefault();
         window.emqnote.openLibrary();
@@ -516,7 +528,9 @@ export function Capture(): React.ReactElement {
           <button
             type="button"
             className="help-button"
-            title={app.t("capture.discardHint")}
+            // The chord beside what it does, the way the dismiss hint above prints its
+            // own — read off the registry, never spelled here.
+            title={`${app.t("capture.discardHint")} (${formatFirstKey("discard", app.isMac)})`}
             onClick={() => window.emqnote.discard()}
           >
             {app.t("capture.discard")}

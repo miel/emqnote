@@ -3,7 +3,26 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 20 August 2026, on top of `v0.9.0` — seven items from daily use,
+Last updated 21 August 2026, on top of `v0.10.1` — five items from daily use, two of them
+corrections to the pin work that had shipped the day before. Four carry decisions. **B77**:
+the limit of three is per *folder*, not per vault, and a pin therefore orders a folder and
+nothing else — in a tag, a person or a search result the rows stand in the plain sort, with
+the mark still drawn on them. **B78**: the three sort labels are one field chooser, opening
+the shared `ContextMenu` with the current field ticked. **B79**: the note window is 600×720,
+a notepad rather than an index card on its side, clamped to the display's work area and given
+minimums for the first time. **B80**: Discard gets `Mod-Shift-Backspace`, in that window
+only — and deliberately not Escape, which is the key it must never acquire. The fifth needed
+no decision: a Tasks button in the note list's header, handed the sidebar row's own
+`openTasks`. See `HISTORY.md` for the account and `TEST-PROTOCOL.md` §33 for what is still
+owed a human.
+
+**Two of those are not confirmed live**: the Discard chord *declining* for a note handed over
+from the library (no capture-renderer harness — the registry test covers the binding, not the
+guard), and the sticky shelf's scrolling with `keepPinnedInView` on, which needs a list longer
+than the pane. §32n's refusal dialog, which the previous entry listed as unconfirmed, has now
+been driven and is confirmed.
+
+The previous entry, 20 August 2026, on top of `v0.9.0` — seven items from daily use,
 four of them landing on the marker-alignment work that had shipped the same
 morning. One carries a decision: **B75**, a note can be pinned to the top of the
 list and the pin is in the file. The rest are constraints: the bullet, the star
@@ -17,9 +36,10 @@ People, Tasks, Settings, Help and Unlinked instead of stepping from the last
 folder straight to Trash. See `HISTORY.md` for the whole account and
 `TEST-PROTOCOL.md` §32 for what is still owed a human.
 
-**Two of those are not confirmed live**: the pin limit's refusal dialog and the
+**Two of those were not confirmed live**: the pin limit's refusal dialog and the
 widened sidebar walk. Both have real-DOM tests that dispatch real events and read
-`document.activeElement`; neither has been driven in the packaged app.
+`document.activeElement`; neither had been driven in the packaged app. The refusal has since
+been driven (21 August, above); the sidebar walk still has not.
 
 The previous entry, 13 August 2026 on top of `v0.7.0` — six items from daily use.
 Two carry decisions: **B43**, a PDF embedded with `![[…]]` draws its first page

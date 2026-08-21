@@ -815,3 +815,68 @@ column carrying a 1 for exactly the note whose frontmatter says so.
 **Not confirmed live**: the pin limit's refusal dialog and the sidebar's widened arrow walk.
 Both have real-DOM tests that dispatch real events and read `document.activeElement`, and
 neither has been driven in the packaged app — see `TEST-PROTOCOL.md` §17.
+
+**Five items from daily use landed on 21 August 2026**, on top of `v0.10.1` — two of them
+corrections to work that had shipped the day before. Four carry decisions.
+
+**B77 narrows B75's pin limit from the vault to the folder, and stops a pin ordering
+anything but a folder.** Three-for-the-whole-vault reads at design time as "three things you
+are working on this week"; in use it is three things *per project*, and once three folders
+had spent the allowance the fourth got a refusal about something that had nothing to do with
+it. The count moves to `pinnedNotesIn(db, folderOf(path))` — the immediate folder, so a
+subfolder has an allowance of its own — and stays in main, where the argument for it got
+*stronger* rather than weaker: the folder being counted is very often not the one the tree is
+standing in, since a note can be pinned from a tag's list or a search result. No new column
+and no `SCHEMA_VERSION` bump; `notes_pinned` is a partial index over `pinned = 1`, so the
+filter reads a handful of rows. The second half follows arithmetically from the first: three
+pins in each of eight folders is one tag click from a list whose top two dozen rows are
+pinned, and with `keepPinnedInView` on that is a sticky slab covering the pane. So a pin
+orders a folder and nothing else — `pinsApplyTo` is `selection.kind === "folder"` **and** an
+empty search box, the query half being load-bearing because a search wins over the tree
+selection entirely while the tree still says "folder". The mark stays drawn wherever the note
+appears; only the order goes.
+
+**B78 turns the three sort labels into one field chooser** — a glyph plus the current field,
+opening a `ContextMenu` with the current field ticked. The three labels were a state you had
+to already know how to read: nothing said they were a group, nothing said the tinted one was
+the answer rather than a link. The menu is the shared component and not a list drawn in
+place, which is what buys the arrow/Home/End walk, Escape, focus returned to the trigger, the
+viewport clamp, the tick — and reachability from `--click-button`, which searches an open
+`.context-menu` in preference to the page.
+
+**B79 reshapes the capture window from 720×440 to 600×720** — a notepad rather than an index
+card on its side. `.editor` is `flex: 1` and the only elastic row, so this roughly doubles the
+body, which is the whole content of that window. Clamped against the primary display's work
+area, because 720 tall clears a 1366×768 laptop only just and a window taller than its screen
+is one whose status bar hangs below the edge; `minWidth`/`minHeight` added for the first time,
+since the status bar has no `flex-wrap` and the header is a four-column grid.
+
+**B80 gives Discard a chord, `Mod-Shift-Backspace`, in the capture window only** — and the
+decision worth keeping is the one about the key it is *not*. Escape is bound to nothing at
+window level there on purpose, and Discard is the one command in that window that throws work
+away, so it is the last thing that reflex key should reach. `formatBinding` learned `MAC_KEYS`
+along the way, so a Mac prints ⇧⌘⌫ rather than three symbols and then a word.
+
+The fifth item needed no decision: a **Tasks** button in the note list's header, beside
++ New note, handed `openTasks` itself rather than a copy of what it does. `.notes-header`
+distributes with `space-between`, so the two buttons went into a `.notes-actions` wrapper —
+a fourth loose child would have spread the bar evenly and moved the sort chooser.
+
+Confirmed in the real app under `Xvfb`, against a seven-note fixture vault spanning four
+folders: the folder view floating its three pins and the `#klantx` tag view — the same notes
+— standing in plain modified order with the pins still marked; the sort chooser opening with
+Modified ticked, `--click-button="01 Projects>Modified>Title"` walking two levels into it, the
+menu collapsing on the choice and `librarySort: "title"` in `settings.json` afterwards; the
+header's Tasks button opening the Tasks view scoped to the folder the tree was standing in,
+with the sidebar's own row lighting up; **the refusal reading "No more notes can be pinned in
+one folder than 3." for a fourth pin in `01 Projects`, and the very next pin in `00 Inbox`
+being accepted** — a fourth pin in the vault, with `modified` untouched, which is the whole
+bug in one pair of gestures; the capture window at 608×724 with all four header cells and all
+five status-bar items legible at that width; and Ctrl+Shift+Backspace moving a brand-new note
+from `00 Inbox` into `_trash` and hiding the window.
+
+**Not confirmed live**: the Discard chord declining for a note handed over from the library
+(there is still no capture-renderer test harness, the limitation `dirtyRef`'s own comment
+names — the registry test covers the binding, not the guard), and the shelf's scroll behaviour
+with `keepPinnedInView` on, which needs a list longer than the pane. Both are
+`TEST-PROTOCOL.md` §33 items.

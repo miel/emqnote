@@ -80,6 +80,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.find": "Zoeken in deze notitie",
   "shortcut.focusTitle": "De titel bewerken",
   "shortcut.close": "Bewaren en sluiten",
+  "shortcut.discard": "Deze notitie weggooien",
   "shortcut.openLibrary": "Bibliotheek openen",
   "shortcut.help": "Dit overzicht",
   "shortcut.newNote": "Nieuwe notitie (overal)",
@@ -176,6 +177,10 @@ const DUTCH: Record<string, string> = {
   "library.sort.modified": "Gewijzigd",
   "library.sort.created": "Gemaakt",
   "library.sort.title": "Titel",
+  // De tooltip van de sorteerkiezer. Het label van de knop zelf is het huidige veld
+  // hierboven; deze zin zegt waar dat veld over gaat, want "Gewijzigd" alleen zegt dat
+  // niet aan wie de lijst voor het eerst ziet.
+  "library.sortBy": "Sorteren op",
   "library.pick": "Kies links een notitie.",
   "library.pickHint": "Klik met rechts op een map voor nieuwe map, hernoemen, verwijderen of een nieuwe notitie.",
   "library.saved": "Bewaard",
@@ -195,8 +200,9 @@ const DUTCH: Record<string, string> = {
   "library.pinLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij vastgeprikt worden.",
   // Het getal komt van de hoofdproces-kant, die de grens ook echt afdwingt, en wordt op
-  // de aanroepplek achter deze zin geplakt — er zit geen invulling in deze tabel.
-  "library.pinLimit": "Er kunnen niet meer notities tegelijk vastgeprikt staan dan",
+  // de aanroepplek achter deze zin geplakt — er zit geen invulling in deze tabel. "Per
+  // map", want de grens geldt sinds B77 per map en niet meer voor de hele kluis.
+  "library.pinLimit": "Er kunnen per map niet meer notities vastgeprikt staan dan",
   "library.duplicate": "Dupliceren",
   // Het menu van een bestandsrij (B47). Kopieert `![[pad]]` of `[[pad]]` — dezelfde
   // spelling die het invoegen zelf schrijft, zodat de twee niet uiteen kunnen lopen.
@@ -467,6 +473,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.find": "Find in this note",
   "shortcut.focusTitle": "Edit the title",
   "shortcut.close": "Save and close",
+  "shortcut.discard": "Discard this note",
   "shortcut.openLibrary": "Open the library",
   "shortcut.help": "This sheet",
   "shortcut.newNote": "New note (from anywhere)",
@@ -562,6 +569,10 @@ const ENGLISH: Record<string, string> = {
   "library.sort.modified": "Modified",
   "library.sort.created": "Created",
   "library.sort.title": "Title",
+  // The sort chooser's tooltip. The button's own label is the current field above; this
+  // says what that field is *for*, which "Modified" on its own does not tell anyone
+  // seeing the list for the first time.
+  "library.sortBy": "Sort by",
   "library.pick": "Pick a note on the left.",
   "library.pickHint":
     "Right-click a folder for new folder, rename, delete or a new note.",
@@ -582,8 +593,9 @@ const ENGLISH: Record<string, string> = {
   "library.pinLocked":
     "This note is open in the note window. Close it there first, then it can be pinned.",
   // The number comes from main, which is what actually enforces the limit, and is
-  // appended at the call site — there is no interpolation in this table.
-  "library.pinLimit": "No more notes can be pinned at once than",
+  // appended at the call site — there is no interpolation in this table. "In one folder",
+  // because since B77 the limit is per folder rather than over the whole vault.
+  "library.pinLimit": "No more notes can be pinned in one folder than",
   "library.duplicate": "Duplicate",
   // A file row's menu (B47). Copies `![[path]]` or `[[path]]` — the very spelling
   // insertion writes, so a copied link and an inserted one cannot disagree.

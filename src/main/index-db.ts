@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import type { TaskCount } from "../shared/vault-types.js";
+import { folderOf, type TaskCount } from "../shared/vault-types.js";
 
 /**
  * The SQLite index behind phase 5 search — `02-technisch-ontwerp.md` §7.1/§7.2.
@@ -374,17 +374,37 @@ export function getNote(db: IndexDb, path: string): NoteMeta | null {
 }
 
 /**
- * Every pinned note's path — what the limit of three is counted against.
+ * Every pinned note's path, anywhere in the vault.
  *
  * Asked in main rather than in the renderer, which only ever knows the list currently on
- * screen: a note pinned in a folder nobody is looking at still counts, and a limit that
- * could be walked around by browsing elsewhere first is not a limit.
+ * screen. That was the whole argument when the limit was vault-wide, and it survives the
+ * limit becoming per-folder unchanged: the folder being counted is very often *not* the
+ * one the tree is standing in — a note can be pinned from a tag's list, or from a search
+ * result — so the renderer has no way to count the right rows even in principle.
  */
 export function pinnedNotes(db: IndexDb): string[] {
   const rows = db.prepare(`SELECT path FROM notes WHERE pinned = 1 ORDER BY path`).all() as {
     path: string;
   }[];
   return rows.map((row) => row.path);
+}
+
+/**
+ * The pinned notes in one folder — what the limit is actually counted against.
+ *
+ * The *immediate* folder, not the subtree: `folderOf` takes the last segment off, so
+ * `01 Projects/Klant X` and `01 Projects` are two different places with an allowance
+ * each. Rolling subfolders up would make the same note count against several folders at
+ * once, and then the answer would depend on which of them you happened to be looking at
+ * when you pinned it.
+ *
+ * Filtered in JS rather than in SQL because there is no `folder` column and adding one
+ * would mean a `SCHEMA_VERSION` bump for a query that reads at most a handful of rows:
+ * `notes_pinned` is a partial index over `pinned = 1`, so this never touches the rest of
+ * the table.
+ */
+export function pinnedNotesIn(db: IndexDb, folder: string): string[] {
+  return pinnedNotes(db).filter((path) => folderOf(path) === folder);
 }
 
 export function allNotes(db: IndexDb): NoteMeta[] {

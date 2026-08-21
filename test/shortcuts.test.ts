@@ -105,6 +105,29 @@ describe("the registry holds together", () => {
     expect(others).toEqual([]);
   });
 
+  it("gives Discard a chord of its own, in the capture window and nowhere else", () => {
+    const discard = shortcut("discard");
+
+    // `where: "capture"` is what keeps it out of the library, where there is no such
+    // command at all, and out of `outlookKeymap`, which would demand a `COMMANDS` entry.
+    expect(discard.where).toBe("capture");
+    expect(discard.keys).toEqual(["Mod-Shift-Backspace"]);
+
+    // Escape is the key it must *not* be, and the reason is written where anyone about to
+    // "improve" this will read it. B68's Discard is the one command in that window that
+    // throws work away, and Escape is the key most likely to be hit by reflex.
+    expect(discard.why).toMatch(/Escape/);
+    expect(SHORTCUTS.some((entry) => entry.keys.includes("Escape"))).toBe(false);
+
+    // The unshifted form stays free: it is the platform's own "delete to start of line"
+    // inside a text field, and this window is mostly text field.
+    const unshifted = press("Backspace", { metaKey: true });
+    expect(matches(discard, unshifted, true)).toBe(false);
+    expect(matches(discard, press("Backspace", { metaKey: true, shiftKey: true }), true)).toBe(
+      true,
+    );
+  });
+
   it("keeps the new window chords off the editor keymap's plate", () => {
     // `newNoteHere` and `searchVault` are handled by `Library.tsx`'s window listener, not
     // by `outlookKeymap` — which is why they have no `COMMANDS` entry and must not be
@@ -193,6 +216,15 @@ describe("formatting, on both platforms", () => {
     expect(formatBinding("Mod-Shift-Enter", false)).toBe("Ctrl+Shift+Enter");
     expect(formatBinding("Shift-Tab", true)).toBe("⇧Tab");
     expect(formatBinding("ContextMenu", false)).toBe("ContextMenu");
+  });
+
+  it("draws the keys macOS draws, and spells them out on Windows", () => {
+    // The modifiers are already symbols on a Mac, so "⇧⌘Backspace" would be three glyphs
+    // and then a word — a sheet that gave up halfway. Only keys whose Mac glyph is the
+    // usual spelling get this: Enter and Tab stay words on both platforms, above.
+    expect(formatBinding("Mod-Shift-Backspace", true)).toBe("⇧⌘⌫");
+    expect(formatBinding("Mod-Shift-Backspace", false)).toBe("Ctrl+Shift+Backspace");
+    expect(formatBinding("Mod-Enter", true)).toBe("⌘Enter");
   });
 
   it("collapses an entry's aliases into one row", () => {

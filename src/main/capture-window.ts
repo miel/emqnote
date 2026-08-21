@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
@@ -33,10 +33,43 @@ export function setQuitting(value: boolean): void {
   quitting = value;
 }
 
+/**
+ * The note window's shape, and why it is portrait.
+ *
+ * It was 720×440 — a 3×5 index card on its side, which is the wrong picture entirely: the
+ * thing being replaced is an Outlook message, and the thing it is used as is a notepad.
+ * Landscape also spent the window's height on chrome and its width on line length, so the
+ * body ended up around 270px tall, four or five visible paragraphs, in the one window
+ * whose whole content is the body. 600×720 roughly doubles that (`.editor` is `flex: 1`
+ * and the only elastic row, so every pixel of window height lands in the body) and gives
+ * a shape near letter-paper proportions.
+ *
+ * Clamped to the display's work area rather than trusted: 720 tall fits a 1366×768 laptop
+ * screen only just, and a window taller than the space it is opened into is one whose
+ * status bar — Discard, Insert, Help — is off the bottom edge with no way to reach it.
+ * `workAreaSize` is already net of the menu bar, the dock and the taskbar, so the margin
+ * here is only a border of breathing room.
+ *
+ * The minimums exist for the same reason and did not before: the status bar is a flex row
+ * with no `flex-wrap`, and the header is a four-column grid, so a window dragged narrow
+ * enough squeezes both into illegibility rather than reflowing.
+ */
+const CAPTURE_WIDTH = 600;
+const CAPTURE_HEIGHT = 720;
+const CAPTURE_MIN_WIDTH = 460;
+const CAPTURE_MIN_HEIGHT = 360;
+const SCREEN_MARGIN = 60;
+
 export function createCaptureWindow(): BrowserWindow {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
   const created = new BrowserWindow({
-    width: 720,
-    height: 440,
+    width: Math.max(CAPTURE_MIN_WIDTH, Math.min(CAPTURE_WIDTH, workArea.width - SCREEN_MARGIN)),
+    height: Math.max(
+      CAPTURE_MIN_HEIGHT,
+      Math.min(CAPTURE_HEIGHT, workArea.height - SCREEN_MARGIN),
+    ),
+    minWidth: CAPTURE_MIN_WIDTH,
+    minHeight: CAPTURE_MIN_HEIGHT,
     show: false,
     // macOS gets its own traffic lights, inset into our title bar; every other
     // platform gets the buttons the renderer draws. Nobody wants a Windows-shaped

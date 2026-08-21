@@ -103,14 +103,20 @@ import {
   closeIndex,
   getNote as getNoteMeta,
   openIndex,
-  pinnedNotes,
+  pinnedNotesIn,
   type IndexDb,
 } from "./index-db.js";
 
 /**
- * How many notes may be pinned at once (B75). Three, as asked for: the feature is "keep
- * the two or three things I am actually working on at the top", and a pinned section that
- * can grow without limit is just the note list again, in a different order.
+ * How many notes may be pinned **in one folder** (B75, narrowed by B77). Three, as asked
+ * for: the feature is "keep the two or three things I am actually working on at the top",
+ * and a pinned section that can grow without limit is just the note list again, in a
+ * different order.
+ *
+ * Three *per folder* rather than three in the vault, because the folder is the unit the
+ * feature is about: a fourth project should not be refused its pins because three other
+ * projects have already spent the allowance. The immediate folder only — see
+ * `pinnedNotesIn` in `index-db.ts` for why subfolders are not rolled up.
  */
 const MAX_PINNED = 3;
 import { watchVault, type VaultWatcher } from "./index-watch.js";
@@ -137,7 +143,7 @@ import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import { serveRemoteImage } from "./remote-images.js";
 import { isOpenableUrl } from "./remote-image.js";
-import { FOLDER_ERROR, TRASH_FOLDER } from "../shared/vault-types.js";
+import { FOLDER_ERROR, folderOf, TRASH_FOLDER } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
   ConflictPair,
@@ -1721,11 +1727,12 @@ function registerLibraryIpc(): void {
   /**
    * B75's pin. The capture-window guard above applies unchanged — this writes the file.
    *
-   * The limit of three is enforced here rather than in the renderer, which only knows the
-   * list currently on screen: a note pinned in a folder nobody is looking at still counts,
-   * and a limit that could be walked around by browsing elsewhere first is not a limit.
-   * Counted from the index; the note being pinned is discounted from that count, so
-   * re-pinning something already pinned is never refused for being the fourth of three.
+   * The limit is three *per folder* (B77) and it is enforced here rather than in the
+   * renderer. The renderer only knows the list currently on screen, and that list is
+   * very often not the folder being counted: a note can be pinned from a tag's list or
+   * from a search result, where rows come from everywhere. Counted from the index, over
+   * `folderOf(path)`; the note being pinned is discounted from that count, so re-pinning
+   * something already pinned is never refused for being the fourth of three.
    *
    * **Unpinning is never refused for the limit.** If the index lagged a partial startup
    * scan and a fourth pin slipped through, or a fourth arrived from the other machine
@@ -1739,7 +1746,7 @@ function registerLibraryIpc(): void {
     if (writer.activePath() === path) return { pinned: !pinned, locked: true };
 
     if (pinned && indexDb !== null) {
-      const already = pinnedNotes(indexDb).filter((other) => other !== path);
+      const already = pinnedNotesIn(indexDb, folderOf(path)).filter((other) => other !== path);
       if (already.length >= MAX_PINNED) return { pinned: false, limit: MAX_PINNED };
     }
 

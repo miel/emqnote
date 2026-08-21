@@ -224,6 +224,23 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "lose that way.",
   },
   {
+    id: "discard",
+    keys: ["Mod-Shift-Backspace"],
+    where: "capture",
+    group: "note",
+    why:
+      "B68's Discard had a button and nothing else, in a window that is otherwise usable " +
+      "without the mouse from the hotkey onwards. Escape is deliberately not this, for " +
+      "the reason `close` above already records — it is the key most likely to be hit by " +
+      "reflex, and this is the one command in the window that throws work away. Two " +
+      "modifiers so it cannot be reached by accident, and Backspace because it is the " +
+      "key that already means 'erase what I just did'. Free in every scope: Mod-Backspace " +
+      "on its own is the platform's 'delete to start of line' inside a text field, which " +
+      "is why the shifted form is the one taken. Guarded on `existing` at the call site, " +
+      "the same rule the button is drawn under — a note handed over from the library is " +
+      "not this window's to throw away.",
+  },
+  {
     id: "openLibrary",
     keys: ["Mod-o"],
     where: "capture",
@@ -409,7 +426,23 @@ const NAMED_KEYS: Record<string, string> = {
   " ": "Space",
 };
 
-function keyName(key: string): string {
+/**
+ * Keys macOS draws rather than spells.
+ *
+ * The modifiers already have this treatment in `MAC_SYMBOLS`; a chord printed as
+ * "⇧⌘Backspace" is three symbols and then a word, which reads as a sheet that gave up
+ * halfway. Only the keys where the Mac glyph is the *usual* spelling belong here —
+ * Enter and Tab are written out on both platforms.
+ */
+const MAC_KEYS: Record<string, string> = {
+  backspace: "⌫",
+};
+
+function keyName(key: string, isMac = false): string {
+  if (isMac) {
+    const mac = MAC_KEYS[key.toLowerCase()];
+    if (mac !== undefined) return mac;
+  }
   return NAMED_KEYS[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key);
 }
 
@@ -431,7 +464,7 @@ export function formatBinding(binding: string, isMac: boolean): string {
       (parsed.alt ? MAC_SYMBOLS.alt : "") +
       (parsed.shift ? MAC_SYMBOLS.shift : "") +
       (meta ? MAC_SYMBOLS.meta : "") +
-      keyName(parsed.key)
+      keyName(parsed.key, true)
     );
   }
 

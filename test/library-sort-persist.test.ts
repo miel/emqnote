@@ -8,11 +8,17 @@ import type { FolderNode } from "../src/shared/vault-types.js";
 /**
  * The note list's sort order round-trips through `settings.json`, the same way the two
  * pane widths already do: `Library.tsx` seeds `sort` from `app.librarySort` once the
- * `bootstrap()` round trip resolves, and persists a click on one of the sort buttons
+ * `bootstrap()` round trip resolves, and persists a choice made in the sort chooser
  * through `window.emqnote.setSort` (`IPC.setSort`, `settings.ts`'s `librarySort`). Mounted
  * through a real `Library`, the same plumbing `test/keyboard-nav.test.ts` and
  * `test/note-list-menu.test.ts` use — the interesting question is what the DOM shows
  * after a real bootstrap round trip, which a shallow render cannot answer.
+ *
+ * The three sort labels are one chooser now, so the persistence question is asked two
+ * clicks deep: the trigger *is* the answer (it reads the current field), and the
+ * alternatives only exist while its menu is open. Both halves are worth holding onto —
+ * a trigger that seeds from the wrong place and a menu whose tick disagrees with it are
+ * two different bugs, and the second one is invisible until you go looking.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -173,23 +179,60 @@ describe("the note list's sort order persists across a relaunch", () => {
     await flush();
   }
 
-  it("seeds the sort buttons from the persisted value once bootstrap resolves", async () => {
+  /** The chooser itself — the one control the header draws for the sort. */
+  function trigger(): HTMLButtonElement {
+    const button = container.querySelector<HTMLButtonElement>(".notes-sort .sort-choose");
+    expect(button).not.toBeNull();
+    return button!;
+  }
+
+  /** The rows of the open menu, by their own label element — the trigger is not one. */
+  function menuRows(): HTMLButtonElement[] {
+    return Array.from(container.querySelectorAll<HTMLButtonElement>(".context-menu-item"));
+  }
+
+  async function openMenu(): Promise<void> {
+    await act(async () => {
+      trigger().click();
+    });
+    await flush();
+  }
+
+  it("seeds the chooser from the persisted value once bootstrap resolves", async () => {
     const fake = buildFake();
     await mount(fake);
 
-    const active = container.querySelector(".notes-sort .sort-on");
-    expect(active).not.toBeNull();
-    expect(active!.textContent).toBe("Title");
+    // `textContent` and not a child lookup: the glyph is an inline SVG with no text in
+    // it, so the button's own text is the field name and nothing else.
+    expect(trigger().textContent).toBe("Title");
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("persists a new sort choice through setSort", async () => {
+  it("offers all three fields with the current one ticked", async () => {
     const fake = buildFake();
     await mount(fake);
+    await openMenu();
 
-    const buttons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".notes-sort button"),
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+    const labels = menuRows().map(
+      (row) => row.querySelector(".context-menu-label")?.textContent,
     );
-    const created = buttons.find((button) => button.textContent === "Created");
+    expect(labels).toEqual(["Modified", "Created", "Title"]);
+
+    const ticked = menuRows()
+      .filter((row) => row.querySelector(".context-menu-check")?.textContent === "✓")
+      .map((row) => row.querySelector(".context-menu-label")?.textContent);
+    expect(ticked).toEqual(["Title"]);
+  });
+
+  it("persists a new sort choice through setSort, and collapses", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await openMenu();
+
+    const created = menuRows().find(
+      (row) => row.querySelector(".context-menu-label")?.textContent === "Created",
+    );
     expect(created).not.toBeUndefined();
 
     await act(async () => {
@@ -198,7 +241,20 @@ describe("the note list's sort order persists across a relaunch", () => {
     await flush();
 
     expect(fake.setSort).toHaveBeenCalledWith("created");
-    const active = container.querySelector(".notes-sort .sort-on");
-    expect(active!.textContent).toBe("Created");
+    expect(trigger().textContent).toBe("Created");
+    // The asked-for collapse: choosing is what closes it, not a second click somewhere.
+    expect(menuRows()).toHaveLength(0);
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes again on a second click of the chooser, choosing nothing", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await openMenu();
+    await openMenu();
+
+    expect(menuRows()).toHaveLength(0);
+    expect(fake.setSort).not.toHaveBeenCalled();
+    expect(trigger().textContent).toBe("Title");
   });
 });

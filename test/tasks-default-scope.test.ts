@@ -13,6 +13,13 @@ import type { FolderNode } from "../src/shared/vault-types.js";
  * `lastFolder` starts on `"00 Inbox"`, the same default the tree selection does, so even
  * the very first click on Tasks — with no folder explicitly chosen yet — is scoped rather
  * than vault-wide.
+ *
+ * There are two ways in now: the sidebar's own row, and a button in the note list's header
+ * beside + New note. The second exists because the first is three panes away from the bar
+ * you are already looking at — and it is given `openTasks` itself rather than a copy of
+ * what it does, which is what the last test here holds onto. Two gestures that mean the
+ * same thing have to *be* the same thing, or the day one of them learns about a new scope
+ * the other will not.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -148,6 +155,18 @@ function clickTasksRow(container: HTMLDivElement): void {
   });
 }
 
+function clickTasksButton(container: HTMLDivElement): void {
+  // The header's own button, not the sidebar row: `.notes-actions` is what tells the two
+  // apart, since both carry the same word — deliberately, they open the same view.
+  const button = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
+  ).find((el) => el.textContent === "Tasks");
+  expect(button).not.toBeUndefined();
+  act(() => {
+    button!.click();
+  });
+}
+
 describe("the Tasks view defaults to the current folder", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
@@ -207,5 +226,33 @@ describe("the Tasks view defaults to the current folder", () => {
     await flush();
 
     expect(fake.tasks).toHaveBeenCalledWith("01 Projects", true);
+  });
+
+  it("opens the same view from the note list's own button", async () => {
+    const fake = buildFake();
+    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LibraryComponent));
+    });
+    await flush();
+
+    const projectRow = Array.from(container.querySelectorAll('[role="treeitem"]')).find(
+      (el) => el.querySelector(".branch-name")?.textContent === "01 Projects",
+    );
+    await act(async () => {
+      projectRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    clickTasksButton(container);
+    await flush();
+
+    // The scope, and not merely "a tasks view opened": it is the scope that would drift if
+    // the button ever grew a handler of its own.
+    expect(fake.tasks).toHaveBeenCalledWith("01 Projects", true);
+    // And the header goes with the list it belongs to, so the button that opened this is
+    // no longer on screen — the view it opened has replaced the note list entirely.
+    expect(container.querySelector(".notes-actions")).toBeNull();
   });
 });

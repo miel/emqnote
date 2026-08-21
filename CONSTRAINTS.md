@@ -102,16 +102,43 @@ calls `rememberOwnWrite` so the watcher does not flash a "changed on disk" bar a
 who just clicked Pin. Unpinning removes the key rather than writing `pinned: false`, so a
 note that has been pinned and unpinned is byte-identical to one that never was.
 
-**The limit of three is counted in main, against the index.** The renderer only ever knows
-the list currently on screen; a note pinned in a folder nobody is looking at still counts,
-and a limit you could walk around by browsing elsewhere first is not a limit. Hence a
-`pinned` column and `SCHEMA_VERSION` 3 → 4 — `needsRefresh` only re-reads a file whose
-`mtime` or `size` moved, and a column coming into existence does neither, so an older index
-would report every note in the vault as unpinned for good. **Unpinning is never refused for
-the limit**, only for the capture-window lock: if four ever exist — a half-finished startup
-scan, or a fourth arriving from the other machine through OneDrive — the list draws four and
-every one of them can be taken off. The file says what it says, and hiding one would be the
-app disagreeing with the vault.
+**The limit of three is per folder, and counted in main against the index** (B75, narrowed
+by B77 — `MAX_PINNED` in `index.ts`, `pinnedNotesIn` in `index-db.ts`). Three *per folder*
+because the folder is the unit the feature is about: three current things in this project,
+and a fourth project must not be refused because three others spent the allowance. The
+immediate folder only — `folderOf` takes the last segment off, so a subfolder has an
+allowance of its own; rolling subfolders up would make one note count against several
+folders at once, and then the answer depends on which of them you happened to be standing
+in. Counted in main and not in the renderer, and **that argument got stronger rather than
+weaker when the limit narrowed**: the folder being counted is very often not the one the
+tree is standing in, because a note can be pinned from a tag's list or from a search
+result, where the rows come from everywhere. Filtered in JS over `pinnedNotes`, with no
+`folder` column and no `SCHEMA_VERSION` bump — `notes_pinned` is a partial index over
+`pinned = 1`, so it reads a handful of rows. (The column and the 3 → 4 bump that B75 *did*
+need are still why the index knows about pins at all: `needsRefresh` only re-reads a file
+whose `mtime` or `size` moved, and a column coming into existence does neither, so an older
+index would have reported every note in the vault as unpinned for good.) **Unpinning is
+never refused for the limit**, only for the capture-window lock: if four ever exist in one
+folder — a half-finished startup scan, or a fourth arriving from the other machine through
+OneDrive — the list draws four and every one of them can be taken off. The file says what
+it says, and hiding one would be the app disagreeing with the vault.
+
+**A pin orders a folder, and nothing else** (B77, `pinsApplyTo` and `sortNotes` in
+`Library.tsx`, the `pinsApply` prop in `NoteList.tsx`). In a tag's list, a person's, the
+tasks view or anything a search query produced, the flag is ignored: the rows stand in the
+chosen sort and that is all. This follows from the limit being per folder rather than being
+a taste: three pins in each of eight folders is one tag click from a list whose top two
+dozen rows are pinned, and with `keepPinnedInView` on that is a sticky slab covering the
+pane — the opposite of what the feature was for. Two things about it are easy to get wrong.
+The predicate is `selection.kind === "folder" && searchQuery.trim() === ""` and **the query
+half is not optional**: a search wins over the tree selection entirely (`loadNotes`), so
+the tree still says "folder" while the rows on screen came from the whole vault. And the
+shelf must be given the *same* predicate rather than inferring one from the rows — a tag's
+list can open with a pinned note on top by coincidence of the sort, and shelving that row
+would be the app claiming an order it did not apply. **The mark stays drawn everywhere**,
+and Pin stays offered everywhere but Trash: the flag is a fact about the note, only the
+order is a fact about the folder, and hiding the mark would leave a row disagreeing with
+the tick in its own Pin menu item.
 
 **The shelf of pinned rows is one wrapper, and drawn only when it is asked for** (B76,
 `.notes-pinned` in `library.css`, `NoteList.tsx`). Keeping the pinned rows against the top
@@ -128,6 +155,39 @@ edge. And with the setting off **no wrapper is rendered at all**, so the list is
 what it was before B76 — which is why the tests assert against the flat `.notes-list .note`
 run in both states, and why `styles-pinned-shelf.test.ts` reads the rule rather than trusting
 jsdom, which has neither a cascade nor scrolling to lose it in.
+
+**The sort is one chooser, and its menu is `ContextMenu`** (B78, `.notes-sort .sort-choose`
+in `NoteList.tsx`). It was three labels with one of them tinted — a state you had to already
+know how to read. What matters for anyone editing it: the menu is the shared component
+rather than a list drawn in place, because that component already carries the arrow/Home/End
+walk, Escape, focus handed back to the trigger, the clamp against the window edge and the
+tick, and because `--click-button` searches an open `.context-menu` in preference to the
+page, so `--click-button="Modified>Title"` walks straight through it. The glyph deliberately
+does **not** show a direction: there is none to choose in this app — dates are always newest
+first and titles always A–Z — and an arrow implying a toggle that does not exist is an
+invitation to click it. `library-sort-persist.test.ts` asserts the trigger *and* the tick,
+which are two different bugs.
+
+**`.notes-header` distributes three children, not four** (B78, `.notes-actions` in
+`library.css`). It is `justify-content: space-between`, so the Tasks button added beside
++ New note is wrapped with it rather than left loose: four loose children spread count,
+sort, Tasks and New note evenly across the bar and move the sort chooser away from where it
+has always been. The Tasks button is handed `openTasks` itself — the very function the
+sidebar's row gets, not a copy — so the two gestures cannot come to mean different scopes;
+`tasks-default-scope.test.ts` drives both. Note that `"Tasks"` now matches two nodes for
+`--click-button`, and `FolderTree` renders before `NoteList`, so existing selftest sequences
+still reach the sidebar row.
+
+**The capture window is portrait, and clamped to the screen it opens on** (B79,
+`capture-window.ts`). 600×720 rather than the old landscape 720×440, because `.editor` is
+`flex: 1` and the only elastic row: every pixel of window height lands in the body, which is
+the whole content of that window. The clamp against `screen.getPrimaryDisplay().workAreaSize`
+is not defensive habit — 720 tall fits a 1366×768 laptop only just, and a window taller than
+the space it opens into is one whose status bar (Discard, Insert, Help) hangs below the edge
+with no way to reach it. The minimums exist for the same reason: the status bar is a flex row
+with no `flex-wrap` and the header is a four-column grid, so a window dragged narrow enough
+crushes both rather than reflowing. Still no geometry persisted — the window is created once
+and only hidden, so a drag survives the session and nothing more.
 
 **Every row the sidebar's arrows walk through is named in one place** (`SIDEBAR_ROWS` in
 `roving.ts`, 20 August 2026). Arrowing down the folder tree used to reach Trash and nothing
@@ -976,6 +1036,25 @@ true, and `discard()` answers `null` for a session with an `existingTitle`. A no
 in the library is not this window's to throw away, and Delete is already there. `capture-store.ts`
 returns the path rather than trashing it — that module writes a session, and where a note goes
 when it is deleted is `vault-io.ts`'s rule, of which there is exactly one.
+
+**The chord is `Mod-Shift-Backspace`, and it is emphatically not Escape** (B80,
+`shortcuts.ts`'s `discard` entry, the branch in `Capture.tsx`'s window listener). Escape is
+deliberately bound to nothing at window level in the capture window — `close`'s own `why`
+already says why, and it says it about *saving*: it is the key hit by reflex, and a
+half-typed note is too easy to lose that way. Discard is the one command in that window
+that throws work away, so it is the last one that key should reach. Backspace already means
+"erase what I just did"; the shift is what keeps it off the platform's own `Mod-Backspace`,
+which deletes to the start of the line inside a text field — and this window is mostly text
+field. The branch carries the `existing` guard itself (through `existingRef`, so the effect
+stays off the dependency list), making it the outer of the two locks above rather than a
+replacement for either: a chord that silently declines is better than one that reaches a
+handler to be refused there.
+
+**⌫ on macOS, "Backspace" on Windows** (`MAC_KEYS` in `shortcuts.ts`). The modifiers are
+already symbols on a Mac, so "⇧⌘Backspace" is three glyphs and then a word — a sheet that
+gave up halfway. Only keys whose Mac glyph *is* the usual spelling belong in that map; Enter
+and Tab stay words on both platforms, which is why `NAMED_KEYS` is still consulted for
+everything else.
 
 **The caret survives a note switch, for as long as the library window is open** (B70). `setDoc`
 replaces the whole `EditorState` — it must, or one note's undo history leaks into the next —

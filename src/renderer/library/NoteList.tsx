@@ -1,4 +1,4 @@
-import { useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   folderOf,
   TRASH_FOLDER,
@@ -9,6 +9,7 @@ import {
   type TaskCount,
 } from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
+import { ContextMenu } from "./ContextMenu.js";
 import { NOTE_DRAG_TYPE } from "./drag.js";
 import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
@@ -68,6 +69,12 @@ interface Props {
   /** Permanently empties `_trash`. Only ever offered while Trash itself is selected. */
   onClearTrash: () => void;
   /**
+   * The Tasks view — the very handler the sidebar's Tasks row is given, not a copy of
+   * what it does. Two gestures that mean the same thing have to *be* the same thing, or
+   * the day one of them learns about a new scope the other will not.
+   */
+  onOpenTasks: () => void;
+  /**
    * Which note is being dragged, or null when none is. The tree needs the path to decide
    * whether a folder is a legal destination *while the drag is still in the air*, and
    * `dataTransfer.getData` deliberately answers "" during `dragover` — a page may see
@@ -96,6 +103,15 @@ interface Props {
    * whether the rows that are already at the top are allowed to leave the screen.
    */
   keepPinnedInView: boolean;
+  /**
+   * Whether the pin orders this list at all (B77) — true for a folder with no search
+   * running, false for a tag, a person, the tasks view and any list a query produced.
+   *
+   * Handed down rather than worked out from `showing` and `searching` here, so the shelf
+   * and `Library.tsx`'s `sortNotes` are answering one question and cannot come to differ:
+   * a shelf drawn over rows the sort did not float is rows in the wrong order.
+   */
+  pinsApply: boolean;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   locale: Locale;
@@ -132,6 +148,32 @@ const pinGlyph = (
   </svg>
 );
 
+/**
+ * The mark on the sort chooser — an arrow up beside an arrow down, the sign every file
+ * manager and mail client uses for "this is what the list is ordered by".
+ *
+ * Same house style as `pinGlyph` above and `FolderTree.tsx`'s three: an inline SVG in
+ * `currentColor` at the 12px slot this window's icon column uses, never an emoji. The two
+ * arrows sit on whole pixel columns (x = 5 and x = 11 of 16) and their shafts are vertical,
+ * so nothing in the drawing depends on a subpixel landing the right way at that size.
+ *
+ * It does *not* say which direction the sort runs: there is no direction to choose in this
+ * app — the date keys are always newest first and the title always A–Z — and a glyph
+ * implying a toggle that does not exist would be an invitation to click it.
+ */
+const sortGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M5 13V3M2.6 5.4 5 3l2.4 2.4M11 3v10M8.6 10.6 11 13l2.4-2.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export function NoteList({
   notes,
   noteTasks,
@@ -151,10 +193,12 @@ export function NoteList({
   onOpenInCapture,
   onNewNote,
   onClearTrash,
+  onOpenTasks,
   onDragNote,
   onContextMenu,
   onFileContextMenu,
   keepPinnedInView,
+  pinsApply,
   isMac,
   locale,
   t,
@@ -172,6 +216,15 @@ export function NoteList({
   // rather than lifted alongside `Library`'s own `dragging`: nothing outside this list
   // needs it, and the tree already gets the path it needs through `onDragNote`.
   const [dragging, setDragging] = useState<string | null>(null);
+
+  // The sort chooser's menu, and the button it hangs under. Held here rather than in
+  // `Library.tsx` beside the row and file menus, exactly as `FolderTree.tsx` holds its
+  // own: nothing outside this pane can open it and nothing outside this pane needs to
+  // know it is open. The ref is what the menu is positioned against — its own rect, so
+  // the panel lands under the control rather than wherever the pointer happened to be
+  // (the keyboard route into a row menu already positions itself this way).
+  const sortButton = useRef<HTMLButtonElement>(null);
+  const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null);
 
   // The one row in this pane with `tabIndex={0}`. Recomputed against the current list
   // rather than trusted outright: switching folders can leave it pointing at a path that
@@ -194,9 +247,16 @@ export function NoteList({
    * a row cannot be lifted out of the middle of it and drawn somewhere it does not
    * belong, which would break the arrow walk's one assumption, that the DOM reads in the
    * order the list does.
+   *
+   * Also 0 wherever the pin does not order this list (B77, `pinsApply`). It has to be
+   * the same condition `Library.tsx`'s `sortNotes` is given, and for the same reason it
+   * cannot be inferred from the rows: a tag's list can open with a pinned note at the top
+   * by pure coincidence of the sort, and putting that one row on a sticky shelf would be
+   * the app claiming an order it did not actually apply.
    */
   const firstUnpinned = notes.findIndex((note) => !note.pinned);
-  const pinned = !keepPinnedInView ? 0 : firstUnpinned === -1 ? notes.length : firstUnpinned;
+  const pinned =
+    !keepPinnedInView || !pinsApply ? 0 : firstUnpinned === -1 ? notes.length : firstUnpinned;
 
   /**
    * One note row.
@@ -337,28 +397,72 @@ export function NoteList({
               ? t("library.noNotes")
               : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
           </span>
+          {/* One control rather than the three labels this used to be. The three were a
+              row of words with one of them tinted, which is a state you have to already
+              know how to read: nothing said they were a group, nothing said the tinted
+              one was the answer rather than a link, and the two that were *not* in force
+              took the same width as the one that was. A chooser says its own name — the
+              glyph says "order", the text says what the order is — and the alternatives
+              are somewhere you go and look rather than something permanently on screen.
+
+              The menu is `ContextMenu`, not a list drawn here: it already carries the
+              arrow/Home/End walk, Escape, focus handed back to whatever opened it, the
+              clamp against the window edge, and the tick that marks the current entry.
+              A second implementation of any of those is a second one to get wrong. */}
           <div className="notes-sort">
-            {SORTS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={sort === key ? "sort-on" : ""}
-                onClick={() => onSort(key)}
-              >
-                {t(`library.sort.${key}`)}
-              </button>
-            ))}
+            <button
+              type="button"
+              ref={sortButton}
+              className={`sort-choose${sortMenu !== null ? " sort-choose-open" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={sortMenu !== null}
+              title={t("library.sortBy")}
+              onClick={() => {
+                if (sortMenu !== null) {
+                  setSortMenu(null);
+                  return;
+                }
+                const rect = sortButton.current?.getBoundingClientRect();
+                if (rect === undefined) return;
+                setSortMenu({ x: rect.left, y: rect.bottom + 2 });
+              }}
+            >
+              <span className="sort-glyph">{sortGlyph}</span>
+              {t(`library.sort.${sort}`)}
+            </button>
           </div>
-          {inTrash ? (
-            <button type="button" className="new-note danger" onClick={onClearTrash}>
-              {t("library.clearTrash")}
+          <div className="notes-actions">
+            {/* The same view the sidebar's own Tasks row opens, from the same handler —
+                not a second route that could come to mean something else. It sits here
+                because this is the bar you are already looking at when you want it, and
+                the sidebar row is three panes away. */}
+            <button type="button" className="new-note" onClick={onOpenTasks}>
+              {t("library.tasks")}
             </button>
-          ) : (
-            <button type="button" className="new-note" onClick={onNewNote}>
-              + {t("library.newNote")}
-            </button>
-          )}
+            {inTrash ? (
+              <button type="button" className="new-note danger" onClick={onClearTrash}>
+                {t("library.clearTrash")}
+              </button>
+            ) : (
+              <button type="button" className="new-note" onClick={onNewNote}>
+                + {t("library.newNote")}
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      {sortMenu !== null && (
+        <ContextMenu
+          x={sortMenu.x}
+          y={sortMenu.y}
+          items={SORTS.map((key) => ({
+            label: t(`library.sort.${key}`),
+            checked: key === sort,
+            onSelect: () => onSort(key),
+          }))}
+          onClose={() => setSortMenu(null)}
+        />
       )}
 
       {unlinked && filesState === "loading" && (

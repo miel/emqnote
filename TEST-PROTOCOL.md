@@ -1104,8 +1104,8 @@ plateau. Apple Color Emoji and Segoe UI Emoji are what §32a and §32b are for.
 | 32k | From the vault root, hold ArrowDown all the way to the bottom of the sidebar | Focus passes through every folder, then Tags, People, Tasks, Settings, Keyboard shortcuts, and finally Trash. It used to jump from the last folder straight to Trash |  |
 | 32l | Unfold Tags, then arrow down through it | Each tag is a stop of its own. Enter on one selects it |  |
 | 32m | Land on Settings with the arrows, then press Tab | Focus goes to the note list, as it does from a folder row. A row the arrows reach but Tab does not understand is the bug this is for |  |
-| 32n | Pin four notes | The fourth is refused with a message naming three. Then unpin one and pin it again: allowed |  |
-| 32o | Pin a note in one folder and a note in another, then try a fourth from a third folder | Still refused. The count is the vault's, not the list's |  |
+| 32n | Pin four notes **in one folder** | The fourth is refused with a message naming three. Then unpin one and pin it again: allowed. (B77 narrowed this from the vault to the folder; §33 covers the narrowing itself) |  |
+| 32o | Pin three in one folder, then pin one in a **different** folder | Allowed — a fourth pin in the vault. The count is the folder's, not the vault's, and not the list's either |  |
 | 32p | Pin a note and `cat` the file | `pinned: true`, unquoted, and **`modified` is exactly what it was**. This is the row most likely to fail after an innocent-looking change |  |
 | 32q | Note the file's timestamp in Explorer/Finder before and after pinning | The note does not move to the top of a folder sorted by date modified |  |
 | 32r | Unpin it and `cat` again | The `pinned` line is gone entirely — not `pinned: false` |  |
@@ -1113,6 +1113,45 @@ plateau. Apple Color Emoji and Segoe UI Emoji are what §32a and §32b are for.
 | 32t | Open the same note in **Obsidian** | `pinned: true` shows in its properties and the note is otherwise untouched |  |
 | 32u | Let OneDrive sync, then look on the **other machine** | The note is pinned there too. This is the whole reason the flag is in the file rather than in settings |  |
 | 32v | Open a pinned note in the capture window, then try to unpin it from the library | Refused, with the "open in the note window" message — the same lock every other write in the library carries |  |
+
+## 33. A pin per folder, a sort chooser, a notepad and a key for Discard (21 August 2026)
+
+Five items from daily use, two of them corrections to §32's own work of the day before. Four
+carry decisions: **B77** (the pin limit is per folder, and a pin orders only a folder),
+**B78** (the sort labels are a field chooser), **B79** (the capture window is a notepad) and
+**B80** (Discard gets a chord, and it is not Escape).
+
+**Most of this was driven live under `Xvfb`** — including the refusal message, which §32n
+had left unconfirmed and which is now the *first* thing checked here. **Two things were
+not**: §33p, because there is still no capture-renderer harness to hand it a note from the
+library, and §33h, which needs a note list longer than the pane to have anything to scroll.
+
+**And §33m is a whole platform, twice over.** The window's new height is clamped against
+`screen.getPrimaryDisplay().workAreaSize`, which is net of the macOS menu bar and dock and of
+the Windows taskbar — three chrome heights this sandbox has none of. A laptop panel is what
+that row is for.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 33a | Pin three notes in one folder, then a fourth in the **same** folder | Refused, with a message reading "in one folder" and naming three |  |
+| 33b | Now pin one in a **different** folder | Allowed. Four pinned notes in the vault, three of them in one place |  |
+| 33c | Pin one inside a **subfolder** of a folder that already has three | Allowed. A subfolder has an allowance of its own |  |
+| 33d | `cat` the note pinned in 33b | `pinned: true`, and `modified` exactly what it was. B75's rule is untouched by any of this |  |
+| 33e | With four or more pinned across the vault, unpin any of them | Never refused. Only pinning is |  |
+| 33f | Select a folder holding pinned notes | They are at the top, above the sort, exactly as before |  |
+| 33g | Now open a **tag**, a **person**, or type in the search box | The pinned notes are wherever the sort puts them — no longer first. They still carry the pin mark |  |
+| 33h | Turn on "Keep pinned notes in view", pick a folder with more notes than fit, and scroll | The pinned rows stay against the top edge, opaque, with the rest scrolling under them. Then open a tag: **no shelf at all** |  |
+| 33i | Clear the search box while standing in a folder | The pins come back to the top immediately |  |
+| 33j | Click the sort control above the note list | A menu of Modified / Created / Title, with a tick on the current one |  |
+| 33k | Pick a different one | The list reorders, the menu closes on its own, and the control now reads the field you picked |  |
+| 33l | Reopen the library | It is still on that field |  |
+| 33m | On a **laptop** — a 13" MacBook or a 1366×768 Windows machine — press the capture hotkey | The whole window is on screen, status bar included. Discard, Insert and ? are all reachable |  |
+| 33n | Look at the note window's proportions | Taller than wide, and the body takes roughly twice the height it used to. All four header cells (When, Tags, Where, Who) still read cleanly |  |
+| 33o | Start a new note, type a sentence, and press ⇧⌘⌫ / Ctrl+Shift+Backspace | The note is in `_trash` and the window is gone. Restore brings it back |  |
+| 33p | Open an **existing** note from the library into the note window and press the same chord | Nothing happens. That note is not this window's to throw away, and there is no Discard button either |  |
+| 33q | Press Escape in the note window with a half-typed note | Still nothing — it neither saves-and-closes nor discards. This row exists because Escape is the key this feature must never acquire |  |
+| 33r | Open the keyboard shortcuts sheet in the note window | Discard has a row. On a Mac it reads ⇧⌘⌫, on Windows Ctrl+Shift+Backspace |  |
+| 33s | Click **Tasks** in the note list's header, then click Tasks in the sidebar | The same view, scoped to the same folder, both times |  |
 
 ## Reporting
 
@@ -1125,7 +1164,7 @@ do not describe it.
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
 §18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f, §28g, §29k, §29r or §29y fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s and §23j are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s, §23j and §33p are all the same gap — the capture
 window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
 it has been driven over CDP, and on 18 August the whole of §26's find bar and both title chords
 were confirmed in it — and §18o–§18q are a gap of their own: a tray menu is not

@@ -335,6 +335,9 @@
 }
 
 .notes-sort button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -342,15 +345,43 @@
   padding: 2px 6px;
   border-radius: 4px;
   cursor: default;
+  white-space: nowrap;
 }
 
 .notes-sort button:hover {
   background: rgba(127, 127, 127, 0.14);
 }
 
-.notes-sort .sort-on {
-  color: var(--accent);
+/* Open reads like hover on purpose, and not like the old `.sort-on` tint: the chooser is
+   not *chosen*, it is unfolded, and a control that turns accent-coloured while its menu is
+   down would be saying the same thing the tick inside the menu already says. */
+.notes-sort .sort-choose-open {
   background: rgba(127, 127, 127, 0.14);
+}
+
+/* The same 12px icon slot `.note-pin` and the tree's `.filter-glyph` use, so the three
+   icon columns in this window agree. `flex: 0 0 auto` because the label beside it is what
+   changes width when the sort does — the glyph never should. */
+.sort-glyph {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  width: 12px;
+}
+
+.sort-glyph svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The header's two buttons, grouped so `.notes-header`'s `space-between` keeps handing out
+   the same three gaps it did when + New note stood there alone. Four loose children would
+   have spread count, sort, Tasks and New note evenly across the bar and put the sort
+   chooser somewhere different from where it has always been. */
+.notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* The only other way in is the global hotkey, so this button gets to stand out a
@@ -428,8 +459,10 @@
    own stacking context, but the rows that follow it in the list would otherwise paint over
    it in document order.
 
-   No cap on how tall it may get, and none needed: `MAX_PINNED` is three, and the fourth
-   pin B75 refuses to hide is the rare case of a shelf one row taller than that. */
+   No cap on how tall it may get, and none needed: `MAX_PINNED` is three *per folder*
+   (B77) and the shelf is only ever drawn for a folder's own list, so three is what it
+   holds. The fourth pin B75 refuses to hide is the rare case of a shelf one row taller
+   than that. */
 .notes-pinned {
   position: sticky;
   top: 0;

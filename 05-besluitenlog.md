@@ -2781,3 +2781,140 @@ er niet uit als een vergeten kleur, dat ziet eruit alsof de notities dubbel staa
 **Staat de schakelaar uit, dan is er geen omhulsel.** `NoteList` tekent de `li` alleen als er iets
 op de plank hoort; de lijst is dan tot op de byte de lijst van vóór dit besluit. Zo kan geen enkele
 regel hierboven een venster bereiken dat er niet om gevraagd heeft.
+
+---
+
+## B77 — De grens van drie geldt per map, en een speld ordent alleen een map
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik, één dag na B75. Het besluit zelf staat
+overeind — twee of drie notities bovenaan is precies wat er nodig was — maar de *eenheid* was
+verkeerd gekozen. Drie voor de hele kluis leest bij het opschrijven als "drie dingen waar je deze
+week aan werkt"; in gebruik is het "drie dingen per project". Zodra drie mappen hun deel op hadden,
+kreeg de vierde een weigering te zien voor iets wat niets met die map te maken had.
+
+**Het besluit, eerste helft.** Maximaal drie vastgeprikte notities **per map**. De directe map, niet
+de boom eronder: `01 Projects` en `01 Projects/Klant X` zijn twee plekken met elk hun eigen ruimte.
+Submappen optellen bij hun ouder zou betekenen dat dezelfde notitie tegen meerdere mappen tegelijk
+meetelt, en dan hangt het antwoord af van wélke van die mappen je toevallig aan het bekijken was
+toen je vastprikte.
+
+**Waar het wordt afgedwongen verandert niet, en dat is het deel dat het makkelijkst verkeerd wordt
+begrepen.** B75 zette de grens in het hoofdproces omdat de renderer alleen de lijst op het scherm
+kent. Dat argument werd toen opgeschreven als "een notitie die vastgeprikt is in een map waar
+niemand naar kijkt telt gewoon mee", en die zin verdwijnt hier. Het argument zelf wordt juist
+sterker: de map die geteld moet worden is heel vaak *niet* de map waar de boom staat — je kunt
+vastprikken vanuit de lijst van een tag of vanuit een zoekresultaat, waar de rijen overal vandaan
+komen. De renderer kan die telling dus in beginsel niet doen. Vandaar `pinnedNotesIn` naast
+`pinnedNotes` in `index-db.ts`, gefilterd op `folderOf`.
+
+**Geen nieuwe kolom en geen `SCHEMA_VERSION`-sprong.** Er is geen `folder`-kolom en die komt er ook
+niet: `notes_pinned` is een gedeeltelijke index over `pinned = 1`, dus de filtering leest hooguit een
+handvol rijen. Een kolom toevoegen zou een herindexering van de hele kluis kosten voor een vraag die
+in JavaScript één regel is.
+
+**Het besluit, tweede helft, en het volgt uit de eerste.** Een speld ordent een map, dus in een lijst
+die *geen* map is telt hij niet mee. Een tag, een persoon, een zoekresultaat: daar staan de rijen in
+de gekozen sortering en verder niets. Dit is geen smaakkwestie maar rekenwerk: drie spelden in elk
+van acht mappen is één tagklik verwijderd van een lijst waarvan de bovenste vierentwintig rijen
+vastgeprikt staan — en met B76's schakelaar aan is dat een plank die het hele paneel opeet. Het
+tegenovergestelde van waar de functie voor bestond.
+
+**De markering blijft wél staan, overal.** De speld is een feit over de *notitie*; alleen de
+volgorde is een feit over de map. Een rij in een tagoverzicht die vastgeprikt is, draagt dus gewoon
+het speldje — anders zou die rij het oneens zijn met het vinkje naast "Bovenaan vastprikken" in zijn
+eigen menu. Vastprikken en losmaken blijven ook overal aangeboden; alleen de prullenbak weigert het,
+zoals altijd.
+
+**Waarom een schakelaar hier niet past, anders dan bij B76.** Daar waren beide standen te
+verdedigen. Hier is de ene stand een lijst die aantoonbaar onbruikbaar wordt naarmate je meer mappen
+gebruikt, en dat is geen keuze maar een fout die je de gebruiker laat maken.
+
+**`keepPinnedInView` blijft precies wat het was.** De plank wordt getekend als er iets op hoort, en
+er hoort alleen iets op in een map. Buiten een map is de lijst tot op de byte de lijst van vóór B76,
+wat dat besluit zelf al als eigenschap opschreef.
+
+---
+
+## B78 — De sorteerknoppen worden een keuzeveld
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik. Boven de notitielijst stonden drie woorden —
+Gewijzigd, Gemaakt, Titel — waarvan er één een accentkleur had. Dat is een toestand die je al moet
+kúnnen lezen: niets zei dat het een groep was, niets zei dat het gekleurde woord het antwoord was in
+plaats van een link, en de twee die *niet* golden namen evenveel breedte in als de een die dat wel
+deed.
+
+**Het besluit.** Eén knop: een pictogram (pijl omhoog naast pijl omlaag) plus het veld waarop op dit
+moment gesorteerd wordt. Klikken vouwt de drie mogelijkheden uit met een vinkje bij de huidige;
+kiezen zet de sortering en vouwt hem meteen weer dicht.
+
+**Het menu is `ContextMenu` en geen eigen lijstje.** Dat onderdeel draagt de pijltjes-, Home-, End-
+en Enter-loop, Escape, de focus die teruggaat naar wat het menu opende, het klemmen tegen de
+vensterrand, en het vinkje. Elk daarvan een tweede keer bouwen is elk daarvan een tweede keer fout
+kunnen doen. Het maakt de kiezer bovendien bereikbaar voor `--click-button`, dat een geopend
+`.context-menu` doorzoekt in plaats van de pagina — `--click-button="Gewijzigd>Titel"` loopt er
+gewoon doorheen.
+
+**Geen richting in het pictogram.** Er valt in deze app geen richting te kiezen: datums staan altijd
+nieuwste eerst en titels altijd A–Z. Een pijl die een omschakeling suggereert die niet bestaat, is
+een uitnodiging om erop te klikken.
+
+**De twee knoppen ernaast staan in één omhulsel.** `.notes-header` verdeelt zijn ruimte met
+`space-between` over drie kinderen; een vierde los kind zou telling, sortering, Taken en Nieuwe
+notitie gelijkmatig over de balk uitsmeren en de sorteerkiezer ergens anders neerzetten dan waar hij
+altijd stond. Vandaar `.notes-actions` om Taken en + Nieuwe notitie heen.
+
+---
+
+## B79 — Het notitievenster is een blocnote, geen systeemkaartje
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik. Het venster was 720×440: een systeemkaartje
+op zijn kant. Dat is het verkeerde plaatje — wat vervangen wordt is een Outlook-bericht, en waar het
+als gebruikt wordt is een blocnote. Liggend ging bovendien de hoogte op aan chroom en de breedte aan
+regellengte, zodat het tekstvlak op zo'n 270 pixels uitkwam: vier of vijf zichtbare alinea's, in het
+ene venster dat verder niets ís dan zijn tekstvlak.
+
+**Het besluit.** 600×720, staand. `.editor` is `flex: 1` en de enige rekbare rij, dus elke pixel
+vensterhoogte landt in het tekstvlak: dat wordt daarmee ongeveer twee keer zo hoog.
+
+**Geklemd op het werkgebied van het scherm, niet vertrouwd.** 720 hoog past nét op een 1366×768
+laptopscherm, en een venster dat hoger is dan de ruimte waarin het geopend wordt, is een venster
+waarvan de statusbalk — Weggooien, Invoegen, Help — onbereikbaar onder de rand hangt.
+`workAreaSize` is al schoon van menubalk, dock en taakbalk, dus de marge hier is alleen wat lucht.
+
+**Minima, die er niet waren.** De statusbalk is een flexrij zonder `flex-wrap` en de kop is een
+raster van vier kolommen; een venster dat smal genoeg getrokken wordt, perst beide onleesbaar in
+plaats van ze te laten teruglopen.
+
+**Nog steeds niets onthouden.** De maat is een startwaarde, geen instelling: het venster wordt één
+keer gemaakt en daarna alleen verborgen, dus wie het versleept houdt dat de hele sessie. Geometrie
+opslaan is een besluit voor als er ooit om gevraagd wordt, niet iets om er hier bij in te bouwen.
+
+---
+
+## B80 — Weggooien krijgt een toets, en die toets is niet Escape
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik. B68 gaf Weggooien een knop in de statusbalk
+en verder niets, in een venster dat vanaf de sneltoets tot en met opslaan zonder muis te bedienen is.
+
+**Het besluit.** `Mod-Shift-Backspace`, alleen in het notitievenster.
+
+**Waarom niet Escape**, wat de eerste ingeving is en de reden dat dit besluit hier staat: Escape is
+in dit venster met opzet nergens aan gekoppeld — B75's buurman in `shortcuts.ts` schrijft het al op
+voor "bewaren en sluiten" — omdat het de toets is die je per reflex indrukt. Weggooien is de ene
+opdracht in dat venster die werk weggooit. Twee toetsen die je per ongeluk raakt, en de duurste
+ervan, is precies de verkeerde combinatie.
+
+**Waarom Backspace en waarom geshift.** Backspace is de toets die al "wis wat ik net deed" betekent.
+`Mod-Backspace` zonder shift is op beide platforms het systeemeigen "wis tot begin van de regel"
+binnen een tekstveld, en dit venster is grotendeels tekstveld — vandaar de geshifte vorm, die in
+elke scope vrij was.
+
+**Dezelfde grendel als de knop.** De toets doet niets voor een notitie die vanuit de bibliotheek is
+overhandigd (`existing`), net als de knop die er dan niet staat. `CaptureWriter.discard` antwoordt
+voor zo'n sessie toch al `null`, dus dit is de buitenste van twee onafhankelijke grendels — maar een
+toets die stilletjes niets doet is beter dan een die een handler haalt om daar geweigerd te worden.
+
+**Op de Mac wordt hij getekend, niet gespeld.** De modifiers zijn daar al symbolen, dus "⇧⌘Backspace"
+zou drie tekens en dan een woord zijn: een overzicht dat halverwege opgeeft. `MAC_KEYS` in
+`shortcuts.ts` maakt er ⇧⌘⌫ van. Alleen toetsen waarvan het Mac-teken de gebruikelijke spelling ís
+horen daarin; Enter en Tab blijven op beide platforms woorden.

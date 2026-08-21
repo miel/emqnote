@@ -45,6 +45,8 @@ const NOTES = [
 interface Fake {
   emqnote: CaptureApi;
   setPinned: ReturnType<typeof vi.fn>;
+  /** Fires the "open this tag" message main sends, so a tag can be selected without the tree. */
+  openTag: (name: string) => void;
 }
 
 function buildFake(
@@ -61,13 +63,20 @@ function buildFake(
 
   const setPinned = vi.fn(async () => answer);
 
+  // The one message that reaches a tag's list without unfolding the sidebar's filter
+  // sections first. Held so a test can fire it; the real sender is main, on a click in a
+  // note's own tag chip.
+  let openTagHandler: (payload: { name: string }) => void = () => {};
+
   const library: LibraryApi = {
     tree: async () => tree,
     notes: async () => NOTES,
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
     noteTaskCounts: async () => ({}),
-    search: async () => [],
+    // The same three notes a folder answers with, so a search and a folder differ in
+    // exactly one thing: whether the pin is allowed to order them.
+    search: async () => NOTES,
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,
     saveNote: async (request) => ({ written: false, path: request.path }),
@@ -98,7 +107,10 @@ function buildFake(
     trashAttachment: async () => "",
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
-    onOpenTag: () => () => {},
+    onOpenTag: (handler) => {
+      openTagHandler = handler;
+      return () => {};
+    },
     tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
     setPinned,
@@ -157,7 +169,7 @@ function buildFake(
     library,
   } as unknown as CaptureApi;
 
-  return { emqnote, setPinned };
+  return { emqnote, setPinned, openTag: (name) => openTagHandler({ name }) };
 }
 
 async function flush(rounds = 12): Promise<void> {
@@ -333,6 +345,104 @@ describe("a pinned note in the list", () => {
 
       expect(document.activeElement).toBe(rows[1]);
       expect(rows[1]!.querySelector(".note-title")?.textContent).toBe("Nieuwste");
+    });
+  });
+
+  /**
+   * B77: a pin orders a folder, and nothing else.
+   *
+   * The limit became three *per folder*, which is what makes this necessary rather than
+   * tidy: three pins in each of eight folders is one tag click away from a list whose top
+   * two dozen rows are pinned — and with the shelf on, a sticky slab covering the pane.
+   * So a list whose rows come from everywhere ignores the flag entirely.
+   *
+   * Both routes out of a folder are driven here, because they are two different states
+   * and only one of them changes `selection`: opening a tag replaces it, while a search
+   * leaves the tree saying "folder" and quietly overrides it (`loadNotes`). A predicate
+   * that only looked at the selection would pass the first of these and fail the second.
+   */
+  describe("outside a folder's own list", () => {
+    async function search(query: string): Promise<void> {
+      const input = container.querySelector<HTMLInputElement>(".notes-search input")!;
+      await act(async () => {
+        // Through the native setter, or React's own value tracker sees no change and the
+        // `onChange` handler never runs — the house spelling, see
+        // `library-folder-files.test.ts`.
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+          input,
+          query,
+        );
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      // The list itself is 150 ms behind on a debounce; the order is not, since the query
+      // decides it the moment it is typed. Waited out anyway so the rows on screen are the
+      // ones the search answered with rather than the folder's, which is the state the
+      // assertion is about.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+      await flush();
+    }
+
+    it("leaves the pinned note where the sort put it, in a tag's list", async () => {
+      const fake = buildFake("modified");
+      await mount(fake);
+      expect(titles()).toEqual(["Vastgeprikt", "Nieuwste", "Middelste"]);
+
+      await act(async () => fake.openTag("klantx"));
+      await flush();
+
+      // Straight modified order now: the pinned note is the oldest of the three, so it
+      // goes last — which is exactly the assertion a pin still being honoured would fail.
+      expect(titles()).toEqual(["Nieuwste", "Middelste", "Vastgeprikt"]);
+    });
+
+    it("leaves the pinned note where the sort put it, while a search is running", async () => {
+      const fake = buildFake("modified");
+      await mount(fake);
+
+      await search("notitie");
+      expect(titles()).toEqual(["Nieuwste", "Middelste", "Vastgeprikt"]);
+    });
+
+    it("puts it back the moment the query is cleared", async () => {
+      const fake = buildFake("modified");
+      await mount(fake);
+
+      await search("notitie");
+      await search("");
+      expect(titles()).toEqual(["Vastgeprikt", "Nieuwste", "Middelste"]);
+    });
+
+    it("draws no shelf, even with the setting on", async () => {
+      const fake = buildFake("modified", { pinned: true }, true);
+      await mount(fake);
+      expect(container.querySelector(".notes-pinned")).not.toBeNull();
+
+      await act(async () => fake.openTag("klantx"));
+      await flush();
+
+      // The shelf has to go with the ordering, not merely shrink: a slab pinning the
+      // *last* row of a tag's list to the top edge would be the app claiming an order it
+      // did not apply.
+      expect(container.querySelector(".notes-pinned")).toBeNull();
+      expect(container.querySelectorAll(".notes-list > .note")).toHaveLength(3);
+    });
+
+    it("still marks the row, because the note is still pinned", async () => {
+      // The flag is a fact about the note and stays visible wherever the note is drawn;
+      // only the *order* is a fact about the folder. Hiding the mark here would leave the
+      // row and the tick in its own Pin menu item disagreeing with each other.
+      const fake = buildFake("modified");
+      await mount(fake);
+
+      await act(async () => fake.openTag("klantx"));
+      await flush();
+
+      const rows = Array.from(container.querySelectorAll<HTMLElement>(".notes-list .note"));
+      const marked = rows.filter((row) => row.querySelector(".note-pin") !== null);
+      expect(marked).toHaveLength(1);
+      expect(marked[0]?.querySelector(".note-title")?.textContent).toBe("Vastgeprikt");
     });
   });
 
