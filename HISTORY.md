@@ -925,3 +925,41 @@ markup said. `TEST-PROTOCOL.md` §34 is the whole batch, written for a human.
 Escape beside it, and Escape out of a search returning focus to the note list. Both are the
 library window's half — `Library.tsx`'s `focusPane` has to come out of the pane-cycle effect
 before either can be wired — and both are still open in `TODO.md`.
+
+**The two items v0.10.3 left behind landed on 21 August 2026**, with the DOM test that
+release was also missing. The Tasks view and a live search now each have a way out: a
+labelled control — "Exit tasks" in the task toolbar, a `×` in the search box while there is
+something to clear — and Escape. Both end by handing focus to the roving row of the list
+that replaces what was on screen, through a `focusNotesOnNextList` flag consumed by an
+effect keyed on `notes`: the reload is a round trip, so anything focused at the moment the
+exit runs belongs to the list being unmounted. `focusPane` and `paneOf` came out of the
+pane-cycle effect to make that possible, which is the groundwork `TODO.md` had named.
+
+**Driving it in the real app is what made this batch worth more than its diff.** Under
+`Xvfb`, over `--library --click-button` for the button and `xdotool` for the keys: the "Exit
+tasks" button returned to `00 Inbox` with the row focused, and Escape in the search box
+cleared the query, restored the folder's list and put focus on the selected note — both
+first time. **Escape out of the Tasks view did not.** The handler was on `.task-list`, where
+the key looks like it belongs, and it did nothing for the two commonest ways of standing in
+that view: arriving by the sidebar row leaves focus in the tree, and a click on the empty
+space below the last task leaves it on `<body>` — neither is inside the pane, so neither
+reached a React handler on it. The window listener owns the key now, which sees it from
+anywhere, with the editor asked about first so a note open beside the list keeps Escape's
+older meaning. The jsdom test had passed against the broken version, because it dispatched
+the key on the pane; it presses on `document.body` now, which is the case that was actually
+broken. That is this project's recurring lesson in its usual shape — a handler placed where
+the key seems to belong rather than where focus actually is.
+
+One more thing came out of the same session, and it is a difference rather than a defect:
+clicking a search hit and then pressing Escape takes **two** presses, because the click puts
+focus in the editor and the first press means "back to the note list". Written down in
+`CONSTRAINTS.md` rather than smoothed over — collapsing the two would take Escape's older
+meaning away from the editor.
+
+**And `test/header-who.test.ts` closes the gap v0.10.3 shipped with**: fourteen cases over
+the Who field's panel — asked on first focus and once per window, what is offered and what
+is filtered out, the arrows and Enter, a name accepted in the middle of a list, Escape not
+travelling on to the window, the rows kept out of the Tab order, and three lists open at
+once keeping separate highlights. The Who completion itself was also confirmed live in this
+session, in the reader window: the caret in "Pieter Jansen" offered exactly that name with
+its count, with "Jan de Vries" filtered out as already in the field.

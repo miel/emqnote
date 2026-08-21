@@ -298,13 +298,20 @@
   overflow: hidden;
 }
 
+/* A row now, rather than a box holding one control: the × sits beside the field while
+   there is something to clear. `position: relative` is not used — the button takes its own
+   space instead of floating over the text, so a long query is never painted underneath it. */
 .notes-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 
 .notes-search input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   font: inherit;
   font-size: 12px;
   padding: 4px 8px;
@@ -317,6 +324,26 @@
 .notes-search input:focus {
   outline: 0;
   border-color: var(--accent);
+}
+
+/* The mouse's way out of a search; Escape is the keyboard's. Deliberately quiet — it
+   appears and disappears with the query, and a control that comes and goes should not also
+   be the loudest thing in the pane. */
+.search-clear {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: default;
+}
+
+.search-clear:hover {
+  color: var(--accent);
 }
 
 .notes-header {
@@ -640,6 +667,26 @@
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+/* `.new-note`'s recipe, in the toolbar rather than the header — the one way out of this
+   view that says its own name. `flex: 0 0 auto` so the scope dropdown beside it goes on
+   taking the room instead. */
+.task-exit {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: default;
+}
+
+.task-exit:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .task-scope {

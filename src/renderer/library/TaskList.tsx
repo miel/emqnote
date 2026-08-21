@@ -10,6 +10,8 @@ interface Props {
   folders: string[];
   onScopeChange: (scope: string) => void;
   onOpenOnlyChange: (openOnly: boolean) => void;
+  /** Back to the folder list. The button below and Escape both call it. */
+  onExit: () => void;
   /** Opens the note in the reader beside this list — clicking a row's text, not its checkbox. */
   onOpenNote: (path: string, ordinal: number) => void;
   /**
@@ -82,6 +84,7 @@ export function TaskList({
   folders,
   onScopeChange,
   onOpenOnlyChange,
+  onExit,
   onOpenNote,
   onToggle,
   t,
@@ -134,8 +137,20 @@ export function TaskList({
   };
 
   return (
+    // No Escape handler here, deliberately. It was here first, and driven in the real app
+    // it did nothing for the two commonest ways of standing in this view: arriving by the
+    // sidebar row leaves focus in the tree, and clicking the empty space below the last
+    // task leaves it on `<body>` — neither is inside this element, so neither reached it.
+    // `Library.tsx`'s window listener owns the key instead, which sees it from anywhere.
     <div className="notes task-list">
       <div className="task-toolbar">
+        {/* Named, not an ×. `--click-button="Exit tasks"` is how the packaged self-test
+            reaches it, and a glyph has no label for that to match — the same reason the
+            sort chooser says its own name. */}
+        <button type="button" className="task-exit" onClick={onExit}>
+          {t("tasks.exit")}
+        </button>
+
         <select
           className="task-scope"
           value={scope}

@@ -629,6 +629,144 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement).toBe(container.querySelector(".notes-search input"));
   });
 
+  /**
+   * Leaving a mode, which is the half the library had never had.
+   *
+   * Tasks and a search are both states you could enter from the sidebar and only leave by
+   * asking for something else — clicking a folder, a tag, anything at all. That is a way of
+   * going somewhere, not a way of coming back, and neither had a key.
+   *
+   * Both exits end the same way, and it is the end that these pin: focus on the roving row
+   * of the list that replaces what was on screen. It cannot be done on the spot — the
+   * reload is a round trip, so the rows under `focusPane` at that moment are the ones about
+   * to be unmounted — which is why `focusNotesOnNextList` waits for the new list instead.
+   */
+  function setSearch(value: string): void {
+    const input = container.querySelector<HTMLInputElement>(".notes-search input")!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    act(() => {
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  const searchBox = (): HTMLInputElement =>
+    container.querySelector<HTMLInputElement>(".notes-search input")!;
+
+  it("Escape in the search box leaves the search and focuses the note list", async () => {
+    await mount();
+    setSearch("klant");
+    await flush();
+    expect(searchBox().value).toBe("klant");
+
+    keydown(searchBox(), "Escape");
+    await flush();
+
+    expect(searchBox().value).toBe("");
+    expect(document.activeElement).toBe(noteRows().find((node) => node.tabIndex === 0));
+  });
+
+  it("Escape on a note row while a search is live leaves the search too", async () => {
+    // The search box is not a `.note[role="option"]`, so the window listener's `paneOf`
+    // reads `null` for it and the box carries its own handler; this is the other branch,
+    // which asks where the press came from before deciding what Escape means.
+    await mount();
+    setSearch("klant");
+    await flush();
+
+    const row = noteRows().find((node) => node.tabIndex === 0)!;
+    row.focus();
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => {
+      row.dispatchEvent(event);
+    });
+    await flush();
+
+    // The cleared box and the consumed press, rather than where focus ended up: focus was
+    // already on the roving row here, so asserting it lands there proves nothing — it
+    // would hold just as well if this branch did not exist at all. The row above it is
+    // where the focus hand-off is actually pinned.
+    expect(searchBox().value).toBe("");
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("Escape on a note row does nothing at all when there is no search", async () => {
+    // The branch above must not swallow the key otherwise: with no query, Escape in the
+    // notes pane has never meant anything and still should not.
+    await mount();
+    const row = noteRows().find((node) => node.tabIndex === 0)!;
+    row.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => {
+      row.dispatchEvent(event);
+    });
+    await flush();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("the Tasks view has a way out, by button and by Escape", async () => {
+    await mount();
+
+    const openTasks = (): void => {
+      const row = Array.from(container.querySelectorAll(".tree-settings")).find(
+        (el) => el.querySelector(".branch-name")?.textContent === "Tasks",
+      )!;
+      act(() => {
+        row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+    };
+
+    openTasks();
+    await flush();
+    expect(container.querySelector(".task-list")).not.toBeNull();
+
+    // The button first. It is labelled rather than an ×, because `--click-button` matches
+    // a control by its text and a glyph gives it nothing to match.
+    const exit = container.querySelector<HTMLButtonElement>(".task-exit")!;
+    expect(exit.textContent).toBe("Exit tasks");
+    act(() => {
+      exit.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    expect(container.querySelector(".task-list")).toBeNull();
+    expect(document.activeElement).toBe(noteRows().find((node) => node.tabIndex === 0));
+
+    // Then the key. Pressed on `document.body`, which is exactly where focus sits after
+    // arriving by the sidebar row or clicking the empty space under the last task — the
+    // two cases a handler on the pane itself did nothing for, found by driving it rather
+    // than by reading it. The window is the only listener that sees all of them.
+    openTasks();
+    await flush();
+    keydown(document.body, "Escape");
+    await flush();
+
+    expect(container.querySelector(".task-list")).toBeNull();
+    expect(document.activeElement).toBe(noteRows().find((node) => node.tabIndex === 0));
+  });
+
+  it("Escape from a task row leaves the view as well", async () => {
+    await mount();
+    const row = Array.from(container.querySelectorAll(".tree-settings")).find(
+      (el) => el.querySelector(".branch-name")?.textContent === "Tasks",
+    )!;
+    act(() => {
+      row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    keydown(container.querySelector(".task-list")!, "Escape");
+    await flush();
+
+    expect(container.querySelector(".task-list")).toBeNull();
+  });
+
   it("Mod-Shift-R starts editing the open note's title", async () => {
     await mount();
     const editorContent = await openNote();

@@ -1189,6 +1189,30 @@ search — are **not in this release**; they are the library window's half and a
 | 34o | Open a note in the library reader and repeat 34h | The same list, in the other window. One component serves both |  |
 | 34p | Put the vault somewhere with no index yet, or break it, then focus Who | An ordinary text field. No dialog, no error — a completion nobody asked for is not worth one |  |
 
+## 35. A way out of the Tasks view and out of a search (21 August 2026)
+
+The two items §34 said were not in that release. **Most of this was driven live** under
+`Xvfb` — the "Exit tasks" button over `--click-button`, the keys over `xdotool` — and doing
+so found the bug reading the code had not: Escape out of the Tasks view was handled on the
+task pane, and did nothing whenever focus was not inside it, which is the two commonest ways
+of being in that view. The window listener owns the key now. What is left for a human is the
+part a sandbox with no window manager cannot judge and the platform differences.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 35a | Open Tasks from the **sidebar row** and press Escape without clicking anything else | Back to the folder you were in, its notes listed, the selected note focused |  |
+| 35b | Open Tasks again and press Escape with the **scope dropdown** focused | The same. Anywhere in that view means the same thing |  |
+| 35c | Open Tasks and click the empty space below the last task, then Escape | The same again. This is the case the first version failed |  |
+| 35d | Open Tasks with a **note open** in the reader, click into the note, then Escape | Focus moves from the editor to the note list and the Tasks view **stays**. A second Escape leaves it |  |
+| 35e | Click "Exit tasks" | Same destination as Escape. The two are one function |  |
+| 35f | Type in the search box, then press Escape **in the box** | Query gone, the folder's own list back, focus on the selected note |  |
+| 35g | Type in the search box, Tab or click to a **note row**, then Escape | The same, from the row |  |
+| 35h | Press Escape on a note row with **no** search running | Nothing at all. Escape has never meant anything there and still should not |  |
+| 35i | Type a query, click a **hit**, then press Escape twice | First press: out of the editor into the list. Second: out of the search. Two presses is correct here |  |
+| 35j | Type a query and click the **×** | Same as Escape in the box. It is only there while there is something to clear |  |
+| 35k | Empty the box by hand, with Backspace | The × goes as the last character does |  |
+| 35l | On **Windows**, repeat 35a and 35f | Focus lands the same way. This is the platform where focus after a re-render has surprised this project before |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

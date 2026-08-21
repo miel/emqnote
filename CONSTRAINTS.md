@@ -457,6 +457,44 @@ where CSS outranks the presentation attributes `checkbox.ts` writes. Bold and it
 strikethrough was asked about and refused, since a `::marker` cannot draw a line through
 itself and it would mean giving up the native marker for a `::before`.
 
+**A mode you can enter needs a way out, and Escape is only half of it.** The Tasks view and
+a live search were both states the library could be put into and only left by asking for
+something else — clicking a folder, a tag, anything at all, which is a way of going
+somewhere rather than a way of coming back. Each has both halves now: a labelled control
+(`.task-exit` reading "Exit tasks", and a `×` in the search box that appears only while
+there is a query) and Escape. The control is not decoration — `--click-button` matches a
+button by its text, so a gesture with no labelled twin is a gesture the packaged self-test
+cannot reach, which is why nothing in this app is keyboard-only.
+
+**Both exits hand focus back through `focusNotesOnNextList`, never on the spot.** The list
+they return to arrives over IPC, so at the moment either exit runs, the rows `focusPane`
+would find still belong to the list being replaced: focusing one lands on an element that is
+about to be unmounted and focus falls to `<body>`. A `requestAnimationFrame` is not a fix
+either, being a guess about how long a round trip takes. The flag is set by the exit and
+consumed by an effect keyed on `notes`, which is the moment the new rows exist. `focusPane`
+and `paneOf` are at component and module scope for this — they lived inside the pane-cycle
+effect until the exits needed them, and a second copy is how the two would come to disagree
+about what counts as being in a pane.
+
+**Leaving the Tasks view is claimed by the window listener, not by the task pane** — and
+that is a correction, found by driving it rather than by reading it. The first version put
+`onKeyDown` on `.task-list`, which is where the key seems to belong, and it did nothing at
+all for the two commonest ways of standing in that view: arriving by the sidebar row leaves
+focus in the *tree*, and clicking the empty space below the last task leaves it on `<body>`.
+Neither is inside the pane, so neither reached a React handler on it. A keydown bubbles to
+the window from anywhere, which is the only position that answers for all of them. The
+branch order matters and is written down in the code: the editor is asked about first, so a
+note open beside the Tasks list keeps Escape's older meaning (back to the note list).
+
+**Leaving a search, by contrast, is asked of both.** The box carries its own handler because
+`paneOf` answers `null` for it — it is not a `.note[role="option"]` — and the window branch
+covers a press on a row while the query is live. A press with no query is deliberately left
+alone: Escape in the notes pane has never meant anything and still should not, which is the
+one case that keeps the new branch from swallowing the key. In the real app, clicking a
+search hit and pressing Escape takes **two** presses, and that is correct rather than a
+bug — the click puts focus in the editor, so the first press means "back to the list" and
+the second means "leave the search".
+
 **Whoever handles a key stops it; a window listener asks the event where it happened**
 (18 August 2026). Two reported bugs with one cause, and the cause is that
 `preventDefault()` does not end an event. An overlay handled its own Escape and, on the way

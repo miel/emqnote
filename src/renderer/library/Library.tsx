@@ -96,6 +96,34 @@ function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSumma
 }
 
 /**
+ * Which of the three panes an element belongs to, or `null` for anything this does not
+ * recognise.
+ *
+ * At module scope because more than one thing asks it now: the pane-cycle listener, its
+ * Escape branch, and — since leaving a search is a thing you can do from a note row — the
+ * exits that run from the render body. It lived inside that effect until then, and a
+ * second copy is how the two would come to disagree about what counts as being in a pane.
+ *
+ * Deliberately narrower than "anywhere inside the pane": a roving row is where a jump into
+ * the pane lands (`focusPane`), and the only place Tab should treat as "leaving" it. The
+ * tree/notes panes hold ordinary controls too — the search box, the sort buttons, a
+ * folder's twisty — and those already have a sensible Tab order of their own that this
+ * must not steamroll.
+ */
+function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
+  if (element === null) return null;
+  // `SIDEBAR_ROWS`, and it has to be that same set: the footer's rows — Tags, People,
+  // each facet, Tasks, Settings, Help, Unlinked — are part of the sidebar's arrow walk
+  // now, and a row the walk can reach but this cannot classify is a row where Tab and
+  // Ctrl+Tab stop knowing which pane they are in.
+  if (element.closest(SIDEBAR_ROWS) !== null) return "tree";
+  if (element.closest('.note[role="option"]') !== null) return "notes";
+  if (element.closest('.task-row[role="option"]') !== null) return "notes";
+  if (element.closest(".editor-content") !== null) return "editor";
+  return null;
+}
+
+/**
  * Whether pins order this list (B77).
  *
  * A folder, and no search running. The query matters because a search wins over the tree
@@ -422,6 +450,47 @@ export function Library(): React.ReactElement {
   const paneWidthsLoaded = useRef(false);
   const libraryRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Puts focus into a pane, at its roving row.
+   *
+   * Hoisted out of the pane-cycle effect below, where it lived until the two exits needed
+   * it: leaving the Tasks view and leaving a search both end by handing focus back to the
+   * note list, which is the gesture Ctrl+Tab already makes. Over two refs only, so it is
+   * stable and naming it in that effect's dependency list changes nothing.
+   *
+   * The notes selector covers both lists that can occupy that pane, and it looks for
+   * `[tabindex="0"]` rather than for whatever is selected: that is the roving row each
+   * list maintains, so this lands on the note that was last there.
+   */
+  const focusPane = useCallback((pane: "tree" | "notes" | "editor"): void => {
+    const root = libraryRef.current;
+    if (pane === "editor") {
+      editor.current?.focus();
+      return;
+    }
+    if (root === null) return;
+    const selector =
+      pane === "tree" ? '.tree [tabindex="0"]' : '.notes [tabindex="0"], .task-list [tabindex="0"]';
+    root.querySelector<HTMLElement>(selector)?.focus();
+  }, []);
+
+  /**
+   * Set by an exit that has just asked for a different list, and consumed once that list
+   * is on screen.
+   *
+   * Neither exit can focus anything on the spot: `loadNotes` is a round trip, so the rows
+   * `focusPane` would find at that moment still belong to the list being replaced —
+   * focusing one lands on a row that is about to be unmounted and focus falls to `<body>`.
+   * A frame later is not a fix either, being a guess about how long an IPC call takes.
+   */
+  const focusNotesOnNextList = useRef(false);
+
+  useEffect(() => {
+    if (!focusNotesOnNextList.current) return;
+    focusNotesOnNextList.current = false;
+    focusPane("notes");
+  }, [notes, focusPane]);
+
   useEffect(() => {
     if (paneWidthsLoaded.current || app.libraryPaneWidths === null) return;
     paneWidthsLoaded.current = true;
@@ -646,6 +715,54 @@ export function Library(): React.ReactElement {
   );
 
   /**
+   * Leaves a search: the box is emptied, the list goes back to what the tree is pointing
+   * at, and focus lands on the note that was selected in it.
+   *
+   * One function for all three ways out — Escape in the box, Escape on a note row, the ×
+   * — because they are one gesture and a second copy of the ref/timer/reload dance is how
+   * they would come to differ. Every existing implicit clear (`openTasks`, `openUnlinked`,
+   * picking something in the tree) stays as it is: those are a *different* thing, a search
+   * being dropped because something else was asked for, and they end somewhere else.
+   *
+   * `searchQueryRef` is written by hand as well as through `setSearchQuery`, exactly as
+   * `openUnlinked` does and for the same reason: the reload happens in this same tick, and
+   * `loadNotes` reads the ref — the state has not caught up yet, and reading it there would
+   * run the search again over the list that is meant to replace it.
+   *
+   * Declared here rather than beside `exitTasks` below because the window's key listener
+   * names it in its dependency array, which is evaluated during render: from further down
+   * the component it would still be in the temporal dead zone.
+   */
+  const exitSearch = useCallback(() => {
+    if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+    searchQueryRef.current = "";
+    setSearchQuery("");
+    focusNotesOnNextList.current = true;
+    void loadNotes(selectionRef.current);
+  }, [loadNotes]);
+
+  /**
+   * And out of the Tasks view, back to the folder list.
+   *
+   * `lastFolder` is the destination for the reason `openTasks` scopes to it and "+ New
+   * folder" files into it: it is where the tree was standing when the view was opened, and
+   * a tag or the Tasks view is not a place to come back to. Until this existed the only
+   * way out was to click something else in the tree — a way of going somewhere, not a way
+   * of coming back.
+   *
+   * Read off `lastFolderRef` rather than the state, and declared up here beside
+   * `exitSearch`, for that function's reason: the window's key listener names it in a
+   * dependency array evaluated during render, and it must not be rebuilt on every one.
+   *
+   * The selection change is what reloads the list, so the focus hand-off goes through the
+   * same flag `exitSearch` uses rather than being fired here.
+   */
+  const exitTasks = useCallback(() => {
+    focusNotesOnNextList.current = true;
+    setSelection({ kind: "folder", path: lastFolderRef.current });
+  }, []);
+
+  /**
    * True once a filter list has been unfolded.
    *
    * Keeps the lazy scan lazy. Without it, saving any note would rebuild the facets and
@@ -860,36 +977,6 @@ export function Library(): React.ReactElement {
    * run when the forward had already failed would be a second answer to one gesture.
    */
   useEffect(() => {
-    // Deliberately narrower than "anywhere inside the pane": a roving row is where a
-    // jump into the pane lands (`focusPane` below), and the only place Tab should treat
-    // as "leaving" it. The tree/notes panes hold ordinary controls too — the search box,
-    // the sort buttons, a folder's twisty — and those already have a sensible Tab order
-    // of their own that this must not steamroll.
-    const paneOf = (element: Element | null): "tree" | "notes" | "editor" | null => {
-      if (element === null) return null;
-      // `SIDEBAR_ROWS`, and it has to be that same set: the footer's rows — Tags, People,
-      // each facet, Tasks, Settings, Help, Unlinked — are part of the sidebar's arrow walk
-      // now, and a row the walk can reach but this cannot classify is a row where Tab and
-      // Ctrl+Tab stop knowing which pane they are in.
-      if (element.closest(SIDEBAR_ROWS) !== null) return "tree";
-      if (element.closest('.note[role="option"]') !== null) return "notes";
-      if (element.closest('.task-row[role="option"]') !== null) return "notes";
-      if (element.closest(".editor-content") !== null) return "editor";
-      return null;
-    };
-
-    const focusPane = (pane: "tree" | "notes" | "editor"): void => {
-      const root = libraryRef.current;
-      if (pane === "editor") {
-        editor.current?.focus();
-        return;
-      }
-      if (root === null) return;
-      const selector =
-        pane === "tree" ? '.tree [tabindex="0"]' : '.notes [tabindex="0"], .task-list [tabindex="0"]';
-      root.querySelector<HTMLElement>(selector)?.focus();
-    };
-
     /**
      * One step around the ring, from wherever focus is now. `true` when it moved.
      *
@@ -944,9 +1031,41 @@ export function Library(): React.ReactElement {
       // Tab is genuinely a question about where focus *is* — nothing has moved it, and the
       // key is about to move it — so it keeps `document.activeElement`.
       if (event.key === "Escape") {
-        if (paneOf(event.target instanceof Element ? event.target : null) !== "editor") return;
-        event.preventDefault();
-        focusPane("notes");
+        const pane = paneOf(event.target instanceof Element ? event.target : null);
+
+        // The editor keeps the meaning it has always had, and keeps it first: Escape there
+        // is the way back to the note list, whatever else is on screen.
+        if (pane === "editor") {
+          event.preventDefault();
+          focusPane("notes");
+          return;
+        }
+
+        // A press on a note row while a search is live means "leave this search". That is
+        // a state worth one key: the rows came from the whole vault while the tree is lit
+        // on a folder whose notes are not the ones being shown. The search box itself is
+        // not a `.note[role="option"]`, so `paneOf` answers `null` for it and it carries
+        // its own handler — this branch is the rows.
+        if (pane === "notes" && searchQueryRef.current.trim() !== "") {
+          event.preventDefault();
+          exitSearch();
+          return;
+        }
+
+        // Leaving the Tasks view is asked of the *window*, not of the pane, and that is a
+        // correction rather than a flourish. It was a handler on the task pane first, and
+        // driven in the real app it did nothing at all for the two commonest ways of being
+        // in that view: arriving by the sidebar row leaves focus in the tree, and a click
+        // on the empty space below the last task leaves it on `<body>` — neither is inside
+        // the pane, so neither reached it. A keydown bubbles to the window from anywhere,
+        // which is the only position that answers for all of them. The editor is asked
+        // about before this, so a note open beside the list keeps its own Escape.
+        if (selectionRef.current.kind === "tasks") {
+          event.preventDefault();
+          exitTasks();
+          return;
+        }
+
         return;
       }
 
@@ -977,7 +1096,10 @@ export function Library(): React.ReactElement {
       window.removeEventListener("keydown", onKeyDown);
       stopForward();
     };
-  }, [app.isMac]);
+    // `focusPane` and `exitSearch` are both stable — refs, and a `useCallback` over
+    // `loadNotes`, whose own dependency list is empty — so naming them here does not put
+    // this listener on the rebuild-every-render path the comment above warns about.
+  }, [app.isMac, focusPane, exitSearch, exitTasks]);
 
   /**
    * Writes the note being edited.
@@ -2129,6 +2251,7 @@ export function Library(): React.ReactElement {
             scope={selection.scope}
             openOnly={selection.openOnly}
             folders={folders}
+            onExit={exitTasks}
             onScopeChange={(scope) => setSelection({ kind: "tasks", scope, openOnly: selection.openOnly })}
             onOpenOnlyChange={(openOnly) =>
               setSelection({ kind: "tasks", scope: selection.scope, openOnly })
@@ -2162,6 +2285,7 @@ export function Library(): React.ReactElement {
             searching={searchQuery.trim() !== ""}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
+            onExitSearch={exitSearch}
             sort={sort}
             onSort={onSort}
             onSelect={(path) => {

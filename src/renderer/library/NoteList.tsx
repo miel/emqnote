@@ -58,6 +58,12 @@ interface Props {
    */
   searchRef?: RefObject<HTMLInputElement | null>;
   onSearchChange: (query: string) => void;
+  /**
+   * Leaves the search: empties the box, puts the folder's own list back and hands focus to
+   * the note that was selected in it. Escape in the box and the × both call it; Escape on a
+   * row goes through the window's own listener, which knows where the press came from.
+   */
+  onExitSearch: () => void;
   sort: SortKey;
   onSort: (key: SortKey) => void;
   onSelect: (path: string) => void;
@@ -187,6 +193,7 @@ export function NoteList({
   searchQuery,
   searchRef,
   onSearchChange,
+  onExitSearch,
   sort,
   onSort,
   onSelect,
@@ -387,7 +394,34 @@ export function NoteList({
           value={searchQuery}
           placeholder={t("library.search")}
           onChange={(event) => onSearchChange(event.target.value)}
+          // `stopPropagation` for the 18 August 2026 reason: `preventDefault` does not end
+          // an event, and the window's Escape branch is behind this one. It would decline
+          // this press anyway — the box is not a `.note[role="option"]`, so `paneOf` reads
+          // `null` for it — but a handler that relies on another one's classifier agreeing
+          // with it is one refactor away from firing twice.
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            onExitSearch();
+          }}
         />
+        {/* Only while there is something to clear: a permanent × beside an empty box is a
+            control that does nothing most of the time. `tabIndex={-1}` keeps it out of the
+            walk from the box to the first note row — it is the mouse's way out, Escape is
+            the keyboard's. */}
+        {searchQuery !== "" && (
+          <button
+            type="button"
+            className="search-clear"
+            tabIndex={-1}
+            title={t("library.clearSearch")}
+            aria-label={t("library.clearSearch")}
+            onClick={onExitSearch}
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {!unlinked && (
