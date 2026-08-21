@@ -110,11 +110,19 @@ const SORTS: SortKey[] = ["modified", "created", "title"];
  * The house style `FolderTree.tsx`'s three glyphs already set: an inline SVG in
  * `currentColor`, not an emoji. 📌 comes from a different fallback font on each of the two
  * machines this runs on and would be the only colour thing in the list.
+ *
+ * Drawn upright — a tack seen head-on — rather than as the tilted pin the first attempt
+ * aimed at. Two reasons, and the second is the one that matters. The tilted drawing was
+ * wrong: its shaft stopped short of the crossbar and its needle started off the body, so it
+ * read as three unconnected strokes. And it is rendered at 12px (`.note-pin svg`), where a
+ * 45° body with arcs in it has no room to be anything but a smudge; an upright tack is
+ * symmetric about a whole pixel column and every line in it is horizontal or nearly so, so
+ * it survives the size it is actually used at.
  */
 const pinGlyph = (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
-      d="M9.6 1.9 14.1 6.4M11 4.3 8.2 7.1a3.6 3.6 0 0 0-.9 3.4l-.6.6-4.1-4.1.6-.6a3.6 3.6 0 0 0 3.4-.9L9.4 2.7M4.8 11.2 2 14"
+      d="M3.4 8h9.2M6.4 3.2 5.5 8M9.6 3.2 10.5 8M6.4 3.2h3.2M8 8v5.2"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.2"
