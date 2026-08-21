@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import type { Node as PMNode } from "prosemirror-model";

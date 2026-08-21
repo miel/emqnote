@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NodeSelection, Selection } from "prosemirror-state";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import { insertTable } from "../src/renderer/editor/table-commands.js";

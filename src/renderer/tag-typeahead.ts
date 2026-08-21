@@ -1,4 +1,4 @@
-import { cleanTagInput, foldTag } from "../markdown/tags.js";
+import { cleanTagInput, foldTag } from "@emqnote/core/markdown/tags";
 import type { Facet } from "../shared/vault-types.js";
 import { score } from "./library/fuzzy.js";
 

@@ -1,5 +1,5 @@
 import type { EditorView } from "prosemirror-view";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 
 /**
  * The one place a chosen note turns into a `[[…]]` node (B41) — the counterpart of

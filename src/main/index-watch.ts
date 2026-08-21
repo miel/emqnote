@@ -5,7 +5,7 @@ import { TRASH_FOLDER, type VaultFileEvent } from "../shared/vault-types.js";
 import { buildRecord } from "./index-scan.js";
 import { deleteNote, deleteNotesUnder, upsertNote, type IndexDb } from "./index-db.js";
 import { isHidden } from "./vault-io.js";
-import { isNoteFile } from "./note-files.js";
+import { isNoteFile } from "@emqnote/core/note-files";
 
 /**
  * Keeps the index in step with the vault after the initial full scan — `02-technisch-

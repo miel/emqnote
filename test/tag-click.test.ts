@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { schema } from "../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { handleTagClick } from "../src/renderer/editor/tag-click.js";
 import { tagHighlight } from "../src/renderer/editor/tag-decoration.js";
 import { docFromMarkdown, caretAfter } from "./helpers/editing.js";

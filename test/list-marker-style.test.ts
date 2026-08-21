@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import {
   EM_ITEM_CLASS,
   markedItems,

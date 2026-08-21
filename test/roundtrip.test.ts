@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseNote, serializeNote } from "../src/markdown/index.js";
+import { parseNote, serializeNote } from "@emqnote/core/markdown";
 
 const CORPUS = join(fileURLToPath(new URL(".", import.meta.url)), "corpus");
 

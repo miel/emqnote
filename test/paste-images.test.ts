@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DOMParser, type Node as PMNode } from "prosemirror-model";
 import { EditorView } from "prosemirror-view";
 import { closeHistory, undo } from "prosemirror-history";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import { externalImageView } from "../src/renderer/editor/attachment-view.js";
 import {

@@ -1,6 +1,6 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView } from "prosemirror-view";
-import { normaliseDimension } from "../../markdown/embed-field.js";
+import { normaliseDimension } from "@emqnote/core/markdown/embed-field";
 
 /**
  * Dragging a picture smaller by one of its corners (B74).

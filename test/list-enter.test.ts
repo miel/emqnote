@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, TextSelection } from "prosemirror-state";
-import { schema } from "../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { markdownOf, pressEnter, run, stateAt } from "./helpers/editing.js";
 
 /**

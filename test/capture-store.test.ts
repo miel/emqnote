@@ -17,8 +17,8 @@ import {
   renameSessionFile,
   writeSession,
 } from "../src/main/capture-store.js";
-import { parseNote } from "../src/markdown/index.js";
-import { timestampPrefix } from "../src/main/filename.js";
+import { parseNote } from "@emqnote/core/markdown";
+import { timestampPrefix } from "@emqnote/core/filename";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
 import { wasOwnWrite } from "../src/main/own-writes.js";

@@ -6,7 +6,8 @@ import {
   sanitiseFolderName,
   sanitiseTitle,
   timestampPrefix,
-} from "../src/main/filename.js";
+  uniquePath,
+} from "@emqnote/core/filename";
 
 const BELL = String.fromCharCode(7);
 const UNIT_SEPARATOR = String.fromCharCode(31);
@@ -116,6 +117,18 @@ describe("file name", () => {
 
   it("pads hours and minutes to two digits", () => {
     expect(timestampPrefix(new Date(2026, 0, 3, 9, 5))).toBe("2026-01-03 0905");
+  });
+});
+
+describe("shared collision names", () => {
+  it("uses the same numbered suffix without filesystem imports", () => {
+    const existing = new Set(["Inbox/note.markdown", "Inbox/note (2).markdown"]);
+    expect(
+      uniquePath("Inbox", "note.markdown", {
+        join: (directory, name) => `${directory}/${name}`,
+        exists: (path) => existing.has(path),
+      }),
+    ).toBe("Inbox/note (3).markdown");
   });
 });
 

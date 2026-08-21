@@ -4,7 +4,7 @@ import { keymap } from "prosemirror-keymap";
 import { baseKeymap } from "prosemirror-commands";
 import { EditorState, type Transaction } from "prosemirror-state";
 import type { Node as PMNode, ResolvedPos } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import type { CommandContext } from "./commands.js";
 import { outlookKeymap } from "./keymap.js";
 import { tagHighlight } from "./tag-decoration.js";

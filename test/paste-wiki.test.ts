@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Fragment, Slice } from "prosemirror-model";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import { transformPastedWikiSyntax } from "../src/renderer/editor/paste-wiki.js";
 
 /**

@@ -1,6 +1,6 @@
 import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { cellsInRect } from "./table-geometry.js";
 import { isCellSelection } from "./table-selection.js";
 import { findTable, type ColumnAlign } from "./table-commands.js";

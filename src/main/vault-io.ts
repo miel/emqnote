@@ -11,9 +11,10 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
+import { captureTags } from "@emqnote/core/capture";
+import { isoWithOffset, noteFileName, sanitiseFolderName } from "@emqnote/core/filename";
+import { isNoteFile, noteExtension, noteStem } from "@emqnote/core/note-files";
 import {
-  bodyTagsOf,
-  cleanTagInput,
   extractTags,
   manualTags,
   mergeTags,
@@ -25,7 +26,7 @@ import {
   taskItemsIn,
   taskItemText,
   type Frontmatter,
-} from "../markdown/index.js";
+} from "@emqnote/core/markdown";
 import {
   FOLDER_ERROR,
   TRASH_FOLDER,
@@ -38,14 +39,13 @@ import {
   type SaveNoteRequest,
 } from "../shared/vault-types.js";
 import { diffText, type DiffLine } from "./diff.js";
-import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
+import { uniquePath } from "./filename.js";
 import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import {
   removeFromTrash,
   type RemovalFailure,
   type RemovalOutcome,
 } from "./trash-delete.js";
-import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
 
 /**
  * Reading and writing the vault for the main window.
@@ -389,10 +389,7 @@ export function saveNote(vault: string, request: SaveNoteRequest): SaveResult {
   // it from `tags:` on the next save rather than leaving it stranded there. This is the
   // one place besides `capture-store.ts`'s `frontmatterFor` that decides it, and the two
   // must stay identical — see that function's own comment.
-  const tags = mergeTags(
-    request.tags.map(cleanTagInput).filter((tag) => tag !== ""),
-    bodyTagsOf(doc),
-  );
+  const tags = captureTags(request, doc);
   if (tags.length > 0) frontmatter.tags = tags;
   else delete frontmatter.tags;
 

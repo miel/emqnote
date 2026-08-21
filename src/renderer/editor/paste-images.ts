@@ -1,7 +1,7 @@
 import { Plugin, PluginKey, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { attachmentNameFromUrl } from "../../shared/attachment-url.js";
 
 /**

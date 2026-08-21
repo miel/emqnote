@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DOMParser, DOMSerializer } from "prosemirror-model";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 
 /**
  * The schema's own DOM round trip.

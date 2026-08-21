@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNote } from "../src/markdown/note.js";
+import { parseNote } from "@emqnote/core/markdown/note";
 import { findMatches } from "../src/renderer/editor/find-in-note.js";
 import type { Node as PMNode } from "prosemirror-model";
 

@@ -1,5 +1,5 @@
 import type { ConflictPair } from "../shared/vault-types.js";
-import { isNoteFile, noteExtension, noteStem } from "./note-files.js";
+import { isNoteFile, noteExtension, noteStem } from "@emqnote/core/note-files";
 
 export type { ConflictPair };
 

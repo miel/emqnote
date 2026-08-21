@@ -1,0 +1,35 @@
+{
+  "name": "@emqnote/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./capture": "./src/capture/index.ts",
+    "./filename": "./src/filename.ts",
+    "./note-files": "./src/note-files.ts",
+    "./time": "./src/time.ts",
+    "./markdown": "./src/markdown/index.ts",
+    "./markdown/*": "./src/markdown/*.ts",
+    "./editor": "./src/editor/index.ts"
+  },
+  "dependencies": {
+    "mdast-util-to-markdown": "^2.1.2",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5",
+    "yaml": "^2.7.1"
+  },
+  "peerDependencies": {
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.24.1",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "^1.42.2",
+    "react": "^19.2.8"
+  }
+}

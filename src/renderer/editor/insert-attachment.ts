@@ -1,6 +1,6 @@
 import type { EditorView } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { isEmbeddableAttachment } from "./attachment-view.js";
 
 /**

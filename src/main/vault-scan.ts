@@ -1,4 +1,4 @@
-import { foldTag } from "../markdown/index.js";
+import { foldTag } from "@emqnote/core/markdown";
 import type {
   Facet,
   Facets,

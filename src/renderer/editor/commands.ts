@@ -15,7 +15,7 @@ import {
   splitListItem,
   wrapInList,
 } from "prosemirror-schema-list";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 // Only the type travels back the other way (`CommandContext`), so this pair is not a
 // runtime cycle — `import type` is erased.
 import { openFind } from "./find-in-note.js";

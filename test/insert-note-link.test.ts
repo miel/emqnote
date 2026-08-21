@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
 import { TextSelection } from "prosemirror-state";
-import { serializeBody } from "../src/markdown/index.js";
+import { serializeBody } from "@emqnote/core/markdown";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import { NOTE_LINK_PREFIX } from "../src/renderer/editor/state.js";

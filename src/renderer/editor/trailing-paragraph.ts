@@ -1,6 +1,6 @@
 import { Plugin } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 
 /**
  * There is always somewhere to type below the last block (B42).

@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CaptureWriter, type WriteResult } from "../src/main/capture-store.js";
-import { parseNote } from "../src/markdown/index.js";
+import { parseNote } from "@emqnote/core/markdown";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
 import { paragraphs, payload } from "./helpers/doc.js";

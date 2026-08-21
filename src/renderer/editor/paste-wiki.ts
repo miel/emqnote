@@ -1,6 +1,6 @@
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
-import { matchWikiSyntax } from "../../markdown/normalize-phrasing.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { matchWikiSyntax } from "@emqnote/core/markdown/normalize-phrasing";
 
 /**
  * A pasted `![[foto.png]]` or `[[01 Projecten/Alpha.md|Alpha]]` becomes the node it names,

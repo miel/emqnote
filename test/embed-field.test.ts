@@ -5,7 +5,7 @@ import {
   splitSizeSuffix,
   withSizeSuffix,
   writeEmbedField,
-} from "../src/markdown/embed-field.js";
+} from "@emqnote/core/markdown/embed-field";
 
 /**
  * The one place B74's pipe field is spelled, on its own.

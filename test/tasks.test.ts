@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { schema } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown";
 import { closeIndex, openIndex, tasksIn, type IndexDb } from "../src/main/index-db.js";
 import { extractTasks, fullScan } from "../src/main/index-scan.js";
 import { toggleTask } from "../src/main/vault-io.js";

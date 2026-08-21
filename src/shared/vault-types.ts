@@ -176,7 +176,7 @@ export interface OpenedNote {
    * body already carries as a `#tag`.
    *
    * The subtraction is B65's provenance rule and is what makes a hoisted tag removable —
-   * `manualTags` in `src/markdown/note-tags.ts` has the argument. It used to be the raw
+   * `manualTags` in `@emqnote/core/markdown` has the argument. It used to be the raw
    * frontmatter list, back when the two stores never wrote to each other.
    */
   tags: string[];

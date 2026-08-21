@@ -1,4 +1,4 @@
-import { foldTag } from "../markdown/tags.js";
+import { foldTag } from "@emqnote/core/markdown/tags";
 import type { Facet } from "../shared/vault-types.js";
 import { score } from "./library/fuzzy.js";
 import { MAX_SUGGESTIONS } from "./tag-typeahead.js";

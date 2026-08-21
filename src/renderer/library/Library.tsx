@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
-import { bodyTagsOf } from "../../markdown/note-tags.js";
-import { schema } from "../../markdown/schema.js";
+import { bodyTagsOf } from "@emqnote/core/markdown/note-tags";
+import { schema } from "@emqnote/core/markdown/schema";
 import {
   canCreateFolderIn,
   canDeleteFolder as canDeleteFolderAt,

@@ -1,17 +1,15 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import type { Node as PMNode } from "prosemirror-model";
+import { buildFrontmatter, firstLineOf } from "@emqnote/core/capture";
+import { isoWithOffset, noteFileName } from "@emqnote/core/filename";
 import {
-  bodyTagsOf,
-  cleanTagInput,
-  mergeTags,
   schema,
   serializeNote,
   type Frontmatter,
-} from "../markdown/index.js";
+} from "@emqnote/core/markdown";
 import type { CapturePayload } from "../shared/ipc.js";
 import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
-import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
+import { uniquePath } from "./filename.js";
 import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import { saveNote } from "./vault-io.js";
 import { INBOX } from "./vault.js";
@@ -117,70 +115,6 @@ export function loadSession(note: OpenedNote): CaptureSession {
     lastContent: null,
     existingTitle: note.title,
   };
-}
-
-/** The first non-empty line of the body, used when no subject was given. */
-function firstLineOf(doc: PMNode): string {
-  let found = "";
-  doc.descendants((node) => {
-    if (found !== "") return false;
-    if (node.isTextblock) {
-      const text = node.textContent.trim();
-      if (text !== "") found = text;
-      return false;
-    }
-    return true;
-  });
-  return found;
-}
-
-/**
- * Everything about the frontmatter except `modified`, which `writeSession` stamps
- * separately — and only once it has already decided a real change happened. Deciding
- * that by comparing `modified` (computed from wall-clock "now") against `created` would
- * make two calls with genuinely identical content disagree the moment real time ticks
- * over a second between them, which is exactly the false "something changed" B10 exists
- * to rule out: a debounced write followed by a blur-triggered flush with nothing more
- * typed would then rewrite the file for no reason other than the clock having moved.
- */
-function buildFrontmatter(
-  payload: CapturePayload,
-  doc: PMNode,
-  createdFallback: Date,
-): Omit<Frontmatter, "modified"> | null {
-  const subject = payload.subject.trim();
-  const title = subject === "" ? firstLineOf(doc) : subject;
-  if (title === "") return null;
-
-  const frontmatter: Omit<Frontmatter, "modified"> = {
-    title,
-    type: payload.kind,
-    created: payload.created === "" ? isoWithOffset(createdFallback) : payload.created,
-    source: "manual",
-  };
-
-  // Not gated on the kind any more (B20): where and who apply to any note, and the
-  // frontmatter spec always allowed every optional field on either type. An empty field
-  // still writes nothing, so a note that has neither reads exactly as it did before.
-  const location = payload.location.trim();
-  if (location !== "") frontmatter.location = location;
-
-  const attendees = payload.attendees
-    .map((name) => name.trim())
-    .filter((name) => name !== "");
-  if (attendees.length > 0) frontmatter.attendees = attendees;
-
-  // What was typed in the field, plus the body's own `#tag`s hoisted in beside them
-  // (B65, revising B19's second half). `saveNote` decides this identically for a note
-  // loaded from the library — the branch in `writeSession` above delegates to it — and
-  // the two must stay that way, which is what `mergeTags` being one function is for.
-  const tags = mergeTags(
-    payload.tags.map(cleanTagInput).filter((tag) => tag !== ""),
-    bodyTagsOf(doc),
-  );
-  if (tags.length > 0) frontmatter.tags = tags;
-
-  return frontmatter;
 }
 
 function toPosix(path: string): string {

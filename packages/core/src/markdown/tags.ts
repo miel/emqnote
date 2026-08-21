@@ -1,7 +1,7 @@
 /**
  * What counts as a tag in the body of a note.
  *
- * This lives in `src/markdown/` rather than `src/shared/` on purpose: the grammar of a
+ * This lives in `@emqnote/core/markdown` on purpose: the grammar of a
  * `#tag` inside a `.md` file is a dialect question, the same kind of question as what
  * `==` means. The serializer needs it to decide whether to escape a `#` at the start of
  * a line, and the vault scanner needs it to find tags — and those two must agree, or the

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { uniquePath } from "../src/main/filename.js";
-import { isNoteFile, noteExtension, noteStem } from "../src/main/note-files.js";
+import { isNoteFile, noteExtension, noteStem } from "@emqnote/core/note-files";
 import { findConflictCopies } from "../src/main/conflicts.js";
 import { openNote, readNotesIn, renameNote } from "../src/main/vault-io.js";
 

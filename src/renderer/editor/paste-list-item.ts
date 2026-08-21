@@ -1,7 +1,7 @@
 import { Fragment, Slice, type Node as PMNode, type ResolvedPos } from "prosemirror-model";
 import { canSplit } from "prosemirror-transform";
 import type { EditorView } from "prosemirror-view";
-import { schema } from "../../markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 
 /**
  * Pasting a task item into a list of tasks whose neighbour's box differs (B34).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectWikiTargets, parseNote } from "../src/markdown/index.js";
+import { collectWikiTargets, parseNote } from "@emqnote/core/markdown";
 
 function targetsOf(markdown: string): string[] {
   return [...collectWikiTargets(parseNote(markdown).doc)].sort();

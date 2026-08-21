@@ -1,6 +1,6 @@
 import { Fragment, type Node as PMNode, type ResolvedPos } from "prosemirror-model";
 import type { EditorState } from "prosemirror-state";
-import { schema, type ColumnAlign } from "../../markdown/schema.js";
+import { schema, type ColumnAlign } from "@emqnote/core/markdown/schema";
 
 /**
  * Where the cells of a table are, and how to build a new one — the arithmetic B42's

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bodyTagsOf, manualTags, mergeTags } from "../src/markdown/note-tags.js";
-import { parseNote } from "../src/markdown/note.js";
+import { bodyTagsOf, manualTags, mergeTags } from "@emqnote/core/markdown/note-tags";
+import { parseNote } from "@emqnote/core/markdown/note";
 
 /** The body of a note, as a document, through the parser the app itself uses. */
 function docOf(body: string) {

@@ -1,6 +1,6 @@
 import { type Node as PMNode } from "prosemirror-model";
 import { TextSelection, type Command } from "prosemirror-state";
-import { schema, type ColumnAlign } from "../../markdown/schema.js";
+import { schema, type ColumnAlign } from "@emqnote/core/markdown/schema";
 import {
   alignOf,
   cellPosAt,

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { cleanTagInput } from "../markdown/tags.js";
+import { cleanTagInput } from "@emqnote/core/markdown/tags";
 import type { NoteKind } from "../shared/ipc.js";
 import type { Facet } from "../shared/vault-types.js";
-import { isoWithOffset } from "../shared/time.js";
+import { isoWithOffset } from "@emqnote/core/time";
 import { formatDateTime, type Locale } from "../shared/i18n.js";
 import { useActiveRowVisible, useHoverGuard } from "./library/palette-scroll.js";
 import { applySuggestion, rankTags, tokenAt } from "./tag-typeahead.js";

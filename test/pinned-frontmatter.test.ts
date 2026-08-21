@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, serializeFrontmatter } from "../src/markdown/frontmatter.js";
-import { parseNote, serializeNote } from "../src/markdown/index.js";
+import { parseFrontmatter, serializeFrontmatter } from "@emqnote/core/markdown/frontmatter";
+import { parseNote, serializeNote } from "@emqnote/core/markdown";
 
 /**
  * B75's `pinned:` — the one frontmatter field that is a type rather than a shape.

@@ -1,7 +1,7 @@
 import { Fragment, Slice, type Node as PMNode, type ResolvedPos } from "prosemirror-model";
 import { Selection, SelectionRange, type EditorState } from "prosemirror-state";
 import type { Mappable } from "prosemirror-transform";
-import type { ColumnAlign } from "../../markdown/schema.js";
+import type { ColumnAlign } from "@emqnote/core/markdown/schema";
 import {
   alignOf,
   cellPosAt,

@@ -7,7 +7,7 @@
  * either the corpus or the serializer is wrong, and telling those apart is a decision.
  */
 import { readFileSync } from "node:fs";
-import { parseNote, serializeNote } from "../src/markdown/index.js";
+import { parseNote, serializeNote } from "@emqnote/core/markdown";
 
 const path = process.argv[2];
 if (path === undefined) {

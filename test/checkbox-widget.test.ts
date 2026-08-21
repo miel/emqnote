@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
 import { EditorState } from "prosemirror-state";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import { taskCheckboxes } from "../src/renderer/editor/checkbox.js";
 import { docFromMarkdown } from "./helpers/editing.js";
 

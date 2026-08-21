@@ -5,7 +5,7 @@ import {
   findTags,
   foldTag,
   startsWithTag,
-} from "../src/markdown/tags.js";
+} from "@emqnote/core/markdown/tags";
 
 /**
  * The tag grammar on its own, away from the serializer and the vault.

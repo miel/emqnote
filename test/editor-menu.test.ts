@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, type Command } from "prosemirror-state";
-import { schema } from "../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import { buildEditorMenu, type EditorMenuActions } from "../src/renderer/editor/editor-menu.js";
 import { formatFirstKey } from "../src/shared/shortcuts.js";
 import { docFromMarkdown, stateAt } from "./helpers/editing.js";

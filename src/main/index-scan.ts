@@ -8,7 +8,7 @@ import {
   plainText,
   taskItemsIn,
   taskItemText,
-} from "../markdown/index.js";
+} from "@emqnote/core/markdown";
 import { TRASH_FOLDER, type ScanProgress } from "../shared/vault-types.js";
 import {
   allNotes,
@@ -21,7 +21,7 @@ import {
 } from "./index-db.js";
 import { isHidden, summarise } from "./vault-io.js";
 import { checkFilesOnDemand } from "./vault.js";
-import { isNoteFile } from "./note-files.js";
+import { isNoteFile } from "@emqnote/core/note-files";
 
 /**
  * Building the SQLite index from what is actually on disk — `02-technisch-ontwerp.md`

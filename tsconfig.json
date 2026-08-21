@@ -19,6 +19,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "packages/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
     "vitest.config.ts",

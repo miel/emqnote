@@ -1,8 +1,8 @@
 import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Command } from "prosemirror-state";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
-import { schema } from "../../src/markdown/schema.js";
-import { parseNote, serializeBody } from "../../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { parseNote, serializeBody } from "@emqnote/core/markdown";
 import { backspace, enter } from "../../src/renderer/editor/commands.js";
 
 /**

@@ -1,8 +1,8 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { copyFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
-import { sanitiseTitle } from "./filename.js";
-import { isNoteFile } from "./note-files.js";
+import { sanitiseTitle } from "@emqnote/core/filename";
+import { isNoteFile } from "@emqnote/core/note-files";
 import { ATTACHMENTS } from "./vault.js";
 
 /**

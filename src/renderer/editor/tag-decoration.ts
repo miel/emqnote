@@ -1,8 +1,8 @@
 import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../../markdown/schema.js";
-import { findTags } from "../../markdown/tags.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { findTags } from "@emqnote/core/markdown/tags";
 
 /**
  * Colours `#tag` in the body while you type.

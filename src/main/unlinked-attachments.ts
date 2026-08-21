@@ -1,11 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { collectWikiTargets, parseNote } from "../markdown/index.js";
+import { collectWikiTargets, parseNote } from "@emqnote/core/markdown";
 import { TRASH_FOLDER } from "../shared/vault-types.js";
 import { ATTACHMENTS } from "./vault.js";
 import { isHidden } from "./vault-io.js";
-import { isNoteFile } from "./note-files.js";
+import { isNoteFile } from "@emqnote/core/note-files";
 
 /**
  * Finding attachments nothing points at any more — `02-technisch-ontwerp.md` §6.5's

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNote, plainText } from "../src/markdown/index.js";
+import { parseNote, plainText } from "@emqnote/core/markdown";
 
 function textOf(markdown: string): string {
   return plainText(parseNote(markdown).doc);

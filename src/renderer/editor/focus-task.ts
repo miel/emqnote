@@ -1,6 +1,6 @@
 import type { EditorView } from "prosemirror-view";
 import { TextSelection } from "prosemirror-state";
-import { taskItemsIn } from "../../markdown/schema.js";
+import { taskItemsIn } from "@emqnote/core/markdown/schema";
 import { taskHighlightKey } from "./task-highlight.js";
 
 /**

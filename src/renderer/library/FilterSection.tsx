@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { foldTag } from "../../markdown/tags.js";
+import { foldTag } from "@emqnote/core/markdown/tags";
 import { selectionKey, type Facet, type Selection } from "../../shared/vault-types.js";
 import { score } from "./fuzzy.js";
 import { sidebarRowProps } from "./roving.js";

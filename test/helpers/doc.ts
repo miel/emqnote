@@ -1,5 +1,5 @@
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../../src/markdown/schema.js";
+import { schema } from "@emqnote/core/markdown/schema";
 import type { CapturePayload, NoteKind } from "../../src/shared/ipc.js";
 
 /** Builds a document of plain paragraphs, the common case in these tests. */

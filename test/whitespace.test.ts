@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../src/markdown/schema.js";
-import { serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { serializeBody } from "@emqnote/core/markdown";
 import {
   readLaunchOptions,
   shouldOpenLibraryAtLaunch,
 } from "../src/main/launch-options.js";
-import { isoWithOffset } from "../src/shared/time.js";
+import { isoWithOffset } from "@emqnote/core/time";
 
 const NBSP = String.fromCharCode(160);
 

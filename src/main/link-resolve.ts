@@ -1,4 +1,4 @@
-import { isNoteFile, noteStem } from "./note-files.js";
+import { isNoteFile, noteStem } from "@emqnote/core/note-files";
 
 /**
  * What a `[[…]]` target points at — B35.

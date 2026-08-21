@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorState } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
-import { bodyTagsOf } from "../markdown/note-tags.js";
-import { schema } from "../markdown/schema.js";
+import { bodyTagsOf } from "@emqnote/core/markdown/note-tags";
+import { schema } from "@emqnote/core/markdown/schema";
 import { buildEditorMenu, insertMenuItems } from "./editor/editor-menu.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
@@ -12,7 +12,7 @@ import { TitleBar } from "./TitleBar.js";
 import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import type { VaultFileEvent } from "../shared/vault-types.js";
-import { isoWithOffset } from "../shared/time.js";
+import { isoWithOffset } from "@emqnote/core/time";
 import { useBootstrap } from "./useBootstrap.js";
 import { ContextMenu } from "./library/ContextMenu.js";
 // Both from `library/` but used by both windows, the arrangement `ContextMenu` above

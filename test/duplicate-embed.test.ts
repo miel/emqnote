@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EditorState } from "prosemirror-state";
-import { serializeBody } from "../src/markdown/index.js";
+import { serializeBody } from "@emqnote/core/markdown";
 import { createEditorState } from "../src/renderer/editor/state.js";
 import type { CommandContext } from "../src/renderer/editor/commands.js";
 import {

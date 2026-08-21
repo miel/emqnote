@@ -14,14 +14,14 @@ import type { TaskCount } from "../shared/vault-types.js";
  * database — the caller decides the path, this module never assumes one.
  */
 
-/** One task item as `buildRecord` extracts it — see `taskItemsIn` in `src/markdown/schema.ts`. */
+/** One task item as `buildRecord` extracts it — see `taskItemsIn` in `@emqnote/core/markdown`. */
 export interface TaskExtract {
   ordinal: number;
   checked: boolean;
   text: string;
 }
 
-/** One `[[…]]`/`![[…]]` reference as `buildRecord` extracts it — see `collectWikiLinkTargets` in `src/markdown/wiki-targets.ts`. */
+/** One `[[…]]`/`![[…]]` reference as `buildRecord` extracts it — see `collectWikiLinkTargets` in `@emqnote/core/markdown`. */
 export interface LinkExtract {
   target: string;
   alias: string | null;
@@ -47,7 +47,7 @@ export interface NoteRecord {
   hash: string;
   /** B75's `pinned: true`, so the limit of three can be counted across the whole vault. */
   pinned: boolean;
-  /** Plain text — see `src/markdown/plain-text.ts` — for FTS5 to index; not returned by queries. */
+  /** Plain text from `@emqnote/core/markdown` for FTS5 to index; not returned by queries. */
   body: string;
   /** Every task item in the note, in document order — fills `note_tasks`, not the `notes` table itself. */
   tasks: TaskExtract[];

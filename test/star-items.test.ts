@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, TextSelection } from "prosemirror-state";
-import { schema } from "../src/markdown/schema.js";
-import { parseNote, serializeBody } from "../src/markdown/index.js";
+import { schema } from "@emqnote/core/markdown/schema";
+import { parseNote, serializeBody } from "@emqnote/core/markdown";
 import { toggleStar, toggleTask, toggleOrderedList, enter } from "../src/renderer/editor/commands.js";
 import { docFromMarkdown, markdownOf, stateAt } from "./helpers/editing.js";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseNote, serializeBody, serializeNote } from "../src/markdown/index.js";
-import { schema } from "../src/markdown/schema.js";
+import { parseNote, serializeBody, serializeNote } from "@emqnote/core/markdown";
+import { schema } from "@emqnote/core/markdown/schema";
 
 /**
  * Known limitations, recorded as tests.
