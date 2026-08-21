@@ -258,6 +258,21 @@ pass — 1216 tests, the full suite.
       ```
       (`tags-and-people` has no local branch left to delete, only the remote.)
 
+- [ ] **Move the workflow actions off Node 20.** Both of `v0.10.1`'s runs went
+      green on 21 August 2026 and both warned: `actions/checkout@v4` and
+      `actions/setup-node@v4` "target Node.js 20 but are being forced to run on
+      Node.js 24" (GitHub's deprecation notice of 19 September 2025). Eight pins
+      to bump to `@v5` — five `checkout` (`build.yml` 14, 47; `release.yml` 29,
+      60, 84) and three `setup-node` (`build.yml` 15, 48; `release.yml` 61).
+      **This is not `node-version: 22`**, which is the Node the build itself
+      runs on and is fine; the deprecated runtime is the one the action's own
+      JavaScript executes under, declared inside the action and changed only by
+      taking a newer major. Worth doing while it is still a warning rather than
+      an error, because the first place it would bite is a tag push — the one
+      run this project cannot repeat cheaply, and the one that has already gone
+      red three times (`v0.3.3`, `v0.8.9`, `v0.10.0`) on a commit whose `build`
+      run had passed.
+
 ## Settled
 
 **Four packages, 7 August 2026, released as `v0.5.0`.** Built as four work
