@@ -1153,6 +1153,42 @@ that row is for.
 | 33r | Open the keyboard shortcuts sheet in the note window | Discard has a row. On a Mac it reads ⇧⌘⌫, on Windows Ctrl+Shift+Backspace |  |
 | 33s | Click **Tasks** in the note list's header, then click Tasks in the sidebar | The same view, scoped to the same folder, both times |  |
 
+## 34. The header's three completions, and a field that had no room left (21 August 2026)
+
+Four items from daily use, all in the header block that both windows share. One carries a
+decision: **B81** — the Who field completes from the people the vault already names,
+revising the sentence in B66 that said it deliberately would not.
+
+**None of this has been driven live.** The capture window is still the one route with no
+test harness, and every one of these four is a thing you find with your hands rather than
+with an assertion: how many Tabs it takes to cross a header, whether a list offers a tag
+back after you delete it, whether a field is wide enough to type in. There are DOM tests
+under `test/` for all four — they dispatch real events and read real properties — but
+**jsdom implements no sequential focus navigation at all**, so 34a below is the one row in
+this file that no automated test could ever have stood in for.
+
+The two remaining items from that day's list — an "Exit tasks" button and Escape out of a
+search — are **not in this release**; they are the library window's half and are still open.
+
+| # | Do this | Expect | ✓ |
+|---|---|---|---|
+| 34a | Click into Tags, then press Tab **once** | The caret is in Where. Not in the suggestion list, and not nowhere |  |
+| 34b | From Where, press Tab once more | The caret is in Who, which now has a list of its own |  |
+| 34c | With a suggestion **highlighted** by the arrow keys, press Tab | It is accepted, as it always was. Tab only moves on when nothing is chosen |  |
+| 34d | In Tags, type two tags the vault knows, then delete the first one | It is offered again, immediately, without leaving the field. This is the bug |  |
+| 34e | Type a tag fully, so it matches one in the list exactly | It is still shown while you are typing it — it only disappears once you separate it |  |
+| 34f | Open a note whose **body** carries five or more `#tags` | Three chips beside the field, then `+2`. Hover it: the rest are named in the tooltip |  |
+| 34g | Look at the Tags field on that note | It is still wide enough to type in — roughly ten characters — rather than squeezed to nothing |  |
+| 34h | Click into Who on a fresh note | A list of the people your notes name, busiest first. Asked now, not at startup — the hotkey must stay clear of it |  |
+| 34i | Type part of a surname | It narrows. `jan vr` finds "Jan de Vries" — the terms match in order, across the space |  |
+| 34j | Pick one with the arrow keys and Enter | The full name lands, followed by `, `, with the caret after it |  |
+| 34k | Now type a second name and accept it | The first is untouched. Only the name the caret is in is replaced |  |
+| 34l | Accept a name in the **middle** of a list of three | No doubled comma, no empty name, and the caret sits after the separator that was already there |  |
+| 34m | Type a name with a space in it by hand, then a comma, then start another | The space never separates. "Jan de Vries" stays one name |  |
+| 34n | Press Escape with the Who list open | The list closes and **nothing else happens** — the header is not left, the window is not dismissed |  |
+| 34o | Open a note in the library reader and repeat 34h | The same list, in the other window. One component serves both |  |
+| 34p | Put the vault somewhere with no index yet, or break it, then focus Who | An ordinary text field. No dialog, no error — a completion nobody asked for is not worth one |  |
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

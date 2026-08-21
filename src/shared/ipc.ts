@@ -315,6 +315,15 @@ export const IPC = {
    */
   locationSuggestions: "app:location-suggestions",
   /**
+   * The vault's own list of people, for the header's Who field to complete from (B81).
+   *
+   * The third of these and the second to be a half of `facets()`: `people` is tallied off
+   * every note's `attendees:` already, for the library's People filter, so this asks the
+   * same question that answer does rather than opening a second one. Top level, first
+   * focus, never at startup — `tagSuggestions`' rules in every respect.
+   */
+  peopleSuggestions: "app:people-suggestions",
+  /**
    * Mod+click on a weblink in the editor (B33). `http:`/`https:` only, checked again in
    * main — the renderer reports where the click landed, not what may be opened.
    */
@@ -740,6 +749,11 @@ export interface CaptureApi {
    * (B73). Empty on no vault or no index, exactly as above and shown the same way.
    */
   locationSuggestions: () => Promise<Facet[]>;
+  /**
+   * Every person the vault's notes name, most-used first, for the Who field's completion
+   * (B81). Empty on no vault or no index, exactly as the two above and shown the same way.
+   */
+  peopleSuggestions: () => Promise<Facet[]>;
   /**
    * Mod+click on a weblink (B33), mirroring `openWikiLink`'s shape. A refusal (a
    * scheme that is not `http:`/`https:`) logs in main and resolves the same as success —

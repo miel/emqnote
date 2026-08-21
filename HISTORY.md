@@ -880,3 +880,48 @@ from `00 Inbox` into `_trash` and hiding the window.
 names — the registry test covers the binding, not the guard), and the shelf's scroll behaviour
 with `keepPinnedInView` on, which needs a list longer than the pane. Both are
 `TEST-PROTOCOL.md` §33 items.
+
+**Four fixes to the shared header block landed on 21 August 2026**, on top of `v0.10.2`, all
+of them in `HeaderBlock.tsx` and its two — now three — completion modules. One carries a
+decision: **B81**, the Who field completes from `facets().people` over a new
+`IPC.peopleSuggestions`, which revises the sentence B66 wrote saying people deliberately would
+not get completion. The argument there was that a name is not drawn from a closed set the way a
+tag is; the answer is B73's, which had already accepted the same argument the other way round
+for Where — the set is as closed as the vault's own history of it, and it is the same handful
+of colleagues typed again and again with a slightly different spelling each time.
+`people-typeahead.ts` is `tag-typeahead.ts`'s token maths with whitespace taken out of the
+separator set, because "Jan de Vries" is one name and `,`/`;` is exactly what `parseAttendees`
+splits on.
+
+The three fixes beside it were each a small thing with a mechanism worth writing down. **Tab
+from Tags landed in the suggestion list rather than on Where**, because the rows were plain
+buttons with no `tabIndex` sitting between the input and the next field, and the list is open
+from the moment the field has focus — so the first Tab entered the list, the input's blur
+closed it and unmounted the button holding focus, and the press after that started again from
+the top of the document. One press in, one press wasted: the reported "extra Tab". Where → Who
+had it identically. **A tag deleted from the Tags field stopped being offered**, because
+`applied` was read off `values.tags` — the committed array, which `commitTags` only refreshes
+on blur or Enter — so for as long as the field had focus it disagreed with the text on screen
+and filtered a tag out of the vault's own list on the strength of a note that no longer carried
+it. `test/header-tags.test.ts` had pinned that behaviour as if it were a rule and had to be
+rewritten, which is the thing to remember from this one: a test encodes a bug exactly as
+faithfully as it encodes a decision. **And the Tags field could be squeezed to zero width** by
+the body-tag chips beside it (B65) — the cell is a flex row, `.header-cell input` is
+`flex: 1; min-width: 0`, and a chip is `0 0 auto`, so the chips took the line and the field was
+left with nothing. It needed both halves: a `flex: 1 1 10ch; min-width: 10ch` floor on the field
+and a cap of three chips with a `+N` carrying the rest in its tooltip. The cap is a count and
+not a measured fit, deliberately — nothing under `test/` puts the stylesheet through a layout
+engine, so a measured version would have been the one piece of this header no test could reach.
+
+**None of the four was driven live**, and that is not an oversight to be tidied away later: the
+capture window remains the one route with no renderer harness, and all four are things you find
+with your hands — how many Tabs cross a header, whether a list offers a tag back, whether a
+field is wide enough to type in. `jsdom` implements no sequential focus navigation at all, so
+the Tab fix in particular is asserted as a property of the rows (`tabIndex === -1`) rather than
+by pressing anything; a test that dispatched a Tab keydown there would have passed whatever the
+markup said. `TEST-PROTOCOL.md` §34 is the whole batch, written for a human.
+
+**Two items from the same day's list are not in this release**: an "Exit tasks" button with
+Escape beside it, and Escape out of a search returning focus to the note list. Both are the
+library window's half — `Library.tsx`'s `focusPane` has to come out of the pane-cycle effect
+before either can be wired — and both are still open in `TODO.md`.

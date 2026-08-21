@@ -1111,8 +1111,56 @@ The matching is a pure module (`src/renderer/tag-typeahead.ts`) and works on the
 caret is in, never the whole field, which holds a list. What the note already carries — the
 field's tags *and* the body's — is not offered: the body half looks like an omission and is
 not, since B65 hoists those anyway, so completing to one would write nothing. Escape closes the
-list with `stopPropagation()`, the 18 Aug 2026 rule. People deliberately get no completion: a
-name is not drawn from a closed set the way a tag is.
+list with `stopPropagation()`, the 18 Aug 2026 rule.
+
+**The field's half of that is read off the live text, and reading it off `values.tags` was a
+bug that survived two months.** `commitTags` runs on blur or Enter and not before, so the
+committed array disagrees with what is on screen for as long as the field has focus — and a
+tag deleted from the field went on being filtered out of the vault's own list until the field
+was left and re-entered. Delete `#klantx`, type `#kl`, and the tag twenty other notes carry is
+not offered. `applied` is `parseTags(tagValue)` now, which is why `parseTags` sits at module
+scope beside `parseAttendees` rather than inside the component. `rankTags` already excludes the
+token being typed from the check, so a half-typed tag does not vanish from its own list. The
+Where field never had this, having no buffer to disagree with; the Who field was built this way
+from the start. `test/header-tags.test.ts` pinned the *old* behaviour and had to be rewritten —
+a test can encode a bug as faithfully as it encodes a rule.
+
+**A completion row is not a Tab stop** (`tabIndex={-1}` on all three lists' buttons). The panel
+sits between its own input and the next field in DOM order and is open from the moment the
+field is focused, so a tabbable row meant Tab moved into the list instead of on to Where; the
+input's blur then closed the list and unmounted the button holding focus, dropping it to
+`<body>`, and the press after that started again from the top of the document. That is the
+whole of the reported "tabbing from Tags to Where needs an extra press", and it applied to
+Where → Who identically. Every other row-list in this codebase already does it —
+`ContextMenu.tsx`, `TaskList.tsx`, `FolderTree.tsx` — `HeaderBlock` was the one that did not.
+It is asserted as a property of the rows rather than by pressing Tab: **jsdom implements no
+sequential focus navigation at all**, so a test that dispatched a Tab keydown would have passed
+whatever the markup said.
+
+**The Who field completes too** (B81), from `facets().people` over `IPC.peopleSuggestions` —
+the `people` half of the same answer the library's People filter reads, exactly as
+`tagSuggestions` takes the `tags` half. B66's sentence saying it deliberately would not has
+been revised, not deleted: the argument was that a name is not drawn from a closed set the way
+a tag is, and the answer is B73's — the set is as closed as the vault's own history of it, and
+the same handful of colleagues get typed again and again with a slightly different spelling
+each time. `people-typeahead.ts` is `tag-typeahead.ts`'s token maths with **whitespace removed
+from the separator set**: "Jan de Vries" is one name, and `,`/`;` is exactly what
+`parseAttendees` splits on, because completion must not find something different from commit.
+The leading space after a comma is *taken from what is there* rather than always inserted, so a
+name completed at the start of the field does not begin with one.
+
+**The Tags field has a floor of ten characters, and it needs two rules to hold it.**
+`.header-cell input` is `flex: 1; min-width: 0` — a zero basis with the browser's own input
+minimum switched off — while every `.tag-chip` beside it is `0 0 auto` at content width, so the
+chips took the line and the field was left with nothing: a note with enough body tags had a
+Tags box you could not see and could not type in. `.header-cell.header-tags .tags` gives it
+`flex: 1 1 10ch; min-width: 10ch` (a *zero* basis never triggers a wrap by itself, which is why
+the basis moves too), and `MAX_TAG_CHIPS` bounds the other side of the row, collapsing
+everything past the third into one `+N` chip whose tooltip names what it stands for. Both are
+needed — the cap alone still loses to three long tags, the floor alone to twelve short ones.
+The cap is a **count and not a measured fit** on purpose: nothing under `test/` puts the
+stylesheet through a layout engine, so a measured version would be the one piece of this header
+no test could reach.
 
 **The Where field does, and it completes on the whole value** (B73). That same argument
 read the other way: there are a handful of places work happens, and they are typed again

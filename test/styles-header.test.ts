@@ -46,6 +46,41 @@ describe("styles.css: the date does not overflow its field", () => {
   });
 });
 
+/**
+ * The Tags field cannot be squeezed to nothing by the chips beside it.
+ *
+ * Same reasoning as above, one field over: `.header-cell input` is `flex: 1; min-width: 0`
+ * — a zero basis with the browser's own input minimum switched off — and every `.tag-chip`
+ * is `0 0 auto` at content width, so a note carrying enough body tags left a Tags box with
+ * no width at all. `MAX_TAG_CHIPS` in `HeaderBlock.tsx` bounds the number of chips and is
+ * covered by `header-tags.test.ts`; this is the other half, and it is the half no DOM test
+ * can see, jsdom having no layout.
+ */
+describe("styles.css: the Tags field keeps a minimum width", () => {
+  const tags = rule(css, ".header-cell.header-tags .tags");
+
+  it("gives it a floor of ten characters", () => {
+    expect(tags).toMatch(/min-width:\s*10ch;/);
+  });
+
+  it("gives it a real basis, not the zero one it inherits", () => {
+    // A flex item with a zero basis never triggers a wrap by itself, so the field would
+    // go on sharing the line with the chips at whatever was left of it.
+    expect(tags).toMatch(/flex:\s*1 1 10ch;/);
+  });
+});
+
+describe("styles.css: a completion panel has something to position against", () => {
+  // The Who field's list is absolutely positioned inside its cell (B81) exactly as the
+  // Where field's is (B73). Without `position: relative` on the cell it would climb to
+  // the nearest positioned ancestor and land somewhere else entirely.
+  it("makes both cells the containing block", () => {
+    expect(rule(css, ".header-cell.header-where,\n.header-cell.header-who")).toMatch(
+      /position:\s*relative;/,
+    );
+  });
+});
+
 describe("library.css: the reader path is the same recipe", () => {
   // Named here because `.created` was written from it: if this one ever loses a
   // declaration, the comment beside `.created` is pointing at something that no longer

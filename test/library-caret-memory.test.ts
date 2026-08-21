@@ -198,6 +198,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
     locationSuggestions: async () => [],
+    peopleSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

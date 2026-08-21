@@ -1630,6 +1630,14 @@ function registerLibraryIpc(): void {
     return vault === null || indexDb === null ? [] : (await facets(vault, indexDb)).tags;
   });
 
+  // And the `people` half of it, for the Who field (B81). Same answer, same reasons: no
+  // `excludePath`, because a note being typed right now has nothing to contribute to its
+  // own completion.
+  ipcMain.handle(IPC.peopleSuggestions, async () => {
+    const vault = vaultPath();
+    return vault === null || indexDb === null ? [] : (await facets(vault, indexDb)).people;
+  });
+
   ipcMain.handle(IPC.libraryFacets, async () => {
     const vault = vaultPath();
     return vault === null || indexDb === null

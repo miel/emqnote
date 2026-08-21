@@ -169,6 +169,7 @@ function buildFake(initial: OpenedNote): Fake {
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
     locationSuggestions: async () => [],
+    peopleSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

@@ -28,6 +28,7 @@ const DUTCH: Record<string, string> = {
   // De chips naast het veld: tags die in de tekst zelf staan. Het veld schrijft ze niet,
   // dus de tooltip zegt waar ze wél weggehaald worden (B65).
   "capture.tagsInNote": "Staat in de notitie zelf — daar weghalen",
+  "capture.tagsMore": "Nog {count} in de notitie: {tags}",
   "capture.placeholder": "Typ maar.",
   "capture.dismiss": "sluit",
   // De knop die een net begonnen notitie weggooit (B68). "Weggooien" en niet
@@ -280,6 +281,7 @@ const DUTCH: Record<string, string> = {
   "library.resizeNotes": "Breedte van de notitielijst aanpassen",
   "library.search":
     "Zoeken… type:meeting tag:klantx attendee:\"Jan de Vries\" after:2026-01-01",
+  "library.clearSearch": "Zoekopdracht wissen",
   "library.moveWhere": "Naar welke map?",
   "library.noFolderMatch": "Geen map gevonden",
 
@@ -385,6 +387,7 @@ const DUTCH: Record<string, string> = {
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
+  "tasks.exit": "Taken sluiten",
   "tasks.none": "Geen taken gevonden",
   "tasks.one": "taak",
   "tasks.many": "taken",
@@ -424,6 +427,7 @@ const ENGLISH: Record<string, string> = {
   // The chips beside the field: tags written in the note itself. The field does not own
   // them, so the tooltip says where they do come out (B65).
   "capture.tagsInNote": "Written in the note itself — remove it there",
+  "capture.tagsMore": "{count} more in this note: {tags}",
   "capture.placeholder": "Just type.",
   "capture.dismiss": "closes",
   "capture.discard": "Discard",
@@ -661,6 +665,7 @@ const ENGLISH: Record<string, string> = {
   "library.resizeNotes": "Resize the note list",
   "library.search":
     'Search… type:meeting tag:klantx attendee:"Jan de Vries" after:2026-01-01',
+  "library.clearSearch": "Clear search",
   "library.moveWhere": "Move to which folder?",
   "library.noFolderMatch": "No folder matches",
 
@@ -761,6 +766,7 @@ const ENGLISH: Record<string, string> = {
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",
+  "tasks.exit": "Exit tasks",
   "tasks.none": "No tasks found",
   "tasks.one": "task",
   "tasks.many": "tasks",

@@ -127,6 +127,25 @@ describe("the body tags beside the field", () => {
     await mount({ values: values({ tags: ["offerte"] }), bodyTags: ["klantx"] });
     expect(tagField().value).toBe("#offerte");
   });
+
+  it("collapses everything past the third into one chip, names in its tooltip", async () => {
+    // The cell is a flex row and the field is the only thing in it that shrinks, so an
+    // unbounded chip row left the Tags input at zero width — a box you could not see and
+    // could not type in. The count is capped here and the floor is `.header-tags .tags`'
+    // `min-width` in the stylesheet; neither alone is enough.
+    await mount({
+      bodyTags: ["klantx", "q3", "klachten", "offerte", "intern"],
+      // The harness's `t` hands the key straight back, which would leave the placeholders
+      // untested — this is the real English string.
+      t: (key: string) =>
+        key === "capture.tagsMore" ? "{count} more in this note: {tags}" : key,
+    });
+
+    const chips = [...container.querySelectorAll(".tag-chip")];
+    expect(chips.map((c) => c.textContent)).toEqual(["#klantx", "#q3", "#klachten", "+2"]);
+    // Dropped names would be worse than the crowding this fixes.
+    expect(chips.at(-1)!.getAttribute("title")).toBe("2 more in this note: #offerte #intern");
+  });
 });
 
 describe("the raw typing buffer", () => {
@@ -257,12 +276,44 @@ describe("completing a tag", () => {
     expect(seen).not.toHaveBeenCalled();
   });
 
-  it("does not offer a tag the note already carries", async () => {
+  it("leaves the rows out of the Tab order, so Tab reaches Where", async () => {
+    // The list sits between its own input and the next field in DOM order and is open
+    // from the moment the field is focused, so tabbable rows meant one Tab moved into the
+    // first row, blur closed the list and unmounted the button holding focus, and the
+    // press after that started from the top of the document — the reported "extra Tab".
+    //
+    // Asserted as a property of the rows rather than by pressing Tab: jsdom implements no
+    // sequential focus navigation at all, so a Tab keydown moves nothing there and a test
+    // that dispatched one would pass whatever this markup said.
+    await mount();
+    await focusField();
+
+    expect(rows()).not.toHaveLength(0);
+    expect(rows().every((row) => row.tabIndex === -1)).toBe(true);
+  });
+
+  it("does not offer a tag the field already holds", async () => {
+    await mount({ values: values({ tags: [] }), bodyTags: [] });
+    await focusField();
+    await act(async () => setInputValue(tagField(), "#klantx #kl"));
+
+    // `#klantx` is in the field, so completing to it would write nothing. `#kl` — the
+    // token the caret is in — is excluded from that check, or a half-typed tag would
+    // disappear from its own list.
+    expect(rows().map((r) => r.textContent)).toEqual(["#klachten2"]);
+  });
+
+  it("offers a tag again once it is deleted from the field", async () => {
+    // The reported bug, and the reason `applied` is read off the live text rather than
+    // off `values.tags`. That array is the *committed* one — `commitTags` runs on blur or
+    // Enter and not before — so a tag deleted from the field went on being filtered out
+    // of the vault's own list until the field was left and re-entered. Twenty other notes
+    // still carry it; the field is not where that is decided.
     await mount({ values: values({ tags: ["klantx"] }), bodyTags: [] });
     await focusField();
     await act(async () => setInputValue(tagField(), "#offerte #kl"));
 
-    expect(rows().map((r) => r.textContent)).toEqual(["#klachten2"]);
+    expect(rows().map((r) => r.textContent)).toEqual(["#klantx24", "#klachten2"]);
   });
 
   it("does not offer a tag the note body already carries", async () => {

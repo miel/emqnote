@@ -2918,3 +2918,39 @@ toets die stilletjes niets doet is beter dan een die een handler haalt om daar g
 zou drie tekens en dan een woord zijn: een overzicht dat halverwege opgeeft. `MAC_KEYS` in
 `shortcuts.ts` maakt er ⇧⌘⌫ van. Alleen toetsen waarvan het Mac-teken de gebruikelijke spelling ís
 horen daarin; Enter en Tab blijven op beide platforms woorden.
+
+## B81 — Ook het Wie-veld vult aan, uit de namen die de kluis al kent
+
+**Genomen** op 21 augustus 2026, uit dagelijks gebruik. B66 gaf het Tags-veld aanvulling en schreef
+er expliciet bij dat het personenveld die *niet* krijgt: "een naam komt niet uit een gesloten
+verzameling zoals een tag dat doet." Dat is de zin die hier wordt herzien.
+
+**Het besluit.** Het Wie-veld vult aan uit `facets().people` — dezelfde telling die het
+Personen-filter in de bibliotheek al leest — via `IPC.peopleSuggestions`, naast
+`tagSuggestions` en `locationSuggestions`. Eerste focus, nooit bij het opstarten, mislukking
+wordt een lege lijst. Geen migratie en geen `SCHEMA_VERSION`-bump: `attendees` staat al als
+kolom op `notes` en `buildRecord` vult hem al.
+
+**Waarom de zin uit B66 niet meer klopt.** Hij was een uitspraak over namen in het algemeen,
+en dit veld gaat niet over namen in het algemeen. Het gaat over dezelfde handvol collega's,
+elke keer opnieuw getypt en elke keer nét anders gespeld — precies het argument dat B73 al
+voor het Waar-veld heeft aanvaard. De verzameling is zo gesloten als de geschiedenis van de
+kluis zelf, en dat is de enige verzameling waar deze drie velden ooit uit aanvullen. Wat er
+niet in staat typ je gewoon; er wordt niets geweigerd.
+
+**Een token, geen heel veld** — daarin lijkt dit op Tags en niet op Waar, want het veld houdt
+een *lijst*. Het verschil met `tag-typeahead.ts` is één regel en die regel is het hele bestaan
+van `people-typeahead.ts` als apart bestand: **witruimte scheidt hier niet**. "Jan de Vries" is
+één naam, en een scheidingsteken-verzameling met spaties erin zou aanvulling aanbieden voor
+"de". Alleen `,` en `;` — exact waar `parseAttendees` op splitst, want aanvullen mag niet iets
+anders vinden dan vastleggen.
+
+**De spatie na de komma wordt overgenomen, niet toegevoegd.** Een token begint hier direct
+achter de komma en opent dus meestal met de spatie die de vorige aanvulling achterliet. Die
+weggooien schrijft "Jan,Pieter Jansen" — dat parseert prima en leest als een typefout die
+niemand gemaakt heeft. Aan het begin van het veld staat er niets, en dan komt er ook niets.
+
+**Wat het veld al heeft wordt uit de live tekst gelezen, niet uit `values.attendees`.** Dat is
+de vergissing van B66's Tags-veld, hier vanaf de eerste versie goed: de array wordt pas bij
+blur of Enter bijgewerkt, dus een naam die je uit het veld haalt zou tot dat moment uit zijn
+eigen lijst gefilterd blijven.

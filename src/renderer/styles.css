@@ -171,11 +171,36 @@ body {
   flex-wrap: wrap;
 }
 
-/* And the Where cell, which carries a completion list of its own since B73. Only
-   `relative` — unlike the Tags cell it holds nothing but the field, so there is nothing to
-   wrap. The list itself is `.tag-suggest` verbatim: one surface, so the two completions in
-   this header cannot come to look like two different things. */
-.header-cell.header-where {
+/* The Tags field itself, and this rule is the only thing standing between it and zero
+   width. `.header-cell input` above is `flex: 1; min-width: 0` — a *zero* basis with the
+   browser's own minimum for an input switched off — while every `.tag-chip` beside it is
+   `0 0 auto` at its content width. So the chips took the line and the field was left with
+   nothing to grow into: a note carrying enough `#tags` in its body had a Tags box you
+   could not see. Ten characters is a floor you can type a tag into; `MAX_TAG_CHIPS` in
+   `HeaderBlock.tsx` bounds the other side of the row. Both are needed — the cap alone
+   still loses to three long tags, and this alone still loses to twelve short ones.
+
+   `flex: 1 1 10ch` rather than leaving the basis at 0: a flex item with a zero basis never
+   triggers a wrap by itself, so the field would have gone on sharing line one with the
+   chips at whatever width was left rather than dropping below them. */
+.header-cell.header-tags .tags {
+  flex: 1 1 10ch;
+  min-width: 10ch;
+}
+
+/* The overflow chip. Muted against the tags it stands for, because a count is not one of
+   them. */
+.tag-chip-more {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+/* And the Where and Who cells, which carry completion lists of their own since B73 and
+   B81. Only `relative` — unlike the Tags cell they hold nothing but the field, so there is
+   nothing to wrap. The lists themselves are `.tag-suggest` verbatim: one surface, so the
+   three completions in this header cannot come to look like three different things. */
+.header-cell.header-where,
+.header-cell.header-who {
   position: relative;
 }
 

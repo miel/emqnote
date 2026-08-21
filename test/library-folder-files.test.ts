@@ -163,6 +163,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     linkCandidates: async () => [],
     tagSuggestions: async () => [],
     locationSuggestions: async () => [],
+    peopleSuggestions: async () => [],
     openExternal: async () => {},
     openTag: async () => {},
     openInSystemViewer: async () => {},

@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   linkCandidates: (query: string) => ipcRenderer.invoke(IPC.linkCandidates, query),
   tagSuggestions: () => ipcRenderer.invoke(IPC.tagSuggestions),
   locationSuggestions: () => ipcRenderer.invoke(IPC.locationSuggestions),
+  peopleSuggestions: () => ipcRenderer.invoke(IPC.peopleSuggestions),
   openExternal: (href: string) => ipcRenderer.invoke(IPC.openExternal, href),
   openTag: (name: string) => ipcRenderer.invoke(IPC.openTag, name),
   fetchRemoteImage: (url: string) => ipcRenderer.invoke(IPC.fetchRemoteImage, url),

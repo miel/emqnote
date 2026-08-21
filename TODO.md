@@ -3,7 +3,40 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 21 August 2026, on top of `v0.10.1` — five items from daily use, two of them
+Last updated 21 August 2026, on top of `v0.10.2` — four fixes to the header block both
+windows share. One carries a decision: **B81**, the Who field completes from the people the
+vault already names, over a new `IPC.peopleSuggestions`. That revises B66, which had written
+down that people deliberately would *not* get completion; the argument it used is B73's read
+the other way, and B73 already accepted it. The other three are constraints and are in
+`CONSTRAINTS.md`: a completion row is not a Tab stop (which is the whole of "tabbing from Tags
+to Where needs an extra press"), what the Tags field already holds is read off the live text
+and never off the committed array (which is why a deleted tag stopped being offered), and the
+Tags field has a floor of ten characters with the body-tag chips capped at three and a `+N`
+beyond that.
+
+**None of the four has been driven live**, for the standing reason: the capture window has no
+renderer harness, and these are four things you find with your hands. `TEST-PROTOCOL.md` §34 is
+written for a human and is owed one.
+
+## Still open from that list
+
+Two items from the same day were planned and are **not built**:
+
+- [ ] **In the Tasks view, an "Exit tasks" button that returns to the folder list**, with
+      Escape doing the same. There is no way out of `selection.kind === "tasks"` today except
+      clicking something else in the tree.
+- [ ] **Escape in the search box — and on a note row while a search is live — exits the
+      search** and puts focus back on the selected note in the list, with a `×` in the box
+      doing the same for the mouse. The i18n keys (`tasks.exit`, `library.clearSearch`) are
+      already in both language tables; nothing else is wired.
+
+Both need one piece of groundwork first: `focusPane` and `paneOf` live *inside* the pane-cycle
+effect in `Library.tsx` and have to be hoisted — `focusPane` as a component-level `useCallback`
+over the two refs it already uses — before any handler in the render body can reach them. The
+focus hand-off also has to wait for the reloaded list rather than fire on the next frame, or it
+lands on a row of the list being replaced.
+
+The previous entry, 21 August 2026, on top of `v0.10.1` — five items from daily use, two of them
 corrections to the pin work that had shipped the day before. Four carry decisions. **B77**:
 the limit of three is per *folder*, not per vault, and a pin therefore orders a folder and
 nothing else — in a tag, a person or a search result the rows stand in the plain sort, with

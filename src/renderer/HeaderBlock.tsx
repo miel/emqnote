@@ -7,6 +7,56 @@ import { formatDateTime, type Locale } from "../shared/i18n.js";
 import { useActiveRowVisible, useHoverGuard } from "./library/palette-scroll.js";
 import { applySuggestion, rankTags, tokenAt } from "./tag-typeahead.js";
 import { rankLocations } from "./location-typeahead.js";
+import {
+  applySuggestion as applyPerson,
+  rankPeople,
+  tokenAt as personAt,
+} from "./people-typeahead.js";
+
+/**
+ * How many of the note's own tags are drawn as chips before the rest become one `+N`.
+ *
+ * The cell is a flex row holding the field, the chips and the completion panel, and the
+ * field is the only item in it that shrinks — so a note carrying eight body tags left the
+ * input at zero width, a box you could not see and could not type in. Capping the chips
+ * bounds what sits beside it; `.header-tags .tags`' `min-width` in `styles.css` is the
+ * other half and is what actually guarantees the ten characters.
+ *
+ * A count and deliberately not a measured fit. Nothing under `test/` puts the stylesheet
+ * through a layout engine — jsdom has no cascade and paints nothing, which is what
+ * `styles-header.test.ts` exists to work around — so a version that measured the row
+ * would be the one piece of this header no test could reach.
+ */
+const MAX_TAG_CHIPS = 3;
+
+/**
+ * Comma and semicolon both separate; Outlook uses semicolons, so fingers expect it.
+ *
+ * At module scope rather than inside the component because the completion has to agree
+ * with it: `people-typeahead.ts`'s `SEPARATOR` is this same set, and `rankPeople` is fed
+ * this function's answer for the *live* text of the field.
+ */
+export function parseAttendees(text: string): string[] {
+  return text
+    .split(/[,;]/)
+    .map((name) => name.trim())
+    .filter((name) => name !== "");
+}
+
+/**
+ * Space separates too: nobody types commas between hashtags.
+ *
+ * Module scope for `parseAttendees`' reason, and here it is load-bearing: what the field
+ * already holds is worked out from the text on screen, so this runs on every keystroke
+ * that the completion is open for. `tag-typeahead.ts`'s `SEPARATOR` is the same set and
+ * says so.
+ */
+export function parseTags(text: string): string[] {
+  return text
+    .split(/[,;\s]/)
+    .map(cleanTagInput)
+    .filter((tag) => tag !== "");
+}
 
 export interface HeaderValues {
   kind: NoteKind;
@@ -71,8 +121,8 @@ interface Props {
  * Rejected: chips for the people field. A free-text list of names wants to be wide and
  * to stay one line; the reader header's own history is of a header that grew and shrank.
  *
- * **The Tags field completes from the vault's own tag list; the people field still does
- * not** (B66). This used to say neither did, with an argument that has since expired.
+ * **The Tags, Where and Who fields all complete from the vault's own lists** (B66, B73,
+ * B81). This used to say none of them did, with an argument that has since expired.
  * Two of its three findings still hold and are why the completion is shaped as it is: a
  * native `<datalist>` will not close on a second click, which is Chromium's behaviour and
  * not reachable from here — so this is a real combobox drawn as plain elements — and
@@ -80,9 +130,14 @@ interface Props {
  * vault holds the real one. The third finding was that serving the vault's list would put
  * a scan on the capture path, and that was true before phase 5: `IPC.tagSuggestions` is a
  * read of the index the launch scan already fills, asked on the field's **first focus**
- * and never at startup, so nothing about it is on the hotkey's way. People are left alone
- * because a name is not drawn from a closed set the way a tag is, and offering half of one
- * would be worse than offering none.
+ * and never at startup, so nothing about it is on the hotkey's way — and the same is true
+ * of the two lists that followed it.
+ *
+ * People were left out of B66 on the argument that a name is not drawn from a closed set
+ * the way a tag is. Use answered that the other way (B81), and it is B73's answer for
+ * Where: there are a handful of colleagues, and they get typed again and again with a
+ * slightly different spelling each time. The set is as closed as the vault's own history
+ * of it, which is the only set any of these three complete from.
  *
  * The chips after the field are the other half of B65: tags written in the note body are
  * shown here but not editable here, since the note is where they are removed.
@@ -160,13 +215,37 @@ export function HeaderBlock({
   const whereList = useRef<HTMLUListElement>(null);
   const whereHoverGuard = useHoverGuard();
 
+  /**
+   * And again for the Who field (B81). Three sets of the same six, for the reason above:
+   * Tab walks Tags → Where → Who without any of them losing focus first, so more than one
+   * panel can be up at once and a shared `active` would move the highlight in a panel
+   * nobody is looking at.
+   */
+  const [vaultPeople, setVaultPeople] = useState<Facet[] | null>(null);
+  const [suggestingWho, setSuggestingWho] = useState(false);
+  const [activeWho, setActiveWho] = useState(-1);
+  const whoInput = useRef<HTMLInputElement>(null);
+  const whoList = useRef<HTMLUListElement>(null);
+  const whoHoverGuard = useHoverGuard();
+
   const tagValue = tagText ?? values.tags.map((tag) => `#${tag}`).join(" ");
   const caret = tagInput.current?.selectionStart ?? tagValue.length;
   // The note's own body tags go in as *applied*, not as candidates: B65 already hoists
   // them into the frontmatter on save, so completing the field to one would write nothing
   // — and the chip saying so is an inch to the left.
+  //
+  // **The field's half is read off the live text, never off `values.tags`.** That array is
+  // the *committed* one — `commitTags` only runs on blur or Enter — so a tag deleted from
+  // the field went on being filtered out of its own vault list until the field was left
+  // and re-entered, which is exactly the reported bug: delete `#klantx`, type `#kl`, and
+  // the tag twenty other notes carry is not offered. `rankTags` already excludes the token
+  // being typed from this check, so a half-typed tag does not disappear from its own list.
+  // The Where field never had this because it has no buffer to disagree with.
   const suggestions = suggesting
-    ? rankTags(vaultTags ?? [], tokenAt(tagValue, caret).value, [...values.tags, ...bodyTags])
+    ? rankTags(vaultTags ?? [], tokenAt(tagValue, caret).value, [
+        ...parseTags(tagValue),
+        ...bodyTags,
+      ])
     : [];
   const listOpen = suggestions.length > 0;
 
@@ -177,8 +256,18 @@ export function HeaderBlock({
     : [];
   const whereListOpen = whereSuggestions.length > 0;
 
+  // A token again, like Tags and unlike Where — the field holds a list. `applied` is the
+  // live text for the reason written above it; here it is that way from the first version.
+  const whoValue = attendeeText ?? values.attendees.join(", ");
+  const whoCaret = whoInput.current?.selectionStart ?? whoValue.length;
+  const whoSuggestions = suggestingWho
+    ? rankPeople(vaultPeople ?? [], personAt(whoValue, whoCaret).value, parseAttendees(whoValue))
+    : [];
+  const whoListOpen = whoSuggestions.length > 0;
+
   useActiveRowVisible(suggestList, active, suggestions);
   useActiveRowVisible(whereList, activeWhere, whereSuggestions);
+  useActiveRowVisible(whoList, activeWho, whoSuggestions);
 
   useEffect(() => {
     if (editingTime) timeInput.current?.focus();
@@ -188,25 +277,11 @@ export function HeaderBlock({
     onChange({ ...values, [key]: value });
   };
 
-  // Comma and semicolon both separate; Outlook uses semicolons, so fingers expect it.
-  const parseAttendees = (text: string): string[] =>
-    text
-      .split(/[,;]/)
-      .map((name) => name.trim())
-      .filter((name) => name !== "");
-
   const commitAttendees = (): void => {
     if (attendeeText === null) return;
     set("attendees", parseAttendees(attendeeText));
     setAttendeeText(null);
   };
-
-  // Space separates too: nobody types commas between hashtags.
-  const parseTags = (text: string): string[] =>
-    text
-      .split(/[,;\s]/)
-      .map(cleanTagInput)
-      .filter((tag) => tag !== "");
 
   const commitTags = (): void => {
     if (tagText === null) return;
@@ -264,6 +339,71 @@ export function HeaderBlock({
     set("location", location);
     closeWhereSuggestions();
     whereInput.current?.focus();
+  };
+
+  const closeWhoSuggestions = (): void => {
+    setSuggestingWho(false);
+    setActiveWho(-1);
+  };
+
+  /** `openSuggestions`' rule for the third field: once per window, on first focus. */
+  const openWhoSuggestions = (): void => {
+    setSuggestingWho(true);
+    setActiveWho(-1);
+    if (vaultPeople !== null) return;
+    setVaultPeople([]);
+    void window.emqnote
+      .peopleSuggestions()
+      .then(setVaultPeople)
+      .catch(() => setVaultPeople([]));
+  };
+
+  /**
+   * Accepting a name, which lands in the middle of a list — so this is `accept`'s shape
+   * rather than `acceptWhere`'s, caret arithmetic included. The text goes into the raw
+   * buffer, not through `set`: a name is only split out into `values.attendees` when the
+   * field is left, and completing one is not leaving it.
+   */
+  const acceptWho = (name: string): void => {
+    const input = whoInput.current;
+    const next = applyPerson(whoValue, input?.selectionStart ?? whoValue.length, name);
+    setAttendeeText(next.text);
+    closeWhoSuggestions();
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  /** `onTagKeyDown`'s rules, including the Escape one, for the Who field. */
+  const onWhoKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === "Escape" && suggestingWho) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWhoSuggestions();
+      return;
+    }
+
+    if (!whoListOpen) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      whoHoverGuard.keyboardMoved();
+      const count = whoSuggestions.length;
+      setActiveWho((current) =>
+        event.key === "ArrowDown"
+          ? (current + 1) % count
+          : current <= 0
+            ? count - 1
+            : current - 1,
+      );
+      return;
+    }
+
+    if ((event.key === "Enter" || event.key === "Tab") && activeWho >= 0) {
+      event.preventDefault();
+      acceptWho(whoSuggestions[activeWho]!.name);
+    }
   };
 
   /** `onTagKeyDown`'s rules, including the Escape one, for the Where field. */
@@ -462,11 +602,34 @@ export function HeaderBlock({
 
           {/* Tags written in the note body (B65). Shown, never edited — a chip is not a
               control, and the tooltip says where the tag does come out. */}
-          {bodyTags.map((tag) => (
+          {bodyTags.slice(0, MAX_TAG_CHIPS).map((tag) => (
             <span key={tag} className="tag-chip" title={t("capture.tagsInNote")}>
               #{tag}
             </span>
           ))}
+
+          {/* The rest as one chip, so a note with a dozen body tags cannot crowd the
+              field out of its own cell. Still a `.tag-chip` and still not a control:
+              unfolding it would be a second place these are read, and they are already
+              in the note, which is where they are removed. The names are in the tooltip
+              rather than dropped — a count with no way to see what it counts is worse
+              than the crowding it fixes. */}
+          {bodyTags.length > MAX_TAG_CHIPS && (
+            <span
+              className="tag-chip tag-chip-more"
+              title={t("capture.tagsMore")
+                .replace("{count}", String(bodyTags.length - MAX_TAG_CHIPS))
+                .replace(
+                  "{tags}",
+                  bodyTags
+                    .slice(MAX_TAG_CHIPS)
+                    .map((tag) => `#${tag}`)
+                    .join(" "),
+                )}
+            >
+              +{bodyTags.length - MAX_TAG_CHIPS}
+            </span>
+          )}
 
           {listOpen && (
             <ul className="tag-suggest" ref={suggestList}>
@@ -481,6 +644,15 @@ export function HeaderBlock({
                   <button
                     type="button"
                     className={index === active ? "tag-suggest-on" : undefined}
+                    // **Not a tab stop.** This list sits between its own input and the
+                    // next field in DOM order, and it is open from the moment the field
+                    // is focused — so a plain Tab moved focus into the first row instead
+                    // of on to Where, the input's blur then closed the list and unmounted
+                    // the button holding focus, and the press after that started again
+                    // from the top of the document. That is the whole of "tabbing from
+                    // Tags to Where needs an extra press". A completion list is walked
+                    // with the arrows, exactly like `ContextMenu` and the task rows.
+                    tabIndex={-1}
                     // Ahead of blur, which would commit the field and close this list
                     // before the click ever landed.
                     onMouseDown={(event) => event.preventDefault()}
@@ -527,6 +699,7 @@ export function HeaderBlock({
                   <button
                     type="button"
                     className={index === activeWhere ? "tag-suggest-on" : undefined}
+                    tabIndex={-1}
                     onMouseDown={(event) => event.preventDefault()}
                     onMouseEnter={(event) => {
                       if (whereHoverGuard.hover(event)) setActiveWhere(index);
@@ -543,15 +716,50 @@ export function HeaderBlock({
         </div>
 
         <span className="header-label">{t("capture.who")}</span>
-        <div className="header-cell">
+        <div className="header-cell header-who">
           <input
+            ref={whoInput}
             className="attendees"
             placeholder={t("capture.people")}
-            value={attendeeText ?? values.attendees.join(", ")}
-            onChange={(event) => setAttendeeText(event.target.value)}
-            onBlur={commitAttendees}
-            onKeyDown={leaveOnEnter}
+            value={whoValue}
+            onChange={(event) => {
+              setAttendeeText(event.target.value);
+              openWhoSuggestions();
+            }}
+            onFocus={openWhoSuggestions}
+            onBlur={() => {
+              closeWhoSuggestions();
+              commitAttendees();
+            }}
+            onKeyDown={(event) => {
+              onWhoKeyDown(event);
+              if (!event.defaultPrevented) leaveOnEnter(event);
+            }}
           />
+
+          {whoListOpen && (
+            <ul className="tag-suggest" ref={whoList}>
+              {whoSuggestions.map((facet, index) => (
+                <li key={facet.name}>
+                  {/* The other two lists' row again, verbatim — one surface, so the three
+                      completions in this header cannot come to look like three things. */}
+                  <button
+                    type="button"
+                    className={index === activeWho ? "tag-suggest-on" : undefined}
+                    tabIndex={-1}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={(event) => {
+                      if (whoHoverGuard.hover(event)) setActiveWho(index);
+                    }}
+                    onClick={() => acceptWho(facet.name)}
+                  >
+                    <span className="context-menu-label tag-suggest-name">{facet.name}</span>
+                    <span className="tag-suggest-count">{facet.count}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
