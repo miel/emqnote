@@ -100,9 +100,11 @@ function buildFake(): Fake {
       // `Library.tsx` starts on — so seeding from the wrong place would go unnoticed.
       librarySort: "title",
       loadRemoteImages: true,
+      keepPinnedInView: false,
     }),
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
+    setKeepPinnedInView: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

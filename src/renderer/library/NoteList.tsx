@@ -87,6 +87,15 @@ interface Props {
    * spelling the menu copies depends on the file's own name.
    */
   onFileContextMenu: (file: FileSummary, x: number, y: number) => void;
+  /**
+   * B76: whether the pinned rows stay against the top edge while the rest of the list
+   * scrolls under them, rather than scrolling away with it.
+   *
+   * The order is not this setting's business either way — pinned notes come first because
+   * `Library.tsx`'s `sortNotes` puts them there (B75), on or off. All this decides is
+   * whether the rows that are already at the top are allowed to leave the screen.
+   */
+  keepPinnedInView: boolean;
   /** Which platform's modifier spelling `isContextMenuKey` should compare the keydown against. */
   isMac: boolean;
   locale: Locale;
@@ -101,11 +110,19 @@ const SORTS: SortKey[] = ["modified", "created", "title"];
  * The house style `FolderTree.tsx`'s three glyphs already set: an inline SVG in
  * `currentColor`, not an emoji. 📌 comes from a different fallback font on each of the two
  * machines this runs on and would be the only colour thing in the list.
+ *
+ * Drawn upright — a tack seen head-on — rather than as the tilted pin the first attempt
+ * aimed at. Two reasons, and the second is the one that matters. The tilted drawing was
+ * wrong: its shaft stopped short of the crossbar and its needle started off the body, so it
+ * read as three unconnected strokes. And it is rendered at 12px (`.note-pin svg`), where a
+ * 45° body with arcs in it has no room to be anything but a smudge; an upright tack is
+ * symmetric about a whole pixel column and every line in it is horizontal or nearly so, so
+ * it survives the size it is actually used at.
  */
 const pinGlyph = (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
-      d="M9.6 1.9 14.1 6.4M11 4.3 8.2 7.1a3.6 3.6 0 0 0-.9 3.4l-.6.6-4.1-4.1.6-.6a3.6 3.6 0 0 0 3.4-.9L9.4 2.7M4.8 11.2 2 14"
+      d="M3.4 8h9.2M6.4 3.2 5.5 8M9.6 3.2 10.5 8M6.4 3.2h3.2M8 8v5.2"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.2"
@@ -137,6 +154,7 @@ export function NoteList({
   onDragNote,
   onContextMenu,
   onFileContextMenu,
+  keepPinnedInView,
   isMac,
   locale,
   t,
@@ -164,6 +182,141 @@ export function NoteList({
     activePath !== null && notes.some((note) => note.path === activePath)
       ? activePath
       : (notes[0]?.path ?? null);
+
+  /**
+   * How many rows off the top of the list go on B76's shelf — 0 whenever the setting is
+   * off, which leaves the markup byte for byte what it was before this existed.
+   *
+   * The *prefix* of pinned rows rather than every pinned row there is, and the difference
+   * is not theoretical: B75 refuses to hide a fourth pin that arrived over OneDrive, so a
+   * list can hold more pins than the limit allows, and `sortNotes` puts them all first
+   * regardless. Taking the prefix means the shelf can only ever be the top of the list —
+   * a row cannot be lifted out of the middle of it and drawn somewhere it does not
+   * belong, which would break the arrow walk's one assumption, that the DOM reads in the
+   * order the list does.
+   */
+  const firstUnpinned = notes.findIndex((note) => !note.pinned);
+  const pinned = !keepPinnedInView ? 0 : firstUnpinned === -1 ? notes.length : firstUnpinned;
+
+  /**
+   * One note row.
+   *
+   * Lifted out of the `map` it used to be written inside because B76 draws the same row
+   * in two places — the shelf of pinned rows and the list under it — and a row that is
+   * spelled out twice is a row where the drag handling, the context menu and the roving
+   * tab stop come to differ between a pinned note and any other one.
+   */
+  const noteRow = (note: NoteSummary): React.ReactElement => (
+    <li
+      key={note.path}
+      className={
+        `note${selected === note.path ? " note-on" : ""}` +
+        `${dragging === note.path ? " note-dragging" : ""}`
+      }
+      role="option"
+      aria-selected={selected === note.path}
+      tabIndex={active === note.path ? 0 : -1}
+      onFocus={() => setActivePath(note.path)}
+      onClick={() => onSelect(note.path)}
+      onDoubleClick={() => onOpenInCapture(note.path)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onSelect(note.path);
+        onContextMenu(note, event.clientX, event.clientY);
+      }}
+      onKeyDown={(event) => {
+        const container = (event.currentTarget as HTMLElement).closest(".notes-list");
+        const next = roveArrowKey(event, container, ".note", event.currentTarget);
+        if (next !== null) {
+          event.preventDefault();
+          next.focus();
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onSelect(note.path);
+          return;
+        }
+        if (isContextMenuKey(event, isMac)) {
+          event.preventDefault();
+          onSelect(note.path);
+          const rect = event.currentTarget.getBoundingClientRect();
+          onContextMenu(note, rect.left, rect.bottom);
+        }
+      }}
+      // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
+      // dialog stays the way to reach a folder four levels deep without hunting
+      // for it; this is the one for a folder already in front of you.
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
+        event.dataTransfer.effectAllowed = "move";
+        onDragNote(note.path);
+        setDragging(note.path);
+      }}
+      onDragEnd={() => {
+        onDragNote(null);
+        setDragging(null);
+      }}
+    >
+      <div className="note-top">
+        {note.pinned && (
+          <span className="note-pin" title={t("library.pin")}>
+            {pinGlyph}
+          </span>
+        )}
+        <span className="note-title">{note.title}</span>
+        <span className="note-when">
+          {formatListTime(locale, sort === "created" ? note.created : note.modified)}
+        </span>
+      </div>
+      {/* The excerpt, with the task count against the right edge when there is
+          nobody to put it beside. One DOM shape and not two: the row is always
+          drawn, so a note with no tasks is geometrically exactly what it was.
+          `.note-excerpt` keeps its own ellipsis — see `.note-middle` in
+          `library.css` for why it needs `min-width: 0` to do so inside a flex
+          row. */}
+      <div className="note-middle">
+        <span className="note-excerpt">{note.excerpt}</span>
+        {note.attendees.length === 0 && taskCount(noteTasks?.[note.path], t)}
+      </div>
+      {/* Under a tag, a person or a search the notes come from all over the
+          vault, and a list of titles with no idea where they live is hard to
+          read. */}
+      {(showing.kind !== "folder" || searching) && (
+        <div className="note-folder">{folderOf(note.path)}</div>
+      )}
+      {note.tags.length > 0 && (
+        <div className="note-tags">
+          {note.tags.map((tag) => (
+            <span key={tag} className="note-tag">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+      {/* People on the left, the task count right-aligned against it.
+          Deliberately a row of its own rather than the count sitting up beside the
+          date: the date is what the sort is on and reads as one column down the
+          list, and a second number in that column would have to be told apart from
+          it at a glance. People keep their line either way — the count was very
+          nearly put *in* their place, and a meeting note that quietly stopped
+          naming who was at it would have been a worse trade than one extra row.
+
+          **Attendees are the whole condition now.** This row used to be drawn when
+          either half had something to say, which spent a line of every note in the
+          vault on a single number with nothing beside it. So the count moves up to
+          the excerpt row when there is nobody here to sit next to, and this row is
+          simply absent — one rule, and it is about People rather than about Tags,
+          which have never shared a row with the count. */}
+      {note.attendees.length > 0 && (
+        <div className="note-bottom">
+          <span className="note-attendees">{note.attendees.join(", ")}</span>
+          {taskCount(noteTasks?.[note.path], t)}
+        </div>
+      )}
+    </li>
+  );
 
   return (
     <div className="notes">
@@ -218,117 +371,24 @@ export function NoteList({
 
       {!unlinked && (
         <ul className="notes-list" role="listbox">
-          {notes.map((note) => (
-            <li
-              key={note.path}
-              className={
-                `note${selected === note.path ? " note-on" : ""}` +
-                `${dragging === note.path ? " note-dragging" : ""}`
-              }
-              role="option"
-              aria-selected={selected === note.path}
-              tabIndex={active === note.path ? 0 : -1}
-              onFocus={() => setActivePath(note.path)}
-              onClick={() => onSelect(note.path)}
-              onDoubleClick={() => onOpenInCapture(note.path)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                onSelect(note.path);
-                onContextMenu(note, event.clientX, event.clientY);
-              }}
-              onKeyDown={(event) => {
-                const container = (event.currentTarget as HTMLElement).closest(".notes-list");
-                const next = roveArrowKey(event, container, ".note", event.currentTarget);
-                if (next !== null) {
-                  event.preventDefault();
-                  next.focus();
-                  return;
-                }
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  onSelect(note.path);
-                  return;
-                }
-                if (isContextMenuKey(event, isMac)) {
-                  event.preventDefault();
-                  onSelect(note.path);
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  onContextMenu(note, rect.left, rect.bottom);
-                }
-              }}
-              // Filing by hand: drag a row onto a folder in the tree. The "Move to…"
-              // dialog stays the way to reach a folder four levels deep without hunting
-              // for it; this is the one for a folder already in front of you.
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
-                event.dataTransfer.effectAllowed = "move";
-                onDragNote(note.path);
-                setDragging(note.path);
-              }}
-              onDragEnd={() => {
-                onDragNote(null);
-                setDragging(null);
-              }}
-            >
-              <div className="note-top">
-                {note.pinned && (
-                  <span className="note-pin" title={t("library.pin")}>
-                    {pinGlyph}
-                  </span>
-                )}
-                <span className="note-title">{note.title}</span>
-                <span className="note-when">
-                  {formatListTime(locale, sort === "created" ? note.created : note.modified)}
-                </span>
-              </div>
-              {/* The excerpt, with the task count against the right edge when there is
-                  nobody to put it beside. One DOM shape and not two: the row is always
-                  drawn, so a note with no tasks is geometrically exactly what it was.
-                  `.note-excerpt` keeps its own ellipsis — see `.note-middle` in
-                  `library.css` for why it needs `min-width: 0` to do so inside a flex
-                  row. */}
-              <div className="note-middle">
-                <span className="note-excerpt">{note.excerpt}</span>
-                {note.attendees.length === 0 && taskCount(noteTasks?.[note.path], t)}
-              </div>
-              {/* Under a tag, a person or a search the notes come from all over the
-                  vault, and a list of titles with no idea where they live is hard to
-                  read. */}
-              {(showing.kind !== "folder" || searching) && (
-                <div className="note-folder">{folderOf(note.path)}</div>
-              )}
-              {note.tags.length > 0 && (
-                <div className="note-tags">
-                  {note.tags.map((tag) => (
-                    <span key={tag} className="note-tag">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {/* People on the left, the task count right-aligned against it.
-                  Deliberately a row of its own rather than the count sitting up beside the
-                  date: the date is what the sort is on and reads as one column down the
-                  list, and a second number in that column would have to be told apart from
-                  it at a glance. People keep their line either way — the count was very
-                  nearly put *in* their place, and a meeting note that quietly stopped
-                  naming who was at it would have been a worse trade than one extra row.
+          {pinned > 0 && (
+            /* B76's shelf: the pinned rows in a box of their own that sticks to the top
+               of the scroller. A wrapper rather than `position: sticky` on each row —
+               rows stuck at the same `top` would draw on top of one another, and giving
+               each its own offset means measuring three variable-height rows and
+               re-measuring them on every resize.
 
-                  **Attendees are the whole condition now.** This row used to be drawn when
-                  either half had something to say, which spent a line of every note in the
-                  vault on a single number with nothing beside it. So the count moves up to
-                  the excerpt row when there is nobody here to sit next to, and this row is
-                  simply absent — one rule, and it is about People rather than about Tags,
-                  which have never shared a row with the count. */}
-              {note.attendees.length > 0 && (
-                <div className="note-bottom">
-                  <span className="note-attendees">{note.attendees.join(", ")}</span>
-                  {taskCount(noteTasks?.[note.path], t)}
-                </div>
-              )}
+               `role="presentation"` on the `li` and `role="group"` on the `ul` inside
+               it: an `li` with its implicit role would be a list item inside a listbox,
+               which is not a thing, while a group is exactly the one wrapper ARIA lets
+               a listbox put its options in. The rows themselves stay in document order
+               either way, which is what `roveArrowKey`'s `querySelectorAll` walks — so
+               Up and Down still cross the shelf's edge without noticing it. */
+            <li className="notes-pinned" role="presentation">
+              <ul role="group">{notes.slice(0, pinned).map(noteRow)}</ul>
             </li>
-          ))}
+          )}
+          {notes.slice(pinned).map(noteRow)}
         </ul>
       )}
 

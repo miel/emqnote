@@ -60,6 +60,22 @@ export interface Settings {
    * protocol handler, never by the renderer choosing not to ask.
    */
   loadRemoteImages: boolean;
+  /**
+   * Whether the pinned rows stay against the top edge of the note list while the rest of
+   * it scrolls under them (B76).
+   *
+   * Off by default, which is the behaviour B75 shipped: the pins order the list and
+   * nothing more. A setting rather than a change, because the two answers are both
+   * defensible — a shelf that never moves is three rows of the pane spent whether or not
+   * you are looking at them, and which of those you want depends on how long the list you
+   * scroll actually is.
+   *
+   * Per machine and not in the vault, unlike the pin itself. B75 put `pinned:` in the file
+   * because a pin is a fact about the note; this is a fact about a window, of a piece with
+   * `libraryPaneWidths` and `librarySort` beside it, and the two machines are entitled to
+   * disagree about it.
+   */
+  keepPinnedInView: boolean;
 }
 
 export { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY };
@@ -76,6 +92,7 @@ function defaults(): Settings {
     libraryPaneWidths: null,
     librarySort: "modified",
     loadRemoteImages: true,
+    keepPinnedInView: false,
   };
 }
 

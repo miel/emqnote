@@ -413,6 +413,36 @@
   opacity: 0.4;
 }
 
+/* B76's shelf: the pinned rows held against the top of the scroller while the rest of the
+   list runs under them. Only drawn when the setting is on — with it off there is no
+   wrapper in the markup at all, so this rule has nothing to apply to and the rows are
+   ordinary rows again.
+
+   An opaque background is not decoration here, it is the whole mechanism: `.note-on` and
+   the hover are translucent greys meant to sit *on* the pane, so without something solid
+   underneath, the rows scrolling past would read straight through the shelf. The rows
+   keep their own transparent backgrounds, so both of those still composite over this the
+   way they do everywhere else.
+
+   `z-index` for the same reason and against a different neighbour — a sticky box makes its
+   own stacking context, but the rows that follow it in the list would otherwise paint over
+   it in document order.
+
+   No cap on how tall it may get, and none needed: `MAX_PINNED` is three, and the fourth
+   pin B75 refuses to hide is the rare case of a shelf one row taller than that. */
+.notes-pinned {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--background);
+}
+
+.notes-pinned ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .note-top {
   display: flex;
   align-items: baseline;
