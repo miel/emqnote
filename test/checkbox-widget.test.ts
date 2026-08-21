@@ -4,7 +4,7 @@ import { EditorView } from "prosemirror-view";
 import { EditorState } from "prosemirror-state";
 import { schema } from "@emqnote/core/markdown/schema";
 import { serializeBody } from "@emqnote/core/markdown";
-import { taskCheckboxes } from "../src/renderer/editor/checkbox.js";
+import { taskCheckboxes } from "@emqnote/core/editor";
 import { docFromMarkdown } from "./helpers/editing.js";
 
 /**

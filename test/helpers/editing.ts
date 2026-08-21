@@ -1,9 +1,10 @@
 import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Command } from "prosemirror-state";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
+import { enter } from "@emqnote/core/editor";
 import { schema } from "@emqnote/core/markdown/schema";
 import { parseNote, serializeBody } from "@emqnote/core/markdown";
-import { backspace, enter } from "../../src/renderer/editor/commands.js";
+import { backspace } from "../../src/renderer/editor/commands.js";
 
 /**
  * Editing tests run against `EditorState` rather than a mounted view: commands are

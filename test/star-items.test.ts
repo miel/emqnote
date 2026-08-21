@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, TextSelection } from "prosemirror-state";
+import { enter, toggleTask } from "@emqnote/core/editor";
 import { schema } from "@emqnote/core/markdown/schema";
 import { parseNote, serializeBody } from "@emqnote/core/markdown";
-import { toggleStar, toggleTask, toggleOrderedList, enter } from "../src/renderer/editor/commands.js";
+import { toggleStar, toggleOrderedList } from "../src/renderer/editor/commands.js";
 import { docFromMarkdown, markdownOf, stateAt } from "./helpers/editing.js";
 
 /**

@@ -21,7 +21,9 @@
     "typecheck": "tsc --noEmit",
     "check:bundle": "tsx scripts/check-bundle.ts",
     "canonical": "tsx scripts/canonical.ts",
-    "icons": "tsx scripts/make-icons.ts"
+    "icons": "tsx scripts/make-icons.ts",
+    "build:iphone": "npm run build --workspace=@emqnote/iphone",
+    "test:iphone": "npm run test --workspace=@emqnote/iphone"
   },
   "//dependencies": "Kept minimal on purpose. Main, preload and renderer are otherwise fully bundled, so nothing from node_modules is needed at runtime. Anything listed here is NOT bundled by electron-vite but externalised, and would then be missing from the package unless electron-builder ships it too (see the files list in electron-builder.yml). electron-updater is here because it does dynamic requires that don't survive bundling. If a native module is ever added (better-sqlite3 in phase 5) it belongs here as well.",
   "devDependencies": {

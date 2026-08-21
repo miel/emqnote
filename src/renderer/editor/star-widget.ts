@@ -2,7 +2,7 @@ import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "@emqnote/core/markdown/schema";
-import { markerAnchor } from "./marker-widget.js";
+import { markerAnchor } from "@emqnote/core/editor";
 
 /**
  * B72's star, drawn into the marker slot.

@@ -12,13 +12,15 @@ import { redo, undo } from "prosemirror-history";
 import {
   liftListItem,
   sinkListItem,
-  splitListItem,
   wrapInList,
 } from "prosemirror-schema-list";
 import { schema } from "@emqnote/core/markdown/schema";
+import { enter, exitList, toggleTask } from "@emqnote/core/editor";
 // Only the type travels back the other way (`CommandContext`), so this pair is not a
 // runtime cycle — `import type` is erased.
 import { openFind } from "./find-in-note.js";
+
+export { enter, exitList, toggleTask };
 
 type Dispatch = ((tr: Transaction) => void) | undefined;
 
@@ -137,67 +139,6 @@ function itemsInSelection(state: EditorState): { pos: number; node: PMNode }[] {
   });
 
   return [...found].map(([pos, node]) => ({ pos, node }));
-}
-
-/**
- * Turns list items into tasks, or back into plain items.
- *
- * Deliberately an attribute on `listItem` and not a fourth list node: `checked` is how
- * both the file format and the editor schema already model this, and a third list type
- * would be a second definition of something markdown expresses one way. Because it only
- * touches item attributes it works at any depth without knowing anything about depth.
- *
- * Outside a list it starts one, and inside a numbered list it turns that list into
- * bullets first — numbered task lists are not admitted.
- *
- * A mixed selection resolves one way for all of it rather than flipping each item
- * separately, the way `toggleMark` does: half the selection ticking and the other half
- * clearing is not a gesture anyone means.
- */
-export const toggleTask: Command = (state, dispatch) => {
-  const list = findList(state.selection.$from);
-
-  if (list === null) {
-    return withList(wrapInList(bulletList!), state, dispatch);
-  }
-  if (list.type === orderedList) {
-    return withList(toggleList(bulletList!), state, dispatch);
-  }
-
-  const items = itemsInSelection(state);
-  if (items.length === 0) return false;
-
-  if (dispatch) {
-    const becomeTasks = items.some((item) => item.node.attrs.checked === null);
-    const tr = state.tr;
-    for (const { pos, node } of items) {
-      tr.setNodeMarkup(pos, undefined, {
-        ...node.attrs,
-        checked: becomeTasks ? false : null,
-        // A box stands where the star would (B72), so gaining one gives the star up.
-        // `toggleStar` says the same sentence from the other end; enforcing it at both
-        // doors is what keeps a state the serializer would refuse from ever existing.
-        starred: becomeTasks ? false : (node.attrs.starred as boolean),
-      });
-    }
-    dispatch(tr.scrollIntoView());
-  }
-
-  return true;
-};
-
-/** Runs `first`, then puts boxes on whatever list it left behind. */
-function withList(first: Command, state: EditorState, dispatch: Dispatch): boolean {
-  if (dispatch === undefined) return first(state, undefined);
-
-  let after: EditorState | null = null;
-  const ok = first(state, (tr) => {
-    after = state.apply(tr);
-    dispatch(tr);
-  });
-
-  if (!ok || after === null) return ok;
-  return toggleTask(after, dispatch);
 }
 
 /**
@@ -353,210 +294,6 @@ export const tabOutdent: Command = (state, dispatch) => {
   return true;
 };
 
-/**
- * A textblock that draws as blank.
- *
- * `content.size === 0` is the obvious test and it is the one that let the bug through.
- * Type a word on a bullet, change your mind, hold Backspace until the bullet *looks*
- * empty — and stop one press early, because the trailing space is invisible. The item is
- * then blank on screen and not empty in the document, so Enter fell through to
- * `splitListItem` and produced a second empty bullet. That is the reported "sometimes it
- * works and sometimes it does not": the two cases look identical and differ by one space.
- * Same reading as `list-marker-style.ts`, which already ignores whitespace outside the
- * run for exactly this class of reason.
- *
- * A `hardBreak` is deliberately *not* blank, and neither is an inline atom: an empty
- * second line is something Shift+Enter was pressed on purpose to make, and an item
- * holding only a picture has content even though it has no text.
- */
-function drawsBlank(node: PMNode): boolean {
-  if (!node.isTextblock) return false;
-
-  let blank = true;
-  node.forEach((child) => {
-    if (!child.isText || child.text!.trim() !== "") blank = false;
-  });
-  return blank;
-}
-
-/**
- * Is the caret on a blank block that is *directly* inside a list item?
- *
- * The direct-child part is measured rather than assumed. A blank paragraph deeper inside
- * an item — inside a quote in a bullet, say — must not end the list, and it does not need
- * to be handled here at all: `baseKeymap.Enter`'s own `liftEmptyBlock` takes it out of the
- * quote and leaves it in the item, which is the useful reading and the one a reader
- * expects from every other editor.
- */
-function onEmptyListItem(state: EditorState): boolean {
-  const { $from, empty } = state.selection;
-  if (!empty || !drawsBlank($from.parent)) return false;
-
-  const itemDepth = $from.depth - 1;
-  return itemDepth >= 1 && $from.node(itemDepth).type === listItem;
-}
-
-/** The outermost list around a position — the one leaving the list has to escape. */
-function outermostListDepth($pos: ResolvedPos): number | null {
-  let found: number | null = null;
-  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    const type = $pos.node(depth).type;
-    if (type === bulletList || type === orderedList) found = depth;
-  }
-  return found;
-}
-
-/**
- * Is there anything below this item that leaving the list in one go would flatten?
- *
- * `exitList` escapes by lifting repeatedly, and every lift splits the list it climbs out
- * of — so whatever follows the item *at a nested level* is carried up with it and arrives
- * at the top, one list per level. Measured on
- * `- A / - B / - C, ▮, - D / - E`: pressing Enter left `- A`, `- B`, `- C`, the empty
- * line, and then `- D` and `- E` both at the top level as two separate lists. The text
- * survives and the outline does not, which is the one thing a note in this app is for.
- *
- * A following item at the *outermost* level is not counted: it is already where the lift
- * would leave it, so nothing about it moves. That is why one press still ends the list in
- * the common shape — an empty item at the bottom of an outline — and why the doc comment
- * on `exitList` still holds wherever it can.
- */
-function nothingIsFlattened($from: ResolvedPos): boolean {
-  const outermost = outermostListDepth($from);
-  if (outermost === null) return true;
-
-  // Down to the outermost list's own items, exclusive: their siblings do not move.
-  for (let depth = $from.depth; depth >= outermost + 2; depth -= 1) {
-    if ($from.index(depth - 1) !== $from.node(depth - 1).childCount - 1) return false;
-  }
-  return true;
-}
-
-/**
- * Leaves the list entirely and starts an ordinary paragraph.
- *
- * `splitListItem` promotes an empty item one level instead, so escaping a list nested
- * three deep took three presses of Enter and felt like the list refusing to end. One
- * press now ends it from any depth. Nothing is lost: Shift+Tab still promotes a level
- * at a time, and that is the key for it.
- *
- * Implemented as repeated lifts rather than one hand-built step: lifting a list item
- * correctly — closing the list, rejoining what is left, moving the children — is
- * exactly the fiddly work `liftListItem` already does well.
- *
- * Repeated only while there is nothing below to flatten (`nothingIsFlattened`). With
- * items still to come at a nested level, climbing all the way out would drag them to the
- * top with it, so it climbs one level per press instead — Shift+Tab's step, and the only
- * answer that keeps the outline, since the levels the tail belongs to cannot be rebuilt
- * once they are left behind.
- */
-export const exitList: Command = (state, dispatch) => {
-  if (!isInList(state) || !onEmptyListItem(state)) return false;
-
-  // Asked before anything is dispatched. A lift that would decline has to leave the key
-  // to `splitListItem` rather than swallow it: returning `true` on the strength of having
-  // *tried* is how Enter came to do nothing at all in a shape nobody has pinned down.
-  if (!liftListItem(listItem!)(state, undefined)) return false;
-  if (dispatch === undefined) return true;
-
-  let current = state;
-  const dispatchInto = (tr: Transaction): void => {
-    current = current.apply(tr);
-    dispatch(tr);
-  };
-
-  // The invisible whitespace `drawsBlank` forgives is still in the document, and the caret
-  // would land after it — an "empty" line that is not empty and is not at its own start.
-  if (current.selection.$from.parent.content.size !== 0) {
-    const { $from } = current.selection;
-    dispatchInto(current.tr.delete($from.start(), $from.end()));
-  }
-
-  const climbOut = nothingIsFlattened(current.selection.$from);
-  for (let guard = 0; guard < 12 && isInList(current); guard += 1) {
-    const before = current;
-    liftListItem(listItem!)(current, dispatchInto);
-    if (current === before || !climbOut) break;
-  }
-
-  return true;
-};
-
-/**
- * Enter. Inside a list this splits the item; on an empty item it ends the list.
- *
- * The new item inherits the *shape* of the one it came from but never its tick: Enter
- * after a finished task starts the next task, not a second one already crossed off.
- * The attrs have to be chosen per press rather than passed always, because
- * `splitListItem`'s `itemAttrs` is static and would stamp `checked: false` — a
- * checkbox — onto every ordinary bullet. Passing nothing is not the neutral option it
- * looks like: `splitListItem` then splits the node as it stands, attrs and all.
- *
- * B72's star is not inherited either, and for a plainer reason than the tick: a star says
- * *this one* needs attention. Carrying it onto the next line would mean the flag spread by
- * pressing Enter, which is the opposite of what flagging is for. What takes its place is
- * not a bullet by default but whatever the list was using before the star —
- * `markerBeforeStar`.
- */
-export const enter: Command = (state, dispatch) => {
-  if (exitList(state, dispatch)) return true;
-  if (!isInList(state)) return false;
-
-  const item = enclosingItem(state.selection.$from);
-  if (item === null) return splitListItem(listItem!)(state, dispatch);
-  if (item.attrs.checked !== null) {
-    return splitListItem(listItem!, { checked: false })(state, dispatch);
-  }
-  if (item.attrs.starred === true) {
-    const checked = markerBeforeStar(state.selection.$from);
-    return splitListItem(listItem!, { checked, starred: false })(state, dispatch);
-  }
-  return splitListItem(listItem!)(state, dispatch);
-};
-
-/**
- * The marker a starred item interrupted, for Enter to carry on with.
- *
- * A star stands *where the bullet stood* (B72) rather than beside it, so it replaces a
- * marker instead of adding one — and the line after it should go back to the marker the
- * list is made of. Starring one line of a checklist and pressing Enter handed back a plain
- * bullet, which ends the checklist at the flagged item: the box is the point of that list,
- * and the star was only ever meant to sit on one of them for a while.
- *
- * Read off the items before it rather than remembered on the node, so nothing new reaches
- * the file (B6) and a star that arrived from Obsidian, from a paste or from an undo answers
- * the same as one that was just typed. Starred siblings are skipped, so several flagged
- * lines in a row still know what they interrupted, and with nothing before it the bullet
- * the request names as the default is what `checked: null` already means. A numbered list
- * never reaches here — `toggleStar` declines one and `to-mdast.ts` would drop the star
- * anyway, the number being the marker already.
- */
-function markerBeforeStar($from: ResolvedPos): boolean | null {
-  const depth = itemDepthOf($from);
-  if (depth === null) return null;
-
-  const list = $from.node(depth - 1);
-  for (let index = $from.index(depth - 1) - 1; index >= 0; index -= 1) {
-    const sibling = list.child(index);
-    if (sibling.attrs.starred === true) continue;
-    return sibling.attrs.checked === null ? null : false;
-  }
-  return null;
-}
-
-/** The depth of the nearest list item around a position, if there is one. */
-function itemDepthOf($pos: ResolvedPos): number | null {
-  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    if ($pos.node(depth).type === listItem) return depth;
-  }
-  return null;
-}
-
-/** The nearest list item around a position, if there is one. */
-function enclosingItem($pos: ResolvedPos): PMNode | null {
-  const depth = itemDepthOf($pos);
-  return depth === null ? null : $pos.node(depth);
-}
 
 /**
  * Rejoins two lists of the same kind that have ended up directly against each other.

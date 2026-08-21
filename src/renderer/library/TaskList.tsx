@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { TaskItem } from "../../shared/vault-types.js";
-import { drawBox } from "../editor/checkbox.js";
+import { drawBox } from "@emqnote/core/editor";
 import { roveArrowKey } from "./roving.js";
 
 interface Props {
