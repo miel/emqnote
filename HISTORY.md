@@ -963,3 +963,74 @@ travelling on to the window, the rows kept out of the Tab order, and three lists
 once keeping separate highlights. The Who completion itself was also confirmed live in this
 session, in the reader window: the caret in "Pieter Jansen" offered exactly that name with
 its count, with "Jan de Vries" filtered out as already in the field.
+
+**The capture window's test harness landed on 22 August 2026**, on top of `v0.10.4`, and
+nothing under `src/` changed for it. It closes the sentence every batch since the
+disk-change work has ended on — and the first thing worth recording is that the sentence
+was wrong, in a specific and instructive way. "The capture window has no test harness" was
+two claims wearing one coat. The window has been *reachable* over CDP since 15 August 2026,
+which is written down in this file ("`Input.dispatchMouseEvent` and `Input.dispatchKeyEvent`
+over CDP reach it perfectly well; what it has never had is a *unit-test* harness, which is a
+narrower statement than the one every batch since has been making"). Every batch since went
+on making the broad one anyway. **A claim that is repeated rather than re-checked drifts**,
+and this one drifted for a week while the correction sat in the same file.
+
+**The unit-test half was never blocked by anything.** `test/library-disk-change.test.ts` has
+mounted a real `Library` against a stubbed `window.emqnote` since Package C shipped;
+`Capture.tsx` reaches for twelve members of the same interface, and four existing suites
+already mount ProseMirror's `Editor` in jsdom. `test/helpers/capture.ts` is that pattern
+pointed at the other window, and four suites came out of it — 41 tests, no display, running
+in CI on all three platforms:
+
+- `capture-disk-change.test.ts` — B31's three branches in this window (`TEST-PROTOCOL.md`
+  §10, the one item recorded as never reachable by automation at all). Reread when clean,
+  a buttonless notice when dirty, a buttonless notice on deletion whatever `dirtyRef` says,
+  and the two ways the notice clears. Two of its assertions are about something *not*
+  happening, which is the whole asymmetry with the reader: a window where the user may be
+  mid-sentence must never offer a button that could discard what they are typing.
+- `capture-keys.test.ts` — the window-level chords, including the Ctrl+Shift+Enter
+  regression `matches()` was written for. Breaking `fires("close")` back into
+  `event.ctrlKey && event.key === "Enter"` reproduces the original bug and turns two of
+  these red, which is the check that the test is worth having.
+- `capture-session.test.ts` — what a session is: the subject field and Discard appearing
+  only for a note this window began (B20, B68), the half-typed tag and attendee buffer that
+  `key={session}` exists to drop, and the stamp on `onShow` — read at the moment the note is
+  begun, left alone once anything is typed, and never applied to a handed-over note.
+- `capture-insert.test.ts` — the Insert routes reaching the document in *this* window's copy
+  of them: the picker's filter, an image, a PDF, and a file with no preview going in as a
+  link rather than an embed.
+
+**The stub has to cover the window's children, and forgetting that is what broke first.**
+`Capture.tsx` never mentions `tagSuggestions`, `peopleSuggestions`, `locationSuggestions` or
+`pdfPageCount` — but `HeaderBlock` calls three of them the moment anything is typed into
+Tags, Where or Who, and `attachment-view.ts` calls the fourth the moment a `.pdf` embed gets
+a node view. An absent one throws out of a `void` promise chain and arrives as an unhandled
+rejection attributed to whichever test was running by then: the reported test and the broken
+one are two different tests, the same shape as `capture-writer.test.ts`'s rename race.
+
+**The other half is `scripts/drive-capture.ts` (`npm run drive:capture`)** — the real window,
+under its own `Xvfb`, over CDP, with no new dependency: Node's global `fetch` and `WebSocket`
+are all CDP needs, so `check:bundle` stays quiet. It scaffolds a throwaway vault holding a
+real PNG and a note that embeds it, raises the hidden window with the **real global hotkey**
+(`xdotool key ctrl+shift+y`; `globalShortcut` works on a bare `Xvfb`), and runs five steps.
+The headline one is the gap four separate features have been unverified on for months:
+**`naturalWidth` non-zero on the picture in the capture window** — decoded, not merely an
+`<img>` in the DOM. It also walks the caret across that picture, measures the header fields'
+real widths (§34's "a field with no room", which every jsdom rectangle reports as zero), and
+re-runs §21j's Mod+clicked tag raising the library filtered. All five green, twice in a row,
+and each confirmed to go red when broken on purpose; the run exits non-zero naming the step,
+and keeps the vault on a failure because that is the evidence.
+
+**Two things cost a run each and are now in `CONSTRAINTS.md`.** `xvfb-run` writes a fresh
+`Xauthority` into a temp directory and exports `XAUTHORITY` to its own child only, so the app
+drew perfectly while every `xdotool` and `xwininfo` beside it was refused — a harness failure
+that reads exactly like a failure of the window under test. The script starts a bare `Xvfb`
+on a display number it picks itself instead. And killing the pid rather than the process
+group left the Electron tree and the X server behind, so the *next* run died on a
+`--remote-debugging-port` bind: `detached: true` and a negative pid, SIGTERM then SIGKILL.
+
+**What none of it reaches, and is not claimed:** the PDF/Office thumbnail happy path, which
+has no OS provider here or in CI; every "does this feel right" row; and everything Windows.
+`TEST-PROTOCOL.md` §36 is what this batch owes a human, and it is mostly judging by eye what
+a 40px floor cannot — including the first photograph this project has of the capture window
+with real content in it.

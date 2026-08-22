@@ -1315,3 +1315,48 @@ The reader toolbar's Rename/Move/Duplicate/Reveal/Delete collapsed into one **"A
 
 B42's row, column and alignment commands were the exception that proved it: they existed from the start and lived *only* in the note panel's right-click menu, and were duly reported as missing features. `table-toolbar.ts` is the second route — a widget decoration above whichever table the caret is in, built on `checkbox.ts`'s recipe (`contentEditable="false"`, `stopEvent`, `ignoreSelection`, and a `preventDefault`ed `mousedown` so the command acts on the cell you clicked from). Its labels are short *visible* text (`table.rowAbove` → "Row ↑") with the menu's full sentence as the `title`, because `--click-button` matches a button on its own `textContent` — a glyph beside the word would put these straight back out of reach. Delete-table stays menu-only, being the destructive one. `t` reaches the plugin through `CommandContext` as its one optional field, falling back to English, so the half-dozen tests that build a context by hand need not carry a translator.
 
+
+**The capture window has a renderer harness now, and it answers half the questions — say
+which half.** `test/helpers/capture.ts` mounts the real `Capture` against a stubbed
+`window.emqnote`, exactly as `library-disk-change.test.ts` has mounted `Library` all along;
+`scripts/drive-capture.ts` drives the real window under its own `Xvfb` over CDP. The
+sentence every batch since the disk-change work ended on — "the capture window has no test
+harness" — was two claims wearing one coat, and only the narrower one was ever true: the
+window has been *reachable* since 15 August 2026 (`HISTORY.md`), and what it lacked was a
+unit-test harness. Nothing about the window had ever prevented one. It was simply never
+pointed at, and the broad version of the sentence kept getting repeated because nobody
+re-checked it.
+
+**The dividing line is layout, and it is not negotiable.** jsdom loads no images and
+computes no boxes, so `getBoundingClientRect` is all zeros and `naturalWidth` is always 0.
+Anything that turns on where something sits or whether a picture decoded — the `/` menu
+flipping above the caret, the table toolbar over a rectangle, `image-resize.ts`'s geometry,
+whether an attachment actually draws — belongs in the driver or with a person, never in a
+jsdom assertion dressed up to look like one. The driver's own headline step asserts
+`naturalWidth !== 0` rather than the presence of an `<img>` for exactly this reason: an
+element in the DOM proves the node view ran and proves nothing about whether the picture
+arrived. Four separate features spent months unverified on that one difference.
+
+**The harness stub covers the window *and its children*, which is what broke first.**
+`Capture.tsx` never mentions `tagSuggestions`, `peopleSuggestions`, `locationSuggestions`
+or `pdfPageCount` — but `HeaderBlock` calls three of them the moment anything is typed into
+Tags, Where or Who, and `attachment-view.ts` calls the fourth the moment a `.pdf` embed gets
+a node view. An absent one throws out of a `void` promise chain, which arrives as an
+unhandled rejection attributed to whichever test was running by then: the reported test and
+the broken one are two different tests, the same shape as `capture-writer.test.ts`'s
+rename race. Grepping the subject component for `window.emqnote.` is not enough; the stub
+has to cover what it renders.
+
+**Driving the real window: own the X server, and own the process group.** `xvfb-run` writes
+a fresh `Xauthority` into a temp directory and exports `XAUTHORITY` to its own child only,
+so the app draws perfectly while every `xdotool` and `xwininfo` beside it is refused with
+"Authorization required" — a harness failure that reads exactly like a failure of the window
+under test. `scripts/drive-capture.ts` therefore starts a bare `Xvfb` on a display number it
+picks itself. And it spawns `detached: true` and signals the *negative* pid: killing the pid
+alone leaves the Electron tree and the X server behind, and the survivor still holds
+`--remote-debugging-port`, so the next run dies on a port bind that reads like a bug in the
+app. Both of these cost a run each before they were understood. The rest of the sandbox's X
+rules still apply and are in the project memory: no window manager, so `windowfocus` and
+never `windowactivate`; `xwininfo`'s Map State rather than `xdotool getwindowgeometry`,
+which answers for a hidden window too — and this window is hidden by design, so a check that
+cannot tell the two apart passes before the hotkey is ever pressed.

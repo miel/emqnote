@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1660 tests
+npm test               # vitest run — 1740 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -27,7 +27,7 @@ npx vitest run test/roundtrip.test.ts
 npx vitest run -t "stays byte-identical"
 ```
 
-Five diagnostic helpers exist for questions this project has learned not to guess at — a
+Seven diagnostic helpers exist for questions this project has learned not to guess at — a
 reported bug that survives its own fix is a recurring theme here (B57 → B59, B62's Ctrl+Tab,
 B71), and each helper below exists because guessing had already had its turn:
 
@@ -56,6 +56,18 @@ emqnote --thumbnail-probe="2026-08-04-1030-offerte.pdf" --vault=/path/to/vault
 ```
 
 `--trash-probe` says why something in `_trash` will not delete, per entry — read-only, held open by another process — and **deletes nothing**; the evidence is the point on the one operation with no way back. `--key-probe` logs every key a window is handed to `<userData>/key-probe.log`, one line per press, including whether `matches()` claimed it — it does not exit and does not bypass the single-instance lock, so quit the resident app first. `--thumbnail-probe` prints exactly which of four things went wrong for one named attachment's PDF preview. `CONSTRAINTS.md` has the full story behind each.
+
+```bash
+npm run drive:capture
+npm run drive:capture -- --screenshot=/tmp/capture.png
+```
+
+Drives the **capture window** in the real app, under its own `Xvfb`, over CDP. Scaffolds a
+throwaway vault, raises the window with the real global hotkey, hands it a note holding a
+picture and a `#tag`, and checks the five things only a real renderer can answer — most of
+all `naturalWidth`, which is whether the picture actually *decoded* rather than whether an
+`<img>` reached the DOM. Exits non-zero on the first failed step and names it. Needs a
+display, so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.
 
 ## Architecture
 
@@ -130,7 +142,15 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite must stay under about two seconds so it can run on every change. `test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
+The suite runs its 1740 tests in roughly twenty seconds of test time (about a minute and a
+half of wall clock, most of it transform and environment setup). That number is worth
+watching rather than defending: this file said "under about two seconds" for a long while
+after it had stopped being true, and a budget nobody re-measures is a budget that quietly
+becomes a wish. What the budget is *for* still holds — the suite has to stay cheap enough to
+run on every change — and the jsdom files that mount a real component are what most of the
+time goes on.
+
+`test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
 
 **Everything in that file starts its watcher through `startWatching`, and the reason is a
 backend property rather than a slow runner.** chokidar's `ready()` resolves when its initial

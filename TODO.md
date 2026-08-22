@@ -3,7 +3,29 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 21 August 2026, on top of `v0.10.3` — the two items that release left behind,
+Last updated 22 August 2026, on top of `v0.10.4` — **the capture window's missing test
+harness, built**. The sentence every batch since the disk-change work has ended on is
+retired, and the honest version of it is worth keeping: it was two claims in one, and only
+the narrow one was ever true. The window has been *reachable* over CDP since 15 August
+(`HISTORY.md` says so, and every batch since went on saying the broader thing anyway); what
+it lacked was a unit-test harness, and nothing about the window had ever prevented one.
+
+Two pieces, answering different questions. `test/helpers/capture.ts` mounts the real
+`Capture` against a stubbed `window.emqnote`, exactly as `library-disk-change.test.ts` has
+mounted `Library` all along — four suites, 41 tests, no display needed, running in CI on all
+three platforms. `scripts/drive-capture.ts` (`npm run drive:capture`) drives the real window
+under its own `Xvfb` over CDP, and its headline step is the one four separate features have
+been unverified on for months: **a picture in the capture window with `naturalWidth` non-zero**
+— decoded, not merely an `<img>` in the DOM. Five steps, all green, twice in a row, and each
+one confirmed to go red when broken on purpose. `TEST-PROTOCOL.md` §36 is what it now owes a
+human, which is mostly judging by eye what a floor of 40px cannot.
+
+Nothing under `src/` changed for any of it. Four constraints came out of it and are in
+`CONSTRAINTS.md` — where the jsdom/layout line falls, why the stub must cover the window's
+*children* and not just the window, and the two things that cost a run each: `xvfb-run`'s
+private `Xauthority`, and a process group that has to be signalled rather than a pid.
+
+The previous entry, 21 August 2026, on top of `v0.10.3` — the two items that release left behind,
 plus the DOM test it was also missing. The Tasks view and a live search each have a way out
 now: a labelled control ("Exit tasks", and a `×` in the search box) and Escape, both handing
 focus back to the selected note in the list that replaces what was on screen. No decision:
@@ -117,6 +139,17 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
 ---
 
 ## Open items worth your attention
+
+- **22 August 2026 — the capture-window gap below is narrower than the bullets say.**
+  Four of them (PR #2's inline attachment, `v0.4.1`'s bug 4, `v0.5.0`'s capture disk-change
+  notice, and the cornerstone features' capture half) named the same absence, and the
+  absence is gone. What each of them can now claim, and what it still cannot, is the same
+  split every time: **the route and the logic are covered** by `test/helpers/capture.ts`
+  and its four suites, and **a real picture decoding in the real window** is covered by
+  `npm run drive:capture` — `naturalWidth` non-zero, driven twice. What is still owed is
+  only what a script cannot judge, and `TEST-PROTOCOL.md` §36 lists it. Read the bullets
+  below with that in front of them; they are kept as written because they are the record
+  of how long this took to close.
 
 - **`v0.4.0` shipped PR #2 before its two unseen items were walked through**,
   deliberately and knowingly — the Mac had been running `v0.3.3` for a week
@@ -232,10 +265,15 @@ because they are unreachable. (Also no longer blocked on Node: an `nvm`
 install of Node 24 on 2 August 2026 fixed both the jsdom-based tests and
 `better-sqlite3`, which segfaulted under the sandbox's previous Node 18 —
 see `00-PLAN.md`.) `npm test`, `npm run typecheck` and `npm run build` all
-pass — 1216 tests, the full suite.
+pass — 1216 tests, the full suite. (1740 as of 22 August 2026.)
 
 - [ ] **The three cornerstone features of 14 August 2026 in the *capture* window**
-      (B49 cell selection, B50 remote images, B51 the `/` menu). All three are
+      (B49 cell selection, B50 remote images, B51 the `/` menu). *Partly closed,
+      22 August 2026: the window now has a harness and a driver, and a real picture
+      genuinely decodes in it. What is still open here is these three specifically —
+      no suite has been written against them in this window yet, and the rectangle
+      and the sixteen-row panel are judgement calls a script cannot make anyway.*
+      All three are
       confirmed in the library under `Xvfb` and driven over CDP — the drag, the
       clearing, the toolbar over a rectangle, the picture drawn from cache with the
       network down, the switch turning it back into a chip, the menu filtering as you

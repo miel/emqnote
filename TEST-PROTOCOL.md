@@ -383,12 +383,17 @@ for "comfortable." Judge it the way you would judge any editor's bottom margin.
 
 ### 9.2 Caret beside an image in the capture window — NEVER VERIFIED
 
-This is the twin of §4.2's problem, one level further in: nobody has ever gotten an image
+This was the twin of §4.2's problem, one level further in: nobody had ever gotten an image
 to draw in the capture window under Xvfb, so `moveOverAtom` (`commands.ts`) — which is
 supposed to steer the arrow keys across a `wikiEmbed`/`wikiLink` atom instead of leaving an
-invisible `NodeSelection` — has never been exercised there against a real render either.
-`test/image-caret.test.ts` covers it against a synthetic ProseMirror document, and that is
-all anyone knows about whether it actually works on screen.
+invisible `NodeSelection` — had never been exercised there against a real render either.
+
+**`npm run drive:capture` now does both** (22 August 2026): a real picture decodes in the
+real capture window (`naturalWidth` non-zero, not merely an `<img>` in the DOM), and six
+ArrowRights move the caret across it rather than leaving it stuck. `test/image-caret.test.ts`
+still owns the *rule* against a synthetic document. What is left here is what a script cannot
+judge: whether the caret's travel across the picture reads as one continuous motion on a real
+display, or as a jump.
 
 | # | Step | Expected | Feedback |
 |---|---|---|---|
@@ -404,15 +409,21 @@ blocks the rest of this section the same way it blocks §4.2's own remaining ste
 
 ---
 
-## 10. Disk-change notice in the capture window — NEVER VERIFIED
+## 10. Disk-change notice in the capture window — LOGIC COVERED, EVENT NOT
 
 The library window's own disk-change bar (a note that changed or disappeared on disk from
 outside the app) is covered end to end by `test/library-disk-change.test.ts`, a real
-`Library` mounted in jsdom. The capture window's equivalent has no such harness — this
-suite has never had one for the capture renderer — so `Capture.tsx`'s `onVaultFileChanged`
-subscription, its `dirtyRef` and the reload round trip through `IPC.captureReload` are
-proven only against the wiring, never against a real chokidar event landing on a real open
-capture window.
+`Library` mounted in jsdom. **Since 22 August 2026 the capture window's equivalent has the
+same** — `test/capture-disk-change.test.ts`, against a real `Capture` mounted through
+`test/helpers/capture.ts`. All three branches are pinned there: reread when clean, a
+buttonless notice when dirty, and a buttonless notice for a deletion whatever `dirtyRef`
+says, plus the two ways the notice clears. Two of those assertions are about something
+*not* happening, which is the point of the feature.
+
+What is left for a person is the half no harness reaches: whether a **real** chokidar event
+from a **real** OneDrive write lands on a **real** open capture window, and whether the
+300 ms `stabilityThreshold` is the right number against actual sync latency. The rows below
+still stand — they simply now check the plumbing rather than the logic.
 
 | # | Step | Expected | Feedback |
 |---|---|---|---|
@@ -443,7 +454,7 @@ as a bare `[[Spelregels]]`.
 | 11c | Type `[[Iets dat niet bestaat]]` into a note and click it | Nothing opens; the chip turns dashed and muted, and hovering says nothing in the vault is called that. This is deliberately not an error dialog — a link to a note you have not written yet is a normal thing to have |  |
 | 11d | Move the linked-to note to another folder (drag it, or Actions → Move) | Before anything moves, a question: "2 notes link to this one — update them to follow?" with **Update** and **Leave them**. Choose Update: open both referencing notes and check the target now names the new folder, while the words on screen are unchanged |  |
 | 11e | Repeat 11d and press Escape instead | **The note still moves** — only the links are left alone. This is the one dialog whose dismissal is not a cancel, and it is worth confirming it does not read as one |  |
-| 11f | Open a note in the **capture window** that carries a `[[…]]` note link, and click it — NEVER VERIFIED | The library window comes to the front with that note open. There is no capture-renderer harness in the suite, so this route has only ever been reasoned about, never watched |  |
+| 11f | Open a note in the **capture window** that carries a `[[…]]` note link, and click it — NEVER VERIFIED | The library window comes to the front with that note open. A capture-renderer harness exists now, but this route has no test against it yet, so it has only ever been reasoned about |  |
 | 11g | Rename a note that others link to (click its title in the reader) | The same question as 11d, and the same two answers. Check a rewritten file's bytes: the alias must be untouched, and a link that had *no* alias must have gained one spelling out what it used to display |  |
 | 11h | Rename a note to a title another note in the **same folder** already has | A warning first — "A note with this title already exists in …" — then, if you confirm, the link question if any links exist. Cancelling the warning must leave the note's title alone |  |
 | 11i | Open an older vault whose index predates this feature | Everything above still works on the first run: the schema version bump forces a rebuild, and the only visible sign should be the scan progress bar at the top of the library |  |
@@ -468,7 +479,7 @@ person on real hardware can judge.
 | 12g | Press ⧉ **Open in system viewer** | Preview/Acrobat opens the same file. This is the escape hatch for printing and annotating |  |
 | 12h | Click a *second* PDF in a note while the viewer is open | The same window retargets to the new file and comes forward — a second viewer window must not appear |  |
 | 12i | Click a `.docx` or `.xlsx` attachment | Still goes straight to Word/Excel. The viewer is for what the app can actually draw |  |
-| 12j | Click a PDF from the **capture window** — NEVER VERIFIED | The viewer opens the same way. The capture renderer has no harness in the suite, so this route has only been reasoned about |  |
+| 12j | Click a PDF from the **capture window** — NEVER VERIFIED | The viewer opens the same way. The capture renderer has a harness now, but no test covers this route, so it has only been reasoned about |  |
 | 12k | Open a corrupt or password-protected PDF | The viewer says it cannot read that file, in words, on the page. Not a blank window and not a crash |  |
 | 12l | Quit the app with the viewer open | The viewer closes with everything else and leaves no stray process |  |
 
@@ -487,7 +498,7 @@ link resolving back through B35. What is left is the capture window and the feel
 | 13e | Select a few words first, then press `Mod+Shift+K` | The picker opens with those words already in the filter, and picking a note replaces the selection |  |
 | 13f | Type a filter that matches nothing | "No note matches", not an empty box |  |
 | 13g | Try `tag:klantx` in the filter | It narrows the same way the library's search bar does — the picker runs the same query language, which is a consequence of using the index rather than a separate feature |  |
-| 13h | Do 13a–13d in the **capture window** — NEVER VERIFIED | Identical behaviour. No capture-renderer harness exists, and this is the window notes are actually written in, so it is the row most worth walking |  |
+| 13h | Do 13a–13d in the **capture window** — NEVER VERIFIED | Identical behaviour. A capture-renderer harness exists now (`test/helpers/capture.ts`) but no test has been written for this row against it, and this is the window notes are actually written in, so it is still the row most worth walking |  |
 | 13i | Open the picker in a vault of a few thousand notes | It appears without a stall, and typing stays responsive. The filtering happens in main against FTS5, so a slow picker here means something else is wrong |  |
 
 ## 14. Tables (B42)
@@ -511,7 +522,7 @@ grid is a hover gesture, which `--click-button` cannot drive, so its feel is unt
 | 14k | Open a note with a table written in Obsidian, edit a cell, save | Run `npm run canonical` on it. Byte-identical, or one of the two is wrong and which is a decision |  |
 | 14l | Add a column to a table whose rows are *not* all the same length | Every row squares up to the same width. Hand-written markdown really does produce ragged rows |  |
 | 14m | Copy a table inside the editor and paste it | It comes back as a table, alignment included — not as loose text |  |
-| 14n | Do 14a–14e in the **capture window** — NEVER VERIFIED | Identical behaviour, same missing harness as 13h |  |
+| 14n | Do 14a–14e in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h: reachable by the harness now, not yet written against it |  |
 
 ---
 
@@ -533,7 +544,7 @@ is what only a person on a real display can judge: how a full-width page feels t
 | 15h | Put the file back — **without restarting** — and reopen the note | The page draws again. This is the one that was broken in the first version: a missing file must not be remembered, only a PDF that genuinely cannot be rendered |  |
 | 15i | Embed a corrupt or password-protected PDF | A chip in the warning colour, and hovering says why. It must not look identical to 15g, and it must not look like a plain attachment |  |
 | 15j | Open a note with several embedded PDFs | They draw one after another, not all at once — one render window, one slot. Nothing about the window should stutter while they arrive |  |
-| 15k | Do 15a and 15c in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n |  |
+| 15k | Do 15a and 15c in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n: reachable by the harness now, not yet written against it |  |
 
 ---
 
@@ -553,7 +564,7 @@ whether ten buttons in a row are legible at a real window width.
 | 16f | Right-click inside the table | The same operations are still in the menu, plus **Delete table**, which is deliberately not on the toolbar |  |
 | 16g | Click a `[[…]]` link to another note | The note opens with a `← <the note you came from>` button above its title. Click it: you are back, and the button is gone |  |
 | 16h | Follow three links in a row, then click back three times | One step per click, all the way out. Then open any note from the list: no back button at all |  |
-| 16i | Click a `[[…]]` link in the **capture window** — NEVER VERIFIED | The library opens the target *and* offers a way back to the note you were typing in. Same missing harness as 13h/14n |  |
+| 16i | Click a `[[…]]` link in the **capture window** — NEVER VERIFIED | The library opens the target *and* offers a way back to the note you were typing in. Same as 13h/14n: reachable by the harness now, not yet written against it |  |
 | 16j | Launch the app and look at the sidebar | Trash is folded. Unfold it: what is inside is dimmed and italic, and the Trash row itself is not |  |
 | 16k | Rename a folder holding notes that other notes link to | No dialog at all — the rename happens and the links follow. Check the referring file's bytes and click the link: it opens the note |  |
 | 16l | Rename a folder holding a note that is open in the capture window | Refused, with a message naming the reason. Nothing on disk moves |  |
@@ -579,7 +590,7 @@ they crowd — plus everything in the capture window, which still has no harness
 | 17e | Look at the bar in a **narrow** note column | Six controls plus a filename that ellipses. If they crowd or wrap, say so — automation measured only a 1600px window |  |
 | 17f | Turn several pages, then leave the note and come back | Back to page 1, and the pages you already looked at come back instantly (they are cached). Nothing should stutter |  |
 | 17g | Turn a page in a note whose PDF you then delete from `_attachments/`, and reopen | The marked ⚠ chip, exactly as §15g. Put the file back and reopen: the page returns without a restart |  |
-| 17h | Do 17a–17d in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k |  |
+| 17h | Do 17a–17d in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k: reachable by the harness now, not yet written against it |  |
 | 17i | Look at the reader toolbar | Two buttons where six things used to be: **Insert** and **Actions**. No 🖼 🔗 ▦ 📎 |  |
 | 17j | Open Insert | Insert image / Insert file / Link to note… / Table…, each with its shortcut. Each one does what the same item in the right-click menu does |  |
 | 17k | Open Actions | Rename / Move / Duplicate / Reveal / Delete, unchanged |  |
@@ -628,7 +639,7 @@ picture, a multi-page PDF and a `.docx` in it, and a note that ends in a table.
 | 18u | Click the `.docx` | "No preview for this file type", and an Open button that hands it to the OS |  |
 | 18v | Judge the split when a folder holds both notes and 200 files — NEVER JUDGED | The files section is capped at half the pane so the notes stay reachable. Does that feel right? |  |
 | 18w | Settings → Orphaned attachments, on a **OneDrive** vault with files not yet downloaded | It finishes. It used to sit on "Looking…" indefinitely — and if it now fails it says so instead of looking busy for ever |  |
-| 18x | Do 18a–18n in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h |  |
+| 18x | Do 18a–18n in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h: reachable by the harness now, not yet written against it |  |
 
 ---
 
@@ -660,7 +671,7 @@ with a real network on it.
 | 19r | Type `/divid`, Enter, then type a word | The rule stays and the word goes below it. Before this the word replaced the rule |  |
 | 19s | Type a date like `12/8` mid-sentence, and a `/` in a table cell | No menu, either time |  |
 | 19t | Judge the panel at a short window height — NEVER JUDGED | Sixteen rows is taller than some windows. It should flip above the caret and scroll rather than run off the screen |  |
-| 19u | Do 19a–19s in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h/18x |  |
+| 19u | Do 19a–19s in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h/18x: reachable by the harness now, not yet written against it |  |
 
 ---
 
@@ -683,7 +694,7 @@ otherwise. Note §19t is answered by 20a: the panel does scroll now.
 | 20j | Press Backspace there | Exactly those cells empty. Save and `npm run canonical`: byte-identical |  |
 | 20k | Select part of a cell and press Shift+Down | Whole cells, two rows of them — a cell has no line below to extend to |  |
 | 20l | Ask a table's alignment buttons to align one cell | They cannot, by design: GFM writes alignment once per column. They act on the caret's column, or on the columns a rectangle covers. See B42 |  |
-| 20m | Do 20a, 20f, 20h–20k in the **capture window** — NEVER VERIFIED | Identical behaviour. Same missing harness as 13h/14n/15k/17h/18x/19u |  |
+| 20m | Do 20a, 20f, 20h–20k in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h/18x/19u: reachable by the harness now, not yet written against it |  |
 
 ---
 
@@ -1212,6 +1223,33 @@ part a sandbox with no window manager cannot judge and the platform differences.
 | 35j | Type a query and click the **×** | Same as Escape in the box. It is only there while there is something to clear |  |
 | 35k | Empty the box by hand, with Backspace | The × goes as the last character does |  |
 | 35l | On **Windows**, repeat 35a and 35f | Focus lands the same way. This is the platform where focus after a re-render has surprised this project before |  |
+
+## 36. The capture window's harness (22 August 2026)
+
+The window notes are written in stopped being the window nothing tests. Two pieces landed,
+and they answer different questions — see `CONSTRAINTS.md` for where the line falls and why
+it must not be blurred.
+
+**`test/helpers/capture.ts` plus four suites** (41 tests): the disk-change notice's three
+branches (§10), the window-level chords including the Ctrl+Shift+Enter regression, what a
+session is — the subject field, Discard, the half-typed tag buffer, the stamp on the way in —
+and the Insert routes reaching the document. None of it needs a display; all of it runs in CI
+on all three platforms.
+
+**`npm run drive:capture`**: the real window under its own `Xvfb`, over CDP. Five steps, each
+one a thing only a real renderer can answer, and each exits non-zero by name.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 36a | `npm run drive:capture` | Five `ok` lines and exit 0. Run it twice: a step that passes only on residue in the temp vault is the failure mode worth catching |  |
+| 36b | `npm run drive:capture -- --screenshot=/tmp/capture.png` and look at the picture — NEVER JUDGED BY EYE | The capture window with a handed-over note in it: heading, the embedded picture, the `#klantx` chip beside the Tags field, the filename in the status bar. This is the first photograph of this window with real content in it |  |
+| 36c | Judge the header against a real display — NEVER JUDGED | The driver asserts Tags/Where/Who are each wider than 40px, which is a floor and not a judgement. §34's "a field with no room" is about whether they are *comfortable*, and only you can say |  |
+| 36d | Break something on purpose and re-run — for whoever next doubts the driver | It goes red on the step, names it, keeps the vault, and exits 1. Deleting the fixture picture is the cheapest way in |  |
+
+**What neither piece reaches, and must not be claimed:** the PDF/Office thumbnail happy path
+(no OS provider here or in CI), every "does this feel right" row, and everything Windows.
+
+---
 
 ## Reporting
 
