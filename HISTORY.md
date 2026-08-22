@@ -1050,14 +1050,25 @@ The two behaviour changes in between were read rather than assumed — setup-nod
 automatic caching keys off a `packageManager` field this project has not got, and
 checkout v6's separate credential file cannot reach `release.yml`'s `git fetch --force
 --tags origin` because this repo is public and that fetch needs no credentials.
-**`actions/upload-artifact@v4` was deliberately left alone**, which is the part the bullet
-had wrong by omission: it is a ninth `actions/` pin in those files and it is *not* in the
-warning — `v0.10.4`'s real annotations name checkout and setup-node and nothing else,
-including on the one job that uses it. Read off the run rather than reasoned from a version
-number, which is the only way to tell those two apart. And the branch bullet named three
+`actions/upload-artifact` was **left alone at first, on evidence that did not say what it
+was read as saying** — `v0.10.4`'s annotations name checkout and setup-node and nothing
+else, including on the `package` job that is the only user of upload-artifact, and that
+absence was taken for proof its v4 already ran on node24. The moment the other two were
+bumped, `v0.10.5`'s `package` jobs warned about `upload-artifact@v4` by name and nothing
+else. The notice does not enumerate every offender, so **an action missing from one run's
+annotation is not evidence that it is fine** — the same shape as inferring a capability
+from a mechanism, two paragraphs down, in the same batch. It is `@v7` now, and `@v5` would
+not have done: upload-artifact's own v5 notes call its node24 support preliminary and say
+the action by default still runs on Node 20, so v5 would have left the warning exactly
+where it was while looking like a fix. And the branch bullet named three
 branches, two of which no longer existed locally, while nineteen fully-merged ones had piled
 up behind it; all nineteen are gone, deleted with `git branch -d` so the command is its own
 check.
+
+`v0.10.5` was tagged on top of all of this rather than beneath it, so that the one run this
+project cannot repeat cheaply would be the run that exercised the new pins. It went green
+end to end, `create-release`'s `git fetch --force --tags origin` included — the one step
+`build.yml` never covers, and the only reason there was any doubt.
 
 **The three cornerstone features of 14 August 2026 (B49, B50, B51) now have suites in the
 capture window** — the item `TODO.md` had carried for eight days on the grounds that the

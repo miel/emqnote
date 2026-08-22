@@ -400,20 +400,30 @@ pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
       cannot affect `release.yml`'s `git fetch --force --tags origin` because this repo
       is public and that fetch needs no credentials at all.
 
-      **`actions/upload-artifact@v4` was deliberately left alone**, and that is the part
-      the old bullet got wrong by omission. It is the ninth `actions/` pin in these
-      files and it is *not* in the warning: the real annotation on `v0.10.4`'s runs names
-      `actions/checkout@v4` and `actions/setup-node@v4` and nothing else — including on
-      the `package` job, which is the only job that uses `upload-artifact`. Its current
-      v4 release already runs on node24. Read from the run rather than reasoned from the
-      version number, which is the only way to tell those two apart.
+      **`actions/upload-artifact` is `@v7` too, and getting there took being wrong first.**
+      It was left alone in the original bump on the evidence of `v0.10.4`'s annotations,
+      which name `checkout` and `setup-node` and nothing else — including on the `package`
+      job, the only job that uses `upload-artifact`. The conclusion drawn from that
+      absence was that its v4 already ran on node24. It does not: the moment the other two
+      were bumped, `v0.10.5`'s `package` jobs warned about `upload-artifact@v4` by name and
+      nothing else. **An action missing from one run's annotation is not evidence that it
+      is fine** — the notice does not enumerate every offender, and reading it as if it did
+      is the same shape of mistake as inferring a capability from a mechanism. Bumped and
+      re-checked, which is the only thing that ever settled it.
 
-- [ ] **Neither workflow has actually run since the bump.** `build.yml` exercises both
-      actions on all three platforms on any push or PR, so that half is one cheap run
-      away. `release.yml` is not: the one thing `build.yml` does not cover is
-      `create-release`'s `git fetch --force --tags origin` immediately after checkout,
-      and the only thing that exercises it is a tag push. The reasoning above says it is
-      safe; a green run is what would make it known.
+      `@v7` rather than `@v5` for a second, sharper reason here: upload-artifact's v5 notes
+      call its node24 support "preliminary" and say the action **by default still runs on
+      Node.js 20**. v6 is where it actually moves. So `@v5` would have left the warning
+      exactly where it was while looking like a fix.
+
+- [x] ~~**Neither workflow has actually run since the bump.**~~ Both have, on 22 August
+      2026. `v0.10.5` was tagged on top of the bump deliberately so that the expensive run
+      would exercise it: `release.yml` went green end to end on `@v7`, including
+      `create-release`'s `git fetch --force --tags origin` immediately after checkout —
+      the one step `build.yml` never covers and the only reason there was any doubt. The
+      release published, both platform artifacts and `latest.yml` with them. That run is
+      also what caught `upload-artifact` still being on Node 20; its own bump has not been
+      through a run yet, and `build.yml` on the next push is what will say.
 
 ## Settled
 
