@@ -1,9 +1,8 @@
 # Phase 0 results — OneDrive feasibility
 
-Blank evidence sheet for the run described in [`08-iphone-phase-0.md`](../../08-iphone-phase-0.md).
-Nothing here has been observed yet: every field is a placeholder until the run happens on the
-Mac and the business iPhone. Fill it in *during* the run, not afterwards from memory — the
-timings and error codes are the whole point.
+Run started 22 August 2026 on the Mac mini and the real business iPhone. §5's full matrix is
+not yet exercised — the run stopped at the picker step, per §7's instruction to stop rather
+than compensate once folder access through Files fails.
 
 Do not record account names, tenant identifiers, or private filesystem paths (§6).
 
@@ -11,20 +10,44 @@ Do not record account names, tenant identifiers, or private filesystem paths (§
 
 | Field | Value |
 |---|---|
-| Date of run | _not yet run_ |
-| iPhone model | |
-| iOS version | |
-| Xcode version | |
-| OneDrive app version | |
-| Account type | |
-| Relevant MDM restrictions | |
-| `00 Inbox` pinned offline? | |
-| Commit tested | |
+| Date of run | 22 August 2026 |
+| iPhone model | iPhone14,4 (iPhone 13 mini) |
+| iOS version | 26.5.2 (23F84) |
+| Xcode version | 26.3 (17C529) |
+| OneDrive app version | not recorded |
+| Account type | signed into both a personal and a business OneDrive account |
+| Relevant MDM restrictions | none confirmed — see finding below; not an MDM block |
+| `00 Inbox` pinned offline? | not reached |
+| Commit tested | 08e69be |
+
+## Finding: OneDrive is not selectable through the folder picker
+
+`selectInbox()`'s `UIDocumentPickerViewController(forOpeningContentTypes: [.folder])` lists
+iCloud Drive and Dropbox as selectable locations. Both signed-in OneDrive accounts (personal
+and business) appear in the location list but are greyed out — not selectable.
+
+Ruled out before concluding this was real:
+
+- **Not a sign-in problem.** Both OneDrive accounts are signed in.
+- **Not a blanket MDM block.** The system Files app (outside this app entirely) browses both
+  OneDrive accounts at the file level without restriction.
+
+What's left is a capability gap in OneDrive's own File Provider extension: it supports
+file-level browsing and import, but not the directory-domain capability
+`UIDocumentPickerViewController`'s `.folder` content type requires for whole-folder selection.
+This is a known, long-standing limitation of Microsoft's provider — other providers (iCloud
+Drive, Dropbox) implement it; OneDrive does not, independent of any corporate policy.
+
+This is functionally the same outcome §7 describes for an MDM block, and triggers the same
+instruction: **stop, rather than compensate by weakening permissions, selecting the whole
+vault, or introducing an uncoordinated write.** The rest of §5's matrix was not run, because
+its precondition (a folder bookmark to `00 Inbox`) cannot be obtained this way.
 
 ## Test matrix
 
 Record the outcome, how long the write took, and the native error domain and code for
-anything that failed. "Pass" means the required outcome in §5, not merely "no crash".
+anything that failed. "Pass" means the required outcome in §5, not merely "no crash". Not
+reached this run — see the finding above.
 
 | Test | Required outcome | Result | Timing | Error domain / code | Notes |
 |---|---|---|---|---|---|
@@ -81,12 +104,18 @@ Each condition from §7, with the evidence that settles it:
 
 | Condition | Met? | Evidence |
 |---|---|---|
-| OneDrive exposes `00 Inbox` through the picker | | |
-| Corporate policy permits read/write access | | |
-| The bookmark survives normal relaunch | | |
-| A coordinated operation produces either exact final bytes or no final file | | |
-| Existing files are never overwritten | | |
-| Offline or interrupted operations return a recoverable state | | |
-| A delivered note reaches the PC and parses correctly | | |
+| OneDrive exposes `00 Inbox` through the picker | **No** | OneDrive greyed out in the `.folder` document picker for both accounts, on real hardware; see finding above |
+| Corporate policy permits read/write access | Not the blocker | System Files app browses OneDrive at the file level with no restriction; the failure is provider capability, not MDM |
+| The bookmark survives normal relaunch | Not reached | |
+| A coordinated operation produces either exact final bytes or no final file | Not reached | |
+| Existing files are never overwritten | Not reached | |
+| Offline or interrupted operations return a recoverable state | Not reached | |
+| A delivered note reaches the PC and parses correctly | Not reached | |
 
-**Decision:** _pending_
+**Decision:** Stop, per §7. The Files-based picker route fails at its first precondition —
+not from MDM, but because OneDrive's File Provider extension does not support folder-level
+selection. §7 routes this to a separate Graph-versus-no-app decision
+([`07-iphone-reviewed-clean.md`](../../07-iphone-reviewed-clean.md), Graph is described as a
+fallback requiring Microsoft sign-in, Entra app registration, permissions, and a second
+delivery implementation — deliberately out of scope for the first plan). That decision has
+not been made yet.
