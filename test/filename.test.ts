@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  collisionCandidate,
   isoWithOffset,
   MAX_TITLE_LENGTH,
   noteFileName,
@@ -129,6 +130,45 @@ describe("shared collision names", () => {
         exists: (path) => existing.has(path),
       }),
     ).toBe("Inbox/note (3).markdown");
+  });
+
+  it("counts the plain name as the first candidate, not a special case", () => {
+    expect(collisionCandidate("2026-07-25 1432 Kickoff.md", 1)).toBe(
+      "2026-07-25 1432 Kickoff.md",
+    );
+    expect(collisionCandidate("2026-07-25 1432 Kickoff.md", 2)).toBe(
+      "2026-07-25 1432 Kickoff (2).md",
+    );
+    expect(collisionCandidate("2026-07-25 1432 Kickoff.md", 3)).toBe(
+      "2026-07-25 1432 Kickoff (3).md",
+    );
+  });
+
+  it("re-attaches the extension the file arrived with", () => {
+    expect(collisionCandidate("verslag.markdown", 2)).toBe("verslag (2).markdown");
+    expect(collisionCandidate("Aantekening.MD", 2)).toBe("Aantekening (2).MD");
+  });
+
+  it("leaves a name that is not a note file whole", () => {
+    // `noteStem` gives back anything without a note extension unchanged, so the suffix
+    // lands at the end rather than in front of an extension this module does not own.
+    expect(collisionCandidate("bijlage.pdf", 2)).toBe("bijlage.pdf (2)");
+  });
+
+  it("is the sequence uniquePath itself walks", () => {
+    // The point of extracting it: the remote destination on iOS cannot answer
+    // `uniquePath`'s synchronous `exists`, so it walks this sequence a round trip at a
+    // time. The two must not be able to disagree about what the third name is.
+    const existing = new Set<string>();
+    for (let counter = 1; counter <= 4; counter += 1) {
+      existing.add(`Inbox/${collisionCandidate("note.md", counter)}`);
+    }
+    expect(
+      uniquePath("Inbox", "note.md", {
+        join: (directory, name) => `${directory}/${name}`,
+        exists: (path) => existing.has(path),
+      }),
+    ).toBe(`Inbox/${collisionCandidate("note.md", 5)}`);
   });
 });
 

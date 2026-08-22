@@ -24,6 +24,34 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- The Entra app registration's client id. Not a secret: this is a public client using
+	     PKCE and there is no client secret anywhere in this app. Empty until the G0 spike in
+	     09-iphone-graph.md has produced one, so a build without it fails as "not configured"
+	     rather than as an authentication error nobody can interpret. -->
+	<key>EMQNOTE_CLIENT_ID</key>
+	<string>$(EMQNOTE_CLIENT_ID)</string>
+	<!-- Where Microsoft sign-in comes back to. Must match the redirect URI registered in
+	     Entra exactly, and is handled in SceneDelegate — not AppDelegate, which this app
+	     never calls. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>msauth.$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Without these MSAL cannot see the Microsoft Authenticator broker and silently falls
+	     back to an in-app webview. Conditional Access policies requiring an approved client
+	     app then fail, reporting a problem with the app rather than with the policy. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>msauthv2</string>
+		<string>msauthv3</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

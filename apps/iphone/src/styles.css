@@ -227,6 +227,49 @@ li[data-checked="true"] > p {
   color: #a33b32;
 }
 
+.delivery-status {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  /* A long filename must not push the Save row out of the screen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delivery-done {
+  color: var(--muted);
+}
+
+.delivery-error {
+  color: #a33b32;
+}
+
+.delivery-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: normal;
+}
+
+.delivery-action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delivery-action button {
+  flex: none;
+  /* 44 points, per §7's accessibility pass — this is a button people press while walking. */
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
 .quick-bar {
   position: sticky;
   bottom: 0;
@@ -295,6 +338,34 @@ li[data-checked="true"] > p {
   background: var(--paper);
   color: var(--ink);
   font-weight: 700;
+}
+
+.probe-actions h2 {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.probe-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.strategy-choice input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #bdb7aa;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
 }
 
 .strategy-choice {

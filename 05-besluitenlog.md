@@ -2781,3 +2781,114 @@ er niet uit als een vergeten kleur, dat ziet eruit alsof de notities dubbel staa
 **Staat de schakelaar uit, dan is er geen omhulsel.** `NoteList` tekent de `li` alleen als er iets
 op de plank hoort; de lijst is dan tot op de byte de lijst van vóór dit besluit. Zo kan geen enkele
 regel hierboven een venster bereiken dat er niet om gevraagd heeft.
+
+## B77 — De iPhone levert via Microsoft Graph, niet via de Files-picker
+
+**Genomen** op 22 augustus 2026, op grond van een proef en niet van een redenering. Dat verschil
+is de moeite van het opschrijven waard, want B53 hiervoor was uitdrukkelijk het omgekeerde.
+
+**Wat er is gemeten.** `08-iphone-phase-0.md` liet de hele iPhone-opzet afhangen van één
+voorwaarde: dat een app de map `00 Inbox` via de iOS Files-picker mag kiezen en er een
+security-scoped bookmark op mag houden. Die proef is gedraaid op de echte zakelijke iPhone
+(iPhone 13 mini, iOS 26.5.2, Xcode 26.3). `UIDocumentPickerViewController` met `UTType.folder`
+toont iCloud Drive en Dropbox als kiesbaar en zet beide ingelogde OneDrive-accounts grijs.
+
+**De saaie verklaringen zijn eerst uitgesloten,** want die zijn veel waarschijnlijker dan een
+gat in Microsofts eigen extensie. Beide accounts zijn ingelogd. Het is geen MDM-blokkade: de
+systeem-Files-app bladert buiten deze app om ongehinderd door beide OneDrives op bestandsniveau.
+Wat overblijft is dat OneDrives File Provider-extensie wél bestanden aanbiedt en géén
+directory-domain implementeert — de capability die mapselectie vereist. Onafhankelijk van welk
+beleid dan ook.
+
+**Daarmee viel de rest van §5's matrix weg,** niet omdat hij faalde maar omdat zijn voorwaarde
+onbereikbaar is. `apps/iphone/phase-0-results.md` heeft de meting; §7 schreef voor: stoppen, en
+niet compenseren door de rechten op te rekken, de hele vault te selecteren of een
+ongecoördineerde schrijfactie te introduceren. Dat is opgevolgd.
+
+**Het besluit.** De iPhone levert via Microsoft Graph. Een publieke client met PKCE, MSAL Swift
+in de Capacitor-schil, gedelegeerde scope `Files.ReadWrite` en verder niets, en één `PUT` naar
+`00 Inbox` die weigert in plaats van overschrijft. `09-iphone-graph.md` is het ontwerp,
+`apps/iphone/graph-results.md` het bewijsblad dat nog leeg is.
+
+**Wat is afgevallen.** *Route D uit `06-ipad.md`* — een Shortcut die een correct gevormde `.md`
+wegschrijft — omdat hij op precies hetzelfde vastloopt: een Shortcut kan een bestand naar
+OneDrive *exporteren*, maar niet zonder handmatige mapkeuze per notitie, en dat is de handeling
+die de app juist wegneemt. Bovendien kan een Shortcut de Taak- en Tag-cursorregels niet
+uitvoeren en geen idempotente outbox bijhouden. *Een share-sheet-export* om dezelfde reden: het
+werkt op bestandsniveau, dus het werkt, maar het vraagt de gebruiker elke keer waar de notitie
+heen moet. *Helemaal geen app* was de eerlijke derde optie en is afgewezen omdat het probleem
+dat B53 openliet — even iets vastleggen onderweg — daarmee onopgelost blijft.
+
+**Wat het kost, en dat is niet niks.** Dit is de eerste netwerkaanroep die deze codebase naar
+Microsoft doet en de eerste plek waar een credential wordt bewaard; tot vandaag deed niets in
+`src/` of `packages/` enige vorm van authenticatie. Het kost ook een Entra-registratie, en of de
+zakelijke tenant die überhaupt toestaat is op het moment van dit besluit onbekend — daarom is
+`09`'s §G0 een blokkerende stap vóór de rest, met een persoonlijk Microsoft-account als
+terugvalregistratie. Dat is geen elegantie, dat is een onbekende die pas met bewijs weggaat.
+
+**B6 blijft overeind, per constructie.** De bytes zijn al definitief voordat welke brug dan ook
+wordt aangeroepen: `buildOutboxItem` serialiseert één keer via `@emqnote/core`, en levering
+vervoert alleen. Er komt geen tweede serializer in Swift, om dezelfde reden als in B53.
+
+## B78 — Levering is één poort met twee adapters
+
+**Genomen** op 22 augustus 2026, tegelijk met B77 en er niet los van te zien.
+
+**De aanleiding is de meting zelf.** Wat B77's proef liet zien was niet "de Files-route werkt
+niet", maar iets specifiekers: hij werkt overal behalve bij de ene provider die deze vault
+gebruikt. iCloud Drive en Dropbox stonden in dezelfde picker gewoon kiesbaar. `InboxBridge.swift`
+is dus geen doodlopend spoor dat opgeruimd hoort te worden — het is werkende code voor iedere
+andere provider, en git-geschiedenis is een slechte plek om die te bewaren.
+
+**Het besluit.** `apps/iphone/src/delivery/deliverer.ts` definieert één interface: statuscontrole
+plus `deliver(filename, bytes)` met zes mogelijke uitkomsten. `graph.ts` en `files.ts` zijn de
+twee adapters, `destination.ts` kiest ertussen. De keuze staat op `graph` en er is geen knop om
+dat te wisselen — dat is bewust: een tweede bestemming zonder vault die erop staat is een knop
+die alleen maar fout gebruikt kan worden.
+
+**Wat er níet in de poort zit is de aanmelding.** Graph heeft een Microsoft-sign-in, Files heeft
+een mapkiezer, en die twee zijn geen twee gevallen van hetzelfde. Ze in één abstractie persen
+zou een gedeelde woordenschat vragen voor twee reparaties die niets met elkaar te maken hebben,
+en de gebruiker een zin opleveren die geen van beide precies beschrijft. `connect.ts` is daarom
+Graph-specifiek en staat naast de poort, niet erin.
+
+**Het beleid staat in TypeScript, niet in Swift.** Welke notitie aan de beurt is, wanneer er
+opnieuw geprobeerd wordt, hoe de volgende botsingsnaam luidt, en of een afgebroken upload telt —
+dat is `delivery/outbox.ts`, puur en zonder timers, en `npm run test:iphone` komt erbij op elke
+machine. Swift doet alleen wat alleen Swift kan: een token in de Keychain, de broker, en een
+HTTPS-verzoek buiten de CORS-regels van een webview om. De helft die alleen op het toestel te
+verifiëren is, is al groot genoeg.
+
+## B79 — Identiteit door bytes te vergelijken, niet via `quickXorHash`
+
+**Genomen** op 22 augustus 2026, als onderdeel van B77's uitwerking.
+
+**Het probleem.** `07-iphone.md` §5 stap 6 eist dat een afgebroken levering wordt opgelost door
+de bedoelde bestandsnaam én de exacte bytes te vergelijken: gelijk betekent dat de eerste poging
+tóch geslaagd is, ongelijk betekent de volgende botsingsnaam. Zonder dat wordt "precies één keer
+geleverd" — acceptatiecriterium 7 — een benadering, en de twee manieren waarop het dan misgaat
+zijn een dubbele notitie en een overschreven notitie.
+
+**Waarom Graph hier niet helpt.** Een zakelijke OneDrive publiceert in `file.hashes` alleen een
+`quickXorHash`. Geen sha256, geen sha1. De voor de hand liggende route is QuickXorHash in Swift
+implementeren en die vergelijken.
+
+**Het besluit is dat niet te doen.** In plaats daarvan haalt `probeItem` de inhoud op en hasht
+die zelf; `delivery/graph.ts` vergelijkt met een sha256 die de JavaScript-kant over dezelfde
+UTF-8-bytes berekent. Een notitie is een paar kilobyte, dus de download kost niets dat iemand
+merkt.
+
+**De reden is waar de fout terecht zou komen.** Een zelfgebouwde QuickXorHash is een aanname op
+precies de ene plek waar deze app niet mag gokken: de beslissing of een notitie die misschien al
+geleverd is, geleverd is. Een implementatiefout daarin geeft geen foutmelding maar een stil
+verkeerd antwoord, en dat antwoord is óf een duplicaat óf een overschrijving. Dat is dezelfde
+afweging die `trash-delete.ts` maakt bij de enige andere operatie zonder weg terug: liever een
+specifieke weigering dan een beweerde oorzaak.
+
+**Faalt de vergelijking zelf, dan is er geen antwoord** en wordt er opnieuw geprobeerd — niet
+geraden. `delivery/graph.ts` doet dat expliciet, en `test/delivery-graph.test.ts` pint het vast.
+
+**De UTF-8-koppeling is de hele afspraak.** `TextEncoder` aan de ene kant, `Data(text.utf8)` aan
+de andere. Wie er één van verandert zonder de ander maakt van elke vergelijking stilzwijgend
+"andere bytes", en dat leest de leveringslaag als andermans notitie — waarna hij er netjes
+omheen hernoemt en de notitie dus dubbel staat.

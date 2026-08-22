@@ -1,17 +1,23 @@
 //
 //  InboxBridge.swift
-//  emqnote iPhone — Phase 0 feasibility bridge
+//  emqnote iPhone — the iOS Files delivery route
 //
-//  ⚠️  THIS FILE HAS NEVER BEEN COMPILED OR RUN.
+//  ⚠️  THIS ROUTE DOES NOT WORK FOR ONEDRIVE, AND THAT IS A MEASUREMENT, NOT A SUSPICION.
 //
-//  It was drafted on Linux from the Apple documentation cited in `08-iphone-phase-0.md`,
-//  in a VM with no Xcode, no iOS SDK and no device. Treat it as a starting point that
-//  encodes the plan's decisions — not as working code. Expect to fix it against the
-//  compiler, and expect at least one of its assumptions about OneDrive's File Provider to
-//  be wrong; finding that out is what Phase 0 is for.
+//  Phase 0 ran this on the real business iPhone on 22 August 2026. `selectInbox`'s
+//  `.folder` picker lists iCloud Drive and Dropbox as selectable and greys out both
+//  signed-in OneDrive accounts. Not a sign-in problem, not MDM — the system Files app
+//  browses OneDrive at file level perfectly well. Microsoft's File Provider extension
+//  simply does not implement the directory-domain capability whole-folder selection needs.
+//  `apps/iphone/phase-0-results.md` has the run; B77 has the decision that followed.
 //
-//  It implements §2's six operations and §3's two write strategies, and nothing else. It
-//  is deliberately not the outbox: §2 says not to build that yet.
+//  It is kept, working, for the providers that *do* implement it. Delivery is a port with
+//  two adapters (B78) and this is the one that will still be the only option the day a
+//  vault lives on iCloud Drive or Dropbox. `GraphBridge.swift` is the OneDrive route.
+//
+//  It implements `08-iphone-phase-0.md` §2's six operations and §3's two write strategies,
+//  and nothing else — no outbox. The outbox is in TypeScript, in `src/delivery/`, where it
+//  can be tested.
 //
 //  Registration assumes Capacitor 6 or newer, where `CAPBridgedPlugin` lets a plugin
 //  register from Swift alone. On Capacitor 5 this needs a companion `InboxBridge.m` with
@@ -47,7 +53,7 @@ public class InboxBridgePlugin: CAPPlugin, CAPBridgedPlugin {
   /// §3: file operations run off the main thread, serially, so two probes cannot interleave.
   private let fileQueue = DispatchQueue(label: "dev.emqnote.inbox-bridge.files")
 
-  private let log = DiagnosticLog()
+  private let log = DiagnosticLog.shared
 
   /// Held only while the picker is on screen; the delegate callbacks resolve it.
   private var pendingSelectCall: CAPPluginCall?
@@ -455,31 +461,5 @@ enum BridgeError: Error {
   }
 }
 
-// MARK: - Diagnostic log
-
-/// A small in-memory ring. Phase 0 needs to read back what happened on the device without
-/// a Mac attached; nothing here is written to disk, so it costs nothing to leave enabled.
-final class DiagnosticLog {
-  private let lock = NSLock()
-  private var lines: [String] = []
-  private let limit = 500
-
-  private lazy var formatter: ISO8601DateFormatter = {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter
-  }()
-
-  func append(_ message: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    lines.append("\(formatter.string(from: Date())) \(message)")
-    if lines.count > limit { lines.removeFirst(lines.count - limit) }
-  }
-
-  func entries() -> [String] {
-    lock.lock()
-    defer { lock.unlock() }
-    return lines
-  }
-}
+// `DiagnosticLog` moved to its own file when `GraphBridge` arrived — both bridges write to
+// the one buffer, so a session that touched both routes reads as a single sequence.

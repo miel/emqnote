@@ -12,13 +12,28 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1636 tests
+npm test               # vitest run — 1665 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
 npm run pack:mac       # packaged .app (zipped) in release/
 npm run pack:win       # per-user NSIS installer (.exe) in release/ — see B22
+
+npm run build:iphone   # apps/iphone: tsc --noEmit && vite build
+npm run test:iphone    # apps/iphone: vitest run — 75 tests, separate from the root suite
 ```
+
+The iPhone app is a second workspace with its own vitest config, so `npm test` at the root does
+**not** run it. Run both. Its native half needs a Mac:
+
+```bash
+npm run build:iphone && npx cap sync ios && npx cap open ios
+cd apps/iphone/ios/App && xcodebuild -scheme App \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+That second line compiles the Swift without a device or a signing round trip, which is the only
+automated check the native code has — there is no XCTest target.
 
 Single test file or single test:
 
@@ -195,6 +210,16 @@ reconstruction (§6.3), left open because real `.eml` samples showed the pattern
 doesn't appear in genuine Word-authored or modern-Outlook content; see `TODO.md` before
 resuming it. Phase 6 (email import) has not started.
 
+**The `iphone-app` branch carries a second client**, which none of `00-PLAN.md`'s phase numbers
+cover. `packages/core/` is the platform-neutral half both clients import — enforced by
+`test/core-boundary.test.ts`, which fails on any `node:`, `electron` or `@capacitor/` import
+inside it. `apps/iphone/` is a Capacitor app: the capture screen and the reduced editor work,
+and delivery goes to OneDrive over **MSAL + Microsoft Graph**, not through the iOS Files picker
+— that route was tried on real hardware and OneDrive's File Provider does not support folder
+selection (B77, `apps/iphone/phase-0-results.md`). `09-iphone-graph.md` is the design; **none of
+its sign-in or upload code has met a real tenant yet**, and `apps/iphone/graph-results.md` is
+the blank sheet that says so. Read that before assuming any of it works.
+
 Since phase 3 shipped, most work has come from daily use rather than the phase plan: dozens of
 batches of fixes and small features, each traceable to a decision in `05-besluitenlog.md`
 (B18 onward) where it changed how something is built. The detailed, dated, batch-by-batch
@@ -216,7 +241,9 @@ Read these before making structural changes; they carry the reasoning that the c
 | `04-bouwplan.md` | Phases with acceptance criteria |
 | `05-besluitenlog.md` | Decisions B1–B74, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
-| `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
+| `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1. Its §5 is partly superseded — read `09` before acting on it |
+| `08-iphone-phase-0.md` | The OneDrive-through-Files feasibility run. **Its go/no-go came back no**, for a reason nobody anticipated; `apps/iphone/phase-0-results.md` has the evidence |
+| `09-iphone-graph.md` | What replaced it: delivery over MSAL + Microsoft Graph. Registration, scopes, the four calls, and an on-device matrix that has not been run yet |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |

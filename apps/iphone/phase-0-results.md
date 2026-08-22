@@ -117,5 +117,15 @@ not from MDM, but because OneDrive's File Provider extension does not support fo
 selection. §7 routes this to a separate Graph-versus-no-app decision
 ([`07-iphone-reviewed-clean.md`](../../07-iphone-reviewed-clean.md), Graph is described as a
 fallback requiring Microsoft sign-in, Entra app registration, permissions, and a second
-delivery implementation — deliberately out of scope for the first plan). That decision has
-not been made yet.
+delivery implementation — deliberately out of scope for the first plan).
+
+**That decision has since been made: Graph.** See `05-besluitenlog.md` **B77**, and
+[`09-iphone-graph.md`](../../09-iphone-graph.md) for what replaced this document. Its
+evidence sheet is [`graph-results.md`](graph-results.md) beside this one.
+
+**This route is not abandoned, only ruled out for OneDrive.** The same run showed iCloud Drive
+and Dropbox offering folder selection normally, so `InboxBridge.swift` is kept and is now one
+of two adapters behind a common delivery port (**B78**). If the vault ever moves, or if a
+future OneDrive release implements the directory-domain capability, the way to re-check it is
+the Files section of the probe panel and the matrix above — which is why neither has been
+deleted.

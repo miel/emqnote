@@ -12,6 +12,7 @@ import {
   loadDraft,
   loadOutbox,
   localDateTimeValue,
+  queuedItem,
   storeDraft,
   type DraftStorage,
 } from "../src/draft.js";
@@ -72,17 +73,38 @@ describe("capture field conversion", () => {
 describe("local outbox", () => {
   it("appends the exact serialized bytes without changing earlier items", () => {
     const storage = memoryStorage();
-    const first = {
+    const first = queuedItem({
       id: "one",
       filename: "2026-08-20 1432 One.md",
       bytes: "---\ntitle: One\n---\n",
       queuedAt: "2026-08-20T12:32:00.000Z",
-    };
+    });
     const second = { ...first, id: "two", filename: "2026-08-20 1433 Two.md" };
     enqueue(storage, first);
     enqueue(storage, second);
     expect(loadOutbox(storage)).toEqual([first, second]);
     expect(JSON.parse(storage.getItem(OUTBOX_KEY)!)[0].bytes).toBe(first.bytes);
+  });
+
+  it("queues a new note with nothing attempted yet", () => {
+    expect(
+      queuedItem({
+        id: "one",
+        filename: "2026-08-20 1432 One.md",
+        bytes: "x",
+        queuedAt: "2026-08-20T12:32:00.000Z",
+      }),
+    ).toEqual({
+      id: "one",
+      filename: "2026-08-20 1432 One.md",
+      bytes: "x",
+      queuedAt: "2026-08-20T12:32:00.000Z",
+      state: "queued",
+      candidate: 1,
+      attempts: 0,
+      lastError: null,
+      nextAttemptAt: null,
+    });
   });
 
   it("constructs desktop-compatible bytes once before enqueueing", () => {

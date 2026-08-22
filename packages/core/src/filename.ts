@@ -69,6 +69,29 @@ export function noteFileName(title: string, when: Date): string {
   return `${timestampPrefix(when)} ${sanitiseTitle(title)}.md`;
 }
 
+/** The ` (N)` suffix itself, kept in one function so nothing can spell it differently. */
+function suffixed(fileName: string, suffix: string | number): string {
+  return `${noteStem(fileName)} (${suffix})${noteExtension(fileName)}`;
+}
+
+/** How many names `uniquePath` tries before falling back to a non-sequential suffix. */
+export const MAX_COLLISION_COUNTER = 1000;
+
+/**
+ * The nth name in the product-wide `(2)`, `(3)` collision contract; `1` is the plain name.
+ *
+ * `uniquePath` below is the desktop's way of using this — it asks a synchronous `exists`
+ * which side is free. A remote destination cannot answer that synchronously, so the iPhone's
+ * Graph delivery walks the same sequence itself, one round trip at a time. Both go through
+ * this function on purpose: `conflicts.ts` deliberately refuses to treat a bare `(N)` as a
+ * OneDrive conflict copy *because* it is this contract's own shape, so a second numbering
+ * scheme invented for a second client would either collide with desktop's names or make the
+ * desktop mistake a perfectly ordinary note for a conflict copy.
+ */
+export function collisionCandidate(fileName: string, counter: number): string {
+  return counter <= 1 ? fileName : suffixed(fileName, counter);
+}
+
 export interface PathAccess {
   exists(path: string): boolean;
   join(directory: string, fileName: string): string;
@@ -81,16 +104,11 @@ export function uniquePath(
   fileName: string,
   access: PathAccess,
 ): string {
-  const candidate = access.join(directory, fileName);
-  if (!access.exists(candidate)) return candidate;
-
-  const base = noteStem(fileName);
-  const extension = noteExtension(fileName);
-  for (let counter = 2; counter < 1000; counter += 1) {
-    const next = access.join(directory, `${base} (${counter})${extension}`);
+  for (let counter = 1; counter < MAX_COLLISION_COUNTER; counter += 1) {
+    const next = access.join(directory, collisionCandidate(fileName, counter));
     if (!access.exists(next)) return next;
   }
 
   const suffix = access.fallbackSuffix?.() ?? Date.now();
-  return access.join(directory, `${base} (${suffix})${extension}`);
+  return access.join(directory, suffixed(fileName, suffix));
 }

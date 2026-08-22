@@ -4,13 +4,14 @@ import {
   enqueue,
   freshDraft,
   loadDraft,
-  loadOutbox,
   storeDraft,
   type CaptureDraft,
 } from "./draft.js";
 import { buildOutboxItem } from "./capture.js";
 import { MobileEditor, type MobileEditorHandle } from "./MobileEditor.js";
 import { ProbePanel } from "./ProbePanel.js";
+import { DeliveryStatus } from "./DeliveryStatus.js";
+import { useDelivery } from "./useDelivery.js";
 
 type SaveState = "idle" | "saved" | "error";
 
@@ -22,8 +23,9 @@ export function App() {
   const [draft, setDraft] = useState<CaptureDraft>(() => loadDraft(localStorage) ?? freshDraft());
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState(() => loadOutbox(localStorage).length);
   const [showProbe, setShowProbe] = useState(false);
+  const delivery = useDelivery(localStorage);
+  const { drain } = delivery;
   const title = useRef<HTMLInputElement>(null);
   const editor = useRef<MobileEditorHandle>(null);
   const latestDraft = useRef(draft);
@@ -95,11 +97,14 @@ export function App() {
     latestDraft.current = next;
     setDraft(next);
     currentEditor.reset();
-    setPending(loadOutbox(localStorage).length);
     setSaveState("saved");
     setMessage("Saved on this iPhone");
     window.requestAnimationFrame(() => title.current?.focus());
-  }, []);
+
+    // Deliberately not awaited. Save has already done the thing it promises — the bytes
+    // are durable on this iPhone — and §6 puts the network outside its 150 ms budget.
+    drain();
+  }, [drain]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -188,7 +193,7 @@ export function App() {
         {message !== "" && (
           <span className={saveState === "error" ? "status-error" : ""}>{message}</span>
         )}
-        {pending > 0 && <span>{pending} waiting for OneDrive</span>}
+        <DeliveryStatus delivery={delivery} />
       </div>
 
       <nav className="quick-bar" aria-label="Editor actions">

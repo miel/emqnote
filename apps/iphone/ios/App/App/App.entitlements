@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  MSAL's token cache lives in the keychain, and it will not write to it without this
+	  access group. Missing it does not produce an error at sign-in: the interactive flow
+	  succeeds, and then `acquireTokenSilent` never finds an account again, so every launch
+	  asks the user to sign in from scratch. See CONSTRAINTS.md.
+	-->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
+		<string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	</array>
+</dict>
+</plist>

@@ -12,6 +12,14 @@ Opslag: markdown-bestanden in mappen op de zakelijke OneDrive.
 | [03-markdown-dialect.md](03-markdown-dialect.md) | Het vault-formaat als specificatie |
 | [04-bouwplan.md](04-bouwplan.md) | Fasen met acceptatiecriteria |
 | [05-besluitenlog.md](05-besluitenlog.md) | Besluiten, afwegingen, wat is afgevallen |
+| [06-ipad.md](06-ipad.md) | Of er een iPad-client komt. Beantwoord met **nee** (B53); bewaard om de analyse, niet als plan |
+| [07-iphone.md](07-iphone.md) | Plan voor een iPhone-app die alleen vastlegt. Geen terugdraaiing van B53 — zie zijn eigen §1 |
+| [08-iphone-phase-0.md](08-iphone-phase-0.md) | De haalbaarheidsproef voor OneDrive via de iOS Files-picker. **Uitkomst: nee**, en niet om de reden die iedereen verwachtte |
+| [09-iphone-graph.md](09-iphone-graph.md) | Wat daarvoor in de plaats kwam: levering via MSAL en Microsoft Graph (B77) |
+
+De iPhone-documenten (07–09) zijn in het Engels, anders dan 01–06. Ze zijn geschreven toen de
+code al Engelstalig was; het onderscheid dat `CLAUDE.md` beschrijft — ontwerpdocumenten in het
+Nederlands — geldt voor de documenten die het desktopontwerp dragen.
 
 ## De kern in tien regels
 

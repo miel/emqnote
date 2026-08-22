@@ -5,6 +5,7 @@ import { serializeNote } from "@emqnote/core/markdown";
 import {
   attendeeNames,
   createdValue,
+  queuedItem,
   type CaptureDraft,
   type OutboxItem,
 } from "./draft.js";
@@ -30,10 +31,10 @@ export function buildOutboxItem(
   );
   if (frontmatter === null) return null;
 
-  return {
+  return queuedItem({
     id,
     filename: noteFileName(frontmatter.title, new Date(frontmatter.created)),
     bytes: serializeNote({ frontmatter, doc }),
     queuedAt: queuedAt.toISOString(),
-  };
+  });
 }

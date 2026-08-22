@@ -20,8 +20,12 @@ The first version does not include:
 - folders, search, an Inbox view, or an aggregated task view;
 - attachments, images, tables, note links, or general rich-text formatting;
 - meeting type, contacts, calendar integration, or a vault-wide metadata scan;
-- Microsoft Graph authentication;
 - App Store, TestFlight, signing, or other distribution work.
+
+**Microsoft Graph authentication was on that list and is not any more.** Phase 0 disproved the
+route this plan was built on — see §5 — and Graph is now how delivery works, not a fallback.
+[`09-iphone-graph.md`](09-iphone-graph.md) is its design; `05-besluitenlog.md`'s B77 is the
+decision.
 
 ## 2. Capture flow
 
@@ -207,6 +211,19 @@ second Swift serializer are rejected for the same dialect-drift reason recorded 
 
 ## 5. OneDrive and durability
 
+> **Superseded in part, on 22 August 2026.** The Files-picker route this section describes was
+> tested on the real business iPhone and does not exist for OneDrive: Microsoft's File Provider
+> extension does not implement directory-domain selection, so `00 Inbox` can never be picked.
+> Delivery now goes over Microsoft Graph — [`09-iphone-graph.md`](09-iphone-graph.md), decision
+> B77.
+>
+> **Everything below except the first two paragraphs still holds**, and is what the Graph
+> implementation was built to satisfy: the write path's six steps, the two truthful UI states,
+> and the refusal to promise PC arrival. Step 6's byte comparison in particular is the whole
+> basis of "delivered exactly once", and Graph satisfies it by reading the item's content back
+> rather than by trusting a hash facet (B79). The section is left standing rather than rewritten
+> because the requirements it states outlived the mechanism it assumed.
+
 Typing must never wait for OneDrive.
 
 On first use, the app asks the user to select the real `00 Inbox` folder through the iOS
@@ -244,6 +261,13 @@ Microsoft Graph is a fallback only if corporate policy blocks third-party access
 Files. It would require Microsoft sign-in, Entra application registration, permissions,
 and a second delivery implementation, so it is not part of this first plan.
 
+> **This paragraph is what actually happened, arrived at for a reason it did not anticipate.**
+> Corporate policy turned out not to be the blocker at all — the provider's own capabilities
+> were. The costs it lists are real and were accepted: Microsoft sign-in, an Entra registration,
+> permissions, and a second delivery implementation. The second implementation is the reason
+> delivery is now a port with two adapters (B78) rather than a replacement — the Files route
+> still works for every provider except OneDrive, and is kept.
+
 ## 6. Responsiveness targets
 
 These are p95 targets to measure on a named physical iPhone, not simulator promises:
@@ -261,6 +285,13 @@ latency budget. Nothing enumerates or scans the vault during launch.
 
 ## 7. Implementation phases
 
+> **Where this actually stands, 22 August 2026.** Phase 1 is done (`@emqnote/core` is extracted
+> and both clients import it). Phase 2 is largely done — the capture screen, the reduced editor,
+> the Task and Tag buttons and draft restore all exist. **Phase 0 failed**, and its replacement
+> is `09-iphone-graph.md`'s G0–G2. **Phase 3's outbox has been built against Graph** rather than
+> against the bookmark bridge; what remains of it is the on-device evidence, not the code. Phase
+> 4 is untouched.
+
 ### Phase 0 — OneDrive feasibility, 1–2 days
 
 On the real business iPhone:
@@ -273,6 +304,10 @@ On the real business iPhone:
 - determine the safe coordinated-create operation for OneDrive's File Provider.
 
 If folder access is blocked, stop and make a separate Graph-versus-no-app decision.
+
+**Folder access was blocked, and that decision has been made: Graph.** Not by corporate policy
+but by the provider — see B77 and `apps/iphone/phase-0-results.md`. This phase is replaced by
+`09-iphone-graph.md`'s G0 (registration and consent) and G2 (the on-device matrix).
 
 ### Phase 1 — Shared capture core, 2–3 days
 

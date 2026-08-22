@@ -1,5 +1,5 @@
 {
-  "originHash" : "f9028765a1a8eb926d229a74bc2783ef31e15817e23d9e0354e83401c3f60a81",
+  "originHash" : "6b79502d8e710e2e7e41041d0165a5c61e3827a687413028acec2b2db5fd76b9",
   "pins" : [
     {
       "identity" : "capacitor-swift-pm",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "4f71d0b979f2f957326f04353eca7604ee937e1e",
         "version" : "8.5.0"
+      }
+    },
+    {
+      "identity" : "microsoft-authentication-library-for-objc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AzureAD/microsoft-authentication-library-for-objc",
+      "state" : {
+        "revision" : "d54e9653f94883a896af533133888be1c2ef5c75",
+        "version" : "2.15.0"
       }
     }
   ],
