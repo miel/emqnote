@@ -41,9 +41,17 @@ measured rather than assumed, with the reason on each row and the summary in
 and no bar (§15k, §17h, §18k–§18m, §22q's ⧉). A click on a markdown link goes through
 `posAtCoords`, and those rows are *about* aiming (§18g–§18i). Shift+arrow inside a cell is a
 selection the browser moves (§20h–§20k), and a panel scrolling is not a thing jsdom does
-(§20a). **The next obvious step is the driver's**: a real multi-page PDF in the scaffolded
-vault and a pdf.js render under `Xvfb` would close §17h and §15k, and nobody has tried
-whether that works headlessly here.
+(§20a).
+
+**The driver took the PDF, and pdf.js does render under `Xvfb`.** `scripts/drive-capture.ts`
+builds a three-page PDF of its own — xref offsets computed, pages differing by the *area* of
+a filled bar so a pixel count can tell them apart — embeds it in the fixture note, and adds
+two steps: the page drawn (`naturalWidth 1240`, with the bar reading "/ 3" and ◀ dimmed but
+not hidden), and ▶ clicked with a real pointer turning to a page that is **genuinely a
+different picture**, counted as dark pixels off a canvas. Nine steps now, green twice, both
+new ones confirmed red when broken on purpose. §15a and §17a–§17b are driven; **§15c's ⧉ and
+§17c–§17d are still owed** — the ⧉ hands the file to an OS viewer nothing here can watch,
+§17c needs a second one-page fixture, and §17d is a judgement.
 
 **One claim in the harness turned out to be wrong and is corrected**: character input is
 *not* unreachable in jsdom. `MutationObserver` is implemented, ProseMirror's `DOMObserver`

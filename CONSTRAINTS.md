@@ -1354,7 +1354,8 @@ things in this window turn out to be unreachable in jsdom, and each was *measure
 than reasoned about — which matters, because three of them look like ordinary behaviour
 rather than layout. **An inline PDF's page arrives over `fetch()` on `emqnote-thumb://`**,
 so the embed never gets past its chip and the bar the page controls live on is never drawn
-(`TEST-PROTOCOL.md` §15k, §17h, §18k–§18m, §22q's ⧉). **A click on a markdown link goes
+(`TEST-PROTOCOL.md` §15k, §17h, §18k, §22q's ⧉) — the driver takes that one now, with a
+three-page PDF it builds itself. **A click on a markdown link goes
 through ProseMirror's `handleClick`, which asks `posAtCoords` first**, so it never fires —
 and those rows are about *aiming* at the last character, which makes them layout wearing a
 behaviour's clothes (§18g–§18i). A `[[…]]` chip is the opposite and does work: its node view
@@ -1373,6 +1374,22 @@ throws out of `updateState`, inside a MutationObserver callback, as an unhandled
 attributed to whichever test was running by then. `helpers/capture.ts` gives `Range` the
 zeros `Element` already gives, which is consistency rather than a fake measurement, and says
 so where it does it.
+
+**Anything still arriving moves the boxes, not just a toolbar — so order the steps by what
+settles.** Adding the PDF to `scripts/drive-capture.ts`'s fixture note broke the table drag
+two steps later, which had been green twice: the page arrives asynchronously and relaid the
+document out from under coordinates that had already been re-measured once. Reordering so
+the PDF steps run first — each of which waits for its own picture — fixed it, and that is
+the general shape: **a driver step that measures anything owes the steps before it a
+finished layout.** The narrower lesson below came first and is the same one.
+
+**Waiting for `complete && naturalWidth` on an `<img>` that is already drawn waits for
+nothing.** The page-turn step counts ink before and after ▶, and its first version waited
+for the picture to be "loaded" — which the page already on screen satisfies immediately, so
+it counted the old page and passed for the wrong reason. It then failed for the right one
+the moment the wait was tightened. The fix is to remember the `src` first and wait for a
+*different* blob: the identity of what arrived, never its readiness. A check that can be
+satisfied by the state it is meant to detect a change from is not a check.
 
 **Coordinates taken before a click are stale after it, and a drag aimed with them lands in
 the wrong row.** `scripts/drive-capture.ts` measures a table's cells, drags from one to

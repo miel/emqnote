@@ -1180,3 +1180,37 @@ release later.
 scaffolded vault and a pdf.js render under `Xvfb` would close §17h and §15k, which have never
 been seen in this window at all. `TEST-PROTOCOL.md` says so on both rows rather than leaving
 them to look like an oversight.
+
+**And the driver took the PDF, the same day.** §15k and §17h had just been written down as
+unreachable by the harness, with "a real multi-page PDF and a pdf.js render under `Xvfb`,
+neither of which has been tried" as the next step. It was tried, and it works.
+
+`scripts/drive-capture.ts` builds a three-page PDF of its own rather than carrying a binary:
+the xref offsets are computed, and the pages differ by the **area** of a filled bar — page n
+gets a bar n times as tall — so a pixel count can tell them apart. That is the whole design
+of the fixture, because §17b asks for "the page *picture* changes each time, not only the
+counter", and a changed `src` is exactly what would pass without it.
+
+Two steps came out of it. The first asserts `naturalWidth` on the drawn page (1240 — pdf.js
+genuinely rendered into this window), the counter reading "/ 3", and ◀ **dimmed but not
+hidden**, hiding being a one-page document's state and a different thing. The second clicks
+▶ with a real pointer and counts dark pixels off a canvas: 321788 on page 1, 630813 on page
+2, which is the bar doubling in height exactly as the fixture was built to. Nine steps now,
+green twice in a row, both new ones confirmed red when broken on purpose — and the page-turn
+one, broken by letting `draw` move the counter and return, produced word for word the
+message it exists for.
+
+**Two things cost a run each, and both are in `CONSTRAINTS.md`.** Adding the PDF to the
+fixture note broke the *table drag* two steps later, which had been green twice: the page
+arrives asynchronously and relaid the document out from under coordinates that had already
+been re-measured once. Ordering the PDF steps first — each waits for its own picture — fixed
+it, and the general rule is that a step which measures anything owes the steps before it a
+finished layout. And the page-turn check first passed for the wrong reason: it waited for
+the picture to be `complete && naturalWidth > 0`, which the page **already on screen**
+satisfies immediately, so it counted the old page. It has to remember the `src` and wait for
+a *different* blob — the identity of what arrived, never its readiness. A check that can be
+satisfied by the state it is meant to detect a change from is not a check.
+
+What is still owed on those rows: §15c's ⧉ hands the file to an OS viewer nothing here can
+watch, §17c wants a second one-page fixture, and §17d is a judgement about whether a page at
+70vh actually reads.

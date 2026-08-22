@@ -37,12 +37,71 @@ const HOTKEY = "ctrl+shift+y";
 
 const NOTE = "2026-08-22 1200 Driven note.md";
 const PICTURE = "driven-picture.png";
+const PDF = "driven-document.pdf";
 
 const keep = process.argv.includes("--keep");
 const screenshot =
   process.argv.find((argument) => argument.startsWith("--screenshot="))?.slice(13) ?? null;
 
 // ---------------------------------------------------------------- the fixture vault
+
+/**
+ * A three-page PDF, built here rather than checked in.
+ *
+ * Same reasoning as `RED_PNG` one step further on: the assertion downstream is that pdf.js
+ * genuinely rendered a page and that turning to another one produced a *different picture*,
+ * so the file has to be one a real renderer will genuinely open. A checked-in binary would
+ * do as well, but this is a hundred lines less repository and it can say out loud what
+ * makes the pages differ.
+ *
+ * The pages differ by **area**, not only by a glyph: page n is drawn with a filled bar n
+ * times as tall. Counting dark pixels can then tell them apart, which is what §17b asks for
+ * — "the page *picture* changes each time, not only the counter" — and what a changed `src`
+ * would not have shown.
+ *
+ * The xref offsets are computed rather than written, because a table that is wrong by a
+ * byte produces a file some readers open and others refuse, which is the worst kind of
+ * fixture: one that fails somewhere else, later, for a reason that looks like the app.
+ */
+function threePagePdf(): Buffer {
+  const objects: string[] = [];
+  const add = (body: string): void => {
+    objects.push(body);
+  };
+
+  // Object numbers follow write order: 1 catalog, 2 pages, then a page and its content
+  // stream per page (3/4, 5/6, 7/8), then the font at 9.
+  add(`<< /Type /Catalog /Pages 2 0 R >>`);
+  add(`<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>`);
+  for (let page = 1; page <= 3; page += 1) {
+    const contents = `${3 + (page - 1) * 2 + 1} 0 R`;
+    add(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents ${contents} ` +
+        `/Resources << /Font << /F1 9 0 R >> >> >>`,
+    );
+    const stream =
+      `0 0 0 rg\n20 20 160 ${page * 50} re f\n` +
+      `BT /F1 24 Tf 30 175 Td (Page ${page}) Tj ET\n`;
+    add(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`);
+  }
+  add(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`);
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+
+  const startxref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const at of offsets) pdf += `${String(at).padStart(10, "0")} 00000 n \n`;
+  pdf +=
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
+    `startxref\n${startxref}\n%%EOF\n`;
+
+  return Buffer.from(pdf, "latin1");
+}
 
 /**
  * A 2×2 red PNG, byte for byte.
@@ -64,6 +123,7 @@ function scaffoldVault(): string {
   mkdirSync(join(vault, "_attachments"), { recursive: true });
 
   writeFileSync(join(vault, "_attachments", PICTURE), RED_PNG);
+  writeFileSync(join(vault, "_attachments", PDF), threePagePdf());
   writeFileSync(
     join(vault, "00 Inbox", NOTE),
     [
@@ -89,6 +149,11 @@ function scaffoldVault(): string {
       "| --- | --- |",
       "| Jan | offerte |",
       "| Piet | planning |",
+      "",
+      // §15k and §17h: the inline page and its bar have never been seen in this window at
+      // all, because they arrive over `fetch()` on `emqnote-thumb://` and jsdom cannot
+      // serve one — so no jsdom test can reach past the chip.
+      `![[${PDF}]]`,
       "",
     ].join("\n"),
   );
@@ -505,6 +570,144 @@ async function main(): Promise<number> {
         if (lit === null) throw new Error("no facet row is lit in the library");
         if (!lit.includes("klantx")) throw new Error(`the lit facet reads ${lit}`);
         return `library filtered on ${lit}`;
+      },
+    },
+    {
+      name: "an embedded PDF draws a real page, with pixels in it (B43, §15k)",
+      run: async () => {
+        // The page arrives as a blob on an `<img>`, so `naturalWidth` is the same question
+        // it is for the picture two steps up: an element in the DOM proves the node view
+        // ran, and proves nothing about whether pdf.js drew anything. The bar underneath is
+        // built only once main answers with a page count, so its counter is the second
+        // half of the same fact.
+        const seen = await open.capture!.evaluate<{
+          width: number;
+          counter: string | null;
+          previousDisabled: boolean | null;
+          navHidden: boolean | null;
+          state: string | null;
+        }>(
+          `(async () => {
+             const box = document.querySelector('.wiki-embed-pdf');
+             const wait = async (ready) => {
+               for (let tries = 0; tries < 60; tries += 1) {
+                 if (ready()) return;
+                 await new Promise((done) => setTimeout(done, 100));
+               }
+             };
+             await wait(() => {
+               const img = document.querySelector('img.wiki-embed-pdf-page');
+               return img !== null && img.naturalWidth > 0;
+             });
+             const img = document.querySelector('img.wiki-embed-pdf-page');
+             const nav = [...document.querySelectorAll('.wiki-embed-pdf-nav')];
+             return {
+               width: img === null ? -1 : img.naturalWidth,
+               counter: document.querySelector('.wiki-embed-pdf-counter')?.textContent ?? null,
+               previousDisabled: nav.length === 0 ? null : nav[0].disabled,
+               navHidden: nav.length === 0 ? null : nav[0].hidden,
+               state: box === null ? null : box.dataset.page ?? null,
+             };
+           })()`,
+        );
+
+        if (seen.width <= 0) {
+          throw new Error(`no page drawn: naturalWidth ${seen.width}, box state ${seen.state}`);
+        }
+        // "/ 3", from `pdfPageCount`. A "/ –" means main never answered, which is a
+        // different failure from a page that would not render.
+        if (seen.counter === null || !seen.counter.includes("3")) {
+          throw new Error(`the counter reads ${JSON.stringify(seen.counter)}, not "/ 3"`);
+        }
+        // §17a: ◀ is dimmed on page 1, and *not* hidden — hiding is what a one-page
+        // document gets, and the two states must not be confused.
+        if (seen.previousDisabled !== true) throw new Error("◀ is not dimmed on page 1");
+        if (seen.navHidden === true) throw new Error("the arrows are hidden on a 3-page PDF");
+
+        return `naturalWidth ${seen.width}, counter "${seen.counter}"`;
+      },
+    },
+    {
+      name: "▶ turns the page, and the picture really changes (§17b)",
+      run: async () => {
+        // Dark pixels counted off a canvas, not a changed `src`. The fixture's pages differ
+        // by the height of a filled bar precisely so this can tell them apart — a `src`
+        // that changed while the same picture stayed on screen is the failure this is for,
+        // and it is the one the library-side check was built to catch too.
+        const ink = `(() => {
+             const img = document.querySelector('img.wiki-embed-pdf-page');
+             if (img === null || img.naturalWidth === 0) return -1;
+             const canvas = document.createElement('canvas');
+             canvas.width = img.naturalWidth;
+             canvas.height = img.naturalHeight;
+             const context = canvas.getContext('2d');
+             context.drawImage(img, 0, 0);
+             const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+             let dark = 0;
+             for (let at = 0; at < data.length; at += 4) {
+               if (data[at] < 128 && data[at + 1] < 128 && data[at + 2] < 128) dark += 1;
+             }
+             return dark;
+           })()`;
+
+        const first = await open.capture!.evaluate<number>(ink);
+        if (first <= 0) throw new Error(`no ink on page 1: ${first}`);
+        // The blob the first page is drawn from, so the wait below can tell "the new
+        // picture has arrived" from "the old one is still there and is perfectly decoded".
+        // Waiting for `complete && naturalWidth` alone is satisfied by the page already on
+        // screen, which is how this check first passed for the wrong reason and then
+        // failed for the right one.
+        const before = await open.capture!.evaluate<string>(
+          `document.querySelector('img.wiki-embed-pdf-page')?.src ?? ''`,
+        );
+
+        // A real pointer at the arrow's real place, the same way the drag is done — and
+        // measured immediately before the click for the same reason.
+        const at = await open.capture!.evaluate<{ x: number; y: number } | null>(
+          `(() => {
+             const nav = document.querySelectorAll('.wiki-embed-pdf-nav');
+             if (nav.length < 2) return null;
+             nav[1].scrollIntoView({ block: 'center' });
+             const box = nav[1].getBoundingClientRect();
+             return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+           })()`,
+        );
+        if (at === null) throw new Error("no ▶ on the bar");
+
+        await open.capture!.mouse("mousePressed", at.x, at.y);
+        await open.capture!.mouse("mouseReleased", at.x, at.y);
+
+        // The counter is a *box you can type into* plus a total beside it — the viewer
+        // window's own markup, down to the input — so the page you are on is the input's
+        // value and never the counter's text, which reads "/ 3" whatever page it is.
+        const after = await open.capture!.evaluate<{ ink: number; page: string | null }>(
+          `(async () => {
+             const at = () => document.querySelector('.wiki-embed-pdf-counter input');
+             for (let tries = 0; tries < 60; tries += 1) {
+               if (at() !== null && at().value !== '1') break;
+               await new Promise((done) => setTimeout(done, 100));
+             }
+             // The number moves when the request goes out; the picture arrives after it,
+             // as a different blob.
+             for (let tries = 0; tries < 60; tries += 1) {
+               const img = document.querySelector('img.wiki-embed-pdf-page');
+               if (img !== null && img.src !== ${JSON.stringify(before)} && img.complete && img.naturalWidth > 0) break;
+               await new Promise((done) => setTimeout(done, 100));
+             }
+             return { ink: ${ink}, page: at() === null ? null : at().value };
+           })()`,
+        );
+
+        if (after.page !== "2") throw new Error(`the page box reads ${after.page}, not 2`);
+        if (after.ink <= 0) throw new Error(`page 2 drew nothing: ${after.ink}`);
+        if (after.ink === first) {
+          throw new Error(
+            `the page box moved to ${after.page} and the picture did not change ` +
+              `(${first} dark pixels both times) — a changed src is not a changed page`,
+          );
+        }
+
+        return `page 1 ${first} dark px → page ${after.page} ${after.ink} dark px`;
       },
     },
     {
