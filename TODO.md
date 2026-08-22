@@ -3,9 +3,11 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 22 August 2026, on top of `v0.10.5` — **the workflow actions off Node 20, the
+Last updated 22 August 2026, released as `v0.10.6` — **the workflow actions off Node 20, the
 branch list cleared, the three cornerstone features written against the capture window's new
-harness, and then the rest of the capture-window backlog walked**. The batch before it, released as `v0.10.5`, is the harness itself,
+harness, then the rest of the capture-window backlog walked, and the driver taught to draw
+and turn a real PDF page**. A patch release deliberately: nothing under `src/` changed in any
+of it, so the app behaves exactly as `v0.10.5` did and only what can be checked has moved. The batch before it, released as `v0.10.5`, is the harness itself,
 and its entry is below.
 
 `TODO.md`'s own two housekeeping items are done (see Housekeeping), and the one that had
