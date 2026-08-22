@@ -2,7 +2,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
 import type { CaptureApi, ShowPayload, StatusPayload } from "../../src/shared/ipc.js";
-import type { OpenedNote, VaultFileEvent } from "../../src/shared/vault-types.js";
+import type {
+  LinkCandidateSummary,
+  OpenedNote,
+  VaultFileEvent,
+} from "../../src/shared/vault-types.js";
 
 /**
  * The capture window's missing harness.
@@ -107,6 +111,12 @@ export interface CaptureSpies {
    * children, not just the window" rule the four suggestion endpoints are here for.
    */
   openExternal: ReturnType<typeof vi.fn>;
+  /** `attachment-view.ts` again: a `[[…]]` chip clicked in the note body (B33/B35). */
+  openWikiLink: ReturnType<typeof vi.fn>;
+  /** The ⧉ on an embedded PDF's bar, which hands the file to the OS whatever the app can draw. */
+  openInSystemViewer: ReturnType<typeof vi.fn>;
+  /** What `NotePicker` lists (B41). Answers nothing by default; a test that wants notes says so. */
+  linkCandidates: ReturnType<typeof vi.fn>;
   painted: ReturnType<typeof vi.fn>;
   pickAttachment: ReturnType<typeof vi.fn>;
   reloadNote: ReturnType<typeof vi.fn>;
@@ -148,17 +158,36 @@ export interface MountedCapture {
   clickSlashItem: (label: string) => Promise<void>;
   /** Picks a size in the open `TableGrid` — one-based, the way the grid counts. */
   clickGridCell: (rows: number, columns: number) => Promise<void>;
+  /** Picks a row in the open palette overlay (the note picker, the link picker, Move) by its text. */
+  clickPaletteRow: (text: string) => Promise<void>;
+  /** Clicks a node the window drew — for the chips and widgets that are not buttons. */
+  clickAt: (node: Element, init?: MouseEventInit) => Promise<void>;
+  /** Pastes into the note body, with whatever the clipboard is standing in for. See `pasteInBody`. */
+  pasteInBody: (clipboard: { text?: string; html?: string }) => Promise<void>;
   /** Lets pending promises and effects settle, the way `library-disk-change.test.ts` does. */
   flush: (rounds?: number) => Promise<void>;
+  /**
+   * Waits until something is true, for the things `flush` cannot reach — a real
+   * `setTimeout` rather than a promise chain. See `waitFor` below.
+   */
+  waitFor: (ready: () => boolean, what: string, within?: number) => Promise<void>;
   /** Waits out real animation frames — `painted()` is deliberately two deep (see `Capture.tsx:228`). */
   nextFrames: (count?: number) => Promise<void>;
   unmount: () => void;
 }
 
 export async function mountCapture(
-  options: { platform?: NodeJS.Platform; loadRemoteImages?: boolean } = {},
+  options: {
+    platform?: NodeJS.Platform;
+    loadRemoteImages?: boolean;
+    pdfPageCount?: number | null;
+  } = {},
 ): Promise<MountedCapture> {
   const platform = options.platform ?? "linux";
+  // Null is what main answers while it does not know yet, and it is the right default —
+  // the page bar is meant to stay absent rather than guess. A suite about the bar has to
+  // be able to say how many pages there are.
+  const pdfPageCount = options.pdfPageCount ?? null;
   // The window reads B50's switch once, at bootstrap, and hands its own copy down to
   // every image node view — which is exactly the wiring `capture-remote-images.test.ts`
   // is about, so it has to be settable from here.
@@ -170,6 +199,9 @@ export async function mountCapture(
     discard: vi.fn(),
     openLibrary: vi.fn(),
     openExternal: vi.fn(async () => {}),
+    openWikiLink: vi.fn(async () => "note" as const),
+    openInSystemViewer: vi.fn(async () => {}),
+    linkCandidates: vi.fn(async () => [] as LinkCandidateSummary[]),
     painted: vi.fn(),
     pickAttachment: vi.fn(async () => null),
     reloadNote: vi.fn(async () => {}),
@@ -232,7 +264,7 @@ export async function mountCapture(
     // Reached from `attachment-view.ts` the moment a `.pdf` embed gets a node view, not
     // from `Capture.tsx`. Null is the honest answer here: there is no pdf.js in jsdom, and
     // the page counter is meant to stay absent rather than guess when nobody knows yet.
-    pdfPageCount: async () => null,
+    pdfPageCount: async () => pdfPageCount,
     checkAttachments: async () => [],
     peopleSuggestions: async () => [],
     locationSuggestions: async () => [],
@@ -509,6 +541,49 @@ export async function mountCapture(
         await flush();
       }
     },
+    /**
+     * Pastes into the note body.
+     *
+     * The clipboard is a hand-made object rather than a `DataTransfer`, because jsdom
+     * implements neither `DataTransfer` nor `ClipboardEvent` — and ProseMirror only ever
+     * asks it for `types`, `getData`, `files` and `items`, so standing in for those four is
+     * standing in for the whole of what the paste path can see. What is being exercised is
+     * this window's `transformPasted` chain (`paste-wiki.ts` composed with
+     * `transformPastedImages`), not the clipboard.
+     */
+    pasteInBody: async ({ text = "", html = "" }) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          types: [...(text === "" ? [] : ["text/plain"]), ...(html === "" ? [] : ["text/html"])],
+          getData: (kind: string) => (kind === "text/html" ? html : text),
+          files: [],
+          items: [],
+        },
+      });
+      await act(async () => {
+        body().dispatchEvent(event);
+      });
+      await flush();
+    },
+    clickPaletteRow: async (text) => {
+      const match = [...container.querySelectorAll<HTMLElement>(".palette-list li")].find(
+        (node) => (node.textContent ?? "").includes(text),
+      );
+      if (match === undefined) throw new Error(`no palette row containing ${text}`);
+      await act(async () => {
+        match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await flush();
+    },
+    clickAt: async (node, init = {}) => {
+      await act(async () => {
+        node.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, ...init }),
+        );
+      });
+      await flush();
+    },
     clickGridCell: async (rows, columns) => {
       const cells = container.querySelectorAll(".table-grid-cell");
       if (cells.length === 0) throw new Error("no table grid is open");
@@ -530,6 +605,34 @@ export async function mountCapture(
     },
     typeField,
     flush,
+    /**
+     * Waits for a *result*, never for a duration.
+     *
+     * `flush` pumps microtasks, which is everything for a promise chain and nothing for a
+     * real timer — and two things in this window are behind one: `NotePicker`'s 150 ms
+     * debounce before it asks main for candidates, and the header's own save debounce. A
+     * `sleep(200)` would work today and be the thing that fails a release later, which is
+     * the lesson `capture-writer.test.ts` and `index-watch.test.ts` each cost one.
+     *
+     * The ceiling is deliberately generous rather than tight, for `index-watch.test.ts`'s
+     * reason: this returns the moment the condition holds, so a high ceiling costs nothing
+     * on the happy path and is only ever reached by a real breakage. What it throws names
+     * what it was waiting for, so a timeout reads as a failed expectation rather than a
+     * bare hang.
+     */
+    waitFor: async (ready, what, within = 4_000) => {
+      const until = Date.now() + within;
+      for (;;) {
+        // eslint-disable-next-line no-await-in-loop
+        await flush(2);
+        if (ready()) return;
+        if (Date.now() > until) throw new Error(`waited ${within}ms for ${what}, and it never happened`);
+        // eslint-disable-next-line no-await-in-loop
+        await act(async () => {
+          await new Promise<void>((done) => setTimeout(done, 10));
+        });
+      }
+    },
     nextFrames: async (count = 2) => {
       await act(async () => {
         await new Promise<void>((done) => {

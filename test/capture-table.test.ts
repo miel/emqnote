@@ -191,3 +191,99 @@ describe("the table toolbar in the capture window", () => {
     expect(capture.container.querySelector(".table-toolbar")).toBeNull();
   });
 });
+
+describe("inserting a table in the capture window", () => {
+  let capture: MountedCapture;
+
+  beforeEach(async () => {
+    capture = await mountCapture();
+    await capture.fireShow();
+    await capture.focusBody();
+  });
+
+  afterEach(() => {
+    capture.unmount();
+  });
+
+  it("opens the grid on Mod+Alt+T, reading 1 x 1 to start (14a)", async () => {
+    await capture.pressKeyInBody({ key: "t", ctrlKey: true, altKey: true });
+
+    expect(capture.container.querySelector(".table-grid")).not.toBeNull();
+    expect(capture.container.querySelector(".table-grid-readout")!.textContent).toBe(
+      "1 × 1 table",
+    );
+  });
+
+  it("is fully drivable from the keyboard, which is what the chord started (14b)", async () => {
+    await capture.pressKeyInBody({ key: "t", ctrlKey: true, altKey: true });
+
+    await capture.pressKeyOn(".table-grid", { key: "ArrowDown" });
+    await capture.pressKeyOn(".table-grid", { key: "ArrowRight" });
+    // The readout follows the arrows exactly as it follows the pointer — a shortcut that
+    // opens a grid you then have to reach for the mouse to finish is a shortcut that does
+    // not finish what it starts.
+    expect(capture.container.querySelector(".table-grid-readout")!.textContent).toBe(
+      "2 × 2 table",
+    );
+
+    await capture.pressKeyOn(".table-grid", { key: "Enter" });
+
+    expect(capture.container.querySelector(".table-grid")).toBeNull();
+    const table = capture.container.querySelector(".ProseMirror table")!;
+    expect(table.querySelectorAll("tr")).toHaveLength(2);
+    expect(table.querySelectorAll("tr:first-child > *")).toHaveLength(2);
+  });
+
+  it("closes on Escape without inserting anything", async () => {
+    await capture.pressKeyInBody({ key: "t", ctrlKey: true, altKey: true });
+    await capture.pressKeyOn(".table-grid", { key: "Escape" });
+
+    expect(capture.container.querySelector(".table-grid")).toBeNull();
+    expect(capture.container.querySelector(".ProseMirror table")).toBeNull();
+  });
+});
+
+describe("walking a table with Tab in the capture window", () => {
+  let capture: MountedCapture;
+
+  beforeEach(async () => {
+    capture = await mountCapture();
+    await withTable(capture);
+  });
+
+  afterEach(() => {
+    capture.unmount();
+  });
+
+  it("selects the next cell's contents so it can be overtyped (14d)", async () => {
+    await capture.pressKeyInBody({ key: "Tab" });
+    // Selected, not just landed in: Backspace with a text selection takes the words out,
+    // and this is how that shows from the DOM without reaching into ProseMirror's state.
+    // (`clearCells` declines here — a text selection inside one cell is not a rectangle —
+    // so it is the ordinary Backspace that runs.)
+    await capture.pressKeyInBody({ key: "Backspace" });
+
+    expect(
+      [...capture.container.querySelectorAll(".ProseMirror td, .ProseMirror th")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["Wie", "", "Jan", "offerte", "Piet", "planning"]);
+  });
+
+  it("adds a row when Tab leaves the very last cell (14e)", async () => {
+    // Six cells in this table, so the sixth Tab is the one that runs out of table.
+    for (let press = 0; press < 5; press += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await capture.pressKeyInBody({ key: "Tab" });
+    }
+    expect(capture.container.querySelectorAll(".ProseMirror table tr")).toHaveLength(3);
+
+    await capture.pressKeyInBody({ key: "Tab" });
+
+    expect(capture.container.querySelectorAll(".ProseMirror table tr")).toHaveLength(4);
+    // Empty, and the note keeps everything that was already in it.
+    expect(capture.container.querySelector(".ProseMirror table")!.textContent).toBe(
+      "WieWatJanoffertePietplanning",
+    );
+  });
+});

@@ -1349,6 +1349,21 @@ was inferred from the name of one event and written down as settled — the same
 the "no test harness" sentence three paragraphs up, in the same file, in the same week. **A
 capability inferred from a mechanism is a guess.**
 
+**The line has been walked, and here is where it actually falls.** Nine suites in, four
+things in this window turn out to be unreachable in jsdom, and each was *measured* rather
+than reasoned about — which matters, because three of them look like ordinary behaviour
+rather than layout. **An inline PDF's page arrives over `fetch()` on `emqnote-thumb://`**,
+so the embed never gets past its chip and the bar the page controls live on is never drawn
+(`TEST-PROTOCOL.md` §15k, §17h, §18k–§18m, §22q's ⧉). **A click on a markdown link goes
+through ProseMirror's `handleClick`, which asks `posAtCoords` first**, so it never fires —
+and those rows are about *aiming* at the last character, which makes them layout wearing a
+behaviour's clothes (§18g–§18i). A `[[…]]` chip is the opposite and does work: its node view
+listens for a plain DOM click and never asks where the pointer was. **Shift+arrow within a
+cell's text is a selection the browser moves and ProseMirror reads back**, so the step
+`extendCellSelection`'s guard is about never happens (§20h–§20k). And **a panel scrolling is
+not a thing jsdom does at all** (§20a). Everything else asked of this window so far is
+reachable, typing and pasting included.
+
 What jsdom genuinely lacks here is narrower, and is a *hole* rather than an absence:
 `Element.getClientRects` exists and answers zeros, and `Range.getClientRects` is not
 implemented at all. ProseMirror's `singleRect` therefore throws a `TypeError` instead of

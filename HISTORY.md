@@ -1125,3 +1125,58 @@ already gives, which is consistency rather than a fake measurement.
 pointer, and whether the flip reads as a decision rather than a jump. Fitting is not
 gracefulness. Untouched by any of this: the reader window's drag, which nothing drags in
 yet, and everything about B50 that needs a real network.
+
+**The rest of the capture-window backlog was walked the same day, 22 August 2026.** Six
+rows in `TEST-PROTOCOL.md` had read "reachable by the harness now, not yet written against
+it" — §13h, §14n, §15k, §16i, §17h, §18x, and §20m, §22s and §23j said much the same. That
+sentence had been true since the harness landed and was doing no work, so each row got one
+of two answers: written, or measured and told why it cannot be.
+
+**Written** (`test/capture-note-link.test.ts`, `test/capture-document.test.ts`, and
+additions to `test/capture-table.test.ts`; the suite is 1784 tests over 136 files):
+
+- **§13h and §16i** — the note picker in the window notes are actually written in, which
+  §13h calls "the row most worth walking". The typed `[[` opening it mid-sentence with the
+  brackets still showing, Escape leaving them exactly as typed, the pick writing
+  `[[path|Title]]` rather than a bare title, "No note matches" instead of an empty box, the
+  `Mod+Shift+K` route, and a chip's click reaching `openWikiLink` with the path it was
+  handed rather than the title it draws.
+- **§14n** — `Mod+Alt+T` opening the grid, the grid walked and chosen entirely from the
+  keyboard (a shortcut that opens something the mouse has to finish does not finish what it
+  starts), Tab selecting the next cell's contents, and Tab off the last cell adding a row.
+- **§18x's reachable half** — a line to type on below a note that ends in a table, a code
+  block or a rule; one of two adjacent spellings drawn with both kept, and two far-apart
+  mentions left alone; the divider with a paragraph under it.
+- **§23j's paste** — a `[[path|Title]]` on the clipboard becoming a real chip in this
+  window, an `![[foto.png]]` becoming an embed, and a bare `[dit]` staying text.
+- **§33p** turned out to be covered already, by `capture-keys.test.ts` and
+  `capture-session.test.ts` between them — worth checking before writing rather than after.
+
+**Measured and written down instead**, which is the more useful half of this batch, because
+three of the four look like ordinary behaviour rather than layout:
+
+- **An inline PDF's page arrives over `fetch()` on `emqnote-thumb://`**, which jsdom cannot
+  serve — so the embed never gets past its chip and the bar the arrows, the counter and the
+  ⧉ live on is never drawn. That is §15k, §17h, §18k–§18m and §22q's ⧉ in one sentence.
+- **A click on a markdown link goes through ProseMirror's `handleClick`, which asks
+  `posAtCoords` first.** Those rows are about aiming at the right-hand half of the last
+  character, so they are layout wearing a behaviour's clothes (§18g–§18i). A `[[…]]` chip is
+  the opposite and does work: its node view listens for a plain DOM click.
+- **Shift+arrow within a cell's text is a selection the browser moves and ProseMirror reads
+  back**, so the step `extendCellSelection`'s guard is about never happens here
+  (§20h–§20k) — and **a panel scrolling is not something jsdom does at all** (§20a).
+
+The harness grew what the work needed and no more: `openWikiLink`, `openInSystemViewer` and
+`linkCandidates` on the stub (the "cover the children" rule collecting its third instalment),
+a `pdfPageCount` option, `pasteInBody` — a hand-made clipboard, since jsdom has neither
+`DataTransfer` nor `ClipboardEvent`, and ProseMirror only ever asks it for four things — and
+`waitFor`, which is there because `NotePicker` debounces 150 ms behind a real timer and
+`flush` pumps only microtasks. `waitFor` waits on the *result* with a generous ceiling, for
+`index-watch.test.ts`'s reason: it returns the moment the condition holds, so a high ceiling
+costs nothing on the happy path and a `sleep(200)` would have been the thing that failed a
+release later.
+
+**What this leaves is a driver step nobody has tried**: a real multi-page PDF in the
+scaffolded vault and a pdf.js render under `Xvfb` would close §17h and §15k, which have never
+been seen in this window at all. `TEST-PROTOCOL.md` says so on both rows rather than leaving
+them to look like an oversight.

@@ -4,8 +4,8 @@ Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
 Last updated 22 August 2026, on top of `v0.10.5` — **the workflow actions off Node 20, the
-branch list cleared, and the three cornerstone features written against the capture
-window's new harness**. The batch before it, released as `v0.10.5`, is the harness itself,
+branch list cleared, the three cornerstone features written against the capture window's new
+harness, and then the rest of the capture-window backlog walked**. The batch before it, released as `v0.10.5`, is the harness itself,
 and its entry is below.
 
 `TODO.md`'s own two housekeeping items are done (see Housekeeping), and the one that had
@@ -26,6 +26,24 @@ reasoned about. Seven steps now, green twice in a row, each confirmed to go red 
 on purpose. And the drag cost a run to a stale measurement that is now in `CONSTRAINTS.md`:
 the toolbar appears when the caret enters a cell and pushes every row below it down, so
 coordinates taken before the click aim one row high.
+
+**Every `TEST-PROTOCOL.md` row that read "reachable by the harness now, not yet written
+against it" has been dealt with**, and dealing with it meant deciding one of two things for
+each: write it, or measure why it cannot be written and say so on the row. §13h (the note
+picker and a followed link), §14n (the table grid and Tab), §16i, §18x's reachable half and
+§23j's paste are written — `capture-note-link.test.ts` and `capture-document.test.ts`, plus
+additions to `capture-table.test.ts`. §33p turned out to be covered already, by two suites
+between them. The suite is 1784 tests over 136 files.
+
+**The rest are not "not yet written" — they are things jsdom cannot do**, and that is now
+measured rather than assumed, with the reason on each row and the summary in
+`CONSTRAINTS.md`. An inline PDF's page comes over `fetch()` on a custom protocol, so no page
+and no bar (§15k, §17h, §18k–§18m, §22q's ⧉). A click on a markdown link goes through
+`posAtCoords`, and those rows are *about* aiming (§18g–§18i). Shift+arrow inside a cell is a
+selection the browser moves (§20h–§20k), and a panel scrolling is not a thing jsdom does
+(§20a). **The next obvious step is the driver's**: a real multi-page PDF in the scaffolded
+vault and a pdf.js render under `Xvfb` would close §17h and §15k, and nobody has tried
+whether that works headlessly here.
 
 **One claim in the harness turned out to be wrong and is corrected**: character input is
 *not* unreachable in jsdom. `MutationObserver` is implemented, ProseMirror's `DOMObserver`
