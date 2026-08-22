@@ -321,7 +321,8 @@ because they are unreachable. (Also no longer blocked on Node: an `nvm`
 install of Node 24 on 2 August 2026 fixed both the jsdom-based tests and
 `better-sqlite3`, which segfaulted under the sandbox's previous Node 18 —
 see `00-PLAN.md`.) `npm test`, `npm run typecheck` and `npm run build` all
-pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
+pass — 1216 tests, the full suite. (1784 over 136 files as of 22 August 2026,
+measured rather than carried forward.)
 
 - [x] ~~**The three cornerstone features of 14 August 2026 in the *capture* window**
       (B49 cell selection, B50 remote images, B51 the `/` menu).~~ Written, 22 August 2026:
