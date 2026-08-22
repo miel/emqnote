@@ -1337,11 +1337,49 @@ jsdom assertion dressed up to look like one. The driver's own headline step asse
 element in the DOM proves the node view ran and proves nothing about whether the picture
 arrived. Four separate features spent months unverified on that one difference.
 
+**Layout is the line; input is not, and this file said otherwise for a week.** The harness
+used to state that character input was unreachable in jsdom, "through `beforeinput` and the
+DOM observer, neither of which jsdom drives for a `contenteditable`". Half of that is wrong,
+and it is the load-bearing half: jsdom implements `MutationObserver`, ProseMirror's
+`DOMObserver` is built on it, and its callback calls `flush()` synchronously — so writing a
+character into the contenteditable and moving the DOM selection is read back exactly as a
+browser's own typing is. `readDOMChange` runs, `handleTextInput` fires, input rules apply,
+and `helpers/capture.ts`'s `typeInBody` is nothing more than that. It was never tried; it
+was inferred from the name of one event and written down as settled — the same failure as
+the "no test harness" sentence three paragraphs up, in the same file, in the same week. **A
+capability inferred from a mechanism is a guess.**
+
+What jsdom genuinely lacks here is narrower, and is a *hole* rather than an absence:
+`Element.getClientRects` exists and answers zeros, and `Range.getClientRects` is not
+implemented at all. ProseMirror's `singleRect` therefore throws a `TypeError` instead of
+reading a zero, and it reaches that line from `scrollToSelection` — which every text-editing
+transaction sets. So the first character typed into a document that already holds text
+throws out of `updateState`, inside a MutationObserver callback, as an unhandled error
+attributed to whichever test was running by then. `helpers/capture.ts` gives `Range` the
+zeros `Element` already gives, which is consistency rather than a fake measurement, and says
+so where it does it.
+
+**Coordinates taken before a click are stale after it, and a drag aimed with them lands in
+the wrong row.** `scripts/drive-capture.ts` measures a table's cells, drags from one to
+another and expects a two-by-two rectangle; it got a one-by-two, and the app was not at
+fault. `table-toolbar.ts` draws its bar as a widget decoration *above* the table, and the
+bar appears the moment the caret enters a cell — so the mousedown that starts the drag
+pushes every row below it down by the height of a toolbar that did not exist when the
+coordinates were read, and the point aimed at the second row is now over the first. The
+failure reads as a rectangle that will not grow downwards: a plausible, specific, entirely
+wrong diagnosis. The driver clicks once, re-measures, and only then drags. Any future step
+that aims a pointer at something a click can move owes the same, and its failure message
+carries the coordinates and the viewport for the reason `--trash-probe` reports evidence
+rather than asserting a cause.
+
 **The harness stub covers the window *and its children*, which is what broke first.**
-`Capture.tsx` never mentions `tagSuggestions`, `peopleSuggestions`, `locationSuggestions`
-or `pdfPageCount` — but `HeaderBlock` calls three of them the moment anything is typed into
-Tags, Where or Who, and `attachment-view.ts` calls the fourth the moment a `.pdf` embed gets
-a node view. An absent one throws out of a `void` promise chain, which arrives as an
+`Capture.tsx` never mentions `tagSuggestions`, `peopleSuggestions`, `locationSuggestions`,
+`pdfPageCount` or `openExternal` — but `HeaderBlock` calls three of them the moment anything
+is typed into Tags, Where or Who, `attachment-view.ts` calls the fourth the moment a `.pdf`
+embed gets a node view, and the fifth the moment anyone clicks the chip a web picture starts
+life as — that last one added a batch later than the others, by the suite that needed it,
+which is the rule restating itself: the list is not finished, it is only as long as what has
+been pointed at so far. An absent one throws out of a `void` promise chain, which arrives as an
 unhandled rejection attributed to whichever test was running by then: the reported test and
 the broken one are two different tests, the same shape as `capture-writer.test.ts`'s
 rename race. Grepping the subject component for `window.emqnote.` is not enough; the stub

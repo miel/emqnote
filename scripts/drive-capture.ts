@@ -81,6 +81,15 @@ function scaffoldVault(): string {
       "",
       "Tekst na de afbeelding, met een #klantx erin.",
       "",
+      // A table, for the one thing about B49 that no jsdom test can reach: a rectangle of
+      // cells selected by *dragging*. `cellPointerAt` goes through `posAtCoords`, which
+      // needs real boxes, so this is the pointer half of a feature whose keyboard half is
+      // covered in `test/capture-table.test.ts`.
+      "| Wie | Wat |",
+      "| --- | --- |",
+      "| Jan | offerte |",
+      "| Piet | planning |",
+      "",
     ].join("\n"),
   );
 
@@ -150,6 +159,42 @@ class Session {
       // eslint-disable-next-line no-await-in-loop
       await this.send("Input.dispatchKeyEvent", { type, key, ...extra });
     }
+  }
+
+  /**
+   * Types characters the way a keyboard does — `text` on the `keyDown` is what makes
+   * Chromium turn the event into input at all, and it is what `handleTextInput` (and so
+   * B51's `/` menu, and every input rule in the app) is reached by. A bare `key` moves a
+   * caret and writes nothing.
+   */
+  async type(text: string): Promise<void> {
+    for (const character of text) {
+      // eslint-disable-next-line no-await-in-loop
+      await this.send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        text: character,
+        unmodifiedText: character,
+        key: character,
+      });
+      // eslint-disable-next-line no-await-in-loop
+      await this.send("Input.dispatchKeyEvent", { type: "keyUp", key: character });
+    }
+  }
+
+  /** A real pointer event at real coordinates, which is the whole reason this script exists. */
+  async mouse(
+    type: "mousePressed" | "mouseReleased" | "mouseMoved",
+    x: number,
+    y: number,
+  ): Promise<void> {
+    await this.send("Input.dispatchMouseEvent", {
+      type,
+      x: Math.round(x),
+      y: Math.round(y),
+      button: "left",
+      buttons: type === "mouseReleased" ? 0 : 1,
+      clickCount: type === "mouseMoved" ? 0 : 1,
+    });
   }
 
   close(): void {
@@ -460,6 +505,150 @@ async function main(): Promise<number> {
         if (lit === null) throw new Error("no facet row is lit in the library");
         if (!lit.includes("klantx")) throw new Error(`the lit facet reads ${lit}`);
         return `library filtered on ${lit}`;
+      },
+    },
+    {
+      name: "a rectangle of table cells comes out of a real drag (B49)",
+      run: async () => {
+        // The half `test/capture-table.test.ts` says out loud that it cannot reach.
+        // Shift+arrow builds the same `CellSelection` and is covered there; this is
+        // `cellPointerAt` → `posAtCoords`, which reads boxes and therefore only means
+        // anything where boxes exist.
+        //
+        // **The cells are measured after a click, not before it, and that cost a run.**
+        // `table-toolbar.ts` draws its bar as a widget decoration above the table, and it
+        // appears the moment the caret enters a cell — so every row below it shifts down by
+        // the height of a toolbar that did not exist when the coordinates were taken. A
+        // drag aimed at the second row then lands in the first, and the failure reads as a
+        // rectangle that would not grow downwards: the app behaving perfectly, measured
+        // wrongly. Clicking first and re-measuring is the whole fix, and it is the sort of
+        // thing that only exists once there are real boxes to be stale about.
+        const measure = async (): Promise<{
+          from: { x: number; y: number };
+          to: { x: number; y: number };
+          text: string[];
+          viewport: { width: number; height: number };
+        } | null> =>
+          open.capture!.evaluate(
+            `(() => {
+             const cells = [...document.querySelectorAll('.ProseMirror table td, .ProseMirror table th')];
+             if (cells.length < 4) return null;
+             const centre = (node) => {
+               const box = node.getBoundingClientRect();
+               return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+             };
+             // The header's first cell to the second column of the row below it: two by two.
+             return {
+               from: centre(cells[0]),
+               to: centre(cells[3]),
+               text: cells.map((node) => node.textContent),
+               viewport: { width: window.innerWidth, height: window.innerHeight },
+             };
+           })()`,
+          );
+
+        const before = await measure();
+        if (before === null) throw new Error("no table was drawn in the note body");
+
+        // The click that brings the toolbar up, and so settles the layout the drag is
+        // aimed at.
+        await open.capture!.mouse("mousePressed", before.from.x, before.from.y);
+        await open.capture!.mouse("mouseReleased", before.from.x, before.from.y);
+        await new Promise((done) => setTimeout(done, 300));
+
+        const corners = await measure();
+        if (corners === null) throw new Error("the table went away when it was clicked");
+
+        await open.capture!.mouse("mousePressed", corners.from.x, corners.from.y);
+        // Two moves rather than one: a drag that jumps straight to its end has never
+        // exercised the part that has to keep up, and the intermediate cell is where a
+        // rectangle that only ever grows down the column would show.
+        await open.capture!.mouse(
+          "mouseMoved",
+          (corners.from.x + corners.to.x) / 2,
+          corners.from.y,
+        );
+        await open.capture!.mouse("mouseMoved", corners.to.x, corners.to.y);
+        await open.capture!.mouse("mouseReleased", corners.to.x, corners.to.y);
+        await new Promise((done) => setTimeout(done, 300));
+
+        const picked = await open.capture!.evaluate<string[]>(
+          `[...document.querySelectorAll('.table-cell-selected')].map((node) => node.textContent)`,
+        );
+        if (picked.length !== 4) {
+          // The coordinates go with the count: a rectangle that came out the wrong shape and
+          // a cell that was never on screen to be dragged to look identical from the count
+          // alone, and only one of them is a bug in the app.
+          throw new Error(
+            `${picked.length} cells selected, not 4: ${JSON.stringify(picked)} — dragged ` +
+              `(${Math.round(corners.from.x)},${Math.round(corners.from.y)}) → ` +
+              `(${Math.round(corners.to.x)},${Math.round(corners.to.y)}) in a ` +
+              `${corners.viewport.width}×${corners.viewport.height} viewport, cells ` +
+              JSON.stringify(corners.text),
+          );
+        }
+        return `dragged ${JSON.stringify(picked)}`;
+      },
+    },
+    {
+      name: "the / menu opens with room to open in, near the foot of the window (B51)",
+      run: async () => {
+        await open.capture!.evaluate(`document.querySelector('.ProseMirror').focus()`);
+        // To the end of the note, then far enough down that the panel cannot fit below the
+        // caret — which is the case the flip exists for and the one no jsdom test can set
+        // up, every box there being zero.
+        await open.capture!.key("End", { modifiers: 2, windowsVirtualKeyCode: 35, code: "End" });
+        for (let press = 0; press < 24; press += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          await open.capture!.key("Enter", {
+            text: "\r",
+            windowsVirtualKeyCode: 13,
+            code: "Enter",
+          });
+        }
+        await open.capture!.type("/");
+        await new Promise((done) => setTimeout(done, 400));
+
+        const seen = await open.capture!.evaluate<{
+          rows: number;
+          panel: { top: number; bottom: number; left: number; right: number; height: number };
+          caretTop: number;
+          window: { width: number; height: number };
+        } | null>(
+          `(() => {
+             const menu = document.querySelector('.slash-menu');
+             if (menu === null) return null;
+             const box = menu.getBoundingClientRect();
+             const range = window.getSelection().getRangeAt(0).cloneRange();
+             const caret = range.getBoundingClientRect();
+             return {
+               rows: menu.querySelectorAll('.context-menu-item').length,
+               panel: { top: box.top, bottom: box.bottom, left: box.left, right: box.right, height: box.height },
+               caretTop: caret.top,
+               window: { width: window.innerWidth, height: window.innerHeight },
+             };
+           })()`,
+        );
+        if (seen === null) throw new Error("no / menu opened in the capture window");
+        if (seen.rows !== 16) throw new Error(`the panel drew ${seen.rows} rows, not 16`);
+        if (seen.panel.height <= 0) throw new Error("the panel has no height");
+
+        // The whole of it on screen. This is `TEST-PROTOCOL.md` §19t's mechanical half —
+        // whether it *fits* — and it is the half a script can settle; whether the flip
+        // looks graceful is still a person's to judge.
+        const off: string[] = [];
+        if (seen.panel.top < 0) off.push(`top ${Math.round(seen.panel.top)}`);
+        if (seen.panel.left < 0) off.push(`left ${Math.round(seen.panel.left)}`);
+        if (seen.panel.bottom > seen.window.height) {
+          off.push(`bottom ${Math.round(seen.panel.bottom)} > ${seen.window.height}`);
+        }
+        if (seen.panel.right > seen.window.width) {
+          off.push(`right ${Math.round(seen.panel.right)} > ${seen.window.width}`);
+        }
+        if (off.length > 0) throw new Error(`the panel hangs off the window: ${off.join(", ")}`);
+
+        const side = seen.panel.top < seen.caretTop ? "above" : "below";
+        return `16 rows, ${Math.round(seen.panel.height)}px tall, ${side} the caret, inside a ${seen.window.width}×${seen.window.height} window`;
       },
     },
   ];

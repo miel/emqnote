@@ -6,6 +6,7 @@ import {
   namesAFile,
   wikiLinkNodeView,
 } from "../src/renderer/editor/attachment-view.js";
+import { spyOnImageSrc } from "./helpers/image-probe.js";
 
 /**
  * `wikiLinkNodeView`'s markup, and B30/B36's addition on top of it: a first-page
@@ -869,37 +870,6 @@ describe("a PDF embedded with ![[…]]", () => {
  * the report that prompted this. The chip drawn for it used to be the one thing in a note
  * that could be seen and not reached.
  */
-/**
- * Records what a probe `Image` was pointed at, without letting jsdom try to load it.
- *
- * The setter is patched on the prototype rather than the constructor swapped: the module
- * under test calls the bare `Image` global, and which object that resolves to under vitest
- * is not something a test should have to know.
- */
-function spyOnImageSrc(): { seen: string[]; restore: () => void } {
-  const seen: string[] = [];
-  const prototype = globalThis.Image.prototype as unknown as object;
-  const original = Object.getOwnPropertyDescriptor(prototype, "src");
-
-  Object.defineProperty(prototype, "src", {
-    configurable: true,
-    set(value: string) {
-      seen.push(value);
-    },
-    get() {
-      return seen[seen.length - 1] ?? "";
-    },
-  });
-
-  return {
-    seen,
-    restore: () => {
-      if (original === undefined) delete (prototype as Record<string, unknown>).src;
-      else Object.defineProperty(prototype, "src", original);
-    },
-  };
-}
-
 describe("externalImageView", () => {
   function chip(src: string, alt: string | null = null): HTMLElement {
     // `false` — B50's own setting off, which is also the only state jsdom can model: it

@@ -3,8 +3,36 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 22 August 2026, on top of `v0.10.4` — **the capture window's missing test
-harness, built**. The sentence every batch since the disk-change work has ended on is
+Last updated 22 August 2026, on top of `v0.10.5` — **the workflow actions off Node 20, the
+branch list cleared, and the three cornerstone features written against the capture
+window's new harness**. The batch before it, released as `v0.10.5`, is the harness itself,
+and its entry is below.
+
+`TODO.md`'s own two housekeeping items are done (see Housekeeping), and the one that had
+carried since 14 August is done with them: B49, B50 and B51 had never been exercised in the
+capture window, on the grounds that it had no harness — and it has had one since yesterday.
+Three suites, 25 tests: `capture-slash-menu` (the `/` menu opening, filtering, Escape, the
+keyboard walk, and all four main-side items routed through *this* window's closures, which
+are different objects from both the library's and its own Insert menu's),
+`capture-table` (a rectangle built with Shift+arrow, cleared with Backspace, and the toolbar
+acting on it) and `capture-remote-images` (B50's switch reaching every image node view —
+including the `data:` case, which only this window's CSP forces through main).
+
+**Two of those features have a half no jsdom test can have, and `scripts/drive-capture.ts`
+now takes it**: a rectangle dragged out with a *real pointer*, and whether B51's sixteen-row
+panel fits on screen with the caret near the foot of the window. It flips above it — 331px
+of panel in a 600×720 window — which is the first time that has been observed rather than
+reasoned about. Seven steps now, green twice in a row, each confirmed to go red when broken
+on purpose. And the drag cost a run to a stale measurement that is now in `CONSTRAINTS.md`:
+the toolbar appears when the caret enters a cell and pushes every row below it down, so
+coordinates taken before the click aim one row high.
+
+**One claim in the harness turned out to be wrong and is corrected**: character input is
+*not* unreachable in jsdom. `MutationObserver` is implemented, ProseMirror's `DOMObserver`
+is built on it, and typing into the contenteditable is read back exactly as a browser's own
+typing is — which is what `handleTextInput`, and so the `/` menu, needs. It had been
+inferred from the name of one event and written down as settled, in the same file and the
+same week as the "no test harness" sentence that went the same way. The sentence every batch since the disk-change work has ended on is
 retired, and the honest version of it is worth keeping: it was two claims in one, and only
 the narrow one was ever true. The window has been *reachable* over CDP since 15 August
 (`HISTORY.md` says so, and every batch since went on saying the broader thing anyway); what
@@ -145,7 +173,7 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   notice, and the cornerstone features' capture half) named the same absence, and the
   absence is gone. What each of them can now claim, and what it still cannot, is the same
   split every time: **the route and the logic are covered** by `test/helpers/capture.ts`
-  and its four suites, and **a real picture decoding in the real window** is covered by
+  and its seven suites, and **a real picture decoding in the real window** is covered by
   `npm run drive:capture` — `naturalWidth` non-zero, driven twice. What is still owed is
   only what a script cannot judge, and `TEST-PROTOCOL.md` §36 lists it. Read the bullets
   below with that in front of them; they are kept as written because they are the record
@@ -265,24 +293,29 @@ because they are unreachable. (Also no longer blocked on Node: an `nvm`
 install of Node 24 on 2 August 2026 fixed both the jsdom-based tests and
 `better-sqlite3`, which segfaulted under the sandbox's previous Node 18 —
 see `00-PLAN.md`.) `npm test`, `npm run typecheck` and `npm run build` all
-pass — 1216 tests, the full suite. (1740 as of 22 August 2026.)
+pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
 
-- [ ] **The three cornerstone features of 14 August 2026 in the *capture* window**
-      (B49 cell selection, B50 remote images, B51 the `/` menu). *Partly closed,
-      22 August 2026: the window now has a harness and a driver, and a real picture
-      genuinely decodes in it. What is still open here is these three specifically —
-      no suite has been written against them in this window yet, and the rectangle
-      and the sixteen-row panel are judgement calls a script cannot make anyway.*
-      All three are
-      confirmed in the library under `Xvfb` and driven over CDP — the drag, the
-      clearing, the toolbar over a rectangle, the picture drawn from cache with the
-      network down, the switch turning it back into a chip, the menu filtering as you
-      type. The capture window still has no harness, the same gap every batch since
-      the disk-change work has named. `TEST-PROTOCOL.md` §19u.
+- [x] ~~**The three cornerstone features of 14 August 2026 in the *capture* window**
+      (B49 cell selection, B50 remote images, B51 the `/` menu).~~ Written, 22 August 2026:
+      three suites and 25 tests against the harness, plus two driver steps for the halves
+      that need real boxes — a dragged rectangle and the panel fitting on screen. All three
+      were already confirmed in the *library* under `Xvfb`; what had never been exercised
+      was this window's own copy of them, and B51's four main-side items in particular go
+      out through closures that exist nowhere else. `TEST-PROTOCOL.md` §19u.
+      **Still owed to a person**, and it is the feel rather than the behaviour: whether the
+      rectangle keeps up with the pointer (§19b) and whether the flip above the caret reads
+      as a decision rather than a jump (§19t). Also untouched by any of this: the *reader*
+      window's drag, which nothing drags in yet, and everything about B50 that needs a real
+      network (§19i–§19m).
 - [ ] **How a dragged rectangle and a sixteen-row `/` panel feel on a real display.**
       Neither is something a script can judge: whether the rectangle keeps up with
       the pointer, and whether the panel flips above the caret gracefully in a short
-      window. `TEST-PROTOCOL.md` §19b and §19t.
+      window. `TEST-PROTOCOL.md` §19b and §19t. *Narrowed 22 August 2026 and worth being
+      exact about which way: the driver now settles that a real drag picks the right four
+      cells and that the panel fits — with the caret near the foot it flips above it, 331px
+      of panel in a 600×720 window. Fitting is not gracefulness, and landing on the right
+      cells is not keeping up with the pointer. Both rows stay open for the half they were
+      always about.*
 - [ ] **What a remote host actually sees when a note with a web picture is opened.**
       From inside the app it is one request per picture, once, and nothing on a
       second open — but that is the app's account of itself. `TEST-PROTOCOL.md` §19m.

@@ -1034,3 +1034,83 @@ has no OS provider here or in CI; every "does this feel right" row; and everythi
 `TEST-PROTOCOL.md` §36 is what this batch owes a human, and it is mostly judging by eye what
 a 40px floor cannot — including the first photograph this project has of the capture window
 with real content in it.
+
+**The workflow actions, the branch list, and the cornerstones in the capture window landed
+on 22 August 2026**, on top of `v0.10.5`. Nothing under `src/` changed for any of it either
+— it is the second batch running that is entirely about what can be checked and what can be
+maintained.
+
+**Two pieces of housekeeping, both of which had gone stale in the file that tracked them.**
+GitHub's deprecation notice of 19 September 2025 had been warning on every run since, and
+the eight `actions/checkout@v4` and `actions/setup-node@v4` pins are `@v7` now. `TODO.md`
+asked for `@v5`, which was current when the bullet was written and no longer is; the node24
+move that ends the deprecation is in v5.0.0 of *both* actions, so every major from v5 up
+answers the warning equally and v5 alone would have bought a bump that needs doing again.
+The two behaviour changes in between were read rather than assumed — setup-node v5's
+automatic caching keys off a `packageManager` field this project has not got, and
+checkout v6's separate credential file cannot reach `release.yml`'s `git fetch --force
+--tags origin` because this repo is public and that fetch needs no credentials.
+**`actions/upload-artifact@v4` was deliberately left alone**, which is the part the bullet
+had wrong by omission: it is a ninth `actions/` pin in those files and it is *not* in the
+warning — `v0.10.4`'s real annotations name checkout and setup-node and nothing else,
+including on the one job that uses it. Read off the run rather than reasoned from a version
+number, which is the only way to tell those two apart. And the branch bullet named three
+branches, two of which no longer existed locally, while nineteen fully-merged ones had piled
+up behind it; all nineteen are gone, deleted with `git branch -d` so the command is its own
+check.
+
+**The three cornerstone features of 14 August 2026 (B49, B50, B51) now have suites in the
+capture window** — the item `TODO.md` had carried for eight days on the grounds that the
+window had no harness, which stopped being true the day before. Three files, 25 tests:
+`capture-slash-menu.test.ts` (the `/` menu opening, filtering, Escape, the keyboard walk,
+and all four of its main-side items — image, file, note link, table — routed through *this*
+window's own closures, which are different objects from the library's and different again
+from the ones its own Insert menu uses), `capture-table.test.ts` (a rectangle built with
+Shift+arrow, cleared with Backspace, and the toolbar acting on it — including alignment
+taken from a rectangle rather than a caret), and `capture-remote-images.test.ts` (B50's
+switch reaching every image node view, the chip and its click, and the `data:` case that
+only this window's CSP forces through main). The suite is 1765 tests over 134 files.
+
+**Two halves of that are jsdom's by definition, and `scripts/drive-capture.ts` took them**:
+a rectangle of cells dragged out with a real pointer — `cellPointerAt` goes through
+`posAtCoords`, which reads boxes — and whether B51's sixteen-row panel *fits* with the caret
+near the foot of the window. It flips above it, 331px of panel in a 600×720 window, which
+is the first time that has been observed rather than reasoned about. Seven steps now, green
+twice in a row, each confirmed to go red when broken on purpose (the drag by neutering
+`table-drag.ts`'s dispatch, the panel by forcing its `fits` true, which put its bottom edge
+at 1017px in a 720px window).
+
+**The drag cost a run, and the diagnosis it invited was plausible and wrong.** It selected a
+one-by-two rectangle instead of two-by-two, which reads exactly like a rectangle that will
+not grow downwards. `table-toolbar.ts` draws its bar as a widget decoration *above* the
+table and it appears the moment the caret enters a cell — so the mousedown that starts the
+drag pushes every row below it down by a toolbar's height, and coordinates measured before
+the click aim one row high. Click once, re-measure, then drag. It is in `CONSTRAINTS.md`,
+along with the failure message that now carries the coordinates and the viewport, for the
+reason `--trash-probe` reports evidence rather than asserting a cause.
+
+**And a claim in yesterday's own harness was wrong.** It said character input was
+unreachable in jsdom, "through `beforeinput` and the DOM observer, neither of which jsdom
+drives for a `contenteditable`". Half of that is wrong and it is the half that matters:
+jsdom implements `MutationObserver`, ProseMirror's `DOMObserver` is built on it and its
+callback flushes synchronously, so writing a character into the contenteditable and moving
+the DOM selection is read back exactly as a browser's own typing is — `handleTextInput`
+fires, input rules apply, and the `/` menu opens. `typeInBody` is nothing more than that. It
+had never been tried; it was inferred from the name of one event. That is the same failure
+as the "no test harness" sentence retired the day before, in the same file, in the same
+week — **a capability inferred from a mechanism is a guess**, and this project has now made
+that particular one twice.
+
+What jsdom really lacks there is narrower and is a hole rather than an absence:
+`Element.getClientRects` answers zeros and `Range.getClientRects` is not implemented at all,
+so ProseMirror's `singleRect` throws where it would otherwise read a zero — reached from
+`scrollToSelection`, which every text-editing transaction sets. Unhandled, inside a
+MutationObserver callback, attributed to whichever test was running by then: the third time
+this codebase has met that exact shape. The harness gives `Range` the zeros `Element`
+already gives, which is consistency rather than a fake measurement.
+
+**What is still owed a human is the feel, and only the feel.** `TEST-PROTOCOL.md` §19b and
+§19t stay open for what they were always about: whether the rectangle keeps up with the
+pointer, and whether the flip reads as a decision rather than a jump. Fitting is not
+gracefulness. Untouched by any of this: the reader window's drag, which nothing drags in
+yet, and everything about B50 that needs a real network.

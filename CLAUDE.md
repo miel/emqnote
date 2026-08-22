@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1740 tests
+npm test               # vitest run — 1765 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -64,10 +64,13 @@ npm run drive:capture -- --screenshot=/tmp/capture.png
 
 Drives the **capture window** in the real app, under its own `Xvfb`, over CDP. Scaffolds a
 throwaway vault, raises the window with the real global hotkey, hands it a note holding a
-picture and a `#tag`, and checks the five things only a real renderer can answer — most of
-all `naturalWidth`, which is whether the picture actually *decoded* rather than whether an
-`<img>` reached the DOM. Exits non-zero on the first failed step and names it. Needs a
-display, so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.
+picture, a table and a `#tag`, and checks the seven things only a real renderer can answer —
+most of all `naturalWidth`, which is whether the picture actually *decoded* rather than
+whether an `<img>` reached the DOM. The other two of those seven are the ones jsdom is
+barred from by definition: a rectangle of table cells dragged out with a **real pointer**
+(B49), and whether B51's sixteen-row `/` panel **fits on screen** when the caret is near the
+foot of the window. Exits non-zero on the first failed step and names it. Needs a display,
+so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.
 
 ## Architecture
 
@@ -142,7 +145,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1740 tests in roughly twenty seconds of test time (about a minute and a
+The suite runs its 1765 tests in roughly twenty-four seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly

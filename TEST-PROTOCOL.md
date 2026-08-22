@@ -652,7 +652,7 @@ with a real network on it.
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
 | 19a | Drag across a 2×2 block of cells in a table | Exactly those four cells are tinted, including the header row. Nothing outside the rectangle |  |
-| 19b | Judge that drag on a real display — NEVER JUDGED | Does the rectangle follow the pointer without lag or flicker? Does the browser's own blue text selection ever flash over it? |  |
+| 19b | Judge that drag on a real display — NEVER JUDGED BY EYE | Does the rectangle follow the pointer without lag or flicker? Does the browser's own blue text selection ever flash over it? That the drag *lands on the right four cells* is settled in the capture window — `npm run drive:capture` does it with a real pointer — so what is left here is the feel, and the reader window, which nothing drags in yet |  |
 | 19c | Press Backspace with that rectangle up | Those four cells empty. The table keeps its shape, and nothing outside the rectangle changes |  |
 | 19d | Type a letter with a rectangle up | The cells empty and the letter lands in the top-left one of them |  |
 | 19e | Shift+click a cell three rows down | The rectangle extends to it. Shift+arrow does the same, one cell at a time |  |
@@ -670,8 +670,8 @@ with a real network on it.
 | 19q | Type `/` then Escape | The menu closes and the `/` stays exactly where you typed it |  |
 | 19r | Type `/divid`, Enter, then type a word | The rule stays and the word goes below it. Before this the word replaced the rule |  |
 | 19s | Type a date like `12/8` mid-sentence, and a `/` in a table cell | No menu, either time |  |
-| 19t | Judge the panel at a short window height — NEVER JUDGED | Sixteen rows is taller than some windows. It should flip above the caret and scroll rather than run off the screen |  |
-| 19u | Do 19a–19s in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h/18x: reachable by the harness now, not yet written against it |  |
+| 19t | Judge the panel at a short window height — NEVER JUDGED BY EYE | Sixteen rows is taller than some windows. It should flip above the caret and scroll rather than run off the screen. That it *fits* is settled — `npm run drive:capture` measures the panel against the window with the caret near the foot, and it flips (331px of panel, 600×720 window). Whether the flip reads as a decision rather than a jump is still yours |  |
+| 19u | Do 19a–19s in the **capture window** | Identical behaviour. **Written against the harness, 22 August 2026** — `test/capture-table.test.ts` for the rectangle and the toolbar, `test/capture-remote-images.test.ts` for the setting reaching the node views, and: `test/capture-slash-menu.test.ts` for the menu opening, filtering, Escape, the keyboard walk and all four main-side items through this window's own closures. What is left here is the pointer, the pixels and the network, which §36 and 19i–19m cover |  |
 
 ---
 
@@ -694,7 +694,7 @@ otherwise. Note §19t is answered by 20a: the panel does scroll now.
 | 20j | Press Backspace there | Exactly those cells empty. Save and `npm run canonical`: byte-identical |  |
 | 20k | Select part of a cell and press Shift+Down | Whole cells, two rows of them — a cell has no line below to extend to |  |
 | 20l | Ask a table's alignment buttons to align one cell | They cannot, by design: GFM writes alignment once per column. They act on the caret's column, or on the columns a rectangle covers. See B42 |  |
-| 20m | Do 20a, 20f, 20h–20k in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h/18x/19u: reachable by the harness now, not yet written against it |  |
+| 20m | Do 20a, 20f, 20h–20k in the **capture window** — NEVER VERIFIED | Identical behaviour. Same as 13h/14n/15k/17h/18x: reachable by the harness now, not yet written against it — §19u is the one that stopped being able to say that, and is the worked example of what it takes |  |
 
 ---
 
@@ -1230,21 +1230,29 @@ The window notes are written in stopped being the window nothing tests. Two piec
 and they answer different questions — see `CONSTRAINTS.md` for where the line falls and why
 it must not be blurred.
 
-**`test/helpers/capture.ts` plus four suites** (41 tests): the disk-change notice's three
+**`test/helpers/capture.ts` plus seven suites** (66 tests): the disk-change notice's three
 branches (§10), the window-level chords including the Ctrl+Shift+Enter regression, what a
 session is — the subject field, Discard, the half-typed tag buffer, the stamp on the way in —
-and the Insert routes reaching the document. None of it needs a display; all of it runs in CI
-on all three platforms.
+the Insert routes reaching the document, and, since 22 August, the three cornerstone features
+in this window: B51's `/` menu opening, filtering and routing all four of its main-side items
+through *this* window's closures, B49's rectangle built with Shift+arrow and cleared with
+Backspace, and B50's setting reaching every image node view. None of it needs a display; all
+of it runs in CI on all three platforms.
 
-**`npm run drive:capture`**: the real window under its own `Xvfb`, over CDP. Five steps, each
-one a thing only a real renderer can answer, and each exits non-zero by name.
+**`npm run drive:capture`**: the real window under its own `Xvfb`, over CDP. Seven steps, each
+one a thing only a real renderer can answer, and each exits non-zero by name. Two of them are
+new and are the layout halves of the suites above: a rectangle of cells dragged out with a
+real pointer, and whether the sixteen-row `/` panel fits on screen with the caret near the
+foot of the window (it flips above it: 331px of panel in a 600×720 window).
 
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
-| 36a | `npm run drive:capture` | Five `ok` lines and exit 0. Run it twice: a step that passes only on residue in the temp vault is the failure mode worth catching |  |
+| 36a | `npm run drive:capture` | Seven `ok` lines and exit 0. Run it twice: a step that passes only on residue in the temp vault is the failure mode worth catching |  |
 | 36b | `npm run drive:capture -- --screenshot=/tmp/capture.png` and look at the picture — NEVER JUDGED BY EYE | The capture window with a handed-over note in it: heading, the embedded picture, the `#klantx` chip beside the Tags field, the filename in the status bar. This is the first photograph of this window with real content in it |  |
 | 36c | Judge the header against a real display — NEVER JUDGED | The driver asserts Tags/Where/Who are each wider than 40px, which is a floor and not a judgement. §34's "a field with no room" is about whether they are *comfortable*, and only you can say |  |
 | 36d | Break something on purpose and re-run — for whoever next doubts the driver | It goes red on the step, names it, keeps the vault, and exits 1. Deleting the fixture picture is the cheapest way in |  |
+
+| 36e | Judge the `/` panel and a dragged rectangle by eye — NEVER JUDGED | The driver settles that the panel *fits* and that a drag *selects the right cells*. Neither is the question §19b and §19t actually ask, which is whether the rectangle keeps up with the pointer and whether the flip looks like a decision rather than a jump. Only you can say |  |
 
 **What neither piece reaches, and must not be claimed:** the PDF/Office thumbnail happy path
 (no OS provider here or in CI), every "does this feel right" row, and everything Windows.
@@ -1260,15 +1268,17 @@ problem, a screenshot. For anything involving files, the actual bytes — `cat` 
 do not describe it.
 
 If something in §4.2, §6.3, §9.2, §10, §11f, §12b, §12j, §13h, §14n, §15k, §16i, §18o–§18q,
-§18x, §19u, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f, §28g, §29k, §29r or §29y fails,
+§18x, §20m, §22s, §23j, §24a, §25a, §26a–§26c, §27f, §28g, §29k, §29r or §29y fails,
 that is expected-ish rather than alarming: those have never been watched working, and they are
-why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §19u, §20m, §22s, §23j and §33p are all the same gap — the capture
+why this document exists. §11f, §13h, §14n, §15k, §16i, §18x, §20m, §22s, §23j and §33p are all the same gap — the capture
 window has no *unit-test* harness, which is narrower than it used to be stated: since 15 August
 it has been driven over CDP, and on 18 August the whole of §26's find bar and both title chords
 were confirmed in it — and §18o–§18q are a gap of their own: a tray menu is not
 scriptable at all, which is why `vault-menu.ts` was split out to be testable apart from it — and §12b is the one thing in the PDF viewer that a Linux sandbox
 genuinely cannot answer. §15b, §16b, §19b, §19t, §20b, §20g, §22f and §22k are a different kind of unwatched: they are
-judgements about how something feels or reads, which no script can make, and §25m, §26i,
+judgements about how something feels or reads, which no script can make — though §19b and
+§19t are narrower than they were since 22 August, the driver having settled that a real drag
+picks the right cells and that the `/` panel fits on screen, leaving only the judgement, and §25m, §26i,
 §26j, §27n, §27o, §28i, §29l and §29s join them, as do §30 &mdash; **all of it**, which
 is new: that batch shipped tested and built but never once driven in the running app, so
 every row in it is a first sighting rather than a confirmation — with one narrow exception,
