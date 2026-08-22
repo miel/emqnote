@@ -10,6 +10,7 @@ import {
 } from "./draft.js";
 import { buildOutboxItem } from "./capture.js";
 import { MobileEditor, type MobileEditorHandle } from "./MobileEditor.js";
+import { ProbePanel } from "./ProbePanel.js";
 
 type SaveState = "idle" | "saved" | "error";
 
@@ -22,6 +23,7 @@ export function App() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(() => loadOutbox(localStorage).length);
+  const [showProbe, setShowProbe] = useState(false);
   const title = useRef<HTMLInputElement>(null);
   const editor = useRef<MobileEditorHandle>(null);
   const latestDraft = useRef(draft);
@@ -110,11 +112,17 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [save]);
 
+  if (showProbe) {
+    return <ProbePanel onClose={() => setShowProbe(false)} />;
+  }
+
   return (
     <main className="capture-shell">
       <header className="capture-header">
         <div>
-          <p className="eyebrow">emqnote</p>
+          <p className="eyebrow" onClick={() => setShowProbe(true)}>
+            emqnote
+          </p>
           <h1>Quick capture</h1>
         </div>
         <button className="save-button" type="button" onClick={save}>
