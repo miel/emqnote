@@ -399,12 +399,9 @@ pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
       locally, while **nineteen** other fully-merged ones had piled up behind it since.
       All nineteen deleted with `git branch -d` (which refuses anything not actually
       merged, so the check is the command). What is left locally is `main`, the working
-      branch, the `iphone-app` worktree, and one deliberate keep: **`integrate-five-features-prerebase`**,
-      the pre-rebase snapshot of a branch whose rebased form is in `main`. It is
-      redundant — all eight of its non-merge commits are patch-equivalent in `main` per
-      `git cherry`, the other three are merges — but `git branch -d` will not take it and
-      nobody has said the snapshot has stopped being worth having, so it stays until
-      someone decides.
+      branch, the `iphone-app` worktree, and one deliberate keep:
+      **`integrate-five-features-prerebase`**, which is settled below and is not an open
+      question.
 
       **The remotes are gone too, 22 August 2026** — asked for and done, the push a human
       had to authorise. Four, not the five this bullet listed: a `git fetch --prune` first
@@ -424,14 +421,43 @@ pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
       `origin` is now `main` and `iphone-app`, which is unmerged and active — it moved in
       that same fetch, so it was never a candidate.
 
-      **One consequence worth naming before someone acts on the bullet above.** With
-      `origin/integrate-five-features` gone, the local `integrate-five-features-prerebase`
-      snapshot is the **only** copy of those pre-rebase commits left anywhere. The reasoning
-      for keeping it is unchanged and so is the reasoning against — its eight non-merge
-      commits are still patch-equivalent in `main` per `git cherry`, so nothing is *lost*
-      by deleting it — but it stopped being one redundant copy of two and became the last
-      one, and `git branch -d` will still refuse it. Deleting it needs `-D`, and needs
-      someone to say so.
+      **`integrate-five-features-prerebase` is kept, deliberately and for good — decided
+      22 August 2026, and there is nothing here for anyone to action.** It is the snapshot
+      of the 5 August integration commit, the point where five features built in parallel
+      by separate agents in separate worktrees were stitched onto one branch. Eleven
+      commits: eight of work, three merges. Do not delete it; do not re-open this.
+
+      **The reason it is kept is not the reason this file used to give**, and the old
+      reason was close enough to true to be worth correcting rather than quietly replacing.
+      It said the branch was redundant — eight non-merge commits, all patch-equivalent in
+      `main` per `git cherry` — and kept only because `git branch -d` refused it and nobody
+      had decided otherwise. The `git cherry` result is real and still holds. The inference
+      drawn from it does not: **`git cherry` compares those eight patches and says nothing
+      whatever about the three merges**, and the merges are what this branch is *for*. Two
+      of them carry genuine conflict resolution — 195 lines of combined diff in the top
+      merge, 60 in `e66889e` — resolution that interleaves IPC handler registrations from
+      agents who had each edited `index.ts`, `ipc.ts`, `i18n.ts`, `Library.tsx` and
+      `FolderTree.tsx` without seeing one another's work. No patch ID accounts for a line
+      of it. "Patch-equivalent, therefore nothing is lost" was an argument about the eight,
+      presented as an argument about all eleven.
+
+      **That resolution was then checked against the tree rather than assumed**, which is
+      the only part of this that ever justified an opinion. Four handlers came out of it.
+      Three — `saveAttachment`, `pickAttachment`, `setPaneWidths` — are in `main` today.
+      The fourth, `openAttachment`, is absent from the codebase entirely, and that is worth
+      knowing the ending of: it was **not** dropped by the rebase. `bc428b6` removed it on
+      8 August and replaced it with the broader `openWikiLink`, because a `[[…]]` chip
+      naming a *note* called `openAttachment`, a note is not in `_attachments/`, and the
+      click therefore did nothing. That is B35 in `05-besluitenlog.md`, a decision rather
+      than an accident.
+
+      So: nothing in the snapshot is unrecoverable, every line of it is either live in
+      `main` or deliberately superseded, and **it is kept for what the rebase flattened
+      away rather than for anything it still holds** — the record of how five parallel
+      agents' work was first joined. That is archaeology, and archaeology is a thing this
+      project spends real effort on elsewhere. It is also, since the remote deletion above,
+      the last copy of it anywhere. `git branch -d` will keep refusing it; that refusal is
+      now the wanted behaviour and not an obstacle to route around with `-D`.
 
 - [x] ~~Move the workflow actions off Node 20.~~ Done 22 August 2026 — the eight pins are
       `@v7`, not the `@v5` this bullet asked for, and both halves of that are deliberate.
