@@ -333,27 +333,54 @@ pass — 1216 tests, the full suite. (1740 as of 22 August 2026.)
 
 ## Housekeeping
 
-- [ ] Delete the merged branches (all three are fully merged into `main`):
-      ```
-      git branch -d ten-improvements-from-use installer-auto-updater
-      git push origin --delete ten-improvements-from-use tags-and-people installer-auto-updater
-      ```
-      (`tags-and-people` has no local branch left to delete, only the remote.)
+- [x] ~~Delete the merged branches.~~ Done 22 August 2026, and the bullet had gone stale
+      in a way worth noticing: it named three branches, two of which no longer existed
+      locally, while **nineteen** other fully-merged ones had piled up behind it since.
+      All nineteen deleted with `git branch -d` (which refuses anything not actually
+      merged, so the check is the command). What is left locally is `main`, the working
+      branch, the `iphone-app` worktree, and one deliberate keep: **`integrate-five-features-prerebase`**,
+      the pre-rebase snapshot of a branch whose rebased form is in `main`. It is
+      redundant — all eight of its non-merge commits are patch-equivalent in `main` per
+      `git cherry`, the other three are merges — but `git branch -d` will not take it and
+      nobody has said the snapshot has stopped being worth having, so it stays until
+      someone decides.
 
-- [ ] **Move the workflow actions off Node 20.** Both of `v0.10.1`'s runs went
-      green on 21 August 2026 and both warned: `actions/checkout@v4` and
-      `actions/setup-node@v4` "target Node.js 20 but are being forced to run on
-      Node.js 24" (GitHub's deprecation notice of 19 September 2025). Eight pins
-      to bump to `@v5` — five `checkout` (`build.yml` 14, 47; `release.yml` 29,
-      60, 84) and three `setup-node` (`build.yml` 15, 48; `release.yml` 61).
-      **This is not `node-version: 22`**, which is the Node the build itself
-      runs on and is fine; the deprecated runtime is the one the action's own
-      JavaScript executes under, declared inside the action and changed only by
-      taking a newer major. Worth doing while it is still a warning rather than
-      an error, because the first place it would bite is a tag push — the one
-      run this project cannot repeat cheaply, and the one that has already gone
-      red three times (`v0.3.3`, `v0.8.9`, `v0.10.0`) on a commit whose `build`
-      run had passed.
+      Five remotes are merged into `main` and are still there; deleting them is a push,
+      so it is left for a human:
+      ```
+      git push origin --delete batch-six-2026-08-16 installer-auto-updater \
+        integrate-five-features tags-and-people ten-improvements-from-use
+      ```
+
+- [x] ~~Move the workflow actions off Node 20.~~ Done 22 August 2026 — the eight pins are
+      `@v7`, not the `@v5` this bullet asked for, and both halves of that are deliberate.
+
+      **Why not `@v5`:** this was written when v5 was current. It no longer is —
+      `actions/checkout` is at v7.0.1 and `actions/setup-node` at v7.0.0, and the node24
+      move that ends the deprecation happened in **v5.0.0 of both**, so every major from
+      v5 up is equally off Node 20. Taking v5 would have bought a bump that needs doing
+      again; v7 is the same work with more runway. The behaviour changes in between were
+      read rather than assumed, and neither reaches this repo: setup-node v5's automatic
+      caching keys off a `packageManager` field in `package.json` (this project has none,
+      and both workflows pass `cache: npm` explicitly anyway, which v6 then narrowed to
+      npm regardless), and checkout v6 persists credentials to a separate file, which
+      cannot affect `release.yml`'s `git fetch --force --tags origin` because this repo
+      is public and that fetch needs no credentials at all.
+
+      **`actions/upload-artifact@v4` was deliberately left alone**, and that is the part
+      the old bullet got wrong by omission. It is the ninth `actions/` pin in these
+      files and it is *not* in the warning: the real annotation on `v0.10.4`'s runs names
+      `actions/checkout@v4` and `actions/setup-node@v4` and nothing else — including on
+      the `package` job, which is the only job that uses `upload-artifact`. Its current
+      v4 release already runs on node24. Read from the run rather than reasoned from the
+      version number, which is the only way to tell those two apart.
+
+- [ ] **Neither workflow has actually run since the bump.** `build.yml` exercises both
+      actions on all three platforms on any push or PR, so that half is one cheap run
+      away. `release.yml` is not: the one thing `build.yml` does not cover is
+      `create-release`'s `git fetch --force --tags origin` immediately after checkout,
+      and the only thing that exercises it is a tag push. The reasoning above says it is
+      safe; a green run is what would make it known.
 
 ## Settled
 
