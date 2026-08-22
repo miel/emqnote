@@ -406,12 +406,32 @@ pass — 1216 tests, the full suite. (1765 as of 22 August 2026.)
       nobody has said the snapshot has stopped being worth having, so it stays until
       someone decides.
 
-      Five remotes are merged into `main` and are still there; deleting them is a push,
-      so it is left for a human:
+      **The remotes are gone too, 22 August 2026** — asked for and done, the push a human
+      had to authorise. Four, not the five this bullet listed: a `git fetch --prune` first
+      reported `integrate-five-features` already deleted upstream, so the list here had
+      been stale in that direction as well as the local one. Each of the remaining four was
+      checked with `git rev-list --count origin/main..origin/<branch>` before the push
+      rather than trusted from `--merged` alone; all four returned 0. Their tips, so that
+      any of them can be put back with `git push origin <sha>:refs/heads/<name>`:
+
       ```
-      git push origin --delete batch-six-2026-08-16 installer-auto-updater \
-        integrate-five-features tags-and-people ten-improvements-from-use
+      batch-six-2026-08-16       0052872cac652a6fd77292dccf946ee1add147fd
+      installer-auto-updater     6c16da233b898e382433fc987eda1bea96be9ac9
+      tags-and-people            4f3126cf44c2d1db35a1f60c62045c91a09f8300
+      ten-improvements-from-use  fa586a7498d47637437592a2d8d8ff002297b28d
       ```
+
+      `origin` is now `main` and `iphone-app`, which is unmerged and active — it moved in
+      that same fetch, so it was never a candidate.
+
+      **One consequence worth naming before someone acts on the bullet above.** With
+      `origin/integrate-five-features` gone, the local `integrate-five-features-prerebase`
+      snapshot is the **only** copy of those pre-rebase commits left anywhere. The reasoning
+      for keeping it is unchanged and so is the reasoning against — its eight non-merge
+      commits are still patch-equivalent in `main` per `git cherry`, so nothing is *lost*
+      by deleting it — but it stopped being one redundant copy of two and became the last
+      one, and `git branch -d` will still refuse it. Deleting it needs `-D`, and needs
+      someone to say so.
 
 - [x] ~~Move the workflow actions off Node 20.~~ Done 22 August 2026 — the eight pins are
       `@v7`, not the `@v5` this bullet asked for, and both halves of that are deliberate.
