@@ -165,6 +165,32 @@ export function Capture(): React.ReactElement {
     });
   }, []);
 
+  /**
+   * **The debounce is cancelled when this component goes away, and that is a CI fix
+   * rather than a runtime one.**
+   *
+   * In the app it can never fire: the capture window is created once and only ever hidden
+   * (`CONSTRAINTS.md` — destroying it is unrecoverable), so this tree is never unmounted
+   * and this cleanup never runs. In jsdom it is unmounted between every test, and a timer
+   * armed by the last keystroke of one test fires 300 ms later into an environment that
+   * has been torn down: `window` is gone, and `send` throws `ReferenceError: window is not
+   * defined` **attributed to whichever test happens to be running by then**. The reported
+   * test and the broken one are two different tests — the exact shape `capture-writer`'s
+   * rename race had, one file over.
+   *
+   * It failed the `v0.11.0` release on the Windows runner and a `main` build the day
+   * before, and never once locally: a loaded runner is what widens the gap between the
+   * last keystroke and teardown enough for the timer to land in it. So the rule this
+   * codebase keeps relearning applies to timers too — **a component that arms a timer owns
+   * cancelling it**, whether or not the window it lives in can plausibly go away.
+   */
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
+
   const onDocChange = useCallback(
     (doc: PMNode) => {
       dirtyRef.current = true;

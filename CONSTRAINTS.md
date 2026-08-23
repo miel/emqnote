@@ -1546,3 +1546,37 @@ so everything in it is counted, or the dialog understates the button in exactly 
 count it replaces did. It shares that function's depth cap and per-directory `try`/`catch`,
 and it is taken when the dialog opens rather than cached: the number has to be what is about
 to be deleted.
+
+**A component that arms a timer owns cancelling it, even in a window that is never
+unmounted** (23 August 2026). Both windows debounced a change onto a `setTimeout` and
+neither cleared it when its tree went away. In the app that is genuinely unreachable: the
+capture window is created once and only hidden, and the library's tree is not unmounted
+while it runs — which is exactly the reasoning that left it out, and exactly the shape of
+reasoning this file keeps having to correct. **In jsdom the tree is unmounted between every
+test**, so a timer armed by the last keystroke of one test fires 300 ms later into an
+environment that has been torn down: `window` is gone, `send` throws `ReferenceError:
+window is not defined`, and it is **charged to whichever test happens to be running by
+then**. The reported test and the broken one are two different tests — `capture-writer`'s
+rename race, one file over, for the same reason.
+
+**It failed the `v0.11.0` release on the Windows runner and a `main` build the day before,
+and it has never once failed locally**: a loaded runner is what widens the gap between the
+last keystroke and teardown enough for the timer to land inside it. Sixteen local runs of
+the capture suites did not reproduce it. What identified it was the stack in the CI
+annotation naming the debounce, not a repro — which is the honest order for a failure of
+this shape, and the reason to read a red release rather than re-run it.
+
+**Fake timers cannot test this, and the first attempt silently could not fail.**
+`vi.useFakeTimers()` replaces `setTimeout` from the moment it is called; the debounce is
+armed with the real one before that, so advancing fake time never reaches it and the test
+passes just as happily with the cleanup ripped out. The tests arm the timer, unmount, and
+then wait out a real margin — a *duration*, which this file's own rule warns against, and
+the exception is stated rather than smuggled: the rule is "wait for a result, never for a
+duration", and what is being waited for here is the **absence** of one. A non-event has no
+result to wait on. Both tests were confirmed red against a disabled cleanup, which is the
+only thing that makes either worth having.
+
+**The library's copy was fixed at the same time and had not been reported**, which is not
+the same as being safe: identical construction, in a component `library-*.test.ts` mounts
+and unmounts a dozen times a run, with *both* its timers reaching `window.emqnote` when
+they fire. A defect class found in one window is a grep, not a fix.

@@ -583,6 +583,28 @@ export function Library(): React.ReactElement {
   const notesRef = useRef<NoteSummary[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * **Both debounces are cancelled when this tree goes away**, for the reason
+   * `Capture.tsx` carries at length and this window shares exactly: nothing here can fire
+   * in the app — the library window's tree is not unmounted while the app is running —
+   * but in jsdom it is unmounted between every test, and a timer armed by the last
+   * keystroke of one test fires into an environment that has been torn down. `window` is
+   * gone by then, so the throw lands on whichever test is running, not on the one that
+   * armed it.
+   *
+   * `Capture.tsx`'s copy of this bug failed the `v0.11.0` release on the Windows runner.
+   * This one had not been reported yet, which is not the same as being safe: it is the
+   * identical construction, in a component `library-*.test.ts` mounts and unmounts a
+   * dozen times a run, and both of its timers reach `window.emqnote` when they fire.
+   */
+  useEffect(
+    () => () => {
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+      if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+
   const loadTree = useCallback(async () => {
     setTree(await window.emqnote.library.tree());
   }, []);

@@ -58,7 +58,16 @@ The shortcut sheet's balance, which is arithmetic here and a judgement there. An
 field's `<h1>`/input swap, which is exactly the thing that looked fine while being broken. The
 rest of the batch was driven under `Xvfb` and photographed.
 
-The suite is 1842 tests over 143 files.
+**A pre-existing flake failed this release's first attempt, and is fixed with it.** Both
+windows debounced a change onto a `setTimeout` and neither cancelled it on unmount. In the
+app that cannot fire — neither tree is ever unmounted — but in jsdom it fires after teardown,
+where `window` is gone, and the throw is charged to whichever test is running by then rather
+than to the one that armed it. It took down the Windows job of the `v0.11.0` release and a
+`main` build the day before, and it has never once failed locally. The library's copy had not
+been reported and was fixed with it: same construction, both timers reaching `window.emqnote`.
+`CONSTRAINTS.md` carries the full account, including why fake timers cannot test it.
+
+The suite is 1845 tests over 145 files.
 
 ---
 

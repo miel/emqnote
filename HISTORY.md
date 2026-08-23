@@ -1267,7 +1267,17 @@ Sans; the shortcut sheet's balance, which is arithmetic here and a judgement the
 title field's swap between `<h1>` and input, which is exactly the thing that looked fine while
 being broken.
 
-The suite is 1842 tests over 143 files. Seven new files: the shared title field's specificity
+**The release's first attempt went red, on a flake older than the batch.** Both windows
+debounced a change onto a `setTimeout` and neither cancelled it on unmount — unreachable in
+the app, since neither tree is ever unmounted, and routine in jsdom, where the timer fires
+after teardown into a missing `window` and the throw is attributed to whichever test is
+running by then. It had already taken down a `main` build the day before. It has never
+failed locally: sixteen runs of the capture suites did not reproduce it, and what identified
+it was the stack in the CI annotation naming the debounce. The library's copy had not been
+reported and was fixed alongside it, which is the rule worth keeping — a defect class found
+in one window is a grep, not a fix.
+
+The suite is 1845 tests over 145 files. Nine new files: the shared title field's specificity
 and the two windows' focus colour, the completion panels' anchoring, the shortcut sheet's
-column balance, the trash count, the search scope, the syntax panel, and the Tasks scope
-chooser's fold.
+column balance, the trash count, the search scope, the syntax panel, the Tasks scope
+chooser's fold, and the two windows' timers-after-teardown.
