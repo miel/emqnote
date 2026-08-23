@@ -73,6 +73,42 @@ describe("foldersWithTasks", () => {
     expect(foldersWithTasks(folders, null, "")).toEqual(folders);
   });
 
+  it("drops a taskless subfolder at every level, not only at the top", () => {
+    // The rule has to hold at any depth, and the shape that would break it is a check
+    // written against the folder's *parent* rather than against the folder itself: with
+    // tasks in "01 Werk/Klant X", every sibling and every child under "01 Werk" would come
+    // along for the ride. Only the chain that actually leads to the tasks survives.
+    const deep = [
+      "",
+      "01 Werk",
+      "01 Werk/Klant X",
+      "01 Werk/Klant X/2026",
+      "01 Werk/Klant X/2026/Q3",
+      "01 Werk/Klant X/2026/Q4",
+      "01 Werk/Klant Y",
+      "01 Werk/Klant Y/2026",
+    ];
+
+    expect(
+      foldersWithTasks(deep, counts({ "01 Werk/Klant X/2026/Q3/offerte.md": [2, 2] }), ""),
+    ).toEqual(["", "01 Werk", "01 Werk/Klant X", "01 Werk/Klant X/2026", "01 Werk/Klant X/2026/Q3"]);
+  });
+
+  it("keeps a deep folder on its own tasks when its parents have none", () => {
+    // The other direction: a folder four levels down whose notes carry the only tasks in
+    // the vault is offered, and so is every folder above it, because choosing one of those
+    // shows what is under it. Nothing beside that chain is.
+    const deep = ["", "A", "A/B", "A/B/C", "A/B/C/D", "A/B/E", "F"];
+
+    expect(foldersWithTasks(deep, counts({ "A/B/C/D/notitie.md": [1, 1] }), "")).toEqual([
+      "",
+      "A",
+      "A/B",
+      "A/B/C",
+      "A/B/C/D",
+    ]);
+  });
+
   it("does not match a folder against a sibling that merely shares its prefix", () => {
     // "01 Werk" must not be kept alive by "01 Werkoverleg/…". The `/` in the comparison
     // is what stops it, the same guard `tasksIn` carries on the main side.

@@ -250,7 +250,7 @@ export function NoteList({
   // last stood on, which is a button doing something unrelated to what it sits next to —
   // so the whole note half of this pane is left out rather than drawn empty.
   const unlinked = showing.kind === "unlinked";
-  // Trash is not a folder you add notes to — Clear trash replaces + New note there, the
+  // Trash is not a folder you add notes to — Empty trash replaces + New note there, the
   // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
   // `canRenameFolder`/`canCreateFolder`).
   const inTrash = showing.kind === "folder" && showing.path === TRASH_FOLDER;

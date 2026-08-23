@@ -97,7 +97,7 @@ describe("styles.css: bullet, star and checkbox on one line", () => {
     // one of them is the one the bullet uses. A `top` here is the bug coming back.
     for (const selector of ["\\.task-check", "\\.star-mark"]) {
       const rule = css.match(new RegExp(`\\.editor-content ${selector} \\{[^}]*\\}`))?.[0];
-      expect(rule).toMatch(/bottom:\s*-?[0-9.]+em;/);
+      expect(rule).toMatch(/bottom:\s*var\(--(check|star)-bottom, -?[0-9.]+em\);/);
       expect(rule).not.toMatch(/^\s*top:/m);
     }
   });
@@ -129,57 +129,58 @@ describe("styles.css: bullet, star and checkbox on one line", () => {
 });
 
 /**
- * The three bullet levels come out of one Unicode block, and every level's marker slot is
- * as wide as that level's glyph.
+ * The three bullet levels, and the size of the first two, decided twice.
  *
- * The report was "levels one and two are smaller than the square at level three, on
- * macOS". Both halves of that turned out to be worth pinning, and neither is what the
- * report said.
+ * They shipped as `\2022`, `\25E6` and `\25AA` and were reported as "levels one and two are
+ * smaller than the square, on macOS". Measured in a real Chromium at four times size, the
+ * first half of that was true and was never only macOS: `\2022` and `\25E6` carry 0.293em of
+ * ink against `\25AA`'s 0.504em, in one face, because U+25AA is small next to U+25A0 rather
+ * than next to a bullet. Levels one and two became `\25CF`/`\25CB` at 0.668em to match, and
+ * in daily use that read as far too heavy — a filled circle two and a quarter times the ink
+ * of the bullet it replaced, at the two depths every note actually uses.
  *
- * It was never only macOS. Measured in a real Chromium at four times size, `\2022` and
- * `\25E6` carry 0.293em of ink against `\25AA`'s 0.504em — the *small* square is 1.7 times
- * the bullet, in one face, because U+25AA is small next to U+25A0 rather than next to a
- * bullet. No font choice was going to make the old three agree.
+ * So the second report wins and the small glyphs come back, and what is pinned here is the
+ * part of the first fix that was genuinely about the square: its own 1.66em slot, and its
+ * own ink centre, now carried per depth instead of by the single constant that could only
+ * ever match one of the two.
  *
- * What macOS added is the second half: `\2022` is General Punctuation and SF carries it,
- * `\25E6` and `\25AA` are Geometric Shapes and SF does not — so a Mac drew level one from
- * the system face and levels two and three from whatever fell back. Keeping all three in
- * Geometric Shapes is what makes them fall back *together*, and it is why there is no
- * `font-family` in these rules to get wrong.
+ * The remaining cost is stated rather than discovered: `\2022` is General Punctuation where
+ * `\25E6` and `\25AA` are Geometric Shapes, so on a Mac — whose SF carries the first and not
+ * the other two — level one falls back to a different face than the levels under it. That is
+ * a fallback difference at one depth, against a marker that was too large at two.
  *
- * The numbers below were read off a screenshot at four times size and cannot be
- * re-measured from here — what this pins is that they still form a set. A glyph changed
- * without its slot is the raggedness `--marker-slot` exists to prevent.
+ * The numbers below were read off a screenshot at four times size and cannot be re-measured
+ * from here — what this pins is that they still form a set. A glyph changed without its slot
+ * and its centre is the raggedness `--marker-slot` exists to prevent.
  */
-describe("styles.css: the bullet levels are one family, and each has its own slot", () => {
+describe("styles.css: each bullet level has its own slot and its own centre", () => {
   const markerRule = (selector: string): string => {
     const rule = css.match(new RegExp(`${selector} \\{[^}]*\\}`))?.[0];
     expect(rule, `no rule found for ${selector}`).toBeDefined();
     return rule!;
   };
 
-  it("draws all three levels from Geometric Shapes, so they fall back together", () => {
-    // The three glyphs, in one block. `\2022` here at any depth is the macOS split coming
-    // back: it is the one character of the old set that a Mac's system face carries, so
-    // it is the one that would be drawn by a different font from its neighbours.
-    expect(markerRule("\\.editor-content ul > li::marker")).toContain('content: "\u25CF"');
+  it("draws the small glyphs at the two depths notes actually use", () => {
+    // `\25CF`/`\25CB` here is the too-heavy marker coming back: 0.668em of ink against the
+    // 0.293em these carry, at levels one and two.
+    expect(markerRule("\\.editor-content ul > li::marker")).toContain('content: "\u2022"');
     expect(markerRule("\\.editor-content :is\\(ul, ol\\) ul > li::marker")).toContain(
-      'content: "\u25CB"',
+      'content: "\u25E6"',
     );
     expect(
       markerRule("\\.editor-content :is\\(ul, ol\\) :is\\(ul, ol\\) ul > li::marker"),
     ).toContain('content: "\u25AA"');
 
-    for (const glyph of ["\u2022", "\u25E6"]) {
+    for (const glyph of ["\u25CF", "\u25CB"]) {
       expect(css).not.toContain(`content: "${glyph}"`);
     }
   });
 
   it("sizes the glyphs by choosing them, never with font-size on the marker", () => {
     // `--marker-gap` is an em space *in the marker's own font*, so `font-size` here scales
-    // the gap with the glyph and the marker box grows with both — and rendered, it grew
-    // the line boxes too: every list line taller, the spacing ragged. Two faults for one
-    // fix, which is why the size came from the character instead.
+    // the gap with the glyph and the marker box goes with both — rendered, the enlarged
+    // marker grew every list line box too. Shrinking would not grow a line box, but it
+    // would still move the glyph's ink centre by an amount nothing here has measured.
     for (const selector of [
       "\\.editor-content ul > li::marker",
       "\\.editor-content :is\\(ul, ol\\) ul > li::marker",
@@ -190,29 +191,42 @@ describe("styles.css: the bullet levels are one family, and each has its own slo
   });
 
   it("gives each depth the slot its own glyph measured", () => {
-    // 1.88em for the circles and 1.66em for the square, against ink left edges of
-    // −1.819em and −1.581em. The square's is a fix rather than a consequence: the single
-    // 1.5em it replaces was tuned to the old bullet, so level three's checkbox had always
+    // 1.5em for the bullets and 1.66em for the square, against ink left edges of −1.444em
+    // and −1.581em. The square's is a fix rather than a consequence, and it outlives the
+    // glyph revert: while one 1.5em served all three, level three's checkbox had always
     // sat 2.5px left of its own marker.
-    expect(markerRule("\\.editor-content ul > li")).toMatch(/--marker-slot:\s*1\.88em;/);
+    expect(markerRule("\\.editor-content ul > li")).toMatch(/--marker-slot:\s*1\.5em;/);
     expect(
       markerRule("\\.editor-content :is\\(ul, ol\\) :is\\(ul, ol\\) ul > li"),
     ).toMatch(/--marker-slot:\s*1\.66em;/);
   });
 
   it("resets the slot for a numbered list, because custom properties inherit", () => {
-    // Without this line an `ol` nested inside a `ul` takes the circles' slot off the `li`
-    // above it and places its numbers against a box it does not have.
+    // Without this line an `ol` nested inside the square's level takes that slot off the
+    // `li` above it and places its digits against a box it does not have.
     expect(markerRule("\\.editor-content ol > li")).toMatch(/--marker-slot:\s*1\.5em;/);
   });
 
-  it("keeps the hand-drawn markers on the centre the new glyphs share", () => {
-    // `\25CF` and `\25AA` both centre 0.766em above the item's first baseline where
-    // `\2022` sat at 0.648em, so both constants moved down by 0.115em together. One
-    // number each and no per-depth override — which only works because the three glyphs
-    // now agree with each other, where the old bullet and square were 0.11em apart and a
-    // single constant could match just one of them.
-    expect(markerRule("\\.editor-content \\.task-check")).toMatch(/bottom:\s*-0\.4425em;/);
-    expect(markerRule("\\.editor-content \\.star-mark")).toMatch(/bottom:\s*-0\.42em;/);
+  it("gives each depth the ink centre its own glyph measured", () => {
+    // `\2022`/`\25E6` centre 0.648em above the item's first baseline where `\25AA` centres
+    // at 0.766em — 0.115em apart, which is why there are two pairs and not one constant.
+    // Tuned to the bullet, a single number left level three's checkbox high; tuned to the
+    // square, it does the same to every note at levels one and two.
+    expect(markerRule("\\.editor-content ul > li")).toMatch(/--check-bottom:\s*-0\.3275em;/);
+    expect(markerRule("\\.editor-content ul > li")).toMatch(/--star-bottom:\s*-0\.305em;/);
+    const deep = markerRule("\\.editor-content :is\\(ul, ol\\) :is\\(ul, ol\\) ul > li");
+    expect(deep).toMatch(/--check-bottom:\s*-0\.4425em;/);
+    expect(deep).toMatch(/--star-bottom:\s*-0\.42em;/);
+  });
+
+  it("reads those centres through the variables, or the per-depth values do nothing", () => {
+    // The half-finished version of this change: new variables declared, and both consumers
+    // still carrying the constant they were tuned to.
+    expect(markerRule("\\.editor-content \\.task-check")).toMatch(
+      /bottom:\s*var\(--check-bottom, -0\.3275em\);/,
+    );
+    expect(markerRule("\\.editor-content \\.star-mark")).toMatch(
+      /bottom:\s*var\(--star-bottom, -0\.305em\);/,
+    );
   });
 });

@@ -6,36 +6,44 @@ import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode } from "../src/shared/vault-types.js";
 
 /**
- * `openTasks()` (`Library.tsx`) used to hardcode `scope: ""` — vault-wide, however deep
- * into a project folder the tree happened to be standing. `tasksIn` (`index-db.ts`)
- * already matches a whole subtree with `startsWith`, so a folder scope is never narrower
- * than "this folder and everything under it": the fix is passing `lastFolder` instead.
- * `lastFolder` starts on `"00 Inbox"`, the same default the tree selection does, so even
- * the very first click on Tasks — with no folder explicitly chosen yet — is scoped rather
- * than vault-wide.
+ * What the Empty-trash question says before the one action in this app with no way back.
  *
- * There are two ways in now: the sidebar's own row, and a button in the note list's header
- * beside + New note. The second exists because the first is three panes away from the bar
- * you are already looking at — and it is given `openTasks` itself rather than a copy of
- * what it does, which is what the last test here holds onto. Two gestures that mean the
- * same thing have to *be* the same thing, or the day one of them learns about a new scope
- * the other will not.
+ * It counted the note *rows on screen*, which `trashContents` replaced with a recursive
+ * count of notes, folders and files. Two things are added to that here, and neither is a
+ * count of something in the trash:
+ *
+ *  - **the open tasks** written in those notes, because what someone wants to know before
+ *    emptying the trash is not how many notes it is but whether anything still to be
+ *    *done* goes with them;
+ *  - **the linked files**, which are not in the trash and are not deleted at all: they are
+ *    attachments that only a trashed note still refers to, so emptying it leaves them
+ *    unreachable from any note — §6.5's unlinked attachments. See
+ *    `attachmentsOrphanedByTrash` for why that number is exact rather than a guess.
+ *
+ * And the button says "Empty trash". Clearing is what a filter or a search box does, and
+ * both of those are one click away in this window.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
+interface Contents {
+  notes: number;
+  folders: number;
+  files: number;
+  openTasks: number;
+  linkedFiles: number;
+}
+
+function buildFake(contents: Contents): CaptureApi {
   const tree: FolderNode = {
     path: "",
     name: "Vault",
     noteCount: 0,
     children: [
       { path: "00 Inbox", name: "00 Inbox", noteCount: 0, children: [] },
-      { path: "01 Projects", name: "01 Projects", noteCount: 0, children: [] },
+      { path: "_trash", name: "_trash", noteCount: contents.notes, children: [] },
     ],
   };
-
-  const tasks = vi.fn(async () => []);
 
   const library: LibraryApi = {
     tree: async () => tree,
@@ -51,7 +59,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
-    trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
+    trashContents: async () => contents,
     trashItemTasks: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
@@ -74,16 +82,16 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     resolveConflict: async () => {},
     unlinkedAttachments: async () => [],
     trashAttachment: async () => "",
-    tasks,
     linkingNotes: async () => [],
     onOpenLink: () => () => {},
     onOpenTag: () => () => {},
+    tasks: async () => [],
     toggleTask: async () => ({ toggled: true }),
     setPinned: async (_path: string, pinned: boolean) => ({ pinned }),
   };
 
-  const emqnote: CaptureApi = {
-    platform: "darwin",
+  return {
+    platform: "linux",
     onShow: () => () => {},
     onReset: () => () => {},
     onStatus: () => () => {},
@@ -98,7 +106,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
-      platform: "darwin",
+      platform: "linux",
       hotkey: "CommandOrControl+Shift+Space",
       libraryHotkey: "CommandOrControl+Shift+B",
       vaultPath: "/vault",
@@ -135,11 +143,9 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     copyText: async () => {},
     library,
   };
-
-  return { emqnote, tasks };
 }
 
-async function flush(rounds = 12): Promise<void> {
+async function flush(rounds = 14): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     // eslint-disable-next-line no-await-in-loop
     await act(async () => {
@@ -148,35 +154,19 @@ async function flush(rounds = 12): Promise<void> {
   }
 }
 
-function clickTasksRow(container: HTMLDivElement): void {
-  const tasksRow = Array.from(container.querySelectorAll(".tree-settings")).find(
-    (el) => el.querySelector(".branch-name")?.textContent === "Tasks",
-  );
-  expect(tasksRow).not.toBeUndefined();
-  act(() => {
-    tasksRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-}
-
-function clickTasksButton(container: HTMLDivElement): void {
-  // The header's own button, not the sidebar row: `.notes-actions` is what tells the two
-  // apart, since both carry the same word — deliberately, they open the same view.
-  const button = Array.from(
-    container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
-  ).find((el) => el.textContent === "Tasks");
-  expect(button).not.toBeUndefined();
-  act(() => {
-    button!.click();
-  });
-}
-
-describe("the Tasks view defaults to the current folder", () => {
+describe("the Empty-trash question", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
 
   beforeAll(async () => {
-    (window as unknown as { emqnote: unknown }).emqnote = buildFake().emqnote;
+    (window as unknown as { emqnote: unknown }).emqnote = buildFake({
+      notes: 0,
+      folders: 0,
+      files: 0,
+      openTasks: 0,
+      linkedFiles: 0,
+    });
     ({ Library: LibraryComponent } = await import("../src/renderer/library/Library.js"));
   });
 
@@ -192,70 +182,66 @@ describe("the Tasks view defaults to the current folder", () => {
     container.remove();
   });
 
-  it("scopes the very first click to the Inbox, not the whole vault", async () => {
-    const fake = buildFake();
-    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
+  /** Mounts, selects the Trash row in the tree, and opens the question. */
+  async function ask(contents: Contents): Promise<string> {
+    (window as unknown as { emqnote: unknown }).emqnote = buildFake(contents);
     root = createRoot(container);
     await act(async () => {
       root.render(createElement(LibraryComponent));
     });
     await flush();
 
-    clickTasksRow(container);
+    const trashRow = Array.from(container.querySelectorAll<HTMLElement>(".branch")).find(
+      (node) => node.querySelector(".branch-name")?.textContent === "Trash",
+    );
+    expect(trashRow, "no Trash row in the tree").not.toBeUndefined();
+    await act(async () => {
+      trashRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     await flush();
 
-    expect(fake.tasks).toHaveBeenCalledWith("00 Inbox", true);
+    const button = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
+    ).find((node) => node.textContent === "Empty trash");
+    expect(button, "no Empty trash button").not.toBeUndefined();
+    await act(async () => {
+      button!.click();
+    });
+    await flush();
+
+    const dialog = container.querySelector(".ask");
+    expect(dialog).not.toBeNull();
+    return dialog!.textContent ?? "";
+  }
+
+  it("is opened by a button called Empty trash", async () => {
+    // Renamed from "Clear trash". Clearing is what a filter and a search box do, and both
+    // are one click away in this window; this is the one control that destroys something.
+    const text = await ask({ notes: 2, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 });
+    expect(text).toContain("2 notes");
   });
 
-  it("follows the tree to whichever folder was last selected", async () => {
-    const fake = buildFake();
-    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
-    root = createRoot(container);
-    await act(async () => {
-      root.render(createElement(LibraryComponent));
-    });
-    await flush();
-
-    const projectRow = Array.from(container.querySelectorAll('[role="treeitem"]')).find(
-      (el) => el.querySelector(".branch-name")?.textContent === "01 Projects",
-    );
-    expect(projectRow).not.toBeUndefined();
-    await act(async () => {
-      projectRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
-    clickTasksRow(container);
-    await flush();
-
-    expect(fake.tasks).toHaveBeenCalledWith("01 Projects", true);
+  it("counts the open tasks in the notes about to go", async () => {
+    const text = await ask({ notes: 6, folders: 2, files: 3, openTasks: 4, linkedFiles: 0 });
+    expect(text).toContain("6 notes, 2 folders, 3 files, 4 open tasks");
+    expect(text).toContain("cannot be undone");
   });
 
-  it("opens the same view from the note list's own button", async () => {
-    const fake = buildFake();
-    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
-    root = createRoot(container);
-    await act(async () => {
-      root.render(createElement(LibraryComponent));
-    });
-    await flush();
+  it("says which files will be left behind as unlinked attachments", async () => {
+    // A second sentence rather than a fourth item in the list, because these files are not
+    // in the trash and are not deleted: emptying it takes away the last note that named
+    // them.
+    const text = await ask({ notes: 1, folders: 0, files: 0, openTasks: 0, linkedFiles: 2 });
+    expect(text).toContain("2 linked files become unlinked attachments");
+  });
 
-    const projectRow = Array.from(container.querySelectorAll('[role="treeitem"]')).find(
-      (el) => el.querySelector(".branch-name")?.textContent === "01 Projects",
-    );
-    await act(async () => {
-      projectRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
-    clickTasksButton(container);
-    await flush();
-
-    // The scope, and not merely "a tasks view opened": it is the scope that would drift if
-    // the button ever grew a handler of its own.
-    expect(fake.tasks).toHaveBeenCalledWith("01 Projects", true);
-    // And the header goes with the list it belongs to, so the button that opened this is
-    // no longer on screen — the view it opened has replaced the note list entirely.
-    expect(container.querySelector(".notes-actions")).toBeNull();
+  it("leaves out every number it does not have", async () => {
+    // A trash holding six notes and nothing else says "6 notes". The zeroes are noise in
+    // the common case, and this question has enough to say without them.
+    const text = await ask({ notes: 6, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 });
+    expect(text).toContain("6 notes —");
+    expect(text).not.toContain("folders");
+    expect(text).not.toContain("open task");
+    expect(text).not.toContain("linked file");
   });
 });

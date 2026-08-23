@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld("emqnote", {
     duplicateNote: (path: string) => ipcRenderer.invoke(IPC.libraryDuplicateNote, path),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
     trashContents: () => ipcRenderer.invoke(IPC.libraryTrashContents),
+    trashItemTasks: (path: string) => ipcRenderer.invoke(IPC.libraryTrashItemTasks, path),
     emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),
     createFolder: (parent: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),

@@ -524,7 +524,7 @@ export function FolderTree({
     // `Library`: it is the same question `canRenameFolder` and its two neighbours in
     // `vault-types.ts` already ask, and `isInTrash` is where the answer lives. The Trash
     // row itself is deliberately not one of these — it is a place, not a deleted folder,
-    // and Clear trash in the note list is what empties it.
+    // and Empty trash in the note list is what empties it.
     if (path !== TRASH_FOLDER && isInTrash(path)) {
       return [
         { label: restoreLabel, onSelect: () => onRestoreFolder(path) },
@@ -575,7 +575,7 @@ export function FolderTree({
         {/* Standing on a deleted folder, the three ordinary buttons are all disabled —
             every one of them refuses a trashed path — so the toolbar said nothing where
             the two things anyone wants to do with one belong. They swap, exactly as
-            `NoteList` swaps + New note for Clear trash in the same place for the same
+            `NoteList` swaps + New note for Empty trash in the same place for the same
             reason. It is also what keeps Restore reachable at all: its other route is a
             right-click menu, and `--click-button` cannot open one of those, which is the
             rule CLAUDE.md draws around every action in this app. */}

@@ -99,7 +99,8 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     renameNote: async (path) => ({ path }),
     duplicateNote,
     trashNote,
-    trashContents: async () => ({ notes: 0, folders: 0, files: 0 }),
+    trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
+    trashItemTasks: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
@@ -325,6 +326,39 @@ describe("the note list's right-click menu", () => {
     expect(ask).not.toBeNull();
     expect(ask!.textContent).toContain("Test note");
     expect(ask!.textContent).toContain("cannot be undone");
+  });
+
+  it("counts the open tasks in what is about to go, when there are any", async () => {
+    // What someone actually wants to know before deleting something for good is not how
+    // many notes it is but whether anything still to be *done* goes with it. Per item
+    // here, where the Empty-trash question counts the whole trash — a folder in the trash
+    // is walked, for the same reason that count is recursive.
+    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
+    fake.emqnote.library.trashItemTasks = async () => 3;
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete permanently").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".ask")!.textContent).toContain("3 open tasks");
+  });
+
+  it("says nothing about tasks when there are none", async () => {
+    // The zeroes are noise. A question that says "(0 open tasks)" is a question with a
+    // fact in it that nobody asked for, in front of the one action with no way back.
+    const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete permanently").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".ask")!.textContent).not.toContain("open task");
   });
 
   it("Open re-opens the note through the same openNote path", async () => {

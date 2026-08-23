@@ -1580,3 +1580,51 @@ only thing that makes either worth having.
 the same as being safe: identical construction, in a component `library-*.test.ts` mounts
 and unmounts a dozen times a run, with *both* its timers reaching `window.emqnote` when
 they fire. A defect class found in one window is a grep, not a fix.
+
+**A control both windows draw is one rule in `styles.css`, and it names its colour rather
+than inheriting it** (23 August 2026). `[Insert] [Actions] [Help]` sits at the foot of the
+capture window and at the foot of the library's note editor, and for a while each window drew
+its own: 11px against 12px, a 4px radius against 5px, `--muted` text against the body colour,
+and a Help button with no border at rest beside two that had one. B82 had already put the two
+*balls* in the same place; what it did not do was stop them being two copies. `.reader-actions
+button` now lives in `styles.css` and names `.capture-actions` beside it, for the reason
+`.title-field`, `.palette` and `.ask` are all there: **both windows load `styles.css` and only
+one loads `library.css`**, so a shared control's rule cannot live in the library's file. The
+second half is the trap. The library's own version said `color: inherit`, which is right there
+— `.reader-footer` sets no colour — and wrong in the capture window, where `.statusbar` sets
+`--muted` for the status text in it, so the very same declaration draws the three buttons grey.
+The fix that suggests itself, `.statusbar .capture-actions button { color: var(--text) }`, is
+three classes and an element and would out-rank the plain `:hover` rule below it, so hovering
+would stop colouring them: correct-looking CSS defeated by the cascade, the same family as B48
+and `.overlay`. **Name the colour in the shared rule.** `test/styles-window-chrome.test.ts`
+pins both halves, including that `library.css` has no `.reader-actions` rule left in it.
+
+**Discard asks first, and "is there anything to lose" is a question about the document's
+structure** (B85). Two shortcuts are available here and both are wrong. `dirtyRef` is the
+obvious signal and **over-reports by design** — its own comment says so — so it stays true
+after a character is typed and deleted again, and a visibly empty window would ask a question
+about nothing, which is how people learn to click through questions. `doc.textContent` is the
+other, and it under-reports in the one case that matters: a note holding nothing but a pasted
+picture, an attachment or an empty table has no text at all, and it is precisely the note whose
+contents could not be retyped. The test is the one a fresh editor satisfies — a single empty
+textblock — and the header is compared field by field against a fresh `HeaderValues`, so a
+field added later is covered without anyone remembering this function exists. The chord and the
+menu item go through one function for the reason the `existing` check they also share does, and
+the dialog joins `overlayOpenRef` so Escape cancels it instead of reaching `fires("close")` and
+hiding the window with the question still on it.
+
+**The trash's confirmation counts two things that are not in the trash, and one of them is
+exact only because it subtracts** (B86). `trashContents` walks `_trash` and now parses every
+note in it for open tasks — through `taskItemsIn`, never a regular expression over the raw
+text, because that function is the one place that decides what a task item is and the index and
+the checkboxes both already ask it. The other number is `attachmentsOrphanedByTrash`, and it
+counts files **outside** the trash that emptying it would leave unreferenced: a trashed note
+goes on counting as a reference for as long as it can be restored, which is deliberate in
+`findUnlinkedAttachments` and is why a picture only that note embeds is not unlinked today. To
+be exact rather than a guess it takes the live notes' targets out of the set, and it takes them
+**from the index** (`note_links`) rather than by reading the vault — reading it instead is what
+once left the unlinked pane sitting on "Looking…" on a Files On-Demand vault, and this runs in
+front of a dialog. Only the trash is read directly, because the index deliberately leaves it
+out. A note that will not parse counts as zero rather than taking the whole count down: these
+numbers are a warning in a sentence, not a manifest, and `emptyTrash` is what reports what
+actually went.

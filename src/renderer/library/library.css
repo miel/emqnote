@@ -423,11 +423,17 @@
   color: var(--muted);
 }
 
+/* The strip above the note list, shaded like `.reader-header` beside it: these are the
+   two things at the top of the window and a header that is panel-coloured next to one
+   that is not reads as a mistake rather than as a distinction. The list itself is
+   deliberately left on `--background` — it is a list of things, not a surface, and the
+   selected row's own highlight is what has to stand out there. */
 .notes-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   color: var(--muted);
@@ -506,7 +512,7 @@
   color: var(--accent);
 }
 
-/* Clear trash replaces + New note while the Trash folder is selected — same shape,
+/* Empty trash replaces + New note while the Trash folder is selected — same shape,
    the destructive-red hover the reader's own Delete button already uses. */
 .new-note.danger:hover {
   border-color: #c42b1c;
@@ -919,12 +925,20 @@
    same three. So the `nowrap` is doing less work than it was — the row it used to be
    protecting the title inside is gone — but the rule that produced the bug has not
    changed, and `.reader-titles` is still the only elastic child. */
+/* `--surface` rather than nothing, so the note editor is shaded the way the capture
+   window is: header and footer on the panel colour with the writing surface between them.
+   The capture window has always done this (`.header` and `.statusbar` in `styles.css`),
+   and the two windows edit the same note with the same editor — a strip that is one colour
+   in one of them and another in the other reads as two different editors. In the light
+   theme `--surface` is white against the `--background` the body sits on; in the dark one
+   it is the lighter panel, which is the same relationship the other way up. */
 .reader-header {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   gap: 12px;
   padding: 12px 18px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -968,6 +982,8 @@
    `flex: 0 0 auto` because `.reader` is a column and `.reader-body` above it takes the
    rest: without it this strip would be squeezed by a long note instead of holding its
    own line. */
+/* Shaded with `.reader-header` above and for its reason — the pair is what makes the
+   writing surface between them read as the page. */
 .reader-footer {
   flex: 0 0 auto;
   display: flex;
@@ -975,6 +991,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 6px 18px;
+  background: var(--surface);
   border-top: 1px solid var(--border);
 }
 
@@ -1043,13 +1060,11 @@
   color: var(--muted);
 }
 
-.reader-actions {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  gap: 6px;
-}
+/* `.reader-actions` has no rule of its own here any more, for `.reader-title-input`'s
+   reason one screen up: the group and its buttons are defined in `styles.css`, beside
+   `.capture-actions`, because the capture window's footer carries the same three controls
+   and the two had drifted into different sizes, colours and borders. A rule here would be
+   a second opinion about a shared control. */
 
 .reader-state {
   font-size: 11px;
@@ -1057,30 +1072,18 @@
   margin-right: 4px;
 }
 
-.reader-actions button {
-  font: inherit;
-  font-size: 12px;
-  color: inherit;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 9px;
-  cursor: default;
-}
+/* ---- settings dialog ---- */
 
-.reader-actions button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+/* The `.ask` rules that stood here are in `styles.css` now, and the `.settings` ones
+   below carry their own copy of what they used to share with them. `Ask` is the capture
+   window's dialog too since B85 — the confirmation in front of discarding a note that has
+   something in it — and that window loads only `styles.css`. `.settings` stays here
+   because the settings sheet is this window's alone. */
 
-.reader-actions .danger:hover {
-  border-color: #c42b1c;
-  color: #c42b1c;
-}
-
-/* ---- ask and settings dialogs ---- */
-
-.ask,
+/* What `.ask` and these shared before the move. Copied rather than reached for across
+   files: this sheet is library-only and the dialog it used to sit beside is not, so a
+   selector here naming `.ask` would put a rule for the capture window in the stylesheet
+   that window does not load. */
 .settings {
   width: min(420px, 80vw);
   background: var(--surface);
@@ -1090,12 +1093,6 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
 }
 
-.ask-title {
-  margin: 0 0 12px;
-  font-size: 14px;
-}
-
-.ask input,
 .settings select {
   width: 100%;
   font: inherit;
@@ -1108,7 +1105,6 @@
   outline: none;
 }
 
-.ask-buttons,
 .settings-buttons {
   display: flex;
   justify-content: flex-end;
@@ -1116,7 +1112,6 @@
   margin-top: 14px;
 }
 
-.ask-buttons button,
 .settings-buttons button {
   font: inherit;
   font-size: 13px;
@@ -1128,15 +1123,9 @@
   cursor: default;
 }
 
-.ask-buttons .primary,
 .settings-buttons .primary {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.ask-buttons .danger {
-  border-color: #c42b1c;
-  color: #c42b1c;
 }
 
 .settings h2 {

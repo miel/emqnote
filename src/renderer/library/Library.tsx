@@ -166,10 +166,23 @@ type Dialog =
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
   | { kind: "deleteFolder"; path: string; notes: number; folders: number }
-  // Three numbers, not one, and all three are counted when the dialog opens: this is
+  // Five numbers, not one, and all five are counted when the dialog opens: this is
   // the confirmation in front of the one thing in this app with no way back, so what
   // it names has to be what is about to go. See `trashContents`.
-  | { kind: "clearTrash"; notes: number; folders: number; files: number }
+  //
+  // The last two are not counts of things in the trash and that is the point of them:
+  // `openTasks` is what is still to be *done* in the notes about to go, and `linkedFiles`
+  // counts attachments that are **not** deleted and are not in the trash at all — they
+  // stop being reachable from any note and turn up in the Unlinked attachments pane. See
+  // `attachmentsOrphanedByTrash`.
+  | {
+      kind: "clearTrash";
+      notes: number;
+      folders: number;
+      files: number;
+      openTasks: number;
+      linkedFiles: number;
+    }
   /**
    * The one dialog whose *cancel* still carries the action out. Dismissing it — Escape,
    * the overlay, "Leave them" — means "move it without touching the links", never "forget
@@ -183,7 +196,7 @@ type Dialog =
    * note's title, a folder's name — and `path` is what actually goes, because the two are
    * not the same string and naming a path at someone is not asking them anything.
    */
-  | { kind: "deletePermanently"; path: string; label: string }
+  | { kind: "deletePermanently"; path: string; label: string; openTasks: number }
   | { kind: "problem"; message: string };
 
 /** What Restore is currently asking for a destination for — a trashed note, or a trashed folder. */
@@ -1586,8 +1599,25 @@ export function Library(): React.ReactElement {
             ? []
             : [plural(open.folders, "library.folder", "library.folders")]),
           ...(open.files === 0 ? [] : [plural(open.files, "library.file", "library.files")]),
+          // Last in the list because it is a different kind of thing from the three in
+          // front of it: those count what is in the trash, this counts what is written
+          // in it and still to be done. It earns its place by the same rule they do.
+          ...(open.openTasks === 0
+            ? []
+            : [plural(open.openTasks, "library.openTask", "library.openTasks")]),
         ];
-        return `${parts.join(", ")} — ${app.t("ask.confirmClearTrash")}`;
+
+        // A second sentence rather than a fourth item in the list, because it is about
+        // files that are *not* in the trash and are *not* deleted: emptying the trash
+        // takes away the last note that named them, so they become unlinked attachments
+        // (§6.5). Left out entirely when there are none — which is the usual case, and a
+        // "0 linked files" would read as a warning about nothing.
+        const unlinks =
+          open.linkedFiles === 0
+            ? ""
+            : ` ${plural(open.linkedFiles, "library.linkedFile", "library.linkedFiles")} ${app.t("ask.clearTrashUnlinks")}`;
+
+        return `${parts.join(", ")} — ${app.t("ask.confirmClearTrash")}${unlinks}`;
       }
       case "deleteFolder": {
         const contents =
@@ -1602,8 +1632,16 @@ export function Library(): React.ReactElement {
         return `${app.t("link.duplicateTitle")} "${open.folder === "" ? app.t("library.vaultRoot") : open.folder}" — ${app.t("link.renameAnyway")}`;
       case "delete":
         return `"${open.title}" — ${app.t("ask.confirmDelete")}`;
-      case "deletePermanently":
-        return `"${open.label}" — ${app.t("ask.confirmDeletePermanently")}`;
+      case "deletePermanently": {
+        // The open tasks in this one thing, counted when the dialog opens exactly as the
+        // whole trash's are. Silent when there are none, for the reason the zeroes are
+        // left out of the list above.
+        const tasks =
+          open.openTasks === 0
+            ? ""
+            : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
+        return `"${open.label}"${tasks} — ${app.t("ask.confirmDeletePermanently")}`;
+      }
     }
   };
 
@@ -1859,6 +1897,24 @@ export function Library(): React.ReactElement {
     const wasOpen = current !== null && current.path === notePath;
     if (wasOpen && dirty) await save();
 
+    /**
+     * The row to stand on afterwards, worked out *before* the note leaves.
+     *
+     * A move takes the note out of the list it was selected in, so the `<li>` holding
+     * focus is unmounted and focus falls to `<body>` — from where Tab walks the whole
+     * window before it reaches the tree again, which is the report. `NoteList` already
+     * recovers its *roving row* on its own (`active` falls back to the first note when
+     * `activePath` no longer exists); what it cannot recover is focus, because nothing
+     * told it to take any.
+     *
+     * The row above rather than the row below, and the row below only when the note was
+     * the first one: after taking something out of a list, the eye is where the thing
+     * above it is. `sorted` and not `notes`, because it has to be the order actually on
+     * screen — this is a question about which row the reader was looking at.
+     */
+    const row = sorted.findIndex((note) => note.path === notePath);
+    const neighbour = row === -1 ? null : (sorted[row - 1]?.path ?? sorted[row + 1]?.path ?? null);
+
     const result = await window.emqnote.library.moveNote(notePath, target, rewriteLinks);
     if (result.locked === true) {
       setDialog({ kind: "problem", message: app.t("library.moveLocked") });
@@ -1866,9 +1922,30 @@ export function Library(): React.ReactElement {
     }
 
     await loadTree();
-    // The reader follows the file it is showing; the list reloads for wherever the tree
-    // still points, which is where it pointed before the move.
-    if (wasOpen) await openNote(result.path);
+
+    // Only when the note that moved is the one being read, which is every move made from
+    // the list or the reader — `NoteList`'s `onContextMenu` selects the row before the
+    // menu opens. A note dragged out of the list while something else is open is the
+    // other case, and it deliberately changes neither the reader nor where focus is: the
+    // caret may be in the editor, and a drag of some other note must not take it away.
+    if (wasOpen && row !== -1) {
+      // Through the same flag the Tasks and search exits use, and for its reason: the
+      // rows `focusPane` would find right now belong to the list about to be replaced.
+      focusNotesOnNextList.current = true;
+      if (neighbour !== null) await openNote(neighbour);
+      else {
+        // Nothing left to stand on. The reader is put away rather than left showing a
+        // note that is no longer in this folder, which is what the empty list is saying.
+        setOpen(null);
+        openRef.current = null;
+      }
+    } else if (wasOpen) {
+      // The reader follows the file it is showing: the note was open but not in the list
+      // on screen — read out of a tag, a search or a `[[…]]` link — so there is no row to
+      // step back onto and nothing to hand focus to.
+      await openNote(result.path);
+    }
+
     await loadNotes(selectionRef.current);
     refreshFacets();
   };
@@ -2276,15 +2353,18 @@ export function Library(): React.ReactElement {
           }}
           onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
           onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
-          onDeleteFolderPermanently={(path) =>
-            setDialog({
-              kind: "deletePermanently",
-              path,
-              // The folder's own name, not its `_trash/...` path: the question is about a
-              // thing, and a path read back at someone is not a question.
-              label: path.split("/").pop() ?? path,
-            })
-          }
+          onDeleteFolderPermanently={(path) => {
+            void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+              setDialog({
+                kind: "deletePermanently",
+                path,
+                // The folder's own name, not its `_trash/...` path: the question is about
+                // a thing, and a path read back at someone is not a question.
+                label: path.split("/").pop() ?? path,
+                openTasks,
+              });
+            });
+          }}
           onNewNoteIn={(folder) => window.emqnote.library.newNote(folder)}
           lastFolder={lastFolder}
           canRenameFolder={canRenameFolderAt(lastFolder)}
@@ -2600,6 +2680,20 @@ export function Library(): React.ReactElement {
                   >
                     {app.t("library.actions")}
                   </button>
+                  {/* Third, after Insert and Actions, because that is the order the
+                      capture window's footer has always carried and this window's editor
+                      is the same editor. The sheet was reachable only from the sidebar's
+                      own Help row and from the shortcut, which is the wrong place to look
+                      for it while writing — the row of controls under the note is where
+                      the question comes up. Same `Help` component, told which window it
+                      is in, so the shortcuts it lists are this window's. */}
+                  <button
+                    type="button"
+                    title={app.t("help.title")}
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    {app.t("help.button")}
+                  </button>
                 </div>
               </div>
 
@@ -2683,12 +2777,12 @@ export function Library(): React.ReactElement {
                   {
                     label: app.t("library.deletePermanently"),
                     danger: true,
-                    onSelect: () =>
-                      setDialog({
-                        kind: "deletePermanently",
-                        path: noteMenu.note.path,
-                        label: noteMenu.note.title,
-                      }),
+                    onSelect: () => {
+                      const { path, title } = noteMenu.note;
+                      void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+                        setDialog({ kind: "deletePermanently", path, label: title, openTasks });
+                      });
+                    },
                   },
                 ]
               : [
@@ -2795,12 +2889,12 @@ export function Library(): React.ReactElement {
                   {
                     label: app.t("library.deletePermanently"),
                     danger: true,
-                    onSelect: () =>
-                      setDialog({
-                        kind: "deletePermanently",
-                        path: open.path,
-                        label: open.title,
-                      }),
+                    onSelect: () => {
+                      const { path, title } = open;
+                      void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+                        setDialog({ kind: "deletePermanently", path, label: title, openTasks });
+                      });
+                    },
                   },
                 ]
               : [

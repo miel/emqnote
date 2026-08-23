@@ -15,9 +15,14 @@ export const LOCALES: Locale[] = ["en-US", "nl-NL"];
 const DUTCH: Record<string, string> = {
   // Capture window
   // "Titel" en niet "Onderwerp": het is hetzelfde veld als in de notitiebewerker, en dat
-  // heet daar de titel. "(optioneel)" is weg — het zei iets over de frontmatter, niet
-  // over het veld, en in het andere venster stond het er ook niet bij.
-  "capture.title": "Titel",
+  // heet daar de titel.
+  //
+  // "(optioneel)" staat er weer bij, en dat is nu twee keer besloten. Het was weggehaald
+  // omdat het iets over de frontmatter zei en niet over het veld; dat klopt nog steeds,
+  // maar het is niet waar de melding over ging. Dit is de enige placeholder in beide
+  // vensters die in een vet veld van 17px staat, en die leest in rust als een al
+  // ingevulde titel — waarna de vraag is of er zonder titel wel bewaard kan worden.
+  "capture.title": "Titel (optioneel)",
   "capture.location": "Locatie",
   // De scheidingstekens blijven in de tekst staan: `parseAttendees` splitst op komma
   // *en* puntkomma, omdat Outlook puntkomma's gebruikt.
@@ -181,6 +186,15 @@ const DUTCH: Record<string, string> = {
   "library.noNotes": "Geen notities",
   "library.file": "bestand",
   "library.files": "bestanden",
+  // Kleine letter en enkelvoud/meervoud apart, omdat deze in een opsomming middenin een
+  // zin staan ("6 notities, 2 mappen, 3 openstaande taken"), anders dan `tree.openTasks`
+  // dat een kop is.
+  "library.openTask": "openstaande taak",
+  "library.openTasks": "openstaande taken",
+  // Bestanden die zelf *niet* in de prullenbak zitten en ook niet verwijderd worden: de
+  // laatste notitie die ernaar verwees verdwijnt, dus worden het losse bijlagen (§6.5).
+  "library.linkedFile": "gekoppeld bestand",
+  "library.linkedFiles": "gekoppelde bestanden",
   "library.sort.modified": "Gewijzigd",
   "library.sort.created": "Gemaakt",
   "library.sort.title": "Titel",
@@ -315,9 +329,18 @@ const DUTCH: Record<string, string> = {
   "ask.confirmDeleteFolder": "naar de prullenbak verplaatsen, met alles erin?",
   "ask.confirmClearTrash":
     "permanent verwijderen. Dit kan niet ongedaan worden gemaakt.",
+  // Tweede zin, met het aantal gekoppelde bestanden ervoor. Zegt bewust "worden" en niet
+  // "kunnen worden": het aantal telt alleen bestanden waar geen enkele overgebleven
+  // notitie meer naar verwijst, dus dit gebeurt echt.
+  "ask.clearTrashUnlinks": "worden losse bijlagen.",
   // Voor één ding uit de prullenbak, waar `ask.confirmClearTrash` er een aantal telt.
   "ask.confirmDeletePermanently":
     "permanent verwijderen? Dit kan niet ongedaan worden gemaakt.",
+  // Zegt waar de notitie heen gaat en niet dat het onomkeerbaar is, want dat is het niet:
+  // Terugzetten is de weg terug, en een waarschuwing die te veel belooft leert mensen
+  // wegklikken.
+  "ask.confirmDiscard":
+    "Deze notitie weggooien? Hij gaat naar de prullenbak en kan worden teruggezet.",
   "ask.ok": "OK",
   "ask.cancel": "Annuleren",
 
@@ -436,9 +459,17 @@ export function translate(locale: Locale, key: string): string {
 
 const ENGLISH: Record<string, string> = {
   // "Title" rather than "Subject": it is the same field as the note editor's, and that
-  // is what it is called there. "(optional)" is gone — it was a fact about the
-  // frontmatter rather than about the control, and the other window never said it.
-  "capture.title": "Title",
+  // is what it is called there.
+  //
+  // **"(optional)" is back, and this is the second time it has been decided.** It was
+  // removed as a fact about the frontmatter rather than about the control, and because
+  // the other window never said it. Both of those are still true and neither is the
+  // report: this is the *only* placeholder in either window standing in a 17px bold
+  // field, so at rest it reads as a title someone has already typed rather than as an
+  // empty box — and what the reader then wants to know is whether the note can be saved
+  // without one. The other window not saying it is not the mismatch it looks like: there
+  // the title is an `<h1>` with text in it and there is no placeholder to read.
+  "capture.title": "Title (optional)",
   "capture.location": "Location",
   // The separator clause stays: `parseAttendees` splits on a comma *and* a semicolon,
   // because Outlook uses semicolons and fingers expect it.
@@ -598,6 +629,15 @@ const ENGLISH: Record<string, string> = {
   "library.noNotes": "No notes",
   "library.file": "file",
   "library.files": "files",
+  // Lower case and split singular/plural, because these appear inside a list in the
+  // middle of a sentence ("6 notes, 2 folders, 3 open tasks") where `tree.openTasks` is a
+  // heading.
+  "library.openTask": "open task",
+  "library.openTasks": "open tasks",
+  // Files that are *not* in the trash and are not deleted: the last note referring to
+  // them goes, so they become unlinked attachments (§6.5).
+  "library.linkedFile": "linked file",
+  "library.linkedFiles": "linked files",
   "library.sort.modified": "Modified",
   "library.sort.created": "Created",
   "library.sort.title": "Title",
@@ -650,7 +690,7 @@ const ENGLISH: Record<string, string> = {
   "library.delete": "Delete",
   /** Out of the trash and back into the vault: asks which folder, the Inbox offered first. */
   "library.restore": "Restore",
-  /** The only menu item that really throws something away (B24), beside Clear trash. */
+  /** The only menu item that really throws something away (B24), beside Empty trash. */
   "library.deletePermanently": "Delete permanently",
   "library.deletePermanentlyLocked":
     "This is open in the note window. Close it there first, then it can be deleted.",
@@ -669,7 +709,12 @@ const ENGLISH: Record<string, string> = {
   "library.actions": "Actions",
   "library.insert": "Insert",
   "library.newNote": "New note",
-  "library.clearTrash": "Clear trash",
+  // "Empty trash", not "Clear trash": clearing is what a filter or a search box does and
+  // both of those are one click away in this window, where this is the one button that
+  // destroys something. The key keeps its old name, which is now the odd one out —
+  // renaming it would touch the two failure strings and the dialog kind beside it for no
+  // behaviour, and `emptyTrash` is already taken twice on the main side.
+  "library.clearTrash": "Empty trash",
   "library.new": "New",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
@@ -719,8 +764,18 @@ const ENGLISH: Record<string, string> = {
   "ask.confirmDelete": "Move to the trash?",
   "ask.confirmDeleteFolder": "Move to the trash, along with everything inside it?",
   "ask.confirmClearTrash": "permanently deleted. This cannot be undone.",
+  // A second sentence, with the number of linked files in front of it. It says "become"
+  // rather than "may become" on purpose: the count only includes files no remaining note
+  // refers to, so this is what happens rather than what might.
+  "ask.clearTrashUnlinks": "become unlinked attachments.",
   // For one thing out of the trash, where `ask.confirmClearTrash` counts several.
   "ask.confirmDeletePermanently": "delete permanently? This cannot be undone.",
+  // The capture window's, and the only one of these that is a whole sentence on its own:
+  // the note it is about has no title to put in front of it, which is half of why the
+  // question is worth asking. It says where the note goes rather than "this cannot be
+  // undone", because it can — Restore is the way back, and a question that overstates
+  // what it is guarding is one people learn to click through.
+  "ask.confirmDiscard": "Discard this note? It goes to the trash and can be restored.",
   "ask.ok": "OK",
   "ask.cancel": "Cancel",
 

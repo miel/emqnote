@@ -1312,6 +1312,49 @@ panel, the scope button's absence under a tag, and "Exit tasks" on the count row
 photographed under `Xvfb`. The bullets were photographed too, but on Linux and in DejaVu Sans,
 which is the one face this sandbox has.
 
+**§37a and §37n are superseded by §38 below**, which came out of the same day's use: the
+bullets at levels one and two are small again, and the trash confirmation says two more things.
+Walk §38's rows instead of those two; the rest of §37 stands.
+
+---
+
+## 38. Twelve items from a day of using §37 (23 August 2026)
+
+The batch above shipped and was used, and this is what came back. `05-besluitenlog.md` B85 and
+B86 carry the two decisions; B82 is revisited in its own entry. **Nothing here has been seen in
+the running app** — not one row was driven under `Xvfb`, unlike §37 — so every row below is a
+first sighting rather than a confirmation, and the rows that are about colour or about the
+weight of a glyph are judgements no screenshot from this sandbox could have settled anyway.
+
+**The bullets are decided for the second time, in the other direction.** §37 made levels one and
+two `\25CF`/`\25CB` so all three levels would agree in size. In use that read as far too heavy,
+so `\2022` and `\25E6` are back — 0.293em of ink against the 0.668em they replaced. What
+survives from §37's fix is the square's own slot and its own ink centre, now per depth. The
+stated cost is that on a Mac level one is drawn from a different face than the two levels under
+it, `\2022` being the one glyph of the three that SF carries: **that is exactly what §38a is
+looking at**, and it is a deliberate trade, not a regression to report.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 38a | On **macOS**, open a note with a six-level bullet outline — judge by eye, NEVER SEEN ON THIS PLATFORM | Levels one and two are small dots, noticeably lighter than the square at level three, and none of them looks heavy. Level one may be drawn from a different face than the two under it; what matters is whether it reads as one outline |  |
+| 38b | The same note on **macOS** and on **Windows**, with a task and a starred item at levels one, two and three — NEVER SEEN ON THIS PLATFORM | The marker, the checkbox and the star sit on one line and one column at every level. The vertical constants are per depth now, so a level that is out on its own is the thing to report |  |
+| 38c | Open a note in the library and look at the strip above it and the strip below it — judge by eye, NEVER JUDGED | Both are on the panel colour, white in the light theme, with the writing surface between them reading as a page. The same shading the capture window has always had |  |
+| 38d | Look at the note list beside it | Its header is shaded with the strips above; the list of notes itself is not. Deliberate — a list is not a surface, and the selected row has to stand out in it |  |
+| 38e | Put the two windows side by side and compare `[Insert] [Actions] [Help]` — judge by eye, NEVER JUDGED | The same size, radius, border and colour in both. They are one CSS rule now; two that merely look alike is what this replaces |  |
+| 38f | In the library's note editor, press the Help button in the footer | The shortcut sheet opens, listing the *library's* shortcuts. It was reachable only from the sidebar row and the chord before this |  |
+| 38g | Raise the capture window and look at the empty title field — judge by eye, NEVER JUDGED | "Title (optional)", dimmer than the placeholders in the fields under it. The report is that at 17px bold an empty title read as one somebody had already typed |  |
+| 38h | Begin a note, type a sentence, then `Mod-Shift-Backspace` | A confirmation appears. Escape or Cancel keeps the note and puts the caret back; Discard throws it away and the window goes |  |
+| 38i | Raise the window and immediately `Mod-Shift-Backspace`, having typed nothing | No question at all — the note goes straight away. A confirmation over an empty note is what teaches people to click through confirmations |  |
+| 38j | Begin a note, paste **only** a picture into it, then Discard | It asks. A picture is a note with no text in it, and it is the one thing that could not be retyped |  |
+| 38k | Select a note in the middle of a folder's list, move it elsewhere, then press Tab once | Focus is still in the note list, on the note that was **above** the one that moved, and that note is open in the reader. One Tab reaches the next pane. The report is that it took several |  |
+| 38l | Do the same with the **first** note in the list | Focus lands on the note that is now first. And with the only note in the list, the list is empty and the reader is put away |  |
+| 38m | Drag a note out of the list while a *different* note is open and the caret is in the editor | The reader does not change and the caret stays where it was. Only a move of the note being read moves the selection |  |
+| 38n | Put a note holding two unfinished tasks in the trash, add a folder and an attachment, then press **Empty trash** | The button says Empty trash, and the question counts notes, folders, files **and** open tasks. Cancel — nothing has gone |  |
+| 38o | Embed a picture in a note, delete that note, then press Empty trash | A second sentence names the linked files that become unlinked attachments. Cancel, put a *second* live note referring to the same picture in place, and ask again: the sentence is gone, because the picture stays linked |  |
+| 38p | Right-click a note in the trash that has open tasks, choose Delete permanently | The question names the note and, in brackets, its open tasks. On a folder in the trash it counts everything under it |  |
+| 38q | In the Tasks view, open the scope dropdown in a vault with several levels of folders | Only folders with tasks in or under them, plus the vault root and whatever is currently chosen. **A folder whose tasks are all finished is still offered** — deliberate, so the list does not rebuild itself under the "open only" tick. If that is the thing that reads wrong, say so: it is the one decision here that could go the other way |  |
+| 38r | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
+
 ---
 
 ## Reporting
@@ -1351,6 +1394,14 @@ can ever really get. §31t is a cost to confirm rather than a behaviour to check
 a loss that used to happen and must not any more, so a failure there is the original bug back.
 §31 is otherwise confirmed: every other row in it was driven under `Xvfb` over CDP, in both
 windows, so a failure there is a genuine surprise.
+**§38 is a whole batch again, in §30's sense**: nothing in it has been driven in the running
+app, so every row is a first sighting rather than a confirmation. Two of its rows are
+narrower than that and worth reading before walking it — §38a is a *stated cost* rather than
+a defect (level one falls back to a different face on a Mac, deliberately, against a marker
+that was too heavy at two depths), and §38q names the one decision in the batch that could
+reasonably go the other way. §38c–§38g are judgements about colour and weight that no
+screenshot from this sandbox could have settled.
+
 **§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine
 they are about — this sandbox is Linux, and all of them are Windows behaviours (§25e is the

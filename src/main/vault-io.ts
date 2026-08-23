@@ -804,7 +804,7 @@ export function trashNote(vault: string, notePath: string): string {
 /**
  * What is in the trash, for the confirmation that is about to destroy it.
  *
- * Three numbers rather than the one the dialog used to name, and none of them is the
+ * Four numbers rather than the one the dialog used to name, and none of them is the
  * number it named: it counted the note *rows on screen*, which come from a single
  * non-recursive `readdir` of `.md` files. So a folder dragged to the trash with forty
  * notes in it counted as nothing, every folder counted as nothing, and an attachment
@@ -825,15 +825,24 @@ export interface TrashContents {
   notes: number;
   folders: number;
   files: number;
+  /**
+   * Open task items across every note in there, because a note is not only its own
+   * content: what someone actually wants to know before emptying the trash is whether
+   * something still to be *done* is about to go with it. Open only — a finished task is
+   * a record, and a record leaving with the note it is written in is what deleting the
+   * note means.
+   */
+  openTasks: number;
 }
 
 export function trashContents(vault: string): TrashContents {
   const trashDirectory = join(vault, TRASH);
-  if (!existsSync(trashDirectory)) return { notes: 0, folders: 0, files: 0 };
+  if (!existsSync(trashDirectory)) return { notes: 0, folders: 0, files: 0, openTasks: 0 };
 
   let notes = 0;
   let folders = 0;
   let files = 0;
+  let openTasks = 0;
 
   const walk = (directory: string, depth: number): void => {
     if (depth >= 12) return;
@@ -850,14 +859,88 @@ export function trashContents(vault: string): TrashContents {
         folders += 1;
         walk(join(directory, entry.name), depth + 1);
       } else if (entry.isFile()) {
-        if (isNoteFile(entry.name)) notes += 1;
-        else files += 1;
+        if (isNoteFile(entry.name)) {
+          notes += 1;
+          openTasks += openTasksIn(join(directory, entry.name));
+        } else files += 1;
       }
     }
   };
 
   walk(trashDirectory, 0);
-  return { notes, folders, files };
+  return { notes, folders, files, openTasks };
+}
+
+/**
+ * The open tasks in one note file, or none if it cannot be read or parsed.
+ *
+ * `taskItemsIn` rather than a regular expression over the raw text, for the reason that
+ * function exists at all: it is the one place that decides what counts as a task item,
+ * and the index (`extractTasks`) and the toggle (`toggleTask`) both already ask it. A
+ * count that disagreed with the number the note list shows for the same note would be
+ * worse than no count.
+ *
+ * It reads and parses every note in the trash, which is the one cost here worth naming.
+ * It runs when the confirmation dialog opens and nowhere else, and the trash is small by
+ * construction — the same walk is about to permanently delete everything it finds. A
+ * file that will not parse counts as zero rather than taking the whole count down: this
+ * number is a warning in a sentence, not a manifest, exactly as the counts beside it are.
+ */
+/**
+ * The open tasks in one thing in the trash — a note, or a folder and everything under it.
+ *
+ * The per-item half of the same question `trashContents` answers for the whole trash, and
+ * it is asked in the same place: the confirmation in front of a permanent delete. A folder
+ * is walked because a folder in the trash is exactly the case the whole-trash count exists
+ * for — "Delete permanently" on one that holds forty notes says as little about what is
+ * going as the note-row count it replaced did.
+ *
+ * Depth-capped and per-directory `try`/`catch` like every other walk here, and zero for
+ * anything that is not a note or cannot be read, for `openTasksIn`'s stated reason.
+ */
+export function openTasksAt(vault: string, path: string): number {
+  const full = join(vault, path);
+
+  let stats;
+  try {
+    stats = statSync(full);
+  } catch {
+    return 0;
+  }
+
+  if (stats.isFile()) return isNoteFile(full) ? openTasksIn(full) : 0;
+  if (!stats.isDirectory()) return 0;
+
+  let open = 0;
+  const walk = (directory: string, depth: number): void => {
+    if (depth >= 12) return;
+
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) walk(join(directory, entry.name), depth + 1);
+      else if (entry.isFile() && isNoteFile(entry.name)) {
+        open += openTasksIn(join(directory, entry.name));
+      }
+    }
+  };
+
+  walk(full, 0);
+  return open;
+}
+
+function openTasksIn(file: string): number {
+  try {
+    const { doc } = parseNote(readFileSync(file, "utf8"));
+    return taskItemsIn(doc).filter(({ node }) => node.attrs.checked === false).length;
+  } catch {
+    return 0;
+  }
 }
 
 /**

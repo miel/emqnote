@@ -37,13 +37,13 @@ function put(relative: string, contents = "x"): void {
 
 describe("trashContents", () => {
   it("answers zero for a vault with no trash folder at all", () => {
-    expect(trashContents(vault)).toEqual({ notes: 0, folders: 0, files: 0 });
+    expect(trashContents(vault)).toEqual({ notes: 0, folders: 0, files: 0, openTasks: 0 });
   });
 
   it("counts notes sitting directly in the trash", () => {
     put("_trash/een.md");
     put("_trash/twee.md");
-    expect(trashContents(vault)).toEqual({ notes: 2, folders: 0, files: 0 });
+    expect(trashContents(vault)).toEqual({ notes: 2, folders: 0, files: 0, openTasks: 0 });
   });
 
   it("counts a trashed folder and everything inside it", () => {
@@ -51,14 +51,14 @@ describe("trashContents", () => {
     // so this whole folder read as nothing at all.
     put("_trash/Project/plan.md");
     put("_trash/Project/Diep/notulen.md");
-    expect(trashContents(vault)).toEqual({ notes: 2, folders: 2, files: 0 });
+    expect(trashContents(vault)).toEqual({ notes: 2, folders: 2, files: 0, openTasks: 0 });
   });
 
   it("counts attachments and anything else that is not a note", () => {
     put("_trash/foto.png");
     put("_trash/offerte.pdf");
     put("_trash/notitie.md");
-    expect(trashContents(vault)).toEqual({ notes: 1, folders: 0, files: 2 });
+    expect(trashContents(vault)).toEqual({ notes: 1, folders: 0, files: 2, openTasks: 0 });
   });
 
   it("counts names `folderContents` would skip, because the trash is not the vault tree", () => {
@@ -67,13 +67,40 @@ describe("trashContents", () => {
     // things out would understate the button in exactly the way the old one did.
     put("_trash/_attachments/foto.png");
     put("_trash/.DS_Store");
-    expect(trashContents(vault)).toEqual({ notes: 0, folders: 1, files: 2 });
+    expect(trashContents(vault)).toEqual({ notes: 0, folders: 1, files: 2, openTasks: 0 });
   });
 
   it("looks only inside the trash", () => {
     put("00 Inbox/levend.md");
     put("_trash/dood.md");
-    expect(trashContents(vault)).toEqual({ notes: 1, folders: 0, files: 0 });
+    expect(trashContents(vault)).toEqual({ notes: 1, folders: 0, files: 0, openTasks: 0 });
+  });
+
+  it("counts the open tasks in the notes, and only the open ones", () => {
+    // The number someone actually wants before emptying the trash: not how many notes
+    // are going but whether anything still to be *done* is going with them. A finished
+    // task is a record and leaves with its note, which is what deleting a note means.
+    put("_trash/taken.md", "- [ ] bellen\n- [x] gedaan\n- [ ] mailen\n");
+    put("_trash/map/meer.md", "- [ ] nog een\n");
+    // Not a task item at all, and it must not become one by looking like a line of text
+    // with a bullet in front of it.
+    put("_trash/gewoon.md", "- gewoon een opsomming\n");
+
+    const counted = trashContents(vault);
+    expect(counted.notes).toBe(3);
+    expect(counted.openTasks).toBe(3);
+  });
+
+  it("counts a note that will not parse as no tasks rather than as no trash", () => {
+    // The count is a warning in a sentence, not a manifest. One unreadable note must not
+    // take the numbers beside it down with it — in front of the one operation in this
+    // app with no way back, an understated count is the failure that matters.
+    put("_trash/stuk.md", "---\nnot: [valid\n");
+    put("_trash/goed.md", "- [ ] bellen\n");
+
+    const counted = trashContents(vault);
+    expect(counted.notes).toBe(2);
+    expect(counted.openTasks).toBe(1);
   });
 
   it("stops descending rather than running away down a deep tree", () => {
