@@ -1272,6 +1272,48 @@ canvas rather than trusted from a changed `src`.
 
 ---
 
+## 37. Two windows made one, bullets, search scope and four fixes (23 August 2026)
+
+Six defects from daily use and two feature groups; `05-besluitenlog.md` B82–B84 carry the
+decisions. Most of it was driven under `Xvfb` and photographed — the capture window's new
+title and Actions menu, the reader's new footer, the search panel and the Tasks header are
+all first sightings in the running app rather than inferences — so what is left here is
+narrower than usual: the macOS judgement the bullets need, the Windows row, and the handful
+of things that are somebody's opinion rather than a measurement.
+
+**The bullet row is the one to read first.** The glyphs at levels one and two changed
+(`\25CF`, `\25CB`) and every number around them was re-measured off a screenshot at four
+times size *on Linux*. The reasoning behind them — that all three levels are Geometric Shapes
+and so fall back to one face — is a claim about macOS's font fallback that has been made from
+here and never seen there.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 37a | On **macOS**, open a note with a six-level bullet outline — NEVER SEEN ON THIS PLATFORM | Levels one and two are round and at least as big as the square at level three, and all three sit on one column and one line. The report this fixes is that the first two were the *smallest* |  |
+| 37b | On **macOS**, put a bullet, a task and a starred item on one level, at levels one, two and three — NEVER SEEN ON THIS PLATFORM | The marker, the checkbox and the star line up on both axes at every level. Measured within a quarter-pixel here; the constants are shared, so a face with different side bearings is what would break it |  |
+| 37c | On **Windows**, the same two — NEVER SEEN ON THIS PLATFORM | Unchanged from before, or better. Segoe UI drew all three of the old glyphs, so Windows had the mildest version of this bug and has the most to lose from the fix |  |
+| 37d | Type into Tags and into Who with the capture window dragged as narrow as it goes | Both completion panels stay inside the frame. They are the two cells in the grid's right-hand column, and they are the ones that used to paint out through it |  |
+| 37e | Open the shortcut sheet in both windows — judge by eye, NEVER JUDGED | Two columns of roughly equal height, no scrolling in the library, and the groups still read in their declared order down one column and then the next. The balance is arithmetic; whether it *looks* balanced is yours |  |
+| 37f | In the capture window: begin a note, open Actions, press Escape, then `Mod-Shift-Backspace` | The menu holds Discard and nothing else, with its chord beside it. Escape closes the menu and does not throw the note away — Escape is the key this window must never give to Discard (B80) |  |
+| 37g | Hand a note over from the library to the capture window | No title field, no Actions button. Both belong to a note this window began |  |
+| 37h | Click the title in the reader, then Tab away and back — judge by eye, NEVER JUDGED | The `<h1>` and the input trade places without the text moving, and the focus outline is the capture window's accent, not a system ring. The first version of this rule changed nothing at all and looked fine |  |
+| 37i | Search inside a folder that has subfolders, then press the scope button | Hits are confined to the folder and everything under it, then widen to the vault. The button names the scope in force, not the one it switches to |  |
+| 37j | Search, widen, leave with Escape, then search again. Then widen and click another folder | Both times the scope is back to the folder. Widening is asked for per search and must not follow you |  |
+| 37k | Stand on a tag or a person and search | No scope button, and the search is vault-wide. Neither has a folder to mean |  |
+| 37l | Press `Mod-F`, read the panel, press Escape, press Escape again | The panel opens with the caret still in the box, the first Escape closes only the panel, the second leaves the search. One press, one thing |  |
+| 37m | Open the Tasks view in a vault where most folders have no tasks | The dropdown offers only folders that have some, itself, or below it — plus the vault root and whatever is currently chosen. Untick "open only" and the list must not change shape |  |
+| 37n | Put a note, a folder of notes and an attachment in the trash, then press Clear trash | The confirmation names all three counts, and the note count includes the ones inside the folder. It used to name only the rows on screen, which counted the folder as nothing |  |
+| 37o | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. The order matters and is the point: the driver runs `out/`, and a renderer change made after the last build is simply not in the window it drives |  |
+
+**What is already confirmed and should not be re-checked as though it were not:** the title
+field's computed size, weight, padding and focus colour were read off the running window with
+`getComputedStyle` rather than judged from a picture; the reader's footer, the search hint
+panel, the scope button's absence under a tag, and "Exit tasks" on the count row were all
+photographed under `Xvfb`. The bullets were photographed too, but on Linux and in DejaVu Sans,
+which is the one face this sandbox has.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

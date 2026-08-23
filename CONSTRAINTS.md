@@ -1430,3 +1430,119 @@ rules still apply and are in the project memory: no window manager, so `windowfo
 never `windowactivate`; `xwininfo`'s Map State rather than `xdotool getwindowgeometry`,
 which answers for a hidden window too — and this window is hidden by design, so a check that
 cannot tell the two apart passes before the hotkey is ever pressed.
+
+**A shared rule has to be more specific than the rule it is replacing, and it is not enough
+to write that it is** (B82's title field, 23 August 2026). `.title-field` is one class. The
+capture window's title sits inside `.header`, where `.header input` is one class *and one
+element* — so it out-ranked the shared rule and went on setting the 13px, the padding and the
+tinted background it was meant to replace. The field did not change, the whole suite stayed
+green, and the comment above the rule claimed in so many words that it was "two classes deep".
+It is B48's bug and the `.overlay` bug for the third time: **correct-looking CSS defeated by
+the cascade, invisible to every test that does not read the rule itself**, and here invisible
+to the author too. The selector names the container now (`.header .title-field,
+.reader-header .title-field`), which settles it outright rather than on source order — a tie
+would be decided by which file loads last, and a later edit would flip it without touching
+either rule. `:focus` needs the same treatment one pseudo-class along, **and has to restate
+`background`**: `.header input:focus` fills a focused header field with `--background`, so
+without it the capture window's title took a fill on focus that the library's never did — the
+difference between the two windows that this work exists to remove, reappearing one state
+along. `styles-title-field.test.ts` pins the pair.
+
+**What actually caught it is worth more than the fix: the driver runs `out/`, and does not
+build.** `npm run drive:capture` starts `out/main/index.js`. It does not run `npm run build`
+first, so a renderer change made after the last build is simply not in the window being
+driven — which reads as a change that does nothing, which is exactly what the specificity bug
+also reads as. Two different causes, one symptom, and they were stacked. **Build before
+driving, every time**, and when the app appears not to have changed, rule the stale bundle out
+before believing anything about the code. The probe that settled it read `getComputedStyle`
+off the real field rather than judging a screenshot.
+
+**`:focus` does not match under `Xvfb` unless focus is emulated.** The same probe reported
+`document.activeElement === field` and `field.matches(":focus") === false`, because Chromium
+only matches `:focus` while the *document* has focus and there is no window manager here to
+give it any. `Emulation.setFocusEmulationEnabled` over CDP is what makes a focus style
+measurable at all; without it a perfectly good `:focus` rule reads as a rule that does not
+apply. This is the same family as the memory's `windowfocus`/`windowactivate` note: the
+sandbox's window focus is not the app's.
+
+**The bullet levels are one family of glyphs, and the sizes are the glyphs rather than a
+`font-size`** (23 August 2026). Reported as "levels one and two are smaller than the square at
+level three, on macOS". Neither half of that survived measurement. It was never only macOS:
+`\2022` and `\25E6` carry 0.293em of ink against `\25AA`'s 0.504em *in one face*, because
+U+25AA is small next to U+25A0 rather than next to a bullet — so no font choice was going to
+make the old three agree. What macOS added is that `\2022` is General Punctuation and SF
+carries it while the other two are Geometric Shapes and SF does not, so a Mac drew level one
+from the system face and the rest from whatever fell back. All three levels are Geometric
+Shapes now (`\25CF`, `\25CB`, `\25AA`), which is what makes them fall back *together* — and is
+why there is no `font-family` in those rules to keep right.
+
+**`font-size` on a `::marker` was tried first and is the wrong lever.** `--marker-gap` is an em
+space *in the marker's own font*, so it scales with the glyph and the marker box grows with
+both — and rendered, the enlarged marker grew the line boxes too: every list line taller, the
+spacing ragged. Two faults for one fix. A wider glyph at the same font-size changes one number
+instead, `--marker-slot`, which is per-depth now (1.88em for the circles, 1.66em for the
+square, 1.5em reset for `ol > li` — **that reset is load-bearing**, since custom properties
+inherit and a numbered list nested in a bullet would otherwise take the circles' slot). The
+square's 1.66em is a fix rather than a consequence: the single 1.5em it replaces was tuned to
+the old bullet, so level three's checkbox had always sat 2.5px left of its own marker. And the
+two vertical constants moved down 0.115em together, because `\25CF` and `\25AA` share an ink
+centre at 0.766em above the first baseline where `\2022` sat at 0.648em — one number each and
+no per-depth override, which is only possible because the three glyphs now agree with each
+other. Every figure here was read off a screenshot at four times size in a real Chromium, the
+way that section's existing numbers were; all three levels land within a quarter of a pixel on
+both axes, which the version they replace did not.
+
+**A completion panel's `max-width: 100%` does not contain it, because `min-width` wins**
+(23 August 2026). `.tag-suggest` is `min-width: 220px; max-width: 100%`, and CSS resolves
+`min-width` last — so in a cell narrower than 220px the panel is 220px wide and the
+`max-width` is decorative. The header grid is `auto minmax(0, 1fr) auto minmax(0, 1fr)` and
+`HeaderBlock` emits When, **Tags**, Where, **Who**, so those two sit in the right-hand track:
+their panels start halfway across the window and run 220px from there, out through the frame
+at anything near the 460px minimum. The fix is which edge they hang from, not a width —
+right-anchored they grow leftwards into the header, where there is always the other column to
+grow into. Where and When must keep `left: 0` for the mirror image of that reason, so this is
+a pair of rules and not one applied to all four. Deliberately **not** a JS clamp like
+`ContextMenu`'s or `slash-menu`'s: those are `position: fixed` on `<body>` with no containing
+block, and have to measure at open time; these have a cell to hang off, and which edge is a
+property of the layout. `styles-typeahead-edge.test.ts` pins both halves.
+
+**The shortcut sheet's columns are balanced in the component, because a grid cannot do it**
+(23 August 2026). `.help-groups` is a two-track grid filling row-major and `SHORTCUT_GROUPS`
+is 10, 7, 11, 4 and 8 entries in a fixed order, so it laid out as `[text | lists] /
+[structure | note] / [window | nothing]` — and a grid row is as tall as its taller member, so
+the sheet stood 32 rows high in the library and 28 in the capture window beside a column that
+was mostly empty, scrolling past its own whitespace. No track sizing reaches that: it is
+which group goes where. `Help.tsx`'s `balanceColumns` cuts the list in two and the grid lays
+the result out (19/22 in capture, 19/24 in the library). **The cut is contiguous on purpose**
+— columns are read down and then across, so a contiguous cut preserves the declared order,
+where picking the two best-fitting groups saves one row and shuffles the sheet. The weight
+counts the heading *and* the two hotkey rows the sheet renders that no registry entry
+accounts for; measured on `SHORTCUTS` alone it is wrong by exactly those two. `columns: 2` is
+still the wrong tool for the reason already recorded in the stylesheet: it lays overflow out
+sideways, past an edge `overflow-y` cannot reach.
+
+**The Tasks scope chooser rolls up, and asks `total` rather than `open`** (23 August 2026,
+`foldersWithTasks`). It listed every folder in the vault, which in a vault of any size is a
+chooser whose commonest outcome is an empty pane. Two things decide whether narrowing it is
+right. `tasksIn` scopes by path *prefix*, so a folder qualifies on what is **beneath** it —
+which `IPC.libraryFolderTaskCounts` cannot answer, since `openTaskCountsByFolder` counts notes
+directly in a folder and deliberately does not roll up (the sidebar badge is about the folder
+itself). The per-note counts are the ones that fold, and they are already in the window. And
+it asks `total`: keyed off `open`, the list would rebuild itself under the "open only"
+checkbox, with the folder you were standing in able to vanish from a chooser still set to it.
+The vault root and the current scope are always kept for that same reason — a `<select>` whose
+value is not among its options renders blank — and a `null` count offers everything rather
+than nothing, the call `withOpenTasks` already makes for the badge.
+
+**The Empty-trash confirmation counts the trash, not the rows on screen** (`trashContents`,
+23 August 2026). It named `notes.length`, which is the note list's own rows for `_trash` — one
+non-recursive `readdir` of `.md` files. So a folder dragged to the trash with forty notes in
+it counted as nothing, every folder counted as nothing, and every attachment counted as
+nothing, in the sentence in front of the only irreversible operation in this app. It is
+**deliberately not `folderContents(vault, "_trash")`**: that function counts only note files
+and skips `_attachments`, `_templates` and dotted names, which is right for a folder chooser
+walking the vault tree and wrong here. The trash is not the tree — everything in it is going,
+so everything in it is counted, or the dialog understates the button in exactly the way the
+count it replaces did. It shares that function's depth cap and per-directory `try`/`catch`,
+and it is taken when the dialog opens rather than cached: the number has to be what is about
+to be deleted.

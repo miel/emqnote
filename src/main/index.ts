@@ -58,6 +58,7 @@ import {
   duplicateNote,
   emptyTrash,
   folderContents,
+  trashContents,
   renameFolder,
   moveFolder,
   moveNote,
@@ -1608,14 +1609,22 @@ function registerLibraryIpc(): void {
       : await notesMatching(vault, indexDb, selection, writer.uncommittedNewPath() ?? undefined);
   });
 
-  ipcMain.handle(IPC.librarySearch, async (_event, query: string) => {
-    const vault = vaultPath();
-    return vault === null || indexDb === null
-      ? []
-      : await searchNotes(vault, indexDb, parseSearchQuery(query), {
-          excludePath: writer.uncommittedNewPath() ?? undefined,
-        });
-  });
+  ipcMain.handle(
+    IPC.librarySearch,
+    async (_event, query: string, scope: string | undefined) => {
+      const vault = vaultPath();
+      return vault === null || indexDb === null
+        ? []
+        : await searchNotes(vault, indexDb, parseSearchQuery(query), {
+            // Passed straight through, `undefined` included: `searchNotes` reads an
+            // absent scope and an empty one as the same "no restriction", so the renderer
+            // declining to narrow and the renderer narrowing to the vault root cannot
+            // come to mean two different things here.
+            scope,
+            excludePath: writer.uncommittedNewPath() ?? undefined,
+          });
+    },
+  );
 
   // The `tags` half of the same answer `libraryFacets` gives, for the header's Tags
   // field (B66). No `excludePath`: this list is what the vault knows, and a note being
@@ -2041,6 +2050,15 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {
     const vault = vaultPath();
     return vault === null ? { notes: 0, folders: 0 } : folderContents(vault, path);
+  });
+
+  // `folderContents`' neighbour, and deliberately not that function called with `_trash`:
+  // it counts only note files and skips the app's own folder names, both of which are
+  // right for a folder in the vault tree and wrong for the trash, where everything is
+  // going. See `trashContents`.
+  ipcMain.handle(IPC.libraryTrashContents, () => {
+    const vault = vaultPath();
+    return vault === null ? { notes: 0, folders: 0, files: 0 } : trashContents(vault);
   });
 
   // Same hazard `IPC.libraryMoveNote` guards against, one level up: `CaptureWriter`'s

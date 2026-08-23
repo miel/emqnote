@@ -240,6 +240,30 @@ body {
   z-index: 20;
 }
 
+/* The two cells in the grid's right-hand column anchor their panel to the field's *right*
+   edge instead. `min-width` beats `max-width` in CSS, so the `max-width: 100%` above does
+   not contain the panel at all: in a cell narrower than 220px the list is 220px wide
+   starting at the cell's left edge, and in the right-hand column that is 220px measured
+   from halfway across a window that may be 460px wide (`capture-window.ts`'s minimum) —
+   which is the panel painting out through the window border, as reported.
+
+   The header grid is `auto minmax(0, 1fr) auto minmax(0, 1fr)` and `HeaderBlock` emits
+   When, Tags, Where, Who in that order, so Tags and Who are the two that sit in the
+   right-hand track. Right-anchored they grow leftwards into the header, where there is
+   always at least the other column's width to grow into. Where and When keep `left: 0`:
+   they grow rightwards into the same room, and flipping them would push them out of the
+   *left* edge instead.
+
+   Deliberately not a JS clamp like `ContextMenu`'s or `slash-menu`'s. Those two are
+   `position: fixed` children of `<body>` with no containing block to hang off; these are
+   absolutely positioned inside the cell they belong to, and which edge they hang from is
+   a property of the layout rather than of the moment. */
+.header-cell.header-tags .tag-suggest,
+.header-cell.header-who .tag-suggest {
+  left: auto;
+  right: 0;
+}
+
 /* `.header button` already paints every button in this block as a field, and at one class
    plus one element it *ties* a bare `.tag-suggest button` on specificity — which is B48's
    bug and the `.overlay` bug, both of which shipped. Two classes deep, so it wins wherever
@@ -306,10 +330,69 @@ body {
   color: var(--muted);
 }
 
-.subject {
+/* **The note's title, and the same control in both windows.**
+ *
+ * It was two: an `<input class="subject">` here at the header's 13px semibold in a tinted
+ * box, and an `<h1>` in the library that swaps to an input on click at 17px bold and
+ * borderless. Same thing, named differently ("Subject" against "Title") and drawn
+ * differently, in two windows that otherwise share `HeaderBlock`, `Editor`, `ContextMenu`
+ * and the shortcut sheet. The library's is the one that reads as a title, so it is the one
+ * that won.
+ *
+ * It lives in `styles.css` rather than `library.css` because both windows load this file
+ * and only one loads that one — the same reason `.overlay` and the shortcut sheet are
+ * here (see `Help.tsx`).
+ *
+ * **The transparent border at rest is load-bearing**, not a placeholder for nothing: the
+ * focus rule below colours a border rather than adding one, so the text does not shift by
+ * a pixel every time the field is focused. `.header input` above already does this, and
+ * `.reader-header h1` in `library.css` has to carry the same box for the same reason —
+ * that `<h1>` and this input trade places, and any difference between them is a jump.
+ *
+ * **The two-part selector is what makes the rule apply at all, and a bare `.title-field`
+ * silently does not.** In the capture window this input sits inside `.header`, where
+ * `.header input` above is one class *and one element* — so it out-ranks a single class
+ * and goes on setting the 13px, the padding and the tinted background this rule is
+ * replacing. Written the obvious way, the field simply did not change and nothing said
+ * so: correct-looking CSS, defeated by the cascade, which is B48's bug and the `.overlay`
+ * bug, both of which shipped. Naming the container puts it two classes deep and settles
+ * it outright rather than on source order, which a tie would decide and a later edit
+ * would quietly flip. `styles-title-field.test.ts` holds the pair together. */
+.header .title-field,
+.reader-header .title-field {
   display: block;
   width: 100%;
-  font-weight: 600;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 17px;
+  font-weight: bold;
+}
+
+/* The capture window's colour, in both windows now — item four of the consistency work.
+   The library's title input had no `:focus` rule at all and fell through to Chromium's
+   own ring, so the two windows lit the same field in two different colours. Same
+   two-part selector as above, and for the same reason: `.header input:focus` is one class
+   and one element plus a pseudo-class, and would out-rank a bare `.title-field:focus`. */
+.header .title-field:focus,
+.reader-header .title-field:focus {
+  outline: none;
+  border-color: var(--accent);
+  /* And `background` again, which is not redundant: `.header input:focus` above fills a
+     focused header field with `--background`, and at one class, one element and a
+     pseudo-class it out-ranks the rest-state rule this field carries. Left off, the
+     capture window's title took a fill on focus that the library's — which that rule
+     never reaches — did not, which is the difference between the two windows this whole
+     change is about, reappearing one state along. Measured in the running app rather than
+     reasoned about: the field read `rgb(251, 251, 252)` focused and transparent at rest. */
+  background: transparent;
+}
+
+.subject {
   margin-bottom: 6px;
 }
 
@@ -499,8 +582,28 @@ body {
   --marker-slot: 1.5em;
 }
 
+/* **The three levels were `\2022`, `\25E6` and `\25AA`, and levels one and two drew
+   visibly smaller than level three.** Reported on macOS and true everywhere: measured in
+   a real Chromium at four times size, `\2022` and `\25E6` have 0.293em of ink against
+   `\25AA`'s 0.504em, so the *small* square is 1.7 times the bullet. That is the Unicode
+   design intent rather than a font defect — U+25AA is small next to U+25A0, not next to a
+   bullet — so no face was going to draw the old three at comparable sizes.
+
+   macOS made it worse for a second reason, and the glyphs fix that too. `\2022` is
+   General Punctuation and SF carries it; `\25E6` and `\25AA` are Geometric Shapes and SF
+   does not, so on a Mac level one came from the system face and the other two from
+   whatever fell back — three levels, two faces. All three are Geometric Shapes now, so
+   they fall back *together*, which is what makes them consistent rather than merely
+   larger. No `font-family` here to force that: choosing the glyphs out of one block does
+   it, and a font stack pinned in this rule would be a fourth thing to keep right.
+
+   **`font-size` on the `::marker` was tried first and is wrong.** The gap is an em space
+   *in the marker's own font*, so it scales with the glyph and the marker box grows with
+   it — and rendered, the enlarged marker grew the line boxes as well: every list line
+   taller, spacing ragged. Two faults for one fix. A wider glyph at the same font-size
+   changes only the box's width, which is one number, below. */
 .editor-content ul > li::marker {
-  content: "•" var(--marker-gap);
+  content: "●" var(--marker-gap);
 }
 
 /* Setting `content` switches off Chromium's own disc → circle → square cycling by
@@ -509,11 +612,43 @@ body {
    specificity and every level draws a disc. `:is()` covers a `ul` nested under an
    `ol`, since the levels of a mixed outline are what this is for. */
 .editor-content :is(ul, ol) ul > li::marker {
-  content: "◦" var(--marker-gap);
+  content: "○" var(--marker-gap);
 }
 
 .editor-content :is(ul, ol) :is(ul, ol) ul > li::marker {
   content: "▪" var(--marker-gap);
+}
+
+/* The one number the wider glyphs cost, and it is measured rather than reasoned about.
+   The marker box is right-aligned against the content edge, so a wider glyph leaves the
+   *text* exactly where it was and moves only the glyph's own left edge — which is what
+   `--marker-slot` names, because the checkbox and the star are placed by hand against it
+   (see `.task-check` and `.star-mark` below) and a mixed list goes ragged the moment the
+   two disagree.
+
+   Read off a screenshot at four times size, ink left edge against the item's content
+   edge: `\25CF`/`\25CB` land at −1.819em where `\2022`/`\25E6` landed at −1.444em, and
+   `\25AA` lands at −1.581em. So 1.5em + 0.375em for the circles, and 1.66em for the
+   square — the second of which is a **fix, not a consequence**: the shipped 1.5em was
+   tuned to the bullet, so level three's checkbox has always sat 2.5px left of its own
+   square. All three levels now agree within a quarter of a pixel on both axes, which the
+   version this replaces did not.
+
+   `ol > li` is reset explicitly and that line is load-bearing: custom properties inherit
+   down the DOM, so a numbered list nested inside a bullet would otherwise take the
+   circles' slot from the `li` above it and place its numbers against a box it does not
+   have. The depth rules mirror the `::marker` selectors exactly, for the specificity
+   reason stated above them. */
+.editor-content ul > li {
+  --marker-slot: 1.88em;
+}
+
+.editor-content ol > li {
+  --marker-slot: 1.5em;
+}
+
+.editor-content :is(ul, ol) :is(ul, ol) ul > li {
+  --marker-slot: 1.66em;
 }
 
 /* `counter(list-item)` is seeded natively from the `start` attribute, so numbering
@@ -637,7 +772,11 @@ body {
      and −0.33em are each a whole pixel out. This is the middle of that plateau, as far from
      both edges as it can be — a platform whose emoji strike sits differently then has a
      pixel of room before it falls off either side. */
-  bottom: -0.305em;
+  /* The same 0.115em the checkbox took, for the same reason and off the same
+     measurement: the star stands where the bullet stands, so it follows the
+     bullet's ink centre wherever that goes. The plateau the number above
+     describes moves with it and is no narrower. */
+  bottom: -0.42em;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -677,7 +816,15 @@ body {
      size: bullet ink starts at −23.10 and its centroid sits at −12.10 from the item's
      baseline, and these two numbers put the box on both. */
   left: calc(-1 * var(--marker-slot) - 0.018em);
-  bottom: -0.3275em;
+  /* Moved down 0.115em when the markers changed, and it had to be: `\25CF` and
+     `\25AA` share an ink centre at 0.766em above the item's first baseline where
+     `\2022` sat at 0.648em, so a constant tuned to the old bullet now sits high
+     against every level. One number rather than a per-depth override, which is
+     only possible because the three glyphs finally agree with each other — under
+     the old set the bullet and the square were 0.11em apart and this could match
+     just one of them. Verified at four times size: 0.10px from the circle, 0.23px
+     from the square. */
+  bottom: -0.4425em;
   display: flex;
   align-items: center;
   width: var(--marker-slot);
@@ -1644,7 +1791,17 @@ body {
    narrow, and a sheet that needs scrolling to be read is a sheet you stop opening.
    A grid and deliberately not `columns: 2`: multi-column lays overflow out *sideways*,
    so in the short capture window the last group ended up in a third column past the
-   right edge, with `overflow-y` unable to reach it. */
+   right edge, with `overflow-y` unable to reach it.
+
+   **It has two children now, and they are columns rather than groups.** Left to fill
+   row-major with the groups themselves the grid could not balance them — they are 10, 7,
+   11, 4 and 8 entries in a fixed order, which laid out as `[text | lists] /
+   [structure | note] / [window | nothing]`, and a grid row is as tall as its taller
+   member: 32 rows of sheet against 8 rows of content on the right, scrolling past its own
+   whitespace. That is a content-ordering problem and no track sizing reaches it, so
+   `Help.tsx`'s `balanceColumns` decides the split and this rule only lays the result out.
+   `auto-fit` still earns its keep: at the capture window's width one track fits, the two
+   columns stack, and the groups are read in exactly the order they were written. */
 .help-groups {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1652,6 +1809,15 @@ body {
   gap: 12px 24px;
   overflow-y: auto;
   padding: 4px 16px 16px;
+}
+
+/* The grid's own child. `gap` here rather than on `.help-groups`' rows, which no longer
+   have anything to separate: the groups inside a column are laid out by this. */
+.help-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
 .help-group {

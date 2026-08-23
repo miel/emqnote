@@ -59,6 +59,16 @@ interface Props {
   searchRef?: RefObject<HTMLInputElement | null>;
   onSearchChange: (query: string) => void;
   /**
+   * Whether the search box is looking at the whole vault rather than the folder in the
+   * tree (B83). Always a boolean, including where the question does not arise — a tag, a
+   * person, the unlinked pane — because it is `Library.tsx`'s state either way and this
+   * component does not decide it. `scopeable` below is what says whether to draw a switch.
+   */
+  searchAll: boolean;
+  onSearchAllChange: (all: boolean) => void;
+  /** True while the tree selection is a folder, which is the only time a scope switch means anything. */
+  scopeable: boolean;
+  /**
    * Leaves the search: empties the box, puts the folder's own list back and hands focus to
    * the note that was selected in it. Escape in the box and the × both call it; Escape on a
    * row goes through the window's own listener, which knows where the press came from.
@@ -180,6 +190,28 @@ const sortGlyph = (
   </svg>
 );
 
+/**
+ * The query language, as rows.
+ *
+ * It used to be the search box's placeholder — the whole of
+ * `type:meeting tag:klantx attendee:"Jan de Vries" after:2026-01-01` in a field a few
+ * centimetres wide, unreadable at that width and gone the moment you typed. A hint you
+ * cannot read while you need it is not a hint.
+ *
+ * The example is the *point* rather than decoration: `attendee:"Jan de Vries"` is the one
+ * that carries the quoting rule, and `after:` and `before:` are the two whose date format
+ * nothing else states. Kept beside the box that uses them and read by
+ * `src/main/search-query.ts`, which is where the parsing lives — a row here with no token
+ * there is a promise the search will not keep.
+ */
+const SEARCH_HINTS: { token: string; key: string }[] = [
+  { token: "type:meeting", key: "search.hint.type" },
+  { token: "tag:klantx", key: "search.hint.tag" },
+  { token: 'attendee:"Jan de Vries"', key: "search.hint.attendee" },
+  { token: "after:2026-01-01", key: "search.hint.after" },
+  { token: "before:2026-12-31", key: "search.hint.before" },
+];
+
 export function NoteList({
   notes,
   noteTasks,
@@ -193,6 +225,9 @@ export function NoteList({
   searchQuery,
   searchRef,
   onSearchChange,
+  searchAll,
+  onSearchAllChange,
+  scopeable,
   onExitSearch,
   sort,
   onSort,
@@ -232,6 +267,14 @@ export function NoteList({
   // (the keyboard route into a row menu already positions itself this way).
   const sortButton = useRef<HTMLButtonElement>(null);
   const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null);
+
+  /**
+   * Whether the query-syntax panel is up (B84).
+   *
+   * Local to this component and not lifted: nothing outside the search row can open or
+   * close it, and `Mod-F` reaches it the way a click does — by focusing the box.
+   */
+  const [hintsOpen, setHintsOpen] = useState(false);
 
   // The one row in this pane with `tabIndex={0}`. Recomputed against the current list
   // rather than trusted outright: switching folders can leave it pointing at a path that
@@ -393,7 +436,22 @@ export function NoteList({
           type="text"
           value={searchQuery}
           placeholder={t("library.search")}
-          onChange={(event) => onSearchChange(event.target.value)}
+          // The syntax panel opens on focus, which is one mechanism serving both ways in
+          // (B84): clicking the box focuses it, and `Mod-F` already focuses and selects
+          // it. Nothing about the shortcut had to change, and nothing takes the caret out
+          // of the box to show you what to type into it.
+          onFocus={() => setHintsOpen(true)}
+          // Closing on blur is safe here only because the panel holds nothing to click:
+          // clicking a row would blur the box, close the panel and lose the press, which
+          // is the bug every completion list in this app has to design around. These are
+          // examples to copy, so the worst a click on one does is dismiss the panel.
+          onBlur={() => setHintsOpen(false)}
+          onChange={(event) => {
+            // Typing is the answer to "what do I type", so the panel gets out of the way
+            // on the first keystroke rather than sitting over the results it is about.
+            setHintsOpen(false);
+            onSearchChange(event.target.value);
+          }}
           // `stopPropagation` for the 18 August 2026 reason: `preventDefault` does not end
           // an event, and the window's Escape branch is behind this one. It would decline
           // this press anyway — the box is not a `.note[role="option"]`, so `paneOf` reads
@@ -403,9 +461,55 @@ export function NoteList({
             if (event.key !== "Escape") return;
             event.preventDefault();
             event.stopPropagation();
+            // Panel first, search second. Escape closes what is on top of the box before
+            // it closes the box, which is the two-press rule leaving a search from a hit
+            // already follows — one press should undo one thing.
+            if (hintsOpen) {
+              setHintsOpen(false);
+              return;
+            }
             onExitSearch();
           }}
         />
+
+        {/* Where the search is looking (B83). A word rather than a glyph, so
+            `--click-button="All notes"` can reach it — the same argument the sort chooser
+            and "Exit tasks" make. Only for a folder: a tag, a person and the unlinked
+            pane are drawn from the whole vault already, and a switch offering to narrow
+            them to a folder they do not have would be a lie. */}
+        {scopeable && (
+          <button
+            type="button"
+            className={`search-scope${searchAll ? " search-scope-all" : ""}`}
+            aria-pressed={searchAll}
+            title={t(searchAll ? "library.searchAllHint" : "library.searchFolderHint")}
+            onClick={() => onSearchAllChange(!searchAll)}
+          >
+            {t(searchAll ? "library.searchAll" : "library.searchFolder")}
+          </button>
+        )}
+        {/* The syntax, under the box that takes it, with the caret still in the box
+            (B84). Deliberately not a modal — B51's argument for the `/` menu, one field
+            over: a picker with its own focus takes away the thing you opened it to do.
+
+            `.tag-suggest` verbatim, which is the header's three completion panels'
+            surface. One floating list in this app, not a fourth that looks nearly like
+            the others.
+
+            Nothing in it is a control: no `tabIndex`, no click handler, no roving keys.
+            These are examples to copy, and a row that could be *chosen* would owe the
+            caret an insertion at a position this panel does not track. */}
+        {hintsOpen && (
+          <dl className="tag-suggest search-hints">
+            {SEARCH_HINTS.map((hint) => (
+              <div key={hint.token} className="search-hint">
+                <dt>{hint.token}</dt>
+                <dd>{t(hint.key)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
         {/* Only while there is something to clear: a permanent × beside an empty box is a
             control that does nothing most of the time. `tabIndex={-1}` keeps it out of the
             walk from the box to the first note row — it is the mouse's way out, Escape is

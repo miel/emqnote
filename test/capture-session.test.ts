@@ -27,9 +27,31 @@ describe("a capture session", () => {
   });
 
   describe("what a brand-new note may do that a handed-over one may not", () => {
-    it("gives a brand-new note a subject field and a Discard button", () => {
+    // Discard moved into the Actions menu (B82), so the button in the bar is what the
+    // `existing` guard now draws or does not draw. Both are asserted rather than just the
+    // menu: the guard is on the *button*, because a menu whose only entry is missing is
+    // worse than no menu at all.
+    it("gives a brand-new note a title field and an Actions menu", () => {
       expect(capture.container.querySelector("input.subject")).not.toBeNull();
-      expect(capture.container.textContent).toContain("Discard");
+      expect(capture.container.textContent).toContain("Actions");
+    });
+
+    it("puts Discard in that menu, with the chord B80 gave it", async () => {
+      await capture.clickButton("Actions");
+
+      const item = capture.container.querySelector(".context-menu-item");
+      expect(item?.textContent).toContain("Discard");
+      // Read off `shortcuts.ts` rather than spelled in the markup, which is what keeps
+      // this chord to one spelling — the sheet, the keymap and this menu all print the
+      // same registry entry.
+      expect(item?.textContent).toContain("Backspace");
+    });
+
+    it("throws the note away when that item is chosen", async () => {
+      await capture.clickButton("Actions");
+      await capture.clickMenuItem("Discard");
+
+      expect(capture.spies.discard).toHaveBeenCalled();
     });
 
     it("takes both away once a note is handed over from the library", async () => {
@@ -39,7 +61,7 @@ describe("a capture session", () => {
       // set it would let the two drift (B20). And a note this window did not begin is not
       // this window's to throw away (B68).
       expect(capture.container.querySelector("input.subject")).toBeNull();
-      expect(capture.container.textContent).not.toContain("Discard");
+      expect(capture.container.textContent).not.toContain("Actions");
     });
 
     it("gives them back when the window is put away and begun again", async () => {
@@ -47,7 +69,14 @@ describe("a capture session", () => {
       await capture.fireReset();
 
       expect(capture.container.querySelector("input.subject")).not.toBeNull();
-      expect(capture.container.textContent).toContain("Discard");
+      expect(capture.container.textContent).toContain("Actions");
+    });
+
+    it("keeps Help a word rather than a question mark", () => {
+      // The one window where the sheet behind this button is how you find out what the
+      // shortcuts are, labelled with a glyph you could only read once you already knew.
+      expect(capture.container.textContent).toContain("Help");
+      expect(capture.container.querySelector(".statusbar")?.textContent).not.toContain("?");
     });
   });
 

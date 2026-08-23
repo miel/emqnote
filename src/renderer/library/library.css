@@ -299,9 +299,15 @@
 }
 
 /* A row now, rather than a box holding one control: the × sits beside the field while
-   there is something to clear. `position: relative` is not used — the button takes its own
-   space instead of floating over the text, so a long query is never painted underneath it. */
+   there is something to clear, and the scope switch beside that. The buttons take their
+   own space rather than floating over the text, so a long query is never painted
+   underneath them.
+
+   `position: relative` is here for the syntax panel below, which is the one thing in this
+   row that does float: it hangs off this element rather than off the input, so it spans
+   the row instead of stopping at the field's right edge. */
 .notes-search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -344,6 +350,77 @@
 
 .search-clear:hover {
   color: var(--accent);
+}
+
+/* Where the search is looking (B83). Quiet at rest and lit when it is widened, because
+   the vault-wide state is the one worth noticing: narrowed is the default and reads as
+   the absence of a state, while "you are searching everything" is a fact about the list
+   below that the list itself cannot show. `nowrap` because the two labels are different
+   lengths and a row that reflows as you toggle it reads as something breaking. */
+.search-scope {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 7px;
+  cursor: default;
+}
+
+.search-scope:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.search-scope-all {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The query language, under the box that takes it (B84). It wears `.tag-suggest` — the
+   header's three completion panels' surface — so this app has one floating list rather
+   than a fourth that looks nearly like the others; everything here is what a `<dl>` needs
+   that a `<ul>` of buttons did not.
+
+   `left: 12px; right: 12px` against the row's own padding rather than `width: 100%`, so
+   it lines up with the field above it at any pane width. `min-width` is overridden away
+   for the same reason — `.tag-suggest`'s 220px floor is for a panel anchored to a narrow
+   header cell, and here it would only stop the panel shrinking with the pane. */
+.search-hints {
+  left: 12px;
+  right: 12px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+/* Stacked, not two columns. Side by side with the description right-aligned against the
+   token — which is `.help-row`'s shape, and the obvious one to reuse — it reads fine at
+   the shortcut sheet's 640px and falls apart here: this panel is as wide as the note
+   list, which is a resizable pane often around 250px, and the longest description wrapped
+   to four ragged right-aligned lines. Seen in the running window rather than reasoned
+   about. Stacked, it reads the same at every pane width. */
+.search-hint {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* The token is what you copy, so it is the half drawn in the text colour and in the font
+   a query is typed in. `nowrap` because a broken-in-half token is not one you can copy —
+   it overflows the panel rather than wrapping, which the `overflow` it inherits from
+   `.tag-suggest` handles. */
+.search-hint dt {
+  font-family: ui-monospace, "Cascadia Mono", "Consolas", "SF Mono", monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.search-hint dd {
+  margin: 0;
+  color: var(--muted);
 }
 
 .notes-header {
@@ -669,9 +746,15 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* `.new-note`'s recipe, in the toolbar rather than the header — the one way out of this
-   view that says its own name. `flex: 0 0 auto` so the scope dropdown beside it goes on
-   taking the room instead. */
+/* `.new-note`'s recipe, on the count row rather than in the toolbar above it — the one
+   way out of this view that says its own name, standing where the note list puts its own
+   buttons rather than in front of the scope chooser, where it read as the first step of
+   setting the view up. `.notes-header` is `space-between` and this is its second child,
+   so the count keeps the left edge and this takes the right with no rule of its own.
+
+   `flex: 0 0 auto` survives the move and still earns its place: `.notes-count` beside it
+   has no basis of its own, and without this the button would give up width to a long
+   count rather than the other way round. */
 .task-exit {
   flex: 0 0 auto;
   font: inherit;
@@ -828,8 +911,14 @@
   font-size: 12px;
 }
 
-/* Never wraps. The title and path used to fall onto extra lines as the window
-   narrowed, which made the header grow and shrink while dragging the edge. */
+/* Never wraps. The title and path used to fall onto extra lines as the window narrowed,
+   which made the header grow and shrink while dragging the edge.
+
+   It holds the title and the path and nothing else since B82: the save state and the two
+   menus moved to `.reader-footer`, which is where the capture window has always kept the
+   same three. So the `nowrap` is doing less work than it was — the row it used to be
+   protecting the title inside is gone — but the rule that produced the bug has not
+   changed, and `.reader-titles` is still the only elastic child. */
 .reader-header {
   display: flex;
   align-items: center;
@@ -863,12 +952,18 @@
   white-space: nowrap;
 }
 
-/* The way back out of a followed `[[…]]` link, at the foot of the pane rather than above
-   the title. It used to sit in `.reader-titles`, which grew the header by a line every
-   time a link was followed and shrank it again on the way back — a strip that changes
-   height under the note being read. Here it is the note's own bottom edge, which is
-   where a "you came from" belongs, and it is only in the tree at all when there is
-   somewhere to go back to (`backTo`), so a note reached from the list pays nothing.
+/* **The note pane's status bar**, which is what this strip has become. It began as the
+   way back out of a followed `[[…]]` link — moved down here because in `.reader-titles`
+   it grew the header by a line every time a link was followed and shrank it again on the
+   way back, a strip that changes height under the note being read. The save state and the
+   two menus have joined it from the header for the same kind of reason and one better
+   one: the capture window has always kept exactly these controls at the foot, and the two
+   windows disagreeing about where a note's chrome lives is the thing being fixed.
+
+   `space-between` over two groups: status left, menus right. And always drawn now, where
+   it used to appear only when there was somewhere to go back to — the height it adds is
+   constant, which is the whole argument for having moved the back link out of the header
+   in the first place.
 
    `flex: 0 0 auto` because `.reader` is a column and `.reader-body` above it takes the
    rest: without it this strip would be squeezed by a long note instead of holding its
@@ -877,8 +972,20 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 6px 18px;
   border-top: 1px solid var(--border);
+}
+
+/* The left-hand group: what the note is doing, and where it came from. `min-width: 0` so
+   a long "← note you came from" ellipses inside this group rather than pushing the menus
+   off the right edge — `.reader-actions` is `flex: 0 0 auto` and would not give way. */
+.reader-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 /* Quieter than the note it sits under: this names a note you are *leaving*, and it must
@@ -904,34 +1011,34 @@
   color: var(--accent);
 }
 
+/* The `<h1>` carries `.title-field`'s box exactly — padding, border width, radius — so
+   that the two do not jump when they trade places. That was already the rule here ("same
+   font-size and font-weight, so the header does not visibly reflow"); what changed is
+   that the box now has a padding and a transparent border in it, because the shared field
+   needs somewhere to put a focus colour without moving the text. Every number that
+   matters is `.title-field`'s in `styles.css`, and this rule exists to copy them. */
 .reader-header h1 {
   margin: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
   font-size: 17px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Swaps in for the `<h1>` above while the title is being edited — same font-size and
-   font-weight, so the reader header does not visibly jump or reflow when the two trade
-   places. */
-.reader-title-input {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 17px;
-  /* `.reader-header h1` sets no font-weight of its own, so it renders at the browser's
-     default bold for a heading — matched here explicitly, since a plain `<input>` has
-     no such default and would otherwise render lighter than the text it replaces. */
-  font-weight: bold;
-}
+/* `.reader-title-input` has no rule of its own any more. Everything that decides how this
+   input looks comes from `.title-field` in `styles.css`, which the capture window's title
+   field also wears — including the focus colour, which this input never had at all and
+   which is why the two windows used to light the same field in different colours. The
+   class stays on the element as a handle for tests and for `--click-button`; a rule here
+   would be a second opinion about a shared control, and a `font: inherit` in it would
+   quietly reset the size and weight that shared rule sets. */
 
+/* Indented past the title's own padding and border, so the path reads as sitting under
+   the title rather than a few pixels left of it. */
 .reader-path {
+  padding-left: 7px;
   font-size: 11px;
   color: var(--muted);
 }

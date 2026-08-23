@@ -14,7 +14,10 @@ export const LOCALES: Locale[] = ["en-US", "nl-NL"];
  */
 const DUTCH: Record<string, string> = {
   // Capture window
-  "capture.subject": "Onderwerp (optioneel)",
+  // "Titel" en niet "Onderwerp": het is hetzelfde veld als in de notitiebewerker, en dat
+  // heet daar de titel. "(optioneel)" is weg — het zei iets over de frontmatter, niet
+  // over het veld, en in het andere venster stond het er ook niet bij.
+  "capture.title": "Titel",
   "capture.location": "Locatie",
   // De scheidingstekens blijven in de tekst staan: `parseAttendees` splitst op komma
   // *en* puntkomma, omdat Outlook puntkomma's gebruikt.
@@ -44,6 +47,9 @@ const DUTCH: Record<string, string> = {
   // Sneltoetsenoverzicht. De namen komen uit src/shared/shortcuts.ts; wat een toets
   // *is* staat daar, wat hij heet staat hier.
   "help.title": "Sneltoetsen",
+  // Het knopje in de statusbalk van het opnamevenster. Kort, want die balk is smal —
+  // en niet "Sneltoetsen", wat de kop van het blad zelf is.
+  "help.button": "Help",
   "help.or": "of",
   "help.group.text": "Tekst",
   "help.group.lists": "Lijsten",
@@ -279,8 +285,24 @@ const DUTCH: Record<string, string> = {
   "library.filterSearch": "Filteren…",
   "library.resizeTree": "Breedte van de mappenboom aanpassen",
   "library.resizeNotes": "Breedte van de notitielijst aanpassen",
-  "library.search":
-    "Zoeken… type:meeting tag:klantx attendee:\"Jan de Vries\" after:2026-01-01",
+  // Alleen nog "Zoeken…". De hele zoektaal stond hier in, in een veld van een paar
+  // centimeter — onleesbaar op die breedte en weg zodra je typte. Die staat nu in het
+  // paneel eronder (B84).
+  "library.search": "Zoeken…",
+  // Het bereik van het zoekvak (B83). De knop draagt het bereik dat *nu geldt* als naam,
+  // niet het bereik waar hij heen schakelt: een knop die "Alle notities" heet terwijl hij
+  // in één map zoekt, leest als een stand en niet als een aanbod.
+  "library.searchFolder": "Deze map",
+  "library.searchAll": "Alle notities",
+  "library.searchFolderHint": "Zoekt in deze map en alles eronder — klik voor de hele kluis",
+  "library.searchAllHint": "Zoekt in de hele kluis — klik om tot deze map te beperken",
+  // De rijen van het zoekhintpaneel. De voorbeelden zijn het punt: bij `attendee:` staat
+  // de aanhalingsregel erin en bij `after:`/`before:` het datumformaat.
+  "search.hint.type": "Alleen dit soort notitie",
+  "search.hint.tag": "Draagt deze tag",
+  "search.hint.attendee": "Deze persoon was erbij — aanhalingstekens bij een spatie",
+  "search.hint.after": "Gemaakt op of na deze datum",
+  "search.hint.before": "Gemaakt op of vóór deze datum",
   "library.clearSearch": "Zoekopdracht wissen",
   "library.moveWhere": "Naar welke map?",
   "library.noFolderMatch": "Geen map gevonden",
@@ -413,7 +435,10 @@ export function translate(locale: Locale, key: string): string {
 }
 
 const ENGLISH: Record<string, string> = {
-  "capture.subject": "Subject (optional)",
+  // "Title" rather than "Subject": it is the same field as the note editor's, and that
+  // is what it is called there. "(optional)" is gone — it was a fact about the
+  // frontmatter rather than about the control, and the other window never said it.
+  "capture.title": "Title",
   "capture.location": "Location",
   // The separator clause stays: `parseAttendees` splits on a comma *and* a semicolon,
   // because Outlook uses semicolons and fingers expect it.
@@ -440,6 +465,9 @@ const ENGLISH: Record<string, string> = {
   // The shortcut sheet. What a key *is* lives in src/shared/shortcuts.ts; what it is
   // called lives here.
   "help.title": "Keyboard shortcuts",
+  // The button in the capture window's status bar. Short, because that bar is narrow —
+  // and not "Keyboard shortcuts", which is the sheet's own heading.
+  "help.button": "Help",
   "help.or": "or",
   "help.group.text": "Text",
   "help.group.lists": "Lists",
@@ -663,8 +691,24 @@ const ENGLISH: Record<string, string> = {
   "library.filterSearch": "Filter…",
   "library.resizeTree": "Resize the folder tree",
   "library.resizeNotes": "Resize the note list",
-  "library.search":
-    'Search… type:meeting tag:klantx attendee:"Jan de Vries" after:2026-01-01',
+  // Just "Search…" now. The whole query language used to be in here, in a field a few
+  // centimetres wide — unreadable at that width and gone the moment you typed. It is in
+  // the panel below the box instead (B84).
+  "library.search": "Search…",
+  // The search box's scope (B83). The button is named for the scope in force rather than
+  // the one it switches to: a button reading "All notes" while the search is confined to
+  // one folder reads as a state, not as an offer.
+  "library.searchFolder": "This folder",
+  "library.searchAll": "All notes",
+  "library.searchFolderHint": "Searching this folder and everything under it — click for the whole vault",
+  "library.searchAllHint": "Searching the whole vault — click to narrow to this folder",
+  // The syntax panel's rows. The examples are the point: `attendee:` is where the quoting
+  // rule lives and `after:`/`before:` are where the date format does.
+  "search.hint.type": "Only notes of this kind",
+  "search.hint.tag": "Carries this tag",
+  "search.hint.attendee": "This person was there — quote it if it has a space",
+  "search.hint.after": "Created on or after this date",
+  "search.hint.before": "Created on or before this date",
   "library.clearSearch": "Clear search",
   "library.moveWhere": "Move to which folder?",
   "library.noFolderMatch": "No folder matches",

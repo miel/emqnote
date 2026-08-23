@@ -50,7 +50,7 @@ import { FilePreview } from "./FilePreview.js";
 // editor's own insertion cannot drift into two spellings of one thing.
 import { isEmbeddableAttachment } from "../editor/attachment-view.js";
 import { clampPaneWidths, DEFAULT_PANE_WIDTHS, type PaneWidths } from "./panes.js";
-import { withOpenTasks } from "./folder-tasks.js";
+import { foldersWithTasks, withOpenTasks } from "./folder-tasks.js";
 import { Settings } from "./Settings.js";
 import { Splitter } from "./Splitter.js";
 import { TaskList } from "./TaskList.js";
@@ -166,7 +166,10 @@ type Dialog =
   | { kind: "renameFolder"; path: string; initial: string }
   | { kind: "delete"; title: string }
   | { kind: "deleteFolder"; path: string; notes: number; folders: number }
-  | { kind: "clearTrash"; count: number }
+  // Three numbers, not one, and all three are counted when the dialog opens: this is
+  // the confirmation in front of the one thing in this app with no way back, so what
+  // it names has to be what is about to go. See `trashContents`.
+  | { kind: "clearTrash"; notes: number; folders: number; files: number }
   /**
    * The one dialog whose *cancel* still carries the action out. Dismissing it — Escape,
    * the overlay, "Leave them" — means "move it without touching the links", never "forget
@@ -280,6 +283,20 @@ export function Library(): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState("");
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+
+  /**
+   * Whether the search box is looking at the whole vault rather than the folder you are
+   * standing in (B83).
+   *
+   * `false` is the default and it stays the default: it is reset when a search is left
+   * and whenever the tree selection moves, so widening is a thing you ask for each time
+   * rather than a mode you can find yourself in. A ref beside the state for `loadNotes`'
+   * own reason — the reload happens in the same tick as the flip, and the state has not
+   * caught up.
+   */
+  const [searchAll, setSearchAll] = useState(false);
+  const searchAllRef = useRef(searchAll);
+  searchAllRef.current = searchAll;
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** The non-note files in the folder being browsed, and which one the reader is showing (B47). */
@@ -686,7 +703,15 @@ export function Library(): React.ReactElement {
     setFilesState("ready");
     setNotes(
       searching
-        ? await window.emqnote.library.search(query)
+        ? // The folder you are standing in, and everything under it (B83) — `searchNotes`
+          // scopes by path prefix, so this is a subtree rather than one directory. A tag,
+          // a person, the unlinked pane and the Tasks view are not folders and have no
+          // honest answer to "which folder", so they search the vault, as does the switch
+          // when it is on.
+          await window.emqnote.library.search(
+            query,
+            searchAllRef.current || target.kind !== "folder" ? "" : target.path,
+          )
         : await window.emqnote.library.notes(target),
     );
 
@@ -737,6 +762,10 @@ export function Library(): React.ReactElement {
     if (searchTimer.current !== null) clearTimeout(searchTimer.current);
     searchQueryRef.current = "";
     setSearchQuery("");
+    // Back to the folder, so the next search starts where the default says it does. Same
+    // hand-written ref as the query above, for the same reason.
+    searchAllRef.current = false;
+    setSearchAll(false);
     focusNotesOnNextList.current = true;
     void loadNotes(selectionRef.current);
   }, [loadNotes]);
@@ -1493,6 +1522,20 @@ export function Library(): React.ReactElement {
   // task count would be noise in it.
   const treeWithTasks = useMemo(() => withOpenTasks(tree, taskCounts), [tree, taskCounts]);
 
+  // The Tasks view's scope chooser, narrowed to the folders that have something to show.
+  // `noteTasks` and not `taskCounts`: the scope filter is a path prefix, so a folder
+  // qualifies on what is *under* it, and the per-folder counts deliberately do not roll
+  // up. See `foldersWithTasks` for the other two decisions in it.
+  const taskFolders = useMemo(
+    () =>
+      foldersWithTasks(
+        folders,
+        noteTasks,
+        selection.kind === "tasks" ? selection.scope : "",
+      ),
+    [folders, noteTasks, selection],
+  );
+
   /**
    * What each dialog says. Lifted out of the JSX when the chain of ternaries there grew
    * past the point of being readable — every branch is one sentence, and a `switch` says
@@ -1509,8 +1552,21 @@ export function Library(): React.ReactElement {
         return `${app.t("ask.newFolderIn")} "${open.parent === "" ? app.t("library.vaultRoot") : open.parent}"`;
       case "problem":
         return open.message;
-      case "clearTrash":
-        return `${plural(open.count, "library.note", "library.notes")} — ${app.t("ask.confirmClearTrash")}`;
+      case "clearTrash": {
+        // Only the kinds that are actually there. A trash holding six notes and nothing
+        // else should say "6 notes", not "6 notes, 0 folders, 0 files" — the zeroes are
+        // noise in the common case and the counts only earn their place when they have
+        // something to add. Same `plural` and the same comma list as `deleteFolder`
+        // below, which is the phrasing this window already uses for "and what is inside".
+        const parts = [
+          plural(open.notes, "library.note", "library.notes"),
+          ...(open.folders === 0
+            ? []
+            : [plural(open.folders, "library.folder", "library.folders")]),
+          ...(open.files === 0 ? [] : [plural(open.files, "library.file", "library.files")]),
+        ];
+        return `${parts.join(", ")} — ${app.t("ask.confirmClearTrash")}`;
+      }
       case "deleteFolder": {
         const contents =
           open.notes === 0 && open.folders === 0
@@ -2167,6 +2223,11 @@ export function Library(): React.ReactElement {
           onSelect={(target) => {
             setSelection(target);
             if (target.kind === "folder") setLastFolder(target.path);
+            // Moving in the tree puts the scope back to the folder, whether or not there
+            // was a query to clear (B83). Widening is asked for per search, so carrying
+            // it to the next folder would be carrying a mode nobody set for that folder.
+            searchAllRef.current = false;
+            setSearchAll(false);
             // Picking something in the tree is a stronger signal than a half-typed
             // query — clear it rather than leave the list disagreeing with what looks
             // selected. Cancel a pending debounce too, or a stale search fired 150ms
@@ -2250,7 +2311,7 @@ export function Library(): React.ReactElement {
           <TaskList
             scope={selection.scope}
             openOnly={selection.openOnly}
-            folders={folders}
+            folders={taskFolders}
             onExit={exitTasks}
             onScopeChange={(scope) => setSelection({ kind: "tasks", scope, openOnly: selection.openOnly })}
             onOpenOnlyChange={(openOnly) =>
@@ -2285,6 +2346,17 @@ export function Library(): React.ReactElement {
             searching={searchQuery.trim() !== ""}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
+            searchAll={searchAll}
+            // Runs the search again at once rather than through the 150 ms debounce: that
+            // delay is about not searching on every keystroke of a word, and this is one
+            // deliberate press with the query already typed.
+            onSearchAllChange={(all) => {
+              searchAllRef.current = all;
+              setSearchAll(all);
+              if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+              void loadNotes(selectionRef.current);
+            }}
+            scopeable={selection.kind === "folder"}
             onExitSearch={exitSearch}
             sort={sort}
             onSort={onSort}
@@ -2299,7 +2371,15 @@ export function Library(): React.ReactElement {
             // uses it: a tag or the Tasks view is not a place to put a note.
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             searchRef={searchInput}
-            onClearTrash={() => setDialog({ kind: "clearTrash", count: notes.length })}
+            // Counted now rather than read off the rows on screen. Those come from one
+            // non-recursive `readdir` of `.md` files, so a folder dragged in here with
+            // forty notes in it counted as nothing — in the sentence that asks whether to
+            // destroy them. Async, the same shape the delete-folder confirmation uses.
+            onClearTrash={() => {
+              void window.emqnote.library.trashContents().then((contents) => {
+                setDialog({ kind: "clearTrash", ...contents });
+              });
+            }}
             onOpenTasks={openTasks}
             onDragNote={setDragging}
             onContextMenu={(note, x, y) => setNoteMenu({ note, x, y })}
@@ -2337,7 +2417,7 @@ export function Library(): React.ReactElement {
                   {editingTitle !== null ? (
                     <input
                       ref={titleInput}
-                      className="reader-title-input"
+                      className="title-field reader-title-input"
                       value={editingTitle}
                       onChange={(event) => setEditingTitle(event.target.value)}
                       onBlur={() => {
@@ -2376,48 +2456,6 @@ export function Library(): React.ReactElement {
                     </h1>
                   )}
                   <span className="reader-path">{open.path}</span>
-                </div>
-                <div className="reader-actions">
-                  <span className="reader-state">
-                    {open.editable
-                      ? app.t(dirty ? "library.saving" : "library.saved")
-                      : app.t("library.openInCapture")}
-                  </span>
-                  {/* 🖼 🔗 ▦ 📎 used to be four always-on icon buttons here, and four
-                      glyphs nobody can read at a glance is exactly the clutter the ⋯
-                      menu below was made to end for the five actions before them. One
-                      named menu instead, built from `insertMenuItems` so the toolbar and
-                      the note panel's right-click menu cannot come to disagree. */}
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("library.insert")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setInsertMenu({ x: rect.left, y: rect.bottom });
-                    }}
-                  >
-                    {app.t("library.insert")}
-                  </button>
-                  {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
-                      buttons here, squeezing the title in the `nowrap` header next to
-                      them — collapsed into one menu button, opened at its own rect the
-                      same way a right-click opens `noteMenu` below. This is a button
-                      opening a menu, not a right-click, so
-                      `--click-button="Actions>Rename"` has to be able to reach it — see
-                      the CLAUDE.md context-menu constraint's note on why that keeps
-                      `--click-button` working here. The label was "⋯" until a glyph
-                      beside a second glyph-labelled menu stopped saying anything. */}
-                  <button
-                    type="button"
-                    title={app.t("library.moreActions")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setReaderMenu({ x: rect.left, y: rect.bottom });
-                    }}
-                  >
-                    {app.t("library.actions")}
-                  </button>
                 </div>
               </header>
   
@@ -2461,30 +2499,87 @@ export function Library(): React.ReactElement {
                 />
               </div>
 
-              {/* Only for a note a `[[…]]` link led to, and only while that note is the
-                  one on screen — see `backTo`. Below the note rather than above the
-                  title: the header is one `nowrap` row already competing between the
-                  title and the two menus, and a second line in it made the whole strip
-                  grow and shrink as links were followed. A strip of its own at the foot
-                  of the pane costs the note nothing when there is no way back to offer,
-                  since it is not rendered at all then.
+              {/* **The bar at the foot, which is where this window's chrome lives now.**
+                  Status, the way back out of a followed `[[…]]` link, and the two menus
+                  used to be split between here and the header: the menus and the save
+                  state sat beside the title in a `nowrap` row they were squeezing, and
+                  the back link sat down here on its own. The capture window has always
+                  put exactly these things at the bottom, and having the two windows
+                  disagree about where a note's controls are is the thing being fixed.
+
+                  Status on the left and menus on the right, which is `space-between`
+                  again. The strip is now always drawn — it used to appear only when there
+                  was a link to go back from, and a bar that comes and goes under the note
+                  is the header-height problem this arrangement was already avoiding, one
+                  edge down.
 
                   Outside `.reader-body`, deliberately: that div is what `reader-locked`
                   makes unclickable while the capture window has the note claimed, and
                   leaving the note you are reading is exactly the thing that must keep
-                  working while somebody else is typing into it. */}
-              {backTo !== null && (
-                <div className="reader-footer">
+                  working while somebody else is typing into it. Insert carries its own
+                  `disabled` for that case, as it always has. */}
+              <div className="reader-footer">
+                <div className="reader-status">
+                  <span className="reader-state">
+                    {open.editable
+                      ? app.t(dirty ? "library.saving" : "library.saved")
+                      : app.t("library.openInCapture")}
+                  </span>
+                  {backTo !== null && (
+                    <button
+                      type="button"
+                      className="reader-back"
+                      title={app.t("library.backTo").replace("{title}", backTo.title)}
+                      onClick={goBack}
+                    >
+                      ← {backTo.title}
+                    </button>
+                  )}
+                </div>
+
+                <div className="reader-actions">
+                  {/* 🖼 🔗 ▦ 📎 used to be four always-on icon buttons here, and four
+                      glyphs nobody can read at a glance is exactly the clutter the ⋯
+                      menu below was made to end for the five actions before them. One
+                      named menu instead, built from `insertMenuItems` so the toolbar and
+                      the note panel's right-click menu cannot come to disagree. */}
                   <button
                     type="button"
-                    className="reader-back"
-                    title={app.t("library.backTo").replace("{title}", backTo.title)}
-                    onClick={goBack}
+                    disabled={!open.editable}
+                    title={app.t("library.insert")}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      // `rect.top`, not `rect.bottom`: this bar is at the foot of the
+                      // window now, so a menu opening downwards is clamped straight back
+                      // over the button it came from. `ContextMenu` clamps to the
+                      // viewport, and this hands it a point it can honour — the same
+                      // line, for the same reason, that `Capture.tsx` has always used.
+                      setInsertMenu({ x: rect.left, y: rect.top });
+                    }}
                   >
-                    ← {backTo.title}
+                    {app.t("library.insert")}
+                  </button>
+                  {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
+                      buttons here, squeezing the title in the `nowrap` header next to
+                      them — collapsed into one menu button, opened at its own rect the
+                      same way a right-click opens `noteMenu` below. This is a button
+                      opening a menu, not a right-click, so
+                      `--click-button="Actions>Rename"` has to be able to reach it — see
+                      the CLAUDE.md context-menu constraint's note on why that keeps
+                      `--click-button` working here. The label was "⋯" until a glyph
+                      beside a second glyph-labelled menu stopped saying anything. */}
+                  <button
+                    type="button"
+                    title={app.t("library.moreActions")}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setReaderMenu({ x: rect.left, y: rect.top });
+                    }}
+                  >
+                    {app.t("library.actions")}
                   </button>
                 </div>
-              )}
+              </div>
 
               {link !== null && (
                 <LinkPrompt

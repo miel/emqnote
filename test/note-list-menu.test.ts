@@ -99,6 +99,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     renameNote: async (path) => ({ path }),
     duplicateNote,
     trashNote,
+    trashContents: async () => ({ notes: 0, folders: 0, files: 0 }),
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,

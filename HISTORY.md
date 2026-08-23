@@ -1214,3 +1214,60 @@ satisfied by the state it is meant to detect a change from is not a check.
 What is still owed on those rows: §15c's ⧉ hands the file to an OS viewer nothing here can
 watch, §17c wants a second one-page fixture, and §17d is a judgement about whether a page at
 70vh actually reads.
+
+**Six defects and two feature groups from daily use landed on 23 August 2026**, on top of
+`v0.10.6`. Three carry decisions. **B82** — the capture window and the library's note editor
+share one title field and one status bar, and that bar is at the *foot* in both. **B83** —
+search is scoped to the folder the tree is standing in, and everything under it, with a
+switch to the whole vault. **B84** — the query language leaves the search box's placeholder
+for a panel under it that stays readable while you type. The other five needed no decision:
+"Exit tasks" moved down beside the task count, the header's completion panels stopped painting
+out through the right-hand window edge, the shortcut sheet's two columns are balanced, the
+Tasks scope chooser offers only folders that have tasks, and the Empty-trash confirmation
+counts folders and files as well as notes.
+
+**The bullet fix is the one worth reading the reasoning for, because the report was wrong in
+two useful ways.** It came in as "levels one and two are smaller than the square at level
+three, on macOS". Measured at four times size in a real Chromium, `\2022` and `\25E6` carry
+0.293em of ink against `\25AA`'s 0.504em *in a single face* — U+25AA is small next to U+25A0
+rather than next to a bullet, so no font was ever going to make the old three agree, and this
+was never only macOS. What macOS added is that `\2022` is General Punctuation and SF has it
+while the other two are Geometric Shapes and SF does not, so a Mac drew level one from the
+system face and the rest from a fallback. Levels one and two are `\25CF` and `\25CB` now:
+all three levels are Geometric Shapes, so they fall back *together*, and no `font-family` had
+to be pinned. `font-size` on the `::marker` was tried first and rendered wrong — the gap is an
+em space in the marker's own font, so it scaled with the glyph and the enlarged marker grew
+every line box with it. The wider glyph cost one number instead, `--marker-slot`, now
+per-depth; the square's new 1.66em is a fix rather than a consequence, since the single 1.5em
+it replaces was tuned to the old bullet and left level three's checkbox 2.5px off its own
+marker. All three levels now land within a quarter-pixel on both axes, which the version they
+replace did not.
+
+**One bug in this batch shipped past a green suite and was caught by driving the app**, and it
+is the batch's most useful hour. B82's shared title rule was written as a bare `.title-field`
+— one class — while the capture window's title sits inside `.header`, where `.header input` is
+one class *and one element*. It lost the cascade, the window it was mostly for did not change
+at all, and the comment above the rule asserted in so many words that it was "two classes
+deep". B48's bug and the `.overlay` bug for the third time. Two things about finding it are
+worth keeping. It was **stacked with a second cause**: `npm run drive:capture` runs `out/` and
+does not build, so the first three attempts at confirming the fix were looking at a stale
+bundle — the same symptom, a change that appears to do nothing. And it was settled by reading
+`getComputedStyle` off the real field rather than judging a screenshot, which needed
+`Emulation.setFocusEmulationEnabled` before `:focus` would match at all: under `Xvfb` there is
+no window manager, so `document.activeElement` was the field while `field.matches(":focus")`
+was false. All three are in `CONSTRAINTS.md`.
+
+**Most of this batch was driven live and photographed** — the capture window's new title and
+its Actions menu holding Discard, the reader's footer with status left and Insert/Actions
+right, the search hint panel with the caret still in the box, the scope button correctly
+absent under a tag, and "Exit tasks" on the count row. The nine `drive:capture` steps stay
+green. What is left to a human is narrow and on `TEST-PROTOCOL.md` §37: the bullets on macOS
+and on Windows, which is a claim about font fallback made from a sandbox that has only DejaVu
+Sans; the shortcut sheet's balance, which is arithmetic here and a judgement there; and the
+title field's swap between `<h1>` and input, which is exactly the thing that looked fine while
+being broken.
+
+The suite is 1842 tests over 143 files. Seven new files: the shared title field's specificity
+and the two windows' focus colour, the completion panels' anchoring, the shortcut sheet's
+column balance, the trash count, the search scope, the syntax panel, and the Tasks scope
+chooser's fold.
