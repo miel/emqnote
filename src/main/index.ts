@@ -58,6 +58,7 @@ import {
   duplicateNote,
   emptyTrash,
   folderContents,
+  openTasksAt,
   trashContents,
   renameFolder,
   moveFolder,
@@ -123,7 +124,10 @@ const MAX_PINNED = 3;
 import { watchVault, type VaultWatcher } from "./index-watch.js";
 import { wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
-import { findUnlinkedAttachments } from "./unlinked-attachments.js";
+import {
+  attachmentsOrphanedByTrash,
+  findUnlinkedAttachments,
+} from "./unlinked-attachments.js";
 import { probeTrashPath, reportTrashProbe } from "./trash-probe.js";
 import { copyAttachment, resolveAttachment, saveAttachment } from "./attachments.js";
 import {
@@ -2004,7 +2008,7 @@ function registerLibraryIpc(): void {
    * The second permanent delete the app has ever performed, and the first that names one
    * thing (B24). `deleteFromTrash` carries the `realpathSync` guard `emptyTrash` has, on
    * the target as well as on the trash folder; the confirmation naming what is about to
-   * go is the renderer's, the same shape Clear trash already uses.
+   * go is the renderer's, the same shape Empty trash already uses.
    *
    * The lock guard is `IPC.libraryTrashFolder`'s, widened by one case: a *note* can be the
    * thing being deleted here, so the capture window's claimed path is compared for equality
@@ -2056,9 +2060,26 @@ function registerLibraryIpc(): void {
   // it counts only note files and skips the app's own folder names, both of which are
   // right for a folder in the vault tree and wrong for the trash, where everything is
   // going. See `trashContents`.
-  ipcMain.handle(IPC.libraryTrashContents, () => {
+  ipcMain.handle(IPC.libraryTrashContents, async () => {
     const vault = vaultPath();
-    return vault === null ? { notes: 0, folders: 0, files: 0 } : trashContents(vault);
+    if (vault === null) return { notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 };
+
+    // The two questions are asked separately because they are separate: `trashContents`
+    // counts what is inside `_trash` and `attachmentsOrphanedByTrash` counts what is
+    // outside it and would stop being reachable. The reference set comes out of the
+    // index for the reason the unlinked pane's own handler gives — on a Files On-Demand
+    // vault, reading every note instead can block on a hydration — and `null` there
+    // means "the index could not answer", which falls back to the walk rather than to a
+    // zero that would quietly understate the dialog.
+    const referenced = indexDb === null ? null : await referencedTargets(vault, indexDb);
+    const orphaned = await attachmentsOrphanedByTrash(vault, referenced ?? undefined);
+
+    return { ...trashContents(vault), linkedFiles: orphaned.length };
+  });
+
+  ipcMain.handle(IPC.libraryTrashItemTasks, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? 0 : openTasksAt(vault, path);
   });
 
   // Same hazard `IPC.libraryMoveNote` guards against, one level up: `CaptureWriter`'s

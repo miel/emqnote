@@ -102,6 +102,7 @@ export const IPC = {
   libraryTrashNote: "library:trash-note",
   /** Permanently empties `_trash` — the one delete this app performs with no way back. */
   libraryTrashContents: "library:trash-contents",
+  libraryTrashItemTasks: "library:trash-item-tasks",
   libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
@@ -526,14 +527,34 @@ export interface LibraryApi {
    * the button doing nothing at all.
    */
   /**
-   * What is in `_trash` right now: notes, folders and other files, counted recursively.
+   * What is in `_trash` right now: notes, folders and other files, counted recursively,
+   * plus the two numbers that say what emptying it would *cost* rather than what it
+   * would remove — the open tasks written in those notes, and the attachments that would
+   * be left unreferenced once the notes naming them are gone.
    *
    * For the confirmation in front of `emptyTrash`, which used to name the note rows on
    * screen — a non-recursive `.md` listing, so a trashed folder full of notes counted as
    * nothing at all. Taken when the dialog opens rather than cached: the number has to be
    * what is about to be deleted.
+   *
+   * `linkedFiles` counts files that are **not** in the trash and are not deleted by
+   * emptying it: they become unlinked attachments (§6.5). See
+   * `attachmentsOrphanedByTrash`.
    */
-  trashContents: () => Promise<{ notes: number; folders: number; files: number }>;
+  trashContents: () => Promise<{
+    notes: number;
+    folders: number;
+    files: number;
+    openTasks: number;
+    linkedFiles: number;
+  }>;
+  /**
+   * The open tasks in one thing in the trash — the per-item half of `trashContents`'
+   * `openTasks`, for the confirmation in front of deleting that one thing for good. A
+   * folder counts everything under it, for the same reason the whole-trash count is
+   * recursive.
+   */
+  trashItemTasks: (path: string) => Promise<number>;
   emptyTrash: () => Promise<{
     removed: number;
     failed: number;

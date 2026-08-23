@@ -3,6 +3,69 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 23 August 2026, released as `v0.11.1` — **twelve items from a day of using
+`v0.11.0`**, which is the batch immediately below this one. Two decisions, B85 and B86, and
+B82 is revisited on two points in its own entry. A **patch** release: every item in it came in
+as a defect report against the release it answers, and none of it is a feature that was not
+there before — the two decisions are both about a question the app already asked badly.
+Everything here is built, tested and typechecked; **none of it has been driven in the running
+app**, unlike the batch it answers, so `TEST-PROTOCOL.md` §38 is a first sighting from top to
+bottom.
+
+**B85 — Discard asks first, unless the note is empty.** It asked nothing, on the argument that
+the draft goes to `_trash` and Restore is the way back — B54's own argument for the drag onto
+the trash, and it does not carry here: Discard is on a chord, one item into a menu at the foot
+of a window someone is typing in, and it takes the window with it, so nothing is left on screen
+to notice by. "Empty" is judged on the document's *structure*, never its text — a note holding
+only a pasted picture has no text and is exactly what could not be retyped — and `dirtyRef` is
+deliberately not the signal, over-reporting as it does by design.
+
+**B86 — the Empty-trash question says what emptying it costs.** Two numbers beside the three it
+already had, and neither counts something in the trash: the **open tasks** in the notes about to
+go, and the **linked files** that become unlinked attachments because the last note naming them
+is leaving. That second one subtracts the live notes' targets — taken from the index, not by
+reading the vault — so it is exact rather than a guess. The same task count appears per item in
+the "Delete permanently" question, walking a trashed folder for the reason the whole-trash count
+is recursive. The button says **Empty trash**.
+
+**The bullets are decided for the second time, the other way.** `v0.11.0` enlarged levels one
+and two to `\25CF`/`\25CB` so all three would agree in size; in use that read as far too heavy,
+at the two depths every note uses. `\2022` and `\25E6` are back — 0.293em of ink against
+0.668em. What survives from the first fix is the half that was genuinely about the square: its
+own 1.66em slot and its own ink centre, now per depth (`--check-bottom`/`--star-bottom`) instead
+of the single constant that could only ever match one of the two. The remaining cost is stated
+rather than discovered: on a Mac, level one falls back to a different face than the levels under
+it.
+
+**Focus after a move had its cause one layer below the report.** Nothing takes focus away — the
+row holding it is unmounted, because the note it drew has left the folder, and focus falls to
+`<body>`. The fix is the flag the Tasks and search exits already use, plus standing on the row
+*above* the one that moved. Only when the note that moved is the one being read; a note dragged
+out while something else is open leaves both the reader and the caret alone.
+
+**Eight more, no decision needed:** the library's note editor gained the Help button its footer
+did not have, third after Insert and Actions; `[Insert] [Actions] [Help]` is one CSS rule naming
+both windows' groups instead of two copies that had drifted apart; `.reader-header`,
+`.reader-footer` and `.notes-header` are shaded on `--surface` like the capture window's strips,
+with the note list itself deliberately left alone; and the capture window's title placeholder is
+"Title (optional)", dimmed further than every other placeholder because it is the only one drawn
+at 17px bold — which reverses one line of B82 for a reason B82 did not have.
+
+**One report was not reproducible, and is written down as such rather than fixed twice.** "In
+the Tasks view, sub-folders at any level with no tasks should not be in the scope dropdown" —
+`foldersWithTasks` already matches note paths by prefix, so it rolls up through any depth, and
+two new tests at three and four levels deep pass unchanged. What can still put a taskless folder
+in that list is deliberate and documented: the vault root, the folder currently chosen (a
+`<select>` whose value is not among its options renders blank), the window before the index has
+answered — and, most likely the thing seen, a folder whose tasks are all *finished*, since the
+filter asks `total` rather than `open` so the list cannot rebuild itself under the "open only"
+tick. That last one is the single decision in this batch that could reasonably go the other way;
+`TEST-PROTOCOL.md` §38q asks about it directly.
+
+The suite is 1882 tests over 150 files.
+
+---
+
 Last updated 23 August 2026, released as `v0.11.0` — **six defects and two feature groups from
 daily use: the two windows made consistent, search given a scope and its syntax a panel, and
 four layout fixes**. Three decisions, B82–B84. A **minor** release and not a patch, unlike the

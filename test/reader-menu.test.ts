@@ -95,7 +95,8 @@ function buildFake(): Fake {
     renameNote: async (path) => ({ path }),
     duplicateNote,
     trashNote,
-    trashContents: async () => ({ notes: 0, folders: 0, files: 0 }),
+    trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
+    trashItemTasks: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
@@ -246,6 +247,38 @@ describe("the reader toolbar's overflow menu", () => {
     expect(found).not.toBeUndefined();
     return found!;
   }
+
+  it("carries [Insert] [Actions] [Help], in the capture window's order", async () => {
+    // Help was reachable only from the sidebar's own row and from F1, which is the wrong
+    // place to look for it while writing — the row of controls under the note is where the
+    // question comes up. Third, after Insert and Actions, because that is the order the
+    // capture window's footer has always had and this is the same editor.
+    const fake = buildFake();
+    await mountWithNoteOpen(fake);
+
+    const labels = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+    ).map((node) => node.textContent);
+    expect(labels).toEqual(["Insert", "Actions", "Help"]);
+  });
+
+  it("opens the shortcut sheet from that button, told which window it is in", async () => {
+    const fake = buildFake();
+    await mountWithNoteOpen(fake);
+
+    const help = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+    ).find((node) => node.textContent === "Help");
+    await act(async () => {
+      help!.click();
+    });
+    await flush();
+
+    // The same `Help` component the capture window mounts, so what it lists is this
+    // window's shortcuts rather than the other one's.
+    const sheet = container.querySelector(".help");
+    expect(sheet).not.toBeNull();
+  });
 
   it("opens with Rename, Move, Duplicate, Reveal, Delete, in that order", async () => {
     const fake = buildFake();

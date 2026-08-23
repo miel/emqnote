@@ -2991,6 +2991,33 @@ niemand opent. Onthullen wil een bestand, en dat is er het grootste deel van de 
 De knop verschijnt alleen voor een nieuwe notitie, net als de Weggooien-knop die hij vervangt:
 een menu waarvan de enige regel ontbreekt is erger dan geen menu.
 
+**Herzien op 23 augustus 2026, op twee punten, uit dagelijks gebruik.**
+
+*"(optioneel)" staat weer achter Titel.* De redenering hierboven klopt nog steeds — het zei iets
+over de frontmatter en het andere venster zei het nooit — maar het was niet waar de melding over
+ging. Dit is de enige placeholder in beide vensters die in een veld van 17px vet staat, en op die
+maat draagt `--muted` net zoveel inkt als gewone tekst op 13px: een leeg titelveld las als een
+al ingevulde titel. Vandaar allebei de helften — de tekst zegt dat het veld gemist mag worden, en
+`.header .title-field::placeholder` dimt hem verder dan elke andere placeholder in dat venster.
+Dat het andere venster het niet zegt is geen scheefheid: daar is de titel een `<h1>` met tekst
+erin en valt er geen placeholder te lezen.
+
+*De drie knoppen onderaan zijn één regel geworden in plaats van twee kopieën.* B82 zette in beide
+vensters dezelfde balk neer, maar elk venster tekende zijn eigen knoppen: 11px tegen 12px, een
+radius van 4 tegen 5, `--muted` tekst tegen de bodykleur, en een Help-knop zonder rand in rust
+naast twee knoppen mét. Drie knoppen op een rij in het ene venster, en in het andere twee knoppen
+plus een stuk statustekst dat toevallig aanklikbaar was. `.reader-actions button` is daarom
+verhuisd naar `styles.css` en noemt daar ook `.capture-actions` — om dezelfde reden als
+`.title-field` hierboven: beide vensters laden dat bestand en maar één laadt `library.css`. Eén
+regel, want een kopie is precies wat het verschil heeft gemaakt. De bibliotheek kreeg er de
+Help-knop bij die ze niet had; die stond alleen in de zijbalk en achter F1, en dat is de verkeerde
+plek om te zoeken terwijl je schrijft.
+
+*En de bewerker in de bibliotheek is nu geschaduwd zoals het opnamevenster.* `.reader-header`,
+`.reader-footer` en `.notes-header` staan op `--surface`, de kleur die `.header` en `.statusbar`
+altijd al hadden. De notitielijst zelf blijft op `--background`: dat is een lijst met dingen, geen
+oppervlak, en daar moet de gekozen regel uitspringen.
+
 **Wat dit besluit bijna om zeep hielp, en waarom het in `CONSTRAINTS.md` staat.** De gedeelde
 regel is eerst als kale `.title-field` geschreven. Het veld in het opnamevenster staat in
 `.header`, waar `.header input` één klasse *en één element* is — dus won die, en het venster
@@ -3054,3 +3081,86 @@ treffer al volgt: eerst het paneel, dan het zoekvak.
 **De regels zijn voorbeelden, geen knoppen.** Geen `tabIndex`, geen klik. Een regel die je kúnt
 kiezen is een regel die de cursor een invoeging schuldig is op een plek die dit paneel niet
 bijhoudt — en die keuze is er al, in de vorm van de tekst overtypen.
+
+## B85 — Weggooien vraagt door, tenzij er niets in staat
+
+**Genomen** op 23 augustus 2026, uit dagelijks gebruik.
+
+Weggooien in het opnamevenster vroeg niets. Het argument daarvoor stond in de code en was niet
+gek: het concept gaat naar `_trash` en komt er via Terugzetten weer uit — precies het argument
+waarmee B54 een notitie op de prullenbak laat slepen zonder één vraag.
+
+**Wat dat argument hier mist.** Weggooien zit hier aan een toets (B80), staat één regel diep in
+een menu onderaan een venster waar iemand zit te typen, en **neemt het venster mee**. Daarna is
+er niets meer op het scherm waaraan je merkt dat het gebeurd is: geen rij die verdwijnt, geen
+map die één notitie minder telt. Een omkeerbare handeling die niemand doorheeft is niet
+omkeerbaar in de zin die dat argument bedoelde.
+
+**Het besluit.** Een bevestiging vóór Weggooien, en alleen als er iets in de notitie staat.
+
+**Waarom niet altijd.** Een vraag boven een lege notitie is precies het soort vraag dat mensen
+leert vragen weg te klikken. Het venster staat het grootste deel van de dag leeg te wachten, dus
+dat zou ook nog eens de gewone toestand zijn.
+
+**Hoe "leeg" gemeten wordt, en waarom niet met `dirtyRef`.** `dirtyRef` is de andere kandidaat en
+de verkeerde: die overdrijft met opzet (zie zijn eigen commentaar) en blijft waar staan nadat je
+één teken typt en weer wist. Het document wordt op zijn *structuur* beoordeeld en nooit op zijn
+tekst — één lege tekstblok is wat een verse editor bevat, al het andere telt. Een notitie met
+alleen een geplakte afbeelding erin heeft namelijk helemaal geen tekst, en dat is nu juist het
+ene wat je niet kunt overtypen. De koptekstvelden worden veld voor veld tegen een verse
+`HeaderValues` gelegd, zodat een veld dat er later bijkomt meetelt zonder dat iemand aan deze
+functie hoeft te denken.
+
+**De vraag zegt niet dat het onomkeerbaar is**, want dat is het niet. Ze zegt waar de notitie
+heen gaat. Een waarschuwing die meer belooft dan ze waarmaakt is een waarschuwing die de volgende
+keer niet meer gelezen wordt.
+
+**Eén pad voor de toets en het menu-item.** Allebei door dezelfde functie, zodat de twee het niet
+oneens kunnen worden over wanneer er gevraagd wordt — dezelfde regel waaronder de `existing`-
+controle staat die ze ook al delen. En zolang de vraag openstaat bezit hij het toetsenbord, net
+als de notitiekiezer en het tabelrooster: Escape moet de vraag intrekken en niet het venster
+wegstoppen met de vraag er nog op.
+
+**`Ask` is daarmee van beide vensters.** De regels ervan verhuisden naar `styles.css` om de reden
+die `.palette` en `.title-field` er al hebben: beide vensters laden dat bestand, `library.css`
+maar één. `.settings` blijft in de bibliotheek staan, want dat blad is alleen van dat venster.
+
+## B86 — De prullenbakvraag zegt wat het kost, niet alleen wat erin zit
+
+**Genomen** op 23 augustus 2026, uit dagelijks gebruik.
+
+De vraag vóór het legen van de prullenbak telde eerst de notitierijen op het scherm, en telt sinds
+`trashContents` recursief notities, mappen en bestanden. Dat is wat er *in* zit. Twee dingen die
+je pas mist als ze weg zijn, stonden er niet bij.
+
+**Het besluit.** De vraag noemt er twee getallen bij: de **openstaande taken** in de notities die
+weggaan, en de **gekoppelde bestanden** die erdoor losraken. En de knop heet Prullenbak legen.
+
+**Waarom openstaande taken.** Wat iemand wil weten vóór het legen is niet hoeveel notities het
+zijn maar of er nog iets te *doen* mee weggaat. Alleen de openstaande: een afgevinkte taak is een
+verslag, en een verslag dat met zijn notitie meegaat is wat het weggooien van die notitie
+betekent. Het getal komt uit `taskItemsIn` en niet uit een reguliere expressie over de ruwe
+tekst, want dat is de ene plek die bepaalt wat een taakregel is — de index en de vinkjes vragen
+het daar ook. Hetzelfde getal staat per stuk in de vraag vóór "Definitief verwijderen"; een map
+in de prullenbak wordt daarvoor doorlopen, om dezelfde reden dat de telling van het geheel
+recursief is.
+
+**Waarom gekoppelde bestanden, en waarom als tweede zin.** Die bestanden zitten niet in de
+prullenbak en worden ook niet verwijderd. Een notitie in de prullenbak telt mee als verwijzing
+zolang ze teruggezet kan worden — daar is `findUnlinkedAttachments` met opzet op gebouwd — dus
+een foto waar alleen die notitie naar wijst is vandaag *niet* los, en wordt dat op het moment
+dat de prullenbak geleegd wordt. Dan staat ze in het paneel met losse bijlagen (§6.5). Dat is
+een ander soort mededeling dan een telling van wat er weggaat, en dus een aparte zin.
+
+**Exact, niet bij benadering.** Er wordt afgetrokken: een bijlage waar ook een levende notitie
+naar verwijst blijft gekoppeld en telt niet mee. De verwijzingen van de levende notities komen
+uit de index (`note_links`), precies zoals het paneel met losse bijlagen ze eruit haalt — anders
+zou de vraag de hele kluis moeten lezen op een Files On-Demand-kluis, wat daar al eens de
+oorzaak was van een venster dat op "Zoeken…" bleef staan.
+
+**Nullen blijven weg.** Een prullenbak met zes notities en verder niets zegt "6 notities". De
+getallen verdienen hun plaats pas als ze iets toe te voegen hebben; dat was de regel al voor
+mappen en bestanden en geldt nu voor beide nieuwe getallen.
+
+**Waarom "legen" en niet "leegmaken van".** Wissen is wat een filter en een zoekvak doen, en die
+staan allebei één klik verderop in ditzelfde venster. Dit is de ene knop die iets vernietigt.

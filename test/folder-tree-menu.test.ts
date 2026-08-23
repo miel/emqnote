@@ -236,7 +236,7 @@ describe("FolderTree's right-click menu", () => {
 
   it("leaves the Trash row itself on the ordinary menu", () => {
     // It is a place you go to, not a folder that was thrown away — Restore and Delete
-    // permanently are both meaningless on it, and Clear trash is what empties it.
+    // permanently are both meaningless on it, and Empty trash is what empties it.
     mount();
     rightClick(branchByName("Trash"));
     expect(menuItemLabels()).not.toContain("Restore");

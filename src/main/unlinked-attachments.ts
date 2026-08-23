@@ -84,11 +84,15 @@ async function collectFiles(root: string, keepHidden = false): Promise<string[]>
  * `_templates`, `_incoming`, `_attachments` and every dot-folder — which the old walk did
  * not, and which is why a template naming a picture used to count as a reference to it.
  */
-async function targetsUnder(root: string): Promise<string[]> {
+async function targetsUnder(root: string, except?: string): Promise<string[]> {
   const targets: string[] = [];
 
   for (const file of await collectFiles(root)) {
     if (!isNoteFile(file)) continue;
+    // `except` is only ever the trash, and only for the question below: "what would be
+    // left unreferenced if the trash went" has to read the live notes *without* it,
+    // where every other caller here wants a trashed note to count as a reference.
+    if (except !== undefined && (file === except || file.startsWith(except + sep))) continue;
 
     let raw: string;
     try {
@@ -140,4 +144,50 @@ export async function findUnlinkedAttachments(
   return attachmentFiles
     .map((file) => relative(vault, file).split(sep).join("/"))
     .filter((path) => !referenced.has(path) && !referenced.has(path.split("/").pop()!));
+}
+
+/**
+ * The attachments that emptying the trash would leave behind unreferenced.
+ *
+ * The confirmation in front of the one operation with no way back names notes, folders
+ * and files; this is the consequence none of those three numbers can show, because the
+ * files it counts are not in the trash at all. A trashed note goes on counting as a
+ * reference for exactly as long as it can be restored (see this module's own comment on
+ * why `_trash` is read here and nowhere else) — so a picture only that note embeds is
+ * *not* unlinked today and becomes unlinked the moment the trash is emptied. It is not
+ * deleted and nothing is lost; it stops being reachable from any note and turns up in
+ * the Unlinked attachments pane, which is where §6.5 says to deal with it.
+ *
+ * Exact rather than approximate, which is why it subtracts: an attachment a live note
+ * also names stays linked and is not counted. `referenced` is the index's answer —
+ * `note_links` for every note outside the trash — and leaving it out reads the live
+ * notes instead, at the cost this module's `findUnlinkedAttachments` describes.
+ *
+ * Both spellings of a reference are matched, bare name and path form, for the reason
+ * given there: this app's own insertion writes one and its Copy link writes the other.
+ */
+export async function attachmentsOrphanedByTrash(
+  vault: string,
+  referenced?: Iterable<string>,
+): Promise<string[]> {
+  const trashRoot = join(vault, TRASH_FOLDER);
+  const doomed = new Set(await targetsUnder(trashRoot));
+  // Nothing in the trash points at anything, so nothing can be orphaned by it going —
+  // and the `_attachments` walk below is worth skipping in what is the common case.
+  if (doomed.size === 0) return [];
+
+  const live = new Set<string>(referenced ?? []);
+  if (referenced === undefined) {
+    for (const target of await targetsUnder(vault, trashRoot)) live.add(target);
+  }
+
+  const attachmentFiles = await collectFiles(join(vault, ATTACHMENTS), true);
+
+  return attachmentFiles
+    .map((file) => relative(vault, file).split(sep).join("/"))
+    .filter((path) => {
+      const name = path.split("/").pop()!;
+      const named = (targets: Set<string>): boolean => targets.has(path) || targets.has(name);
+      return named(doomed) && !named(live);
+    });
 }

@@ -7,6 +7,7 @@ import { buildEditorMenu, insertMenuItems } from "./editor/editor-menu.js";
 import { Editor, type EditorHandle } from "./editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
+import { Ask } from "./library/Ask.js";
 import { LinkPrompt } from "./LinkPrompt.js";
 import { TitleBar } from "./TitleBar.js";
 import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
@@ -67,6 +68,20 @@ export function Capture(): React.ReactElement {
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /**
+   * The confirmation in front of Discard (B85).
+   *
+   * There was none, on the argument that discarding is reversible: the draft is written
+   * to `_trash` and Restore brings it back. That is still true and it is still the reason
+   * dragging a note onto the trash asks nothing. What it misses is that this window's
+   * Discard is bound to a chord and sits one item into a menu at the foot of a window
+   * someone is typing in — and unlike the library, there is nothing on screen afterwards
+   * to notice the note by. A recoverable action nobody realises they took is not a
+   * recoverable action.
+   *
+   * Only ever raised for a note with something in it. See `discardOrAsk`.
+   */
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   /**
    * A one-line, no-buttons notice for a disk-level change to the note currently held
    * here — see the module comment near `onVaultFileChanged` below for the shapes.
@@ -146,9 +161,63 @@ export function Capture(): React.ReactElement {
   const linkOpenRef = useRef(false);
   linkOpenRef.current = link !== null;
   const overlayOpenRef = useRef(false);
-  overlayOpenRef.current = notePick !== null || tableGrid !== null;
+  // The discard confirmation belongs in here for the reason the picker and the grid do:
+  // while it is up it owns the keyboard, and Escape in particular must cancel it rather
+  // than reach `fires("close")` and hide the window out from under it.
+  overlayOpenRef.current = notePick !== null || tableGrid !== null || confirmDiscard;
   const existingRef = useRef(false);
   existingRef.current = existing;
+
+  /**
+   * Whether this note is still exactly what the window opened as — nothing typed, no
+   * field filled in.
+   *
+   * Deliberately **not** `dirtyRef`, which is the other candidate and the wrong one:
+   * that ref over-reports by design (its own comment says so) and stays true after a
+   * character is typed and deleted again, so a window that is visibly empty would still
+   * ask. A confirmation raised over an empty note is exactly the kind that teaches people
+   * to click through confirmations.
+   *
+   * The document is judged by its *structure*, never by `textContent`: a note holding
+   * nothing but a pasted picture, an attachment or an empty table has no text in it at
+   * all, and treating that as pristine would throw away the one thing the reader could
+   * not retype. One empty textblock is what a fresh editor holds; anything else counts.
+   *
+   * The header is compared against a fresh one field by field rather than by a list of
+   * "is this string empty" checks, so a field added to `HeaderValues` later is covered
+   * without this function being remembered. `created` is exempt because nobody sets it —
+   * it is stamped on open and re-stamped by `onShow`.
+   */
+  const isPristine = useCallback((): boolean => {
+    const doc = editor.current?.getDoc();
+    if (doc !== null && doc !== undefined) {
+      const only = doc.childCount === 1 ? doc.firstChild : null;
+      if (only === null || !only.isTextblock || only.content.size > 0) return false;
+    }
+
+    const fresh = freshHeader();
+    const values = headerRef.current;
+    return (Object.keys(fresh) as (keyof HeaderValues)[]).every((field) => {
+      if (field === "created") return true;
+      const mine = values[field];
+      const blank = fresh[field];
+      return Array.isArray(mine) && Array.isArray(blank)
+        ? mine.length === blank.length
+        : mine === blank;
+    });
+  }, []);
+
+  /**
+   * Discard, asking first unless there is nothing to lose.
+   *
+   * The one path both the chord and the menu item take, so the two cannot come to
+   * disagree about when the question is asked — which is the same rule the `existing`
+   * check they also share is written under.
+   */
+  const discardOrAsk = useCallback((): void => {
+    if (isPristine()) window.emqnote.discard();
+    else setConfirmDiscard(true);
+  }, [isPristine]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -384,7 +453,7 @@ export function Capture(): React.ReactElement {
         // silently does nothing is better than one that reaches a handler to be refused.
         if (existingRef.current) return;
         event.preventDefault();
-        window.emqnote.discard();
+        discardOrAsk();
         return;
       }
 
@@ -495,10 +564,11 @@ export function Capture(): React.ReactElement {
               // B80's key has one spelling.
               shortcut: formatFirstKey("discard", app.isMac),
               danger: true,
-              // No confirmation in front of it: the note goes to `_trash` and comes back
-              // out through Restore, which is B54's own argument for why dragging a note
-              // onto the trash asks nothing either.
-              onSelect: () => window.emqnote.discard(),
+              // Asks first unless the note is empty (B85). It used to ask nothing at all,
+              // on the argument that the draft goes to `_trash` and comes back out
+              // through Restore — see `confirmDiscard` for why that argument does not
+              // carry here the way it does for B54's drag onto the trash.
+              onSelect: () => discardOrAsk(),
             },
           ]}
         />
@@ -573,66 +643,93 @@ export function Capture(): React.ReactElement {
         <span className="dismiss-hint">
           {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
         </span>
-        <button
-          type="button"
-          className="help-button insert-button"
-          title={app.t("library.insert")}
-          onClick={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            // Above the button, not below it: this bar is at the foot of the window, so
-            // a menu opening downwards would be clamped back over the button it came
-            // from. `ContextMenu` clamps to the viewport, and this hands it a point it
-            // can honour.
-            setInsertMenu({ x: rect.left, y: rect.top });
-          }}
-        >
-          {app.t("library.insert")}
-        </button>
-        {/* **Discard used to be a button of its own here; it is the one item in this
-            menu.** Insert beside Actions is the pair the library's note editor carries,
-            and a window that shares this app's editor should not carry a different set of
-            controls in a different order.
-
-            One item, and the four the library offers are deliberately absent. Rename is
-            what the title field above already is. Move refuses a note this window has
-            claimed — `IPC.libraryMoveNote` says so — and this window has claimed it by
-            definition. Duplicate makes a copy nothing here would open. Reveal wants a
-            file, and for most of this window's life there is not one yet.
-
-            The button is drawn only for a brand-new note, exactly as the Discard button
-            was: a note handed over from the library is not this window's to throw away
-            (`existing`), main answers `null` for such a session anyway
-            (`CaptureWriter.discard`), and a menu whose only entry is missing is worse
-            than no menu. */}
-        {!existing && (
+        {/* One group, `.capture-actions`, wearing the very rule the library's
+            `.reader-actions` wears — see `styles.css`, where that rule now lives. These
+            three used to be `.help-button`/`.insert-button`: a smaller font, a tighter
+            radius, muted text, and a Help button with no border at rest beside two that
+            had one. The two windows edit the same note with the same editor and the same
+            three controls under it, so a reader should not be able to tell which window
+            they are in from the shape of the buttons. */}
+        <div className="capture-actions">
           <button
             type="button"
-            className="help-button insert-button"
-            title={app.t("library.moreActions")}
+            title={app.t("library.insert")}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
-              setActionsMenu({ x: rect.left, y: rect.top });
+              // Above the button, not below it: this bar is at the foot of the window, so
+              // a menu opening downwards would be clamped back over the button it came
+              // from. `ContextMenu` clamps to the viewport, and this hands it a point it
+              // can honour.
+              setInsertMenu({ x: rect.left, y: rect.top });
             }}
           >
-            {app.t("library.actions")}
+            {app.t("library.insert")}
           </button>
-        )}
-        {/* "Help" rather than "?". A question mark is the label you can only read once
-            you already know what it opens, in the one window where the sheet behind it is
-            how you find out. `help.button` and not `help.title`, which is the sheet's own
-            heading ("Keyboard shortcuts") and too long to stand in this bar. */}
-        <button
-          type="button"
-          className="help-button"
-          title={app.t("help.title")}
-          onClick={() => setHelpOpen(true)}
-        >
-          {app.t("help.button")}
-        </button>
+          {/* **Discard used to be a button of its own here; it is the one item in this
+              menu.** Insert beside Actions is the pair the library's note editor carries,
+              and a window that shares this app's editor should not carry a different set of
+              controls in a different order.
+
+              One item, and the four the library offers are deliberately absent. Rename is
+              what the title field above already is. Move refuses a note this window has
+              claimed — `IPC.libraryMoveNote` says so — and this window has claimed it by
+              definition. Duplicate makes a copy nothing here would open. Reveal wants a
+              file, and for most of this window's life there is not one yet.
+
+              The button is drawn only for a brand-new note, exactly as the Discard button
+              was: a note handed over from the library is not this window's to throw away
+              (`existing`), main answers `null` for such a session anyway
+              (`CaptureWriter.discard`), and a menu whose only entry is missing is worse
+              than no menu. */}
+          {!existing && (
+            <button
+              type="button"
+              title={app.t("library.moreActions")}
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setActionsMenu({ x: rect.left, y: rect.top });
+              }}
+            >
+              {app.t("library.actions")}
+            </button>
+          )}
+          {/* "Help" rather than "?". A question mark is the label you can only read once
+              you already know what it opens, in the one window where the sheet behind it is
+              how you find out. `help.button` and not `help.title`, which is the sheet's own
+              heading ("Keyboard shortcuts") and too long to stand in this bar. */}
+          <button
+            type="button"
+            title={app.t("help.title")}
+            onClick={() => setHelpOpen(true)}
+          >
+            {app.t("help.button")}
+          </button>
+        </div>
         <span className="latency" data-over-budget={overBudget}>
           {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
         </span>
       </div>
+
+      {confirmDiscard && (
+        <Ask
+          title={app.t("ask.confirmDiscard")}
+          // No `initial`, so this is a plain confirmation with no text field in it — the
+          // shape `Ask` grew for the library's own delete questions.
+          confirmLabel={app.t("capture.discard")}
+          cancelLabel={app.t("ask.cancel")}
+          danger
+          onConfirm={() => {
+            setConfirmDiscard(false);
+            window.emqnote.discard();
+          }}
+          onCancel={() => {
+            setConfirmDiscard(false);
+            // Back where the question was asked from. Without this the window keeps the
+            // note but loses the caret, which reads as the Escape having done something.
+            editor.current?.focus();
+          }}
+        />
+      )}
 
       {helpOpen && (
         <Help

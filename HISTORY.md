@@ -1281,3 +1281,92 @@ The suite is 1845 tests over 145 files. Nine new files: the shared title field's
 and the two windows' focus colour, the completion panels' anchoring, the shortcut sheet's
 column balance, the trash count, the search scope, the syntax panel, the Tasks scope
 chooser's fold, and the two windows' timers-after-teardown.
+
+**Twelve items from the same day's use landed on 23 August 2026**, on top of that batch and
+before a tag — the shape those two batches make together is the point: the first one built the
+two windows' shared chrome, and this one is what a day of actually using it reported back.
+Two carry decisions: **B85** — discard asks first, unless the note is empty — and **B86** — the
+Empty-trash question says what emptying it *costs*, not only what is in it. B82 is revisited on
+two points in its own entry.
+
+**The bullets are the second decision made twice, and it is the useful one to read.** The batch
+before this one enlarged levels one and two to `\25CF`/`\25CB` so all three levels would agree
+in size, having measured that `\25AA` really is 1.7× the bullet in a single face. In daily use
+that read as far too heavy — a filled circle at 0.668em of ink against the 0.293em it replaced,
+at the two depths every note actually uses. The small glyphs came back. What survives from the
+first fix is the half that was genuinely about the square: its own 1.66em `--marker-slot`, and
+its own ink centre, now carried per depth as `--check-bottom`/`--star-bottom` rather than by the
+single constant that could only ever match one of the two — tuned to the bullet it left level
+three's checkbox 0.115em high, tuned to the square it did the same to every note. So the state
+after this batch is strictly better than either version before it, and the stated cost is one
+sentence: `\2022` is General Punctuation where the other two are Geometric Shapes, so on a Mac
+level one falls back to a different face than the levels under it. A fallback difference at one
+depth, against a marker that was too large at two. `font-size` on the `::marker` is still not
+the way, for the reason the last batch measured.
+
+**Focus after a move was the report with a cause one layer below where it was reported.** "After
+moving a note the focus within the folder list is lost — it takes multiple tabs to get back."
+Nothing takes focus away; the `<li>` holding it is *unmounted*, because the note it drew is no
+longer in this folder, and focus falls to `<body>`. `NoteList` already recovers its roving row
+on its own — `active` falls back to the first note when the path it was on is gone — and cannot
+recover focus, because nothing told it to take any. The fix is the flag the Tasks and search
+exits already use, plus a decision about which row to stand on: the one above the note that
+left, since after taking something out of a list the eye is where the thing above it was. Only
+when the note that moved is the one being read, which is every move made from the list or the
+reader; a row dragged out while something else is open changes neither the reader nor where
+focus is, because the caret may be in the editor.
+
+**The trash question grew two numbers that are not counts of things in the trash.** The open
+tasks in the notes about to go — because what someone wants to know first is whether anything
+still to be *done* leaves with them — and the attachments that would be left unreferenced,
+which are not in the trash and are not deleted at all. That second one is exact rather than a
+guess: a trashed note counts as a reference for as long as it can be restored, so a picture only
+that note embeds is not unlinked today and becomes unlinked the moment the trash is emptied;
+`attachmentsOrphanedByTrash` subtracts every target the index knows for the live notes, which is
+the same set the Unlinked attachments pane already reads and the reason the vault is not walked
+a second time. Per item, the "Delete permanently" question counts the same way, walking a folder
+in the trash for the reason the whole-trash count is recursive.
+
+**Discard's confirmation is a reversal with a stated reason, not a change of mind about B54.**
+Discarding writes the draft to `_trash` and Restore is the way back — which is exactly why
+dragging a note onto the trash asks nothing, and why this asked nothing either. What that misses
+is that discard here is bound to a chord, sits one item into a menu at the foot of a window
+someone is typing in, and takes the window with it: there is nothing left on screen afterwards
+to notice by. The question is only ever raised for a note with something in it, and "something"
+is judged by the document's **structure** rather than its text — a note holding nothing but a
+pasted picture has no text at all, and is the one thing that could not be retyped. `dirtyRef`
+was the obvious signal and the wrong one: it over-reports by design and stays true after a
+character is typed and deleted again, so a visibly empty window would still have asked.
+
+**One report in this batch was not reproducible and is written down as such.** "In the Tasks
+view, sub-folders at any level that hold no tasks should not be in the scope dropdown." Read
+against `foldersWithTasks`, that is what the code already does — the filter matches note paths
+by prefix, so it rolls up through any depth — and two new tests at three and four levels deep
+pass unchanged. What can still put a taskless folder in that list is documented and deliberate:
+the vault root, which is never a lie; the folder the view is currently scoped to, because a
+`<select>` whose value is not among its options renders blank; and the window before the index
+has answered, when everything is offered rather than nothing. A fourth possibility is worth
+naming because it is the likeliest thing to have been seen: the filter asks `total`, not `open`,
+so a folder whose tasks are all finished stays in the list — keying it off `open` would rebuild
+the chooser under the "open only" checkbox, with the folder you were standing in able to vanish
+from it. That trade-off is unchanged and is the one thing here that could be decided the other
+way.
+
+The rest, in one line each: Empty trash replaces Clear trash on the button (clearing is what a
+filter and a search box do, and both are one click away in this window); the capture window's
+title placeholder says "Title (optional)" and is dimmed further than every other placeholder,
+being the only one drawn at 17px bold; the library's note editor gained the Help button its
+footer did not have, third after Insert and Actions; `.reader-header`, `.reader-footer` and
+`.notes-header` are shaded on `--surface` like the capture window's own strips, with the note
+list itself deliberately left on `--background`; and the three footer buttons are one rule in
+`styles.css` naming both windows' groups instead of two copies that had drifted to 11px against
+12px, a 4px radius against 5px, and a Help button with no border at rest beside two that had one.
+
+Nothing in this batch has been seen on real hardware. The bullet sizes in particular are a
+judgement about ink at two depths, made here from a sandbox with DejaVu Sans and no Mac — they
+are `TEST-PROTOCOL.md` §38's, along with the two shaded headers and the footer buttons, which
+are claims about colour that a screenshot from this machine cannot settle for a real display.
+
+The suite is 1882 tests over 150 files. Five new files: the discard confirmation, the move's
+focus hand-off, the Empty-trash question's wording, the attachments a trash-emptying would
+orphan, and the two windows' shared chrome.
