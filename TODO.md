@@ -3,13 +3,15 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 23 August 2026, **not released yet** — **five items from a day of using
-`v0.11.1`**, which is the batch immediately below this one. No new decision: **B86 is extended**
-to the two ordinary deletes, and the one question `TEST-PROTOCOL.md` §38q put to a human came
-back answered. Four of the five are about a colour or a position, which is what §38 could not
-settle from a sandbox; **three of them were driven here this time**, under `Xvfb` on the real
-renderer, with the pixels read out of the screenshots rather than judged by eye. §39 is what a
-real display still has to say.
+Last updated 23 August 2026, released as `v0.11.2` — **five items from a day of using
+`v0.11.1`**, which is the batch immediately below this one. A **patch** release, like the one it
+answers and for the same reason: every item in it arrived as a defect report against that
+release, and four of the five are a colour or a position rather than anything the app could not
+do. No new decision: **B86 is extended** to the two ordinary deletes, and the one question
+`TEST-PROTOCOL.md` §38q put to a human came back answered. Those four are what §38 could not
+settle from a sandbox, and **three of them were driven here this time**: under `Xvfb` on the
+real renderer, with the pixels read out of the screenshots rather than judged by eye. §39 is
+what a real display still has to say.
 
 **The Tasks scope chooser asks whichever count the tick is asking.** It asked `total` so that
 ticking "open only" could not rebuild the list under your hands — but the view *opens* with that
