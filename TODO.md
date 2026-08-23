@@ -3,11 +3,14 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 23 August 2026, **not released yet** — **twelve items from a day of using
+Last updated 23 August 2026, released as `v0.11.1` — **twelve items from a day of using
 `v0.11.0`**, which is the batch immediately below this one. Two decisions, B85 and B86, and
-B82 is revisited on two points in its own entry. Everything here is built, tested and
-typechecked; **none of it has been driven in the running app**, unlike the batch it answers,
-so `TEST-PROTOCOL.md` §38 is a first sighting from top to bottom.
+B82 is revisited on two points in its own entry. A **patch** release: every item in it came in
+as a defect report against the release it answers, and none of it is a feature that was not
+there before — the two decisions are both about a question the app already asked badly.
+Everything here is built, tested and typechecked; **none of it has been driven in the running
+app**, unlike the batch it answers, so `TEST-PROTOCOL.md` §38 is a first sighting from top to
+bottom.
 
 **B85 — Discard asks first, unless the note is empty.** It asked nothing, on the argument that
 the draft goes to `_trash` and Restore is the way back — B54's own argument for the drag onto
