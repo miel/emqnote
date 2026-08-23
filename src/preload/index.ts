@@ -88,7 +88,8 @@ contextBridge.exposeInMainWorld("emqnote", {
     folderFiles: (folder: string) => ipcRenderer.invoke(IPC.libraryFolderFiles, folder),
     folderTaskCounts: () => ipcRenderer.invoke(IPC.libraryFolderTaskCounts),
     noteTaskCounts: () => ipcRenderer.invoke(IPC.libraryNoteTaskCounts),
-    search: (query: string) => ipcRenderer.invoke(IPC.librarySearch, query),
+    search: (query: string, scope?: string) =>
+      ipcRenderer.invoke(IPC.librarySearch, query, scope),
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
     saveNote: (request: SaveNoteRequest) => ipcRenderer.invoke(IPC.librarySaveNote, request),
@@ -103,6 +104,7 @@ contextBridge.exposeInMainWorld("emqnote", {
       subscribe<{ name: string }>(IPC.libraryOpenTag, handler),
     duplicateNote: (path: string) => ipcRenderer.invoke(IPC.libraryDuplicateNote, path),
     trashNote: (path: string) => ipcRenderer.invoke(IPC.libraryTrashNote, path),
+    trashContents: () => ipcRenderer.invoke(IPC.libraryTrashContents),
     emptyTrash: () => ipcRenderer.invoke(IPC.libraryEmptyTrash),
     createFolder: (parent: string, name: string) =>
       ipcRenderer.invoke(IPC.libraryCreateFolder, parent, name),

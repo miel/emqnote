@@ -802,6 +802,65 @@ export function trashNote(vault: string, notePath: string): string {
 }
 
 /**
+ * What is in the trash, for the confirmation that is about to destroy it.
+ *
+ * Three numbers rather than the one the dialog used to name, and none of them is the
+ * number it named: it counted the note *rows on screen*, which come from a single
+ * non-recursive `readdir` of `.md` files. So a folder dragged to the trash with forty
+ * notes in it counted as nothing, every folder counted as nothing, and an attachment
+ * counted as nothing — in front of the one operation in this app that cannot be undone.
+ *
+ * **Deliberately without `folderContents`' `isHidden` filter**, which is the one line in
+ * here worth arguing about. That function skips `_attachments`, `_templates` and dotted
+ * names because they are not part of the vault *tree* and a folder chooser should not
+ * offer them. The trash is not the tree. Everything in it is going, so everything in it
+ * has to be counted, or the dialog understates what the button does — which is the same
+ * class of mistake as the count it replaces, made for a tidier reason.
+ *
+ * It shares that function's depth cap and its per-directory `try`/`catch`: a directory
+ * that cannot be read must not take the whole count down with it, and the count is a
+ * warning rather than a manifest. `emptyTrash` reports what actually went.
+ */
+export interface TrashContents {
+  notes: number;
+  folders: number;
+  files: number;
+}
+
+export function trashContents(vault: string): TrashContents {
+  const trashDirectory = join(vault, TRASH);
+  if (!existsSync(trashDirectory)) return { notes: 0, folders: 0, files: 0 };
+
+  let notes = 0;
+  let folders = 0;
+  let files = 0;
+
+  const walk = (directory: string, depth: number): void => {
+    if (depth >= 12) return;
+
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        folders += 1;
+        walk(join(directory, entry.name), depth + 1);
+      } else if (entry.isFile()) {
+        if (isNoteFile(entry.name)) notes += 1;
+        else files += 1;
+      }
+    }
+  };
+
+  walk(trashDirectory, 0);
+  return { notes, folders, files };
+}
+
+/**
  * What emptying the trash actually managed.
  *
  * `failed` is a count, not an error: one entry that will not go must not stop the ones

@@ -3,6 +3,63 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 23 August 2026 — **six defects and two feature groups from daily use: the two
+windows made consistent, search given a scope and its syntax a panel, and four layout fixes**.
+Three decisions, B82–B84. Not released yet.
+
+**B82 — the two windows share one title field and one bar at the foot.** The capture window and
+the library's note editor already share `HeaderBlock`, `Editor`, `ContextMenu`,
+`insertMenuItems` and the shortcut sheet, and were at odds about almost everything visible:
+"Subject" at 13px semibold in a tinted box against "Title" at 17px bold and borderless, menus
+and status at the head in one window and the foot in the other, a help button labelled "?",
+and two different focus colours on the same field because `.reader-title-input` had no
+`:focus` rule at all. One `.title-field` in `styles.css` now, the reader's Insert/Actions and
+save state moved into `.reader-footer`, and the capture window's Discard moved into an Actions
+menu beside Insert. Discard is that menu's only item and the four the library offers are
+deliberately absent — see the decision for why each one cannot mean anything here.
+
+**B83 — search is scoped to the folder you are standing in**, and everything under it;
+a switch beside the box widens it to the vault. `searchNotes` has carried the `scope` option
+since it was written, with a comment saying nothing ever passed one. The widening is reset when
+a search is left and whenever the tree moves, and the switch is not drawn for a tag, a person or
+the unlinked pane, which have no folder to mean.
+
+**B84 — the query syntax leaves the placeholder for a panel** under the box, opening on the
+box's *focus* — which is one mechanism for both ways in, since clicking focuses it and `Mod-F`
+already did. Escape is panel-first.
+
+**Four fixes, no decision needed:** "Exit tasks" moved down beside the task count; the Tags and
+Who completion panels stopped painting out through the right-hand window edge (`min-width` beats
+`max-width`, and those two are the cells in the grid's right-hand column); the shortcut sheet's
+two columns are balanced in `Help.tsx` rather than left to a row-major grid (32 rows tall beside
+8 rows of content, before); the Tasks scope chooser offers only folders that have tasks; and the
+Empty-trash confirmation counts folders and files as well as notes, recursively, instead of
+naming the note rows that happened to be on screen.
+
+**The bullets were the fifth, and the report was wrong in two useful ways.** "Levels one and two
+are smaller than the square, on macOS" — measured at four times size, `\2022` and `\25E6` carry
+0.293em of ink against `\25AA`'s 0.504em *in one face*, so it was never only macOS and no font
+choice would have fixed it. Levels one and two are `\25CF` and `\25CB` now, which also puts all
+three levels in Geometric Shapes so a Mac falls back for all of them together rather than
+drawing one from SF. `font-size` on the `::marker` was tried first and grew every line box.
+
+**One bug in this batch shipped past a green suite**, and is the hour worth remembering: B82's
+shared rule was a bare `.title-field`, which `.header input` out-ranks, so the window it was
+mostly for did not change — while the comment above it claimed it was two classes deep. It was
+stacked with a second cause, `drive:capture` running `out/` without building, and settled by
+reading `getComputedStyle` off the real field with focus emulation on. All three are in
+`CONSTRAINTS.md`.
+
+**What is still owed a human: `TEST-PROTOCOL.md` §37**, and it is narrow. The bullets on macOS
+and on Windows — a claim about font fallback made from a sandbox whose only face is DejaVu Sans.
+The shortcut sheet's balance, which is arithmetic here and a judgement there. And the title
+field's `<h1>`/input swap, which is exactly the thing that looked fine while being broken. The
+rest of the batch was driven under `Xvfb` and photographed.
+
+The suite is 1842 tests over 143 files.
+
+---
+
 Last updated 22 August 2026, released as `v0.10.6` — **the workflow actions off Node 20, the
 branch list cleared, the three cornerstone features written against the capture window's new
 harness, then the rest of the capture-window backlog walked, and the driver taught to draw

@@ -521,8 +521,10 @@ export function HeaderBlock({
       {inCapture && (
         <input
           ref={subjectRef}
-          className="subject"
-          placeholder={t("capture.subject")}
+          // `.title-field` is the note editor's title, shared; `.subject` is only the
+          // margin below it, which the reader's title does not want.
+          className="title-field subject"
+          placeholder={t("capture.title")}
           value={values.subject}
           onChange={(event) => set("subject", event.target.value)}
           onKeyDown={leaveOnEnter}

@@ -126,6 +126,15 @@ export function Capture(): React.ReactElement {
    * header; leaving them here would give one app two vocabularies for one action.
    */
   const [insertMenu, setInsertMenu] = useState<{ x: number; y: number } | null>(null);
+  /**
+   * The Actions menu, which in this window holds one thing (B82).
+   *
+   * Its own state rather than a flag on `insertMenu`: the two open from different buttons
+   * at different points, and one of them is `null` while the other is a rect. Named to
+   * match the library's `readerMenu` in intent — same button, same position, same items
+   * where the items make sense here.
+   */
+  const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number } | null>(null);
 
   const openNotePicker = useCallback((prefix: string) => {
     setNotePick({ prefix, query: editor.current?.getSelectedText() ?? "" });
@@ -447,6 +456,28 @@ export function Capture(): React.ReactElement {
         />
       )}
 
+      {actionsMenu !== null && (
+        <ContextMenu
+          x={actionsMenu.x}
+          y={actionsMenu.y}
+          onClose={() => setActionsMenu(null)}
+          items={[
+            {
+              label: app.t("capture.discard"),
+              // The chord beside what it does, read off the registry rather than spelled
+              // here — the same rule the dismiss hint in this bar follows, and the reason
+              // B80's key has one spelling.
+              shortcut: formatFirstKey("discard", app.isMac),
+              danger: true,
+              // No confirmation in front of it: the note goes to `_trash` and comes back
+              // out through Restore, which is B54's own argument for why dragging a note
+              // onto the trash asks nothing either.
+              onSelect: () => window.emqnote.discard(),
+            },
+          ]}
+        />
+      )}
+
       {notePick !== null && (
         <NotePicker
           initialQuery={notePick.query}
@@ -516,26 +547,6 @@ export function Capture(): React.ReactElement {
         <span className="dismiss-hint">
           {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
         </span>
-        {/* A brand-new note only. A note handed over from the library is not this
-            window's to throw away — `existing` is exactly that state, and main answers
-            `null` for such a session anyway (`CaptureWriter.discard`), so the guard is
-            drawn here rather than relied on there.
-
-            No confirmation in front of it: the note goes to `_trash` and comes back out
-            through Restore, which is B54's own argument for why dragging a note onto the
-            trash asks nothing either. */}
-        {!existing && (
-          <button
-            type="button"
-            className="help-button"
-            // The chord beside what it does, the way the dismiss hint above prints its
-            // own — read off the registry, never spelled here.
-            title={`${app.t("capture.discardHint")} (${formatFirstKey("discard", app.isMac)})`}
-            onClick={() => window.emqnote.discard()}
-          >
-            {app.t("capture.discard")}
-          </button>
-        )}
         <button
           type="button"
           className="help-button insert-button"
@@ -551,13 +562,46 @@ export function Capture(): React.ReactElement {
         >
           {app.t("library.insert")}
         </button>
+        {/* **Discard used to be a button of its own here; it is the one item in this
+            menu.** Insert beside Actions is the pair the library's note editor carries,
+            and a window that shares this app's editor should not carry a different set of
+            controls in a different order.
+
+            One item, and the four the library offers are deliberately absent. Rename is
+            what the title field above already is. Move refuses a note this window has
+            claimed — `IPC.libraryMoveNote` says so — and this window has claimed it by
+            definition. Duplicate makes a copy nothing here would open. Reveal wants a
+            file, and for most of this window's life there is not one yet.
+
+            The button is drawn only for a brand-new note, exactly as the Discard button
+            was: a note handed over from the library is not this window's to throw away
+            (`existing`), main answers `null` for such a session anyway
+            (`CaptureWriter.discard`), and a menu whose only entry is missing is worse
+            than no menu. */}
+        {!existing && (
+          <button
+            type="button"
+            className="help-button insert-button"
+            title={app.t("library.moreActions")}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setActionsMenu({ x: rect.left, y: rect.top });
+            }}
+          >
+            {app.t("library.actions")}
+          </button>
+        )}
+        {/* "Help" rather than "?". A question mark is the label you can only read once
+            you already know what it opens, in the one window where the sheet behind it is
+            how you find out. `help.button` and not `help.title`, which is the sheet's own
+            heading ("Keyboard shortcuts") and too long to stand in this bar. */}
         <button
           type="button"
           className="help-button"
           title={app.t("help.title")}
           onClick={() => setHelpOpen(true)}
         >
-          ?
+          {app.t("help.button")}
         </button>
         <span className="latency" data-over-budget={overBudget}>
           {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}

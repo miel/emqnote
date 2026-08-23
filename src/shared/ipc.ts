@@ -91,7 +91,7 @@ export const IPC = {
    * a `readdir` that must answer at once, and this sits behind `ensureScanned`.
    */
   libraryNoteTaskCounts: "library:note-task-counts",
-  /** Free-text search across the whole vault — `02-technisch-ontwerp.md` §7.3. */
+  /** Free-text search, over a folder subtree or the whole vault — `02-technisch-ontwerp.md` §7.3. */
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
   librarySaveNote: "library:save-note",
@@ -101,6 +101,7 @@ export const IPC = {
   libraryDuplicateNote: "library:duplicate-note",
   libraryTrashNote: "library:trash-note",
   /** Permanently empties `_trash` — the one delete this app performs with no way back. */
+  libraryTrashContents: "library:trash-contents",
   libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
@@ -453,7 +454,14 @@ export interface LibraryApi {
    * completely blank query is not special-cased to nothing), so the caller decides
    * whether to show search results or fall back to `notes()` — this call never does.
    */
-  search: (query: string) => Promise<NoteSummary[]>;
+  /**
+   * `scope` is a folder path, and it means that folder *and everything under it* — the
+   * "current folder only" switch `02-technisch-ontwerp.md` §7.3 describes, which
+   * `searchNotes` has carried an option for since it was written and which nothing called
+   * it with until B83. `""` is the vault root, meaning no restriction; omitted is the
+   * same thing, so an older caller cannot silently start narrowing.
+   */
+  search: (query: string, scope?: string) => Promise<NoteSummary[]>;
   facets: () => Promise<Facets>;
   openNote: (path: string) => Promise<OpenedNote | null>;
   saveNote: (
@@ -517,6 +525,15 @@ export interface LibraryApi {
    * threw on the first failure and the rejection died in a `void` call, which read as
    * the button doing nothing at all.
    */
+  /**
+   * What is in `_trash` right now: notes, folders and other files, counted recursively.
+   *
+   * For the confirmation in front of `emptyTrash`, which used to name the note rows on
+   * screen — a non-recursive `.md` listing, so a trashed folder full of notes counted as
+   * nothing at all. Taken when the dialog opens rather than cached: the number has to be
+   * what is about to be deleted.
+   */
+  trashContents: () => Promise<{ notes: number; folders: number; files: number }>;
   emptyTrash: () => Promise<{
     removed: number;
     failed: number;

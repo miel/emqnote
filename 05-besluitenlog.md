@@ -2954,3 +2954,103 @@ niemand gemaakt heeft. Aan het begin van het veld staat er niets, en dan komt er
 de vergissing van B66's Tags-veld, hier vanaf de eerste versie goed: de array wordt pas bij
 blur of Enter bijgewerkt, dus een naam die je uit het veld haalt zou tot dat moment uit zijn
 eigen lijst gefilterd blijven.
+
+## B82 — De twee vensters delen één titelveld en één balk aan de onderkant
+
+**Genomen** op 23 augustus 2026, uit dagelijks gebruik.
+
+De achtergrond. Het opnamevenster en de notitiebewerker in de bibliotheek delen al
+`HeaderBlock`, `Editor`, `ContextMenu`, `insertMenuItems` en het sneltoetsenblad — en waren het
+over vrijwel alles wat je *ziet* oneens. Het opnamevenster noemde de titel "Onderwerp" en
+tekende hem als 13px halfvet in een getint veldje; de bibliotheek noemde hem Titel en tekende
+hem als 17px vet zonder rand. Het opnamevenster zette zijn menu's en zijn status onderaan, de
+bibliotheek bovenaan naast de titel. De knop naar het sneltoetsenblad heette "?". En de twee
+lichtten hetzelfde veld in twee verschillende kleuren op, omdat `.reader-title-input` helemaal
+geen `:focus`-regel had en op Chromiums eigen ring terugviel.
+
+**Het besluit.** Eén titelveld (`.title-field` in `styles.css`, dat beide vensters laden), één
+statusbalk, en die balk staat **onderaan** in beide vensters. Het opnamevenster krijgt een
+Acties-menu naast Invoegen, met Weggooien erin; "?" wordt "Help".
+
+**Waarom de onderkant en niet de bovenkant.** Het opnamevenster heeft zijn chroom daar altijd
+gehad, en het is het venster met de vaste maat: 600×720, waarvan `.editor` de enige rekbare rij
+is (B79). De bovenkant van de bibliotheek was bovendien al te vol — `.reader-header` is één
+`nowrap`-rij waarin de titel het opnam tegen twee menu's en de bewaarstatus, en de weg terug uit
+een gevolgde `[[…]]`-link was er eerder al uit weggehaald omdat hij de strip liet groeien en
+krimpen (die strook onderaan is nu deze balk). Eén venster verplaatsen kon, en het venster dat
+niets te winnen had bij verhuizen is het venster dat bleef staan.
+
+**Waarom "Titel" en niet "Onderwerp".** Het is hetzelfde veld als in de bewerker en daar heet het
+de titel. "(optioneel)" is vervallen: dat zei iets over de frontmatter, niet over het veld, en in
+het andere venster stond het er nooit bij.
+
+**Eén regel in Acties, en de vier van de bibliotheek ontbreken met opzet.** Hernoemen ís het
+titelveld erboven. Verplaatsen weigert een notitie die dit venster geclaimd heeft
+(`IPC.libraryMoveNote`), en dat heeft het per definitie. Dupliceren maakt een kopie die hier
+niemand opent. Onthullen wil een bestand, en dat is er het grootste deel van de tijd nog niet.
+De knop verschijnt alleen voor een nieuwe notitie, net als de Weggooien-knop die hij vervangt:
+een menu waarvan de enige regel ontbreekt is erger dan geen menu.
+
+**Wat dit besluit bijna om zeep hielp, en waarom het in `CONSTRAINTS.md` staat.** De gedeelde
+regel is eerst als kale `.title-field` geschreven. Het veld in het opnamevenster staat in
+`.header`, waar `.header input` één klasse *en één element* is — dus won die, en het venster
+waar dit vooral voor bedoeld was veranderde helemaal niet, met een volledig groene suite
+eromheen. Correct ogende CSS, verslagen door de cascade: dezelfde fout als B48 en die van
+`.overlay`, allebei ook geshipt. De selector noemt nu de container. Gemeten in de draaiende app,
+niet beredeneerd.
+
+## B83 — Zoeken kijkt in de map waar je staat; de hele kluis is een keuze
+
+**Genomen** op 23 augustus 2026, uit dagelijks gebruik.
+
+`searchNotes` draagt sinds het geschreven werd een `scope`-optie, met in zijn eigen commentaar
+de zin dat niets hem ooit meegaf — dus was elke zoekopdracht een zoekopdracht over de hele
+kluis, en "in dit project" bestond niet.
+
+**Het besluit.** De standaard is de map die in de boom geselecteerd staat, **en alles eronder**;
+een knop naast het zoekvak verbreedt hem naar de hele kluis.
+
+**Waarom die standaard.** De map is de context waar je toch al in staat. Kluisbreed zoeken is
+nooit gekozen — het was wat er het eerst gebouwd werd, en het is de reden dat een resultaat uit
+een archief van drie jaar terug tussen de treffers van vanmiddag staat.
+
+**Waarom een deelboom en niet één map.** `searchNotes` filtert op een padprefix, precies zoals
+`tasksIn` dat voor de Takenweergave doet. Eén enkele map zou de standaard onbruikbaar maken —
+notities in een project staan in submappen — en twee opties die "deze map" verschillend
+uitleggen zijn erger dan één.
+
+**Waarom de verbreding niet blijft staan.** Hij wordt teruggezet bij het verlaten van een
+zoekopdracht *en* bij elke verplaatsing in de boom. Verbreden vraag je per zoekopdracht; mee
+verhuisd naar de volgende map is het een stand die niemand voor die map heeft gezet en die
+nergens op het scherm wordt uitgelegd.
+
+**Geen knop waar hij zou liegen.** Een tag, een persoon en het paneel met losse bijlagen komen
+per definitie uit de hele kluis; die hebben geen map om "deze map" te betekenen, dus zoeken ze
+kluisbreed en krijgen de knop niet te zien.
+
+## B84 — De zoektaal verlaat de placeholder voor een paneel dat je kunt lezen terwijl je typt
+
+**Genomen** op 23 augustus 2026, uit dagelijks gebruik.
+
+De hele zoektaal — `type:meeting tag:klantx attendee:"Jan de Vries" after:2026-01-01` — stond in
+de placeholder van het zoekvak: onleesbaar op die breedte, en weg zodra je één teken typte. Een
+hint die verdwijnt op het moment dat je hem nodig hebt is geen hint.
+
+**Het besluit.** Een paneel onder het zoekvak, dat opent zodra het vak focus krijgt. De
+placeholder wordt "Zoeken…".
+
+**Waarom geen modal.** Dit is B51's argument voor het `/`-menu, één veld verderop: een kiezer met
+eigen focus neemt precies weg wat je hem voor opendeed. De cursor blijft in het vak, dus je leest
+de syntaxis terwijl je hem typt.
+
+**Eén mechanisme voor beide gebaren.** Het paneel hangt aan de *focus* van het vak. Klikken geeft
+focus, en `Mod-F` gaf al focus en selecteerde de tekst — aan de sneltoets hoefde niets te
+veranderen, en er is geen tweede tak die met de eerste oneens kan raken.
+
+**Escape gaat over het paneel vóór de zoekopdracht.** Escape betekende hier al "verlaat het
+zoeken". Eén druk doet één ding, wat de regel is die het verlaten van een zoekopdracht vanaf een
+treffer al volgt: eerst het paneel, dan het zoekvak.
+
+**De regels zijn voorbeelden, geen knoppen.** Geen `tabIndex`, geen klik. Een regel die je kúnt
+kiezen is een regel die de cursor een invoeging schuldig is op een plek die dit paneel niet
+bijhoudt — en die keuze is er al, in de vorm van de tekst overtypen.

@@ -144,13 +144,6 @@ export function TaskList({
     // `Library.tsx`'s window listener owns the key instead, which sees it from anywhere.
     <div className="notes task-list">
       <div className="task-toolbar">
-        {/* Named, not an ×. `--click-button="Exit tasks"` is how the packaged self-test
-            reaches it, and a glyph has no label for that to match — the same reason the
-            sort chooser says its own name. */}
-        <button type="button" className="task-exit" onClick={onExit}>
-          {t("tasks.exit")}
-        </button>
-
         <select
           className="task-scope"
           value={scope}
@@ -176,12 +169,25 @@ export function TaskList({
         </label>
       </div>
 
+      {/* The count on the left and the way out on the right, which is `.notes-header`'s
+          own `space-between` doing exactly what it does for the note list — two children,
+          no new CSS. The exit used to sit at the head of the toolbar above, in front of
+          the scope chooser, where it read as the first step of setting the view up rather
+          than as the way out of it. Two children and not three: that rule distributes
+          however many it is given, and a third would push the count off the left edge. */}
       <div className="notes-header">
         <span className="notes-count">
           {items.length === 0
             ? t("tasks.none")
             : `${items.length} ${t(items.length === 1 ? "tasks.one" : "tasks.many")}`}
         </span>
+        {/* Named, not an ×. `--click-button="Exit tasks"` is how the packaged self-test
+            reaches it, and a glyph has no label for that to match — the same reason the
+            sort chooser says its own name. Moving it changed nothing for that: the match
+            is on the label, not on where the label is. */}
+        <button type="button" className="task-exit" onClick={onExit}>
+          {t("tasks.exit")}
+        </button>
       </div>
 
       <ul className="task-rows" role="listbox">

@@ -10,6 +10,63 @@ import {
 } from "../shared/shortcuts.js";
 import { trapTab } from "./library/focus-trap.js";
 
+/**
+ * Rows this sheet renders for a group beyond the entries in `SHORTCUTS` itself.
+ *
+ * Both global hotkeys are settings rather than constants, so they are drawn from what is
+ * configured (see the `window` branch in the markup below) instead of being written down
+ * a second time. They are still two lines on the page, and the balance below has to count
+ * what is *drawn* — a column measured on the registry alone is a column measured wrong by
+ * exactly these two.
+ */
+const EXTRA_ROWS: Partial<Record<ShortcutGroup, number>> = { window: 2 };
+
+interface Section {
+  group: ShortcutGroup;
+  entries: ShortcutEntry[];
+}
+
+/**
+ * Splits the groups into the sheet's two columns.
+ *
+ * It exists because the grid could not do it. `.help-groups` is a two-track grid filling
+ * row-major, and the groups are wildly uneven — 10, 7, 11, 4, 8 entries in a fixed order.
+ * That laid out as `[text | lists] / [structure | note] / [window | nothing]`, and since
+ * each grid row is as tall as its taller member the sheet stood 32 rows high with 8 rows
+ * of content on the right of it: scrolling, past a column that was mostly empty. Which is
+ * a content-ordering problem, and no amount of track sizing addresses it.
+ *
+ * **The cut is contiguous, and that is the point rather than a simplification.** Columns
+ * are read down and then across, so a contiguous cut leaves `SHORTCUT_GROUPS`' order
+ * exactly as written; picking the two best-fitting groups for the left column would
+ * balance a row better and shuffle the sheet. Measured over both windows: contiguous
+ * gives 19/22 in capture and 19/24 in the library, against 28 and 32 today, and the best
+ * non-contiguous split saves one further row. That is not a trade.
+ *
+ * A heading is a line too, so it is counted. A group with nothing in it is dropped before
+ * the walk rather than weighed at zero — it renders nothing, and a cut placed on it would
+ * silently leave one column empty.
+ */
+export function balanceColumns(sections: Section[]): [Section[], Section[]] {
+  const weigh = (section: Section): number =>
+    section.entries.length + (EXTRA_ROWS[section.group] ?? 0) + 1;
+
+  const total = sections.reduce((sum, section) => sum + weigh(section), 0);
+
+  let best = 1;
+  let smallest = Number.POSITIVE_INFINITY;
+  for (let cut = 1; cut < sections.length; cut += 1) {
+    const left = sections.slice(0, cut).reduce((sum, section) => sum + weigh(section), 0);
+    const difference = Math.abs(left - (total - left));
+    if (difference < smallest) {
+      smallest = difference;
+      best = cut;
+    }
+  }
+
+  return [sections.slice(0, best), sections.slice(best)];
+}
+
 interface Props {
   /** Which window is asking, so its own keys are listed and the other's are not. */
   window: Extract<ShortcutWhere, "capture" | "library">;
@@ -68,6 +125,12 @@ export function Help({
   const rows = (group: ShortcutGroup): ShortcutEntry[] =>
     shown.filter((entry) => entry.group === group);
 
+  const columns = balanceColumns(
+    SHORTCUT_GROUPS.map((group) => ({ group, entries: rows(group) })).filter(
+      (section) => section.entries.length > 0,
+    ),
+  );
+
   return (
     <div className="help-backdrop" onMouseDown={onClose}>
       <div
@@ -96,41 +159,46 @@ export function Help({
           </button>
         </div>
 
+        {/* Two columns the component fills, not two tracks the grid fills. The grid is
+            still a grid — it is what collapses the pair to one column in the narrow
+            capture window — but which group lands where is a decision, and row-major flow
+            over uneven groups is what left this sheet 32 rows tall beside 8 rows of
+            content. See `balanceColumns`. */}
         <div className="help-groups">
-          {SHORTCUT_GROUPS.map((group) => {
-            const entries = rows(group);
-            if (entries.length === 0) return null;
-
-            return (
-              <section key={group} className="help-group">
-                <h3>{t(`help.group.${group}`)}</h3>
-                <dl>
-                  {entries.map((entry) => (
-                    <div key={entry.id} className="help-row">
-                      <dt>{t(`shortcut.${entry.id}`)}</dt>
-                      <dd>{formatEntry(entry, isMac, t("help.or"))}</dd>
-                    </div>
-                  ))}
-
-                  {/* The two entries that are not constants: both global hotkeys are
-                      settings, so they are rendered from what is configured rather than
-                      written down twice. */}
-                  {group === "window" && (
-                    <>
-                      <div className="help-row">
-                        <dt>{t("shortcut.newNote")}</dt>
-                        <dd>{formatAccelerator(hotkey, isMac)}</dd>
+          {columns.map((sections, column) => (
+            <div key={column} className="help-column">
+              {sections.map(({ group, entries }) => (
+                <section key={group} className="help-group">
+                  <h3>{t(`help.group.${group}`)}</h3>
+                  <dl>
+                    {entries.map((entry) => (
+                      <div key={entry.id} className="help-row">
+                        <dt>{t(`shortcut.${entry.id}`)}</dt>
+                        <dd>{formatEntry(entry, isMac, t("help.or"))}</dd>
                       </div>
-                      <div className="help-row">
-                        <dt>{t("shortcut.openLibraryGlobal")}</dt>
-                        <dd>{formatAccelerator(libraryHotkey, isMac)}</dd>
-                      </div>
-                    </>
-                  )}
-                </dl>
-              </section>
-            );
-          })}
+                    ))}
+
+                    {/* The two entries that are not constants: both global hotkeys are
+                        settings, so they are rendered from what is configured rather than
+                        written down twice. `EXTRA_ROWS` above is how the balance knows
+                        they are here; the two have to move together. */}
+                    {group === "window" && (
+                      <>
+                        <div className="help-row">
+                          <dt>{t("shortcut.newNote")}</dt>
+                          <dd>{formatAccelerator(hotkey, isMac)}</dd>
+                        </div>
+                        <div className="help-row">
+                          <dt>{t("shortcut.openLibraryGlobal")}</dt>
+                          <dd>{formatAccelerator(libraryHotkey, isMac)}</dd>
+                        </div>
+                      </>
+                    )}
+                  </dl>
+                </section>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>
