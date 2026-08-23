@@ -96,7 +96,7 @@ function buildFake(): Fake {
     duplicateNote,
     trashNote,
     trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
-    trashItemTasks: async () => 0,
+    openTasksAt: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,

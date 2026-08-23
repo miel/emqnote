@@ -1370,3 +1370,57 @@ are claims about colour that a screenshot from this machine cannot settle for a 
 The suite is 1882 tests over 150 files. Five new files: the discard confirmation, the move's
 focus hand-off, the Empty-trash question's wording, the attachments a trash-emptying would
 orphan, and the two windows' shared chrome.
+
+**Five items from a day of using `v0.11.1` landed on 23 August 2026.** Four of them are about a
+surface being the wrong colour or a group of buttons standing in the wrong place, which is
+exactly what the batch before this one could not settle: nothing in it had been seen on a real
+display. No new decision number — **B86 is extended** to the two ordinary deletes, and the one
+question §38q put to a human came back answered.
+
+**The Tasks scope chooser asks whichever count the tick is asking.** §38's own writeup named
+this as the likeliest cause of a report it could not otherwise reproduce, and as the one
+trade-off in that batch that could reasonably go the other way; it went the other way. The
+chooser asked `total` so that ticking "open only" could not rebuild the list under the user's
+hands — but the view *opens* with that box ticked, so a folder whose tasks were all finished
+stood in the list and led to an empty pane. The rebuild that argument was avoiding is real and
+is answered by the rule beside it rather than by refusing to ask: `scope` is never dropped, so
+the folder being stood in survives its own last task going out of scope. A filter and the list
+it feeds have to ask the same question.
+
+**Delete and Delete folder count the open tasks going with them** (B86, extended). The two
+permanent deletes have counted them since the previous batch; the two that move something to
+`_trash` had not, on the unstated reasoning that a reversible action needs less of a question.
+It is the same fact either way — a trashed note is out of the Tasks view and out of every folder
+badge at once — and Restore is a difference in the buttons rather than in the count. On a folder
+the tasks are the third number in the same bracket as the notes and subfolders, walked through
+the whole subtree. Two things fell out of doing it: the count's own function, `trashItemTasks`,
+never had anything to do with the trash and is now `openTasksAt`, and the `delete` dialog now
+carries the path it asked about, so confirming trashes **the note the sentence named** rather
+than whatever `openRef` happened to hold — the same note in practice, since right-clicking a row
+opens it, but not the same thing to reach for.
+
+**The two strips B82 left out are the two you type into.** `.notes-search` and `.header-reader`
+had no background of their own, so in the light theme they sat on `#fbfbfc` between strips that
+are `#ffffff`. `.header-reader` is the worse of the pair: it is the same component the capture
+window draws inside `.header`, which has always been `--surface`, so one shared block drew
+itself two colours depending on the window it was in.
+
+**And the capture window's footer had no left-hand group at all.** `[Insert] [Actions] [Help]`
+stood in the middle of the bar while the library's stood in the corner, with both wearing the
+same rule for the buttons themselves — which is why it read as a mystery rather than as drift.
+`.statusbar` is `space-between` and had **four** children: three pieces of status text and the
+group. The library has always had two. `.reader-status` moved into `styles.css` and names
+`.capture-status` beside it, the way the buttons' rule already did. The invisible part is worth
+keeping: the latency readout renders as an *empty* `<span>` until the first measurement, and an
+empty element still takes a slot and a gap — it was that fourth child holding the right-hand end
+of the bar, and it now sits inside the status group where it belongs anyway.
+
+**Three of the five were driven here, and read out rather than judged.** `--library
+--screenshot` and `--screenshot` under `Xvfb` on the real renderer, with the pixels taken out of
+the PNGs: the search strip and the field block both measure `(255, 255, 255)` where they
+measured `(251, 251, 252)` before, and the capture window's three buttons end against the right
+margin. That is as far as this sandbox goes — a real display and a real theme are still
+`TEST-PROTOCOL.md` §39's, along with the two behaviour rows (§39a and §39g) that no screenshot
+speaks to.
+
+The suite is 1898 tests over 151 files. One new file: the Delete folder question.

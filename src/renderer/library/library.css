@@ -305,13 +305,19 @@
 
    `position: relative` is here for the syntax panel below, which is the one thing in this
    row that does float: it hangs off this element rather than off the input, so it spans
-   the row instead of stopping at the field's right edge. */
+   the row instead of stopping at the field's right edge.
+
+   `--surface`, with `.notes-header` under it and `.reader-header` beside it: this strip
+   is chrome — a control you type into — and the three at the top of this window now agree
+   about that. The note list below them stays on `--background`, which is the distinction
+   the shading is *for*. */
 .notes-search {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -943,10 +949,17 @@
 }
 
 /* The shared header block, in the library. No drag region here — that exists for the
-   frameless capture window, and this strip sits in the middle of a normal one. */
+   frameless capture window, and this strip sits in the middle of a normal one.
+
+   `--surface` and not `transparent`, which is what it was: When, Where, Tags and Who are
+   the note's chrome, not its body, and left transparent they sat on `.reader-body`'s
+   `--background` — a band of off-white between the white header above them and the white
+   page below, which reads as a seam rather than as a distinction. In the capture window
+   this same block has always been on `--surface`, because `.header` around it is; this is
+   the library agreeing with it, one more item of the consistency work B82 began. */
 .header-reader {
   -webkit-app-region: no-drag;
-  background: transparent;
+  background: var(--surface);
   padding: 4px 14px 8px;
 }
 
@@ -995,15 +1008,8 @@
   border-top: 1px solid var(--border);
 }
 
-/* The left-hand group: what the note is doing, and where it came from. `min-width: 0` so
-   a long "← note you came from" ellipses inside this group rather than pushing the menus
-   off the right edge — `.reader-actions` is `flex: 0 0 auto` and would not give way. */
-.reader-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
+/* `.reader-status`, the left-hand group of this bar, lives in `styles.css` beside
+   `.reader-actions` — both windows' footers wear it now. */
 
 /* Quieter than the note it sits under: this names a note you are *leaving*, and it must
    not compete with the one you are reading. The ellipsis stays for a long title. */

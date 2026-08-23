@@ -18,6 +18,12 @@ import { describe, expect, it } from "vitest";
  *
  * `styles.css` is read together with `library.css` where the question is about the library
  * window, because that window's cascade is both files — `styles-overlay.test.ts`'s rule.
+ *
+ * Three more of the same kind arrived a batch later, from the same day of use: the search
+ * strip and the note's own When/Where/Tags/Who block were the two surfaces at the top of
+ * the library that the first pass had left off, and the capture window's footer turned out
+ * to have no left-hand group at all — which is why its buttons stood in the middle of the
+ * bar where the library's stand at the end of it.
  */
 
 const shared = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
@@ -25,6 +31,7 @@ const library = readFileSync(
   new URL("../src/renderer/library/library.css", import.meta.url),
   "utf8",
 );
+const capture = readFileSync(new URL("../src/renderer/Capture.tsx", import.meta.url), "utf8");
 
 const rule = (css: string, selector: string): string => {
   const found = css.match(new RegExp(`${selector} \\{[^}]*\\}`))?.[0];
@@ -51,6 +58,24 @@ describe("styles: the note editor's chrome is shaded like the capture window's",
 
     const notes = rule(library, "\\.notes");
     expect(notes).not.toMatch(/background:\s*var\(--surface\);/);
+  });
+
+  it("shades the search strip with them", () => {
+    // The third thing at the top of this window, and the one you type into. It had no
+    // background of its own, which put a band of `--background` between two strips that
+    // are white — a seam across the head of the window rather than a distinction.
+    expect(rule(library, "\\.notes-search")).toMatch(/background:\s*var\(--surface\);/);
+  });
+
+  it("puts the note's own fields on the same surface in both windows", () => {
+    // When, Where, Tags and Who are the note's chrome, not its body. In the capture window
+    // `.header` around them has always been `--surface`; in the library the same block was
+    // `transparent` and sat on `.reader-body`'s `--background`, so the one component that
+    // is literally shared drew itself two different colours.
+    const block = rule(library, "\\.header-reader");
+    expect(block).toMatch(/background:\s*var\(--surface\);/);
+    expect(block).not.toMatch(/background:\s*transparent;/);
+    expect(rule(shared, "\\.header")).toMatch(/background:\s*var\(--surface\);/);
   });
 });
 
@@ -84,6 +109,27 @@ describe("styles: [Insert] [Actions] [Help] is one rule for both windows", () =>
     // The drift came from two copies of one control's rule. One copy is the fix; a rule
     // here naming `.reader-actions` is the drift starting again.
     expect(library).not.toMatch(/^\.reader-actions/m);
+  });
+
+  it("gives the status text at the other end of the bar one rule as well", () => {
+    // `.statusbar` is `space-between`, which distributes however many children it is
+    // given: four loose ones put the three buttons somewhere in the middle of the bar
+    // instead of against its right edge, where the library's have always been. Grouping
+    // the status text makes it the two children that rule is for — and the group wears
+    // `.reader-status`, moved here rather than copied, for the reason above it.
+    const group = rule(shared, "\\.reader-status,\\s*\\n\\.capture-status");
+    expect(group).toMatch(/display:\s*flex;/);
+    // `min-width: 0` is what lets a long file name ellipsis inside this group instead of
+    // pushing the buttons off the right edge — the group beside it does not give way.
+    expect(group).toMatch(/min-width:\s*0;/);
+    expect(library).not.toMatch(/^\.reader-status/m);
+  });
+
+  it("is a class the capture window's markup actually carries", () => {
+    // A rule naming a class nothing wears is the silent failure this file exists for, one
+    // step earlier than the cascade: it passes every text check about the stylesheet and
+    // changes nothing on screen.
+    expect(capture).toContain('className="capture-status"');
   });
 
   it("has dropped the capture window's own two button classes", () => {

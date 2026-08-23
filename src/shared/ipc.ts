@@ -102,7 +102,8 @@ export const IPC = {
   libraryTrashNote: "library:trash-note",
   /** Permanently empties `_trash` — the one delete this app performs with no way back. */
   libraryTrashContents: "library:trash-contents",
-  libraryTrashItemTasks: "library:trash-item-tasks",
+  /** The open tasks in one note or folder, anywhere in the vault — see `openTasksAt`. */
+  libraryOpenTasksAt: "library:open-tasks-at",
   libraryEmptyTrash: "library:empty-trash",
   libraryCreateFolder: "library:create-folder",
   libraryRenameFolder: "library:rename-folder",
@@ -549,12 +550,20 @@ export interface LibraryApi {
     linkedFiles: number;
   }>;
   /**
-   * The open tasks in one thing in the trash — the per-item half of `trashContents`'
-   * `openTasks`, for the confirmation in front of deleting that one thing for good. A
-   * folder counts everything under it, for the same reason the whole-trash count is
-   * recursive.
+   * The open tasks in one note, or in one folder and everything under it.
+   *
+   * The per-item half of `trashContents`' `openTasks`, and it is asked in front of every
+   * delete this app offers rather than only the permanent one: "Delete permanently" on
+   * something in `_trash`, and — since a note moved to the trash is out of the Tasks view
+   * the moment it goes — Delete on a note or a folder still in the vault. It was
+   * `trashItemTasks` while `_trash` was the only caller; the walk was never about the
+   * trash, and a name that says otherwise is the kind that makes the second caller write
+   * a second copy.
+   *
+   * A folder counts everything under it, for the same reason the whole-trash count is
+   * recursive: a folder holding forty notes says nothing about what is going.
    */
-  trashItemTasks: (path: string) => Promise<number>;
+  openTasksAt: (path: string) => Promise<number>;
   emptyTrash: () => Promise<{
     removed: number;
     failed: number;

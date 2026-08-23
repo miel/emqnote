@@ -49,11 +49,16 @@ export function withOpenTasks(
  * counts notes directly in a folder and deliberately does not roll up, because the
  * sidebar badge is about the folder itself. The per-note counts are the ones that fold.
  *
- * **It asks `total`, not `open`.** The view has an "open only" checkbox, and keying this
- * off it would rebuild the list under the user's hands every time they ticked it — with
- * the folder they were standing in able to vanish from a chooser still claiming to be set
- * to it. A folder with three finished tasks is a folder the view has something to say
- * about.
+ * **It asks the same question the list does.** With "open only" ticked — which is how
+ * the view opens — it counts `open`; unticked, `total`. It used to always ask `total`, on
+ * the argument that keying off the checkbox would rebuild the list under the user's hands
+ * every time they ticked it. That argument survived one release and was reported twice:
+ * the default view is "open only", so a folder whose tasks are all *finished* stood in the
+ * chooser offering an empty pane — a chooser that can be set to something with nothing in
+ * it is worse than one that changes when you change what it is choosing from. The rebuild
+ * is real and is answered below rather than avoided: `scope` is never dropped, so the
+ * folder being stood in stays in the list even when the tick has just taken its last task
+ * out of scope.
  *
  * **The vault root and the current scope are always in.** `""` is "no restriction" and is
  * never a lie; `scope` has to stay because a `<select>` whose value is not among its
@@ -66,13 +71,14 @@ export function withOpenTasks(
  */
 export function foldersWithTasks(
   folders: string[],
-  counts: Record<string, { total: number }> | null,
+  counts: Record<string, { total: number; open: number }> | null,
   scope: string,
+  openOnly: boolean,
 ): string[] {
   if (counts === null) return folders;
 
   const withTasks = Object.entries(counts)
-    .filter(([, count]) => count.total > 0)
+    .filter(([, count]) => (openOnly ? count.open : count.total) > 0)
     .map(([path]) => path);
 
   return folders.filter(

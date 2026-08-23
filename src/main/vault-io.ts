@@ -887,13 +887,20 @@ export function trashContents(vault: string): TrashContents {
  * number is a warning in a sentence, not a manifest, exactly as the counts beside it are.
  */
 /**
- * The open tasks in one thing in the trash — a note, or a folder and everything under it.
+ * The open tasks in one thing — a note, or a folder and everything under it.
  *
  * The per-item half of the same question `trashContents` answers for the whole trash, and
- * it is asked in the same place: the confirmation in front of a permanent delete. A folder
- * is walked because a folder in the trash is exactly the case the whole-trash count exists
- * for — "Delete permanently" on one that holds forty notes says as little about what is
- * going as the note-row count it replaced did.
+ * it is asked in the same place: the confirmation in front of a delete. A folder is walked
+ * because a folder is exactly the case the whole-trash count exists for — "Delete
+ * permanently" on one that holds forty notes says as little about what is going as the
+ * note-row count it replaced did.
+ *
+ * **Nothing here is about `_trash`, and the path is not required to be in it.** Every
+ * delete this app offers asks this now, including the two that move something *to* the
+ * trash: a note in `_trash` is out of the Tasks view and out of every folder's badge the
+ * moment it goes, so "3 open tasks" is as true of trashing a note as of deleting it for
+ * good. Restore is the way back from one and not from the other, which is a difference in
+ * what the buttons say, not in what the count means.
  *
  * Depth-capped and per-directory `try`/`catch` like every other walk here, and zero for
  * anything that is not a note or cannot be read, for `openTasksIn`'s stated reason.

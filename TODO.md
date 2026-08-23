@@ -3,6 +3,47 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 23 August 2026, **not released yet** — **five items from a day of using
+`v0.11.1`**, which is the batch immediately below this one. No new decision: **B86 is extended**
+to the two ordinary deletes, and the one question `TEST-PROTOCOL.md` §38q put to a human came
+back answered. Four of the five are about a colour or a position, which is what §38 could not
+settle from a sandbox; **three of them were driven here this time**, under `Xvfb` on the real
+renderer, with the pixels read out of the screenshots rather than judged by eye. §39 is what a
+real display still has to say.
+
+**The Tasks scope chooser asks whichever count the tick is asking.** It asked `total` so that
+ticking "open only" could not rebuild the list under your hands — but the view *opens* with that
+box ticked, so a folder whose tasks were all finished was offered and led to an empty pane. The
+rebuild that argument was avoiding is answered by the rule beside it rather than by refusing to
+ask: `scope` is never dropped, so the folder being stood in survives its last task going out of
+scope. §38's own writeup named this as the likeliest cause of a report it could not reproduce
+and as the one call in that batch that could go the other way; it went the other way.
+
+**Delete and Delete folder count the open tasks going with them.** The two permanent deletes
+have counted them since B86; the two that move something to `_trash` had not, on the unstated
+reasoning that a reversible action needs less of a question. Same fact either way — a trashed
+note is out of the Tasks view and out of every folder badge at once — and Restore is a
+difference in the buttons, not in the count. On a folder it is the third number in the same
+bracket as the notes and subfolders, walked through the whole subtree. Two things fell out of
+it: the walk was called `trashItemTasks` and never had anything to do with the trash, so it is
+`openTasksAt` now, and the delete question carries the **path** it asked about, so confirming
+trashes the note the sentence named rather than whatever was open.
+
+**Three layout fixes, all measured.** `.notes-search` and `.header-reader` — the search strip
+and the note's own When/Where/Tags/Who block — had no background of their own and sat on
+`#fbfbfc` between strips that are `#ffffff`; the second is the same component the capture window
+draws on `--surface`, so one shared block was drawing itself two colours depending on the
+window. And the capture window's `[Insert] [Actions] [Help]` stood in the middle of its footer
+because `.statusbar` is `space-between` with **four** children where the library's footer has
+two — the fourth being the latency readout, which renders as an empty `<span>` until the first
+measurement and still takes a slot and a gap. `.reader-status` now names `.capture-status`
+beside it in `styles.css`, the way the buttons' own rule already did, and the readout sits
+inside that group.
+
+The suite is 1898 tests over 151 files. One new file: the Delete folder question.
+
+---
+
 Last updated 23 August 2026, released as `v0.11.1` — **twelve items from a day of using
 `v0.11.0`**, which is the batch immediately below this one. Two decisions, B85 and B86, and
 B82 is revisited on two points in its own entry. A **patch** release: every item in it came in

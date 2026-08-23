@@ -100,7 +100,7 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     duplicateNote,
     trashNote,
     trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
-    trashItemTasks: async () => 0,
+    openTasksAt: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
@@ -334,7 +334,7 @@ describe("the note list's right-click menu", () => {
     // here, where the Empty-trash question counts the whole trash — a folder in the trash
     // is walked, for the same reason that count is recursive.
     const fake = buildFake("_trash/2026-08-06 1200 Test note.md");
-    fake.emqnote.library.trashItemTasks = async () => 3;
+    fake.emqnote.library.openTasksAt = async () => 3;
     await mount(fake);
     await rightClickRow();
 
@@ -456,5 +456,36 @@ describe("the note list's right-click menu", () => {
     await flush();
 
     expect(fake.trashNote).toHaveBeenCalledWith(NOTE_PATH);
+  });
+
+  it("Delete counts the open tasks going with the note, as the permanent one does", async () => {
+    // Trashing is reversible and deleting for good is not, which is a difference in the
+    // buttons, not in what a note holds: either way the note leaves the Tasks view and
+    // every folder badge at once, and what is still to be *done* is the thing a title
+    // says least about. Same count, same words, same silence at zero.
+    const fake = buildFake();
+    fake.emqnote.library.openTasksAt = async () => 2;
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".ask")!.textContent).toContain("2 open tasks");
+  });
+
+  it("Delete says nothing about tasks when the note has none", async () => {
+    const fake = buildFake();
+    await mount(fake);
+    await rightClickRow();
+
+    await act(async () => {
+      menuItem("Delete").click();
+    });
+    await flush();
+
+    expect(container.querySelector(".ask")!.textContent).not.toContain("open task");
   });
 });

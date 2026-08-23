@@ -1935,6 +1935,26 @@ body {
   gap: 6px;
 }
 
+/* **The other half of the same bar: what the note is doing, on the left.**
+
+   `min-width: 0` so a long "← note you came from" — or a long file name in the capture
+   window — ellipses inside this group rather than pushing the buttons off the right edge;
+   the group beside it is `flex: 0 0 auto` and would not give way.
+
+   The capture window's foot had no group at all: four loose children under
+   `.statusbar`'s `space-between`, which distributes however many it is given, so the
+   three buttons were spread across the middle of the bar rather than standing against its
+   right edge like the library's. One wrapper makes it the two children that rule is for.
+   Moved here from `library.css` rather than copied, for `.reader-actions`' reason
+   directly above: a copy is what produced the drift being fixed. */
+.reader-status,
+.capture-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .reader-actions button,
 .capture-actions button {
   font: inherit;
