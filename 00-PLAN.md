@@ -12,6 +12,7 @@ Opslag: markdown-bestanden in mappen op de zakelijke OneDrive.
 | [03-markdown-dialect.md](03-markdown-dialect.md) | Het vault-formaat als specificatie |
 | [04-bouwplan.md](04-bouwplan.md) | Fasen met acceptatiecriteria |
 | [05-besluitenlog.md](05-besluitenlog.md) | Besluiten, afwegingen, wat is afgevallen |
+| [TODO-BEFORE-RELEASE.md](TODO-BEFORE-RELEASE.md) | Wat er nog moet gebeuren voor een publieke 1.0 — de releasepoort, niets anders |
 
 ## De kern in tien regels
 

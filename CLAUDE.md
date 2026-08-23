@@ -246,5 +246,6 @@ Read these before making structural changes; they carry the reasoning that the c
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |
+| `TODO-BEFORE-RELEASE.md` | The release gate for a public 1.0 — only what must be true before `v1.0.0` is tagged |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.
