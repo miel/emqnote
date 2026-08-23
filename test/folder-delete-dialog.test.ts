@@ -1,27 +1,25 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
 import type { FolderNode } from "../src/shared/vault-types.js";
 
 /**
- * What the Empty-trash question says before the one action in this app with no way back.
+ * What the two *ordinary* delete questions say — Delete folder in the tree's menu, and
+ * Delete on a note — about the open tasks going with what is deleted.
  *
- * It counted the note *rows on screen*, which `trashContents` replaced with a recursive
- * count of notes, folders and files. Two things are added to that here, and neither is a
- * count of something in the trash:
+ * The Empty-trash question has counted them since B86 (`trash-dialog.test.ts`), and so has
+ * "Delete permanently" per item (`note-list-menu.test.ts`). These two had not, on the
+ * unstated reasoning that a trip to `_trash` is reversible so the question matters less.
+ * It is the same fact either way: the moment a note is trashed it leaves the Tasks view
+ * and every folder badge, and a folder being deleted takes every task under it at once —
+ * which is exactly what a folder's *name* says least about. Restore is the difference, and
+ * it is a difference in the buttons, not in the count.
  *
- *  - **the open tasks** written in those notes, because what someone wants to know before
- *    emptying the trash is not how many notes it is but whether anything still to be
- *    *done* goes with them;
- *  - **the linked files**, which are not in the trash and are not deleted at all: they are
- *    attachments that only a trashed note still refers to, so emptying it leaves them
- *    unreachable from any note — §6.5's unlinked attachments. See
- *    `attachmentsOrphanedByTrash` for why that number is exact rather than a guess.
- *
- * And the button says "Empty trash". Clearing is what a filter or a search box does, and
- * both of those are one click away in this window.
+ * `openTasksAt` answers both, which is why it is no longer called `trashItemTasks`: the
+ * walk was never about the trash, and a name that says otherwise is the kind that makes
+ * the second caller write a second copy of it.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,7 +39,7 @@ function buildFake(contents: Contents): CaptureApi {
     noteCount: 0,
     children: [
       { path: "00 Inbox", name: "00 Inbox", noteCount: 0, children: [] },
-      { path: "_trash", name: "_trash", noteCount: contents.notes, children: [] },
+      { path: "01 Werk", name: "01 Werk", noteCount: 3, children: [] },
     ],
   };
 
@@ -60,11 +58,11 @@ function buildFake(contents: Contents): CaptureApi {
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
     trashContents: async () => contents,
-    openTasksAt: async () => 0,
+    openTasksAt: async () => contents.openTasks,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
-    folderContents: async () => ({ notes: 0, folders: 0 }),
+    folderContents: async () => ({ notes: contents.notes, folders: contents.folders }),
     trashFolder: async () => ({ trashed: true }),
     moveFolder: async (path) => path,
     deleteFromTrash: async () => ({ deleted: true }),
@@ -154,7 +152,7 @@ async function flush(rounds = 14): Promise<void> {
   }
 }
 
-describe("the Empty-trash question", () => {
+describe("the Delete folder question", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
@@ -182,7 +180,7 @@ describe("the Empty-trash question", () => {
     container.remove();
   });
 
-  /** Mounts, selects the Trash row in the tree, and opens the question. */
+  /** Mounts, right-clicks "01 Werk" in the tree, picks Delete folder, returns the question. */
   async function ask(contents: Contents): Promise<string> {
     (window as unknown as { emqnote: unknown }).emqnote = buildFake(contents);
     root = createRoot(container);
@@ -191,21 +189,23 @@ describe("the Empty-trash question", () => {
     });
     await flush();
 
-    const trashRow = Array.from(container.querySelectorAll<HTMLElement>(".branch")).find(
-      (node) => node.querySelector(".branch-name")?.textContent === "Trash",
+    const folderRow = Array.from(container.querySelectorAll<HTMLElement>(".branch")).find(
+      (node) => node.querySelector(".branch-name")?.textContent === "01 Werk",
     );
-    expect(trashRow, "no Trash row in the tree").not.toBeUndefined();
+    expect(folderRow, "no 01 Werk row in the tree").not.toBeUndefined();
     await act(async () => {
-      trashRow!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      folderRow!.dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+      );
     });
     await flush();
 
-    const button = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
-    ).find((node) => node.textContent === "Empty trash");
-    expect(button, "no Empty trash button").not.toBeUndefined();
+    const item = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".context-menu-item"),
+    ).find((node) => node.querySelector(".context-menu-label")?.textContent === "Delete folder");
+    expect(item, "no Delete folder item in the menu").not.toBeUndefined();
     await act(async () => {
-      button!.click();
+      item!.click();
     });
     await flush();
 
@@ -214,34 +214,37 @@ describe("the Empty-trash question", () => {
     return dialog!.textContent ?? "";
   }
 
-  it("is opened by a button called Empty trash", async () => {
-    // Renamed from "Clear trash". Clearing is what a filter and a search box do, and both
-    // are one click away in this window; this is the one control that destroys something.
-    const text = await ask({ notes: 2, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 });
-    expect(text).toContain("2 notes");
+  it("counts the open tasks under the folder, after what is in it", async () => {
+    // Third in the same bracketed list the notes and subfolders were already in, because
+    // it is one more thing that is inside this folder — not a second sentence, which is
+    // what the Empty-trash question reserves for the files it does *not* delete.
+    const text = await ask({ notes: 4, folders: 2, files: 0, openTasks: 5, linkedFiles: 0 });
+    expect(text).toContain("4 notes, 2 folders, 5 open tasks");
   });
 
-  it("counts the open tasks in the notes about to go", async () => {
-    const text = await ask({ notes: 6, folders: 2, files: 3, openTasks: 4, linkedFiles: 0 });
-    expect(text).toContain("6 notes, 2 folders, 3 files, 4 open tasks");
-    expect(text).toContain("cannot be undone");
-  });
-
-  it("says which files will be left behind as unlinked attachments", async () => {
-    // A second sentence rather than a fourth item in the list, because these files are not
-    // in the trash and are not deleted: emptying it takes away the last note that named
-    // them.
-    const text = await ask({ notes: 1, folders: 0, files: 0, openTasks: 0, linkedFiles: 2 });
-    expect(text).toContain("2 linked files become unlinked attachments");
-  });
-
-  it("leaves out every number it does not have", async () => {
-    // A trash holding six notes and nothing else says "6 notes". The zeroes are noise in
-    // the common case, and this question has enough to say without them.
-    const text = await ask({ notes: 6, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 });
-    expect(text).toContain("6 notes —");
-    expect(text).not.toContain("folders");
+  it("says nothing about tasks when there are none", async () => {
+    const text = await ask({ notes: 4, folders: 2, files: 0, openTasks: 0, linkedFiles: 0 });
+    expect(text).toContain("4 notes, 2 folders)");
     expect(text).not.toContain("open task");
-    expect(text).not.toContain("linked file");
+  });
+
+  it("brackets nothing at all for an empty folder with no tasks", async () => {
+    // An empty folder is the one case with nothing to warn about, and a "(0 notes, 0
+    // folders)" in front of it is a fact nobody asked for.
+    const text = await ask({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 });
+    expect(text).not.toContain("(");
+  });
+
+  it("brackets the tasks alone when an otherwise empty-looking folder has some", async () => {
+    // `folderContents` counts notes directly in the folder and `openTasksAt` walks the
+    // whole subtree, so the two can disagree — and when they do, the number that says
+    // something is still to be done is the one that must survive.
+    const text = await ask({ notes: 0, folders: 0, files: 0, openTasks: 2, linkedFiles: 0 });
+    expect(text).toContain("(2 open tasks)");
+  });
+
+  it("asks before anything moves", async () => {
+    const text = await ask({ notes: 1, folders: 0, files: 0, openTasks: 1, linkedFiles: 0 });
+    expect(text).toContain("01 Werk");
   });
 });

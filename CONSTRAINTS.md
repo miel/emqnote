@@ -1521,18 +1521,42 @@ accounts for; measured on `SHORTCUTS` alone it is wrong by exactly those two. `c
 still the wrong tool for the reason already recorded in the stylesheet: it lays overflow out
 sideways, past an edge `overflow-y` cannot reach.
 
-**The Tasks scope chooser rolls up, and asks `total` rather than `open`** (23 August 2026,
-`foldersWithTasks`). It listed every folder in the vault, which in a vault of any size is a
-chooser whose commonest outcome is an empty pane. Two things decide whether narrowing it is
-right. `tasksIn` scopes by path *prefix*, so a folder qualifies on what is **beneath** it —
-which `IPC.libraryFolderTaskCounts` cannot answer, since `openTaskCountsByFolder` counts notes
-directly in a folder and deliberately does not roll up (the sidebar badge is about the folder
-itself). The per-note counts are the ones that fold, and they are already in the window. And
-it asks `total`: keyed off `open`, the list would rebuild itself under the "open only"
-checkbox, with the folder you were standing in able to vanish from a chooser still set to it.
-The vault root and the current scope are always kept for that same reason — a `<select>` whose
-value is not among its options renders blank — and a `null` count offers everything rather
-than nothing, the call `withOpenTasks` already makes for the badge.
+**The Tasks scope chooser rolls up, and asks whichever count the tick is asking**
+(23 August 2026, `foldersWithTasks`). It listed every folder in the vault, which in a vault of
+any size is a chooser whose commonest outcome is an empty pane. Two things decide whether
+narrowing it is right. `tasksIn` scopes by path *prefix*, so a folder qualifies on what is
+**beneath** it — which `IPC.libraryFolderTaskCounts` cannot answer, since
+`openTaskCountsByFolder` counts notes directly in a folder and deliberately does not roll up
+(the sidebar badge is about the folder itself). The per-note counts are the ones that fold, and
+they are already in the window. The vault root and the current scope are always kept — a
+`<select>` whose value is not among its options renders blank — and a `null` count offers
+everything rather than nothing, the call `withOpenTasks` already makes for the badge.
+
+**And the second half of that rule was written the wrong way round first, which is the part
+worth remembering.** It asked `total` unconditionally, so that keying off the "open only"
+checkbox could not rebuild the list under the user's hands. What that overlooked is that the
+view *opens* with the box ticked: a folder whose tasks are all finished was therefore offered
+by a chooser whose pane, once chosen, was empty — reported twice, the second time after the
+first had been closed as not reproducible. The tick is now part of the question (`open` while
+it is on, `total` while it is off), and the rebuild the old rule feared is answered by the rule
+above it rather than avoided: `scope` is never dropped, so the folder being stood in survives
+its own last task going out of scope. **A filter and the list it feeds must ask the same
+question**, or the filter offers things the list cannot show.
+
+**Every delete question counts the open tasks going with it, through one walk**
+(23 August 2026, `openTasksAt`). B86 gave the count to the two permanent deletes; the two
+ordinary ones — Delete on a note, Delete folder in the tree — did not have it, on the unstated
+reasoning that a trip to `_trash` is reversible. It is the same fact either way: a trashed note
+leaves the Tasks view and every folder badge the moment it goes, and what is still to be *done*
+in it is what a title says least about. Restore is the difference, and it is a difference in the
+buttons rather than in the count. The walk is `openTasksAt` in `vault-io.ts`, which was called
+`trashItemTasks` while `_trash` was its only caller — **it never had anything to do with the
+trash**, and the old name is exactly the kind that makes the second caller write a second copy
+rather than reuse the first. Both numbers are fetched before the dialog opens
+(`Promise.all` for the folder, which needs `folderContents` as well): a question that appears on
+one answer and grows a clause on the other is a question that changes while it is being read.
+And the `delete` dialog carries the **path** it asked about, so confirming trashes the note the
+sentence named rather than whatever `openRef` happens to hold.
 
 **The Empty-trash confirmation counts the trash, not the rows on screen** (`trashContents`,
 23 August 2026). It named `notes.length`, which is the note list's own rows for `_trash` — one
@@ -1598,6 +1622,33 @@ three classes and an element and would out-rank the plain `:hover` rule below it
 would stop colouring them: correct-looking CSS defeated by the cascade, the same family as B48
 and `.overlay`. **Name the colour in the shared rule.** `test/styles-window-chrome.test.ts`
 pins both halves, including that `library.css` has no `.reader-actions` rule left in it.
+
+**`space-between` distributes however many children it is given, so a bar with two ends
+needs exactly two of them** (23 August 2026, `.statusbar`). That rule put the capture window's
+`[Insert] [Actions] [Help]` somewhere in the middle of its footer while the library's stood in
+the corner — with both windows wearing the same rule for the buttons themselves, which is why
+this read as a mystery rather than as drift. The bar had **four** children: three pieces of
+status text and the button group. The library's footer has always had two, `.reader-status` and
+`.reader-actions`, and the fix is to give the capture window the same shape — `.reader-status`
+moved into `styles.css` and named `.capture-status` beside it, the way the buttons' own rule
+already was. **An empty element still takes a slot and a gap**: the latency readout renders as
+an empty `<span>` until the first measurement arrives, and it was that invisible fourth child
+holding the right-hand end of the bar. It now sits inside the status group, where it belongs
+anyway — it is ambient status like the two beside it. `styles-window-chrome.test.ts` pins the
+shared rule *and* that `Capture.tsx` actually carries the class, which is the failure one step
+earlier than the cascade: a rule naming a class nothing wears passes every text check and
+changes nothing on screen.
+
+**The two strips that were left out of the shading, and were the ones you type into**
+(23 August 2026). B82 put `.reader-header`, `.reader-footer` and `.notes-header` on `--surface`;
+`.notes-search` and `.header-reader` kept no background of their own, so in the light theme they
+sat on `--background` — `#fbfbfc` against `#ffffff`, which is invisible in a screenshot from a
+sandbox and reads as a seam on a real display. `.header-reader` is the worse of the two: it is
+the *same component* the capture window draws inside `.header`, which has always been
+`--surface`, so one shared block was drawing itself two different colours depending on the
+window. Measured rather than judged: `--library --screenshot` under `Xvfb`, pixels read out of
+the PNG, `(251, 251, 252)` before and `(255, 255, 255)` after. The note list itself stays on
+`--background` deliberately — a list is not a surface.
 
 **Discard asks first, and "is there anything to lose" is a question about the document's
 structure** (B85). Two shortcuts are available here and both are wrong. `dirtyRef` is the

@@ -627,22 +627,39 @@ export function Capture(): React.ReactElement {
       )}
 
       <div className="statusbar">
-        <span className="filename">
-          {status.savedAs === null
-            ? app.t("capture.nothingSaved")
-            : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
-        </span>
-        {/* The notice carries no buttons, deliberately — see the comment on
-            `onVaultFileChanged` above. A window where the user may be mid-sentence must
-            never offer a *choice* that could discard what is currently being typed.
-            Discard below is not that: it is asked for, it is about this note rather than
-            about a disk event nobody expected, and what it does is reversible. */}
-        {diskNotice !== null && <span className="disk-notice">{app.t(diskNotice)}</span>}
-        {/* Moved out of the header when the tag field took its place. A learn-once
-            hint belongs in the ambient chrome anyway, not in a row of fields. */}
-        <span className="dismiss-hint">
-          {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
-        </span>
+        {/* One group, so `.statusbar`'s `space-between` has two children to distribute
+            rather than four — which is what put Insert/Actions/Help somewhere in the
+            middle of the bar instead of against its right edge. The library's
+            `.reader-footer` has always been status-left, menus-right; this is the same
+            arrangement, wearing the same rule (`styles.css`, `.reader-status`). */}
+        <div className="capture-status">
+          <span className="filename">
+            {status.savedAs === null
+              ? app.t("capture.nothingSaved")
+              : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
+          </span>
+          {/* The notice carries no buttons, deliberately — see the comment on
+              `onVaultFileChanged` above. A window where the user may be mid-sentence must
+              never offer a *choice* that could discard what is currently being typed.
+              Discard below is not that: it is asked for, it is about this note rather than
+              about a disk event nobody expected, and what it does is reversible. */}
+          {diskNotice !== null && <span className="disk-notice">{app.t(diskNotice)}</span>}
+          {/* Moved out of the header when the tag field took its place. A learn-once
+              hint belongs in the ambient chrome anyway, not in a row of fields. */}
+          <span className="dismiss-hint">
+            {formatFirstKey("close", app.isMac)} {app.t("capture.dismiss")}
+          </span>
+          {/* In the status group, and not at the far end of the bar where it was — which
+              is where it held the right-hand end away from the buttons, `space-between`
+              distributing however many children it is given. Invisibly, at that: it renders
+              as an *empty* span until the first measurement arrives, and an empty element
+              still takes a slot and a gap. It is ambient status like the two beside it
+              anyway: what the last hotkey → caret cost, in the window that budget is
+              about. */}
+          <span className="latency" data-over-budget={overBudget}>
+            {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
+          </span>
+        </div>
         {/* One group, `.capture-actions`, wearing the very rule the library's
             `.reader-actions` wears — see `styles.css`, where that rule now lives. These
             three used to be `.help-button`/`.insert-button`: a smaller font, a tighter
@@ -705,9 +722,6 @@ export function Capture(): React.ReactElement {
             {app.t("help.button")}
           </button>
         </div>
-        <span className="latency" data-over-budget={overBudget}>
-          {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
-        </span>
       </div>
 
       {confirmDiscard && (

@@ -20,11 +20,21 @@ import type { FolderNode } from "../src/shared/vault-types.js";
  * what it does, which is what the last test here holds onto. Two gestures that mean the
  * same thing have to *be* the same thing, or the day one of them learns about a new scope
  * the other will not.
+ *
+ * The other half of a scope is what can be *chosen* as one, and the three tests at the top
+ * are about that: the chooser is filtered by `foldersWithTasks`, whose own unit tests live
+ * in `tasks-folder-options.test.ts`. These mount the real window because what was wrong
+ * was not that function but the question being put to it — it was asked about `total`
+ * while the view it feeds opens on `open`, so a folder whose tasks were all finished could
+ * be selected and showed nothing. That mismatch is invisible from either side alone.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
+/** `noteCounts` is what the index says per note path, which is what the scope chooser reads. */
+function buildFake(
+  noteCounts: Record<string, { open: number; total: number }> = {},
+): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
   const tree: FolderNode = {
     path: "",
     name: "Vault",
@@ -42,7 +52,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     notes: async () => [],
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
-    noteTaskCounts: async () => ({}),
+    noteTaskCounts: async () => noteCounts,
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,
@@ -52,7 +62,7 @@ function buildFake(): { emqnote: CaptureApi; tasks: ReturnType<typeof vi.fn> } {
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
     trashContents: async () => ({ notes: 0, folders: 0, files: 0, openTasks: 0, linkedFiles: 0 }),
-    trashItemTasks: async () => 0,
+    openTasksAt: async () => 0,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
@@ -170,7 +180,7 @@ function clickTasksButton(container: HTMLDivElement): void {
   });
 }
 
-describe("the Tasks view defaults to the current folder", () => {
+describe("the Tasks view's scope, and what can be chosen as one", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
@@ -190,6 +200,64 @@ describe("the Tasks view defaults to the current folder", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  /** Mounts and opens the Tasks view through the sidebar row. */
+  async function openTasks(
+    noteCounts: Record<string, { open: number; total: number }> = {},
+  ): Promise<void> {
+    (window as unknown as { emqnote: unknown }).emqnote = buildFake(noteCounts).emqnote;
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LibraryComponent));
+    });
+    await flush();
+    clickTasksRow(container);
+    await flush();
+  }
+
+  const scopeOptions = (): string[] =>
+    Array.from(container.querySelectorAll<HTMLOptionElement>(".task-scope option")).map(
+      (option) => option.value,
+    );
+
+  it("offers no folder whose tasks are all finished while 'open only' is ticked", async () => {
+    // Reported twice. The chooser asked `total` so that ticking the box could not rebuild
+    // it — but the view *opens* with the box ticked, so a folder whose every task is done
+    // stood in the list offering a pane with nothing in it. The tick and the list now ask
+    // the same question.
+    await openTasks({
+      "01 Projects/afgerond.md": { total: 3, open: 0 },
+      "00 Inbox/plan.md": { total: 2, open: 1 },
+    });
+
+    expect(scopeOptions()).not.toContain("01 Projects");
+    expect(scopeOptions()).toContain("00 Inbox");
+  });
+
+  it("offers it again the moment the box is unticked", async () => {
+    // The other half: with the tick off the view shows finished tasks, so a folder that
+    // holds only those has something to show and belongs in the chooser again.
+    await openTasks({ "01 Projects/afgerond.md": { total: 3, open: 0 } });
+    expect(scopeOptions()).not.toContain("01 Projects");
+
+    const box = container.querySelector<HTMLInputElement>(".task-open-only input");
+    expect(box).not.toBeNull();
+    await act(async () => {
+      box!.click();
+    });
+    await flush();
+
+    expect(scopeOptions()).toContain("01 Projects");
+  });
+
+  it("keeps the folder being stood in, even when the tick empties it", async () => {
+    // The rebuild the old rule was avoiding, met head-on: the first click scopes to
+    // "00 Inbox", and a `<select>` whose value is not among its options renders blank.
+    await openTasks({ "00 Inbox/afgerond.md": { total: 1, open: 0 } });
+
+    expect(scopeOptions()).toContain("00 Inbox");
+    expect(container.querySelector<HTMLSelectElement>(".task-scope")!.value).toBe("00 Inbox");
   });
 
   it("scopes the very first click to the Inbox, not the whole vault", async () => {

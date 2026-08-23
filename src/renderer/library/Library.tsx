@@ -164,8 +164,17 @@ const BACK_STACK_LIMIT = 20;
 type Dialog =
   | { kind: "newFolder"; parent: string }
   | { kind: "renameFolder"; path: string; initial: string }
-  | { kind: "delete"; title: string }
-  | { kind: "deleteFolder"; path: string; notes: number; folders: number }
+  /**
+   * A note, to `_trash`. `openTasks` is counted when the dialog opens, exactly as the two
+   * permanent deletes below count theirs and for the same reason: what is still to be
+   * *done* in a note is the thing least visible from its title, and trashing it takes it
+   * out of the Tasks view and out of every folder badge at once. Restore is the way back,
+   * which is why this question is a question and not a warning — but it should still say
+   * what it is about to take off the list.
+   */
+  | { kind: "delete"; title: string; path: string; openTasks: number }
+  /** A folder, to `_trash`, with what is inside it — notes, subfolders, and open tasks. */
+  | { kind: "deleteFolder"; path: string; notes: number; folders: number; openTasks: number }
   // Five numbers, not one, and all five are counted when the dialog opens: this is
   // the confirmation in front of the one thing in this app with no way back, so what
   // it names has to be what is about to go. See `trashContents`.
@@ -1560,13 +1569,15 @@ export function Library(): React.ReactElement {
   // The Tasks view's scope chooser, narrowed to the folders that have something to show.
   // `noteTasks` and not `taskCounts`: the scope filter is a path prefix, so a folder
   // qualifies on what is *under* it, and the per-folder counts deliberately do not roll
-  // up. See `foldersWithTasks` for the other two decisions in it.
+  // up. The tick travels with it, so the chooser offers what the list under it would
+  // actually show — see `foldersWithTasks` for the other two decisions in it.
   const taskFolders = useMemo(
     () =>
       foldersWithTasks(
         folders,
         noteTasks,
         selection.kind === "tasks" ? selection.scope : "",
+        selection.kind === "tasks" ? selection.openOnly : true,
       ),
     [folders, noteTasks, selection],
   );
@@ -1620,18 +1631,38 @@ export function Library(): React.ReactElement {
         return `${parts.join(", ")} — ${app.t("ask.confirmClearTrash")}${unlinks}`;
       }
       case "deleteFolder": {
-        const contents =
-          open.notes === 0 && open.folders === 0
-            ? ""
-            : ` (${plural(open.notes, "library.note", "library.notes")}, ${plural(open.folders, "library.folder", "library.folders")})`;
+        // The open tasks join the parenthetical rather than starting a sentence of their
+        // own, because they are one more thing that is inside this folder — and they are
+        // left out at zero for the reason the whole list is: a "0 open tasks" is a
+        // warning about nothing. An empty folder still shows nothing at all in brackets.
+        const inside = [
+          ...(open.notes === 0 && open.folders === 0
+            ? []
+            : [
+                plural(open.notes, "library.note", "library.notes"),
+                plural(open.folders, "library.folder", "library.folders"),
+              ]),
+          ...(open.openTasks === 0
+            ? []
+            : [plural(open.openTasks, "library.openTask", "library.openTasks")]),
+        ];
+        const contents = inside.length === 0 ? "" : ` (${inside.join(", ")})`;
         return `"${open.path}"${contents} — ${app.t("ask.confirmDeleteFolder")}`;
       }
       case "relink":
         return `${plural(open.count, "link.noteLinksHere", "link.notesLinkHere")} — ${app.t("link.updateThem")}`;
       case "duplicateTitle":
         return `${app.t("link.duplicateTitle")} "${open.folder === "" ? app.t("library.vaultRoot") : open.folder}" — ${app.t("link.renameAnyway")}`;
-      case "delete":
-        return `"${open.title}" — ${app.t("ask.confirmDelete")}`;
+      case "delete": {
+        // The same parenthetical the permanent delete below writes, in the same words:
+        // the two questions differ in what they do, not in what a note holds. Silent at
+        // zero, which is the common case.
+        const tasks =
+          open.openTasks === 0
+            ? ""
+            : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
+        return `"${open.title}"${tasks} — ${app.t("ask.confirmDelete")}`;
+      }
       case "deletePermanently": {
         // The open tasks in this one thing, counted when the dialog opens exactly as the
         // whole trash's are. Silent when there are none, for the reason the zeroes are
@@ -1975,12 +2006,6 @@ export function Library(): React.ReactElement {
 
     await loadTree();
     void loadNotes(selectionRef.current);
-  };
-
-  const trash = async (): Promise<void> => {
-    const current = openRef.current;
-    if (current === null) return;
-    await trashNoteAt(current.path);
   };
 
   /**
@@ -2347,14 +2372,27 @@ export function Library(): React.ReactElement {
             })
           }
           onDeleteFolder={(path) => {
-            void window.emqnote.library.folderContents(path).then((contents) => {
-              setDialog({ kind: "deleteFolder", path, notes: contents.notes, folders: contents.folders });
+            // Both counts before the question, not one: `folderContents` walks for notes
+            // and subfolders and `openTasksAt` reads the notes themselves, and a dialog
+            // that appeared on the first answer and grew a clause on the second would be
+            // a question that changes while it is being read.
+            void Promise.all([
+              window.emqnote.library.folderContents(path),
+              window.emqnote.library.openTasksAt(path),
+            ]).then(([contents, openTasks]) => {
+              setDialog({
+                kind: "deleteFolder",
+                path,
+                notes: contents.notes,
+                folders: contents.folders,
+                openTasks,
+              });
             });
           }}
           onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
           onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
           onDeleteFolderPermanently={(path) => {
-            void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+            void window.emqnote.library.openTasksAt(path).then((openTasks) => {
               setDialog({
                 kind: "deletePermanently",
                 path,
@@ -2779,7 +2817,7 @@ export function Library(): React.ReactElement {
                     danger: true,
                     onSelect: () => {
                       const { path, title } = noteMenu.note;
-                      void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+                      void window.emqnote.library.openTasksAt(path).then((openTasks) => {
                         setDialog({ kind: "deletePermanently", path, label: title, openTasks });
                       });
                     },
@@ -2810,7 +2848,12 @@ export function Library(): React.ReactElement {
                   {
                     label: app.t("library.delete"),
                     danger: true,
-                    onSelect: () => setDialog({ kind: "delete", title: noteMenu.note.title }),
+                    onSelect: () => {
+                      const { path, title } = noteMenu.note;
+                      void window.emqnote.library.openTasksAt(path).then((openTasks) => {
+                        setDialog({ kind: "delete", title, path, openTasks });
+                      });
+                    },
                   },
                 ]
           }
@@ -2891,7 +2934,7 @@ export function Library(): React.ReactElement {
                     danger: true,
                     onSelect: () => {
                       const { path, title } = open;
-                      void window.emqnote.library.trashItemTasks(path).then((openTasks) => {
+                      void window.emqnote.library.openTasksAt(path).then((openTasks) => {
                         setDialog({ kind: "deletePermanently", path, label: title, openTasks });
                       });
                     },
@@ -2911,7 +2954,12 @@ export function Library(): React.ReactElement {
                   {
                     label: app.t("library.delete"),
                     danger: true,
-                    onSelect: () => setDialog({ kind: "delete", title: open.title }),
+                    onSelect: () => {
+                      const { path, title } = open;
+                      void window.emqnote.library.openTasksAt(path).then((openTasks) => {
+                        setDialog({ kind: "delete", title, path, openTasks });
+                      });
+                    },
                   },
                 ]
           }
@@ -2996,7 +3044,14 @@ export function Library(): React.ReactElement {
           onConfirm={(value) => {
             const current = dialog;
             setDialog(null);
-            if (current.kind === "delete") void trash();
+            // The path the question was asked about, not whatever is open when it is
+            // answered. Both were the same note in practice — right-clicking a row selects
+            // it, which opens it — but "the note this dialog names" and "the note in the
+            // reader" are two different things to reach for, and only one of them is what
+            // the sentence on screen promised. The count in that sentence is read off this
+            // same path, so a mismatch would put a task count from one note in a question
+            // about another.
+            if (current.kind === "delete") void trashNoteAt(current.path);
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();

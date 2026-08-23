@@ -1352,8 +1352,38 @@ looking at**, and it is a deliberate trade, not a regression to report.
 | 38n | Put a note holding two unfinished tasks in the trash, add a folder and an attachment, then press **Empty trash** | The button says Empty trash, and the question counts notes, folders, files **and** open tasks. Cancel — nothing has gone |  |
 | 38o | Embed a picture in a note, delete that note, then press Empty trash | A second sentence names the linked files that become unlinked attachments. Cancel, put a *second* live note referring to the same picture in place, and ask again: the sentence is gone, because the picture stays linked |  |
 | 38p | Right-click a note in the trash that has open tasks, choose Delete permanently | The question names the note and, in brackets, its open tasks. On a folder in the trash it counts everything under it |  |
-| 38q | In the Tasks view, open the scope dropdown in a vault with several levels of folders | Only folders with tasks in or under them, plus the vault root and whatever is currently chosen. **A folder whose tasks are all finished is still offered** — deliberate, so the list does not rebuild itself under the "open only" tick. If that is the thing that reads wrong, say so: it is the one decision here that could go the other way |  |
+| 38q | In the Tasks view, open the scope dropdown in a vault with several levels of folders | Only folders with tasks in or under them, plus the vault root and whatever is currently chosen. **Answered: a folder whose tasks are all finished is no longer offered while "open only" is ticked** — this row asked directly and the answer came back as a defect report. §39a is the row that now covers it |  |
 | 38r | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
+
+---
+
+## 39. Five items from a day of using §38 (23 August 2026)
+
+Five reports against the batch above, four of which are about a surface being the wrong
+colour or a group of buttons standing in the wrong place — which is precisely the kind of
+thing §38 could not settle, having never been on a real display. **Three of these five *were*
+driven here**, under `Xvfb` on the real renderer, and the pixels were read out of the
+screenshots rather than judged by eye: the search strip and the note's own field block both
+measure `#ffffff` where they measured `#fbfbfc` before, and the capture window's three
+buttons now end against the right margin. That leaves the rows below as a check on a real
+display and a real theme rather than a first sighting — with two exceptions, §39a and §39d,
+which are behaviour rather than colour.
+
+**§38q asked a question and this is the answer.** The Tasks scope chooser asked `total` so
+that ticking "open only" could not rebuild it; the view opens with that box ticked, so a
+folder whose tasks were all finished was offered and led to an empty pane. It now asks
+whichever of the two the tick is asking. The rebuild that argument was avoiding is real and
+is held harmless by the rule beside it: the folder currently chosen is never dropped.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 39a | In a vault where one folder holds only *finished* tasks, open the Tasks view and drop the scope list open | That folder is not in it. Untick "open only" and open the list again: it is back. Now scope *to* that folder and tick the box — the chooser still says its name, and the pane below is empty |  |
+| 39b | Look at the strip holding the search box in the note list — judge by eye, on a real display | Pure white in the light theme, level with the note-list header under it and the note editor's header beside it. The search field itself stays a shade off it, being a field |  |
+| 39c | Open a note in the library and look at the When / Where / Tags / Who block — judge by eye, on a real display | The block sits on the same white as the header above it, with the writing surface below it a shade off. It is the same component the capture window draws, and it should now be the same colour in both |  |
+| 39d | Look at the foot of the **capture** window, then at the foot of the library's note editor | `[Insert] [Actions] [Help]` ends against the right margin in both. In the capture window the timing readout has moved to the left, in beside "Ctrl+Enter closes", which is what was keeping the buttons out of the corner |  |
+| 39e | Right-click a note with two unfinished tasks in it and choose Delete | The question names the note and, in brackets, "2 open tasks". Cancel, tick both tasks off, and ask again: no brackets |  |
+| 39f | Right-click a folder holding a few notes and some open tasks, choose Delete folder | One bracket, three numbers: notes, subfolders, open tasks — the tasks counted through the whole subtree, not just the folder's own notes. An empty folder with no tasks gets no brackets at all |  |
+| 39g | Do §39e from the reader's **Actions** menu instead of the note list | The same question, and confirming deletes **the note the question named** — not whatever else may have been open |  |
 
 ---
 

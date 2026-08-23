@@ -2077,7 +2077,7 @@ function registerLibraryIpc(): void {
     return { ...trashContents(vault), linkedFiles: orphaned.length };
   });
 
-  ipcMain.handle(IPC.libraryTrashItemTasks, (_event, path: string) => {
+  ipcMain.handle(IPC.libraryOpenTasksAt, (_event, path: string) => {
     const vault = vaultPath();
     return vault === null ? 0 : openTasksAt(vault, path);
   });

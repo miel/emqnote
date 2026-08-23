@@ -3164,3 +3164,19 @@ mappen en bestanden en geldt nu voor beide nieuwe getallen.
 
 **Waarom "legen" en niet "leegmaken van".** Wissen is wat een filter en een zoekvak doen, en die
 staan allebei één klik verderop in ditzelfde venster. Dit is de ene knop die iets vernietigt.
+
+**Uitgebreid op 23 augustus 2026, naar de gewone verwijdervragen.** Dit besluit gaf de telling
+aan de twee definitieve verwijderingen; de twee gewone — Verwijderen op een notitie, Map
+verwijderen in de boom — kregen hem niet, op de onuitgesproken redenering dat een gang naar de
+prullenbak omkeerbaar is en de vraag er dus minder toe doet. Dat is hetzelfde feit, hoe je het
+ook wendt: op het moment dat een notitie in de prullenbak ligt is ze weg uit het Taken-scherm en
+uit elke maptelling, en wat er nog te *doen* in stond is precies wat een titel er het minst over
+zegt. Terugzetten is het verschil, en dat verschil zit in de knoppen, niet in het getal. Dezelfde
+woorden, dezelfde stilte bij nul: bij een map staan de taken als derde getal tussen dezelfde
+haakjes als de notities en de submappen, want het is nog iets dat *in* die map zit — geen tweede
+zin, die is voorbehouden aan de bestanden die juist **niet** meegaan.
+
+Eén ding daaraan is een naam. De telling zelf was `trashItemTasks`, en die functie heeft nooit
+iets met de prullenbak te maken gehad: ze loopt een pad af dat overal in de kluis mag liggen. Zo
+heet ze nu ook (`openTasksAt`). Een naam die het bereik van een functie kleiner voorstelt dan het
+is, is precies de naam die de tweede aanroeper een tweede kopie laat schrijven.
