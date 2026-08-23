@@ -3,9 +3,11 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 23 August 2026 — **six defects and two feature groups from daily use: the two
-windows made consistent, search given a scope and its syntax a panel, and four layout fixes**.
-Three decisions, B82–B84. Not released yet.
+Last updated 23 August 2026, released as `v0.11.0` — **six defects and two feature groups from
+daily use: the two windows made consistent, search given a scope and its syntax a panel, and
+four layout fixes**. Three decisions, B82–B84. A **minor** release and not a patch, unlike the
+three before it: this one changes what the app does and how it looks in both windows, where
+`v0.10.6` deliberately changed nothing under `src/` at all.
 
 **B82 — the two windows share one title field and one bar at the foot.** The capture window and
 the library's note editor already share `HeaderBlock`, `Editor`, `ContextMenu`,
