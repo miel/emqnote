@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from "electron";
+import { windowBackground } from "./window-background.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ export function showLibraryWindow(): void {
     minHeight: 480,
     show: false,
     title: "emqnote",
-    backgroundColor: "#1e1f22",
+    backgroundColor: windowBackground(),
     // This window is natively framed, and on Windows that means the application menu
     // `installMinimalMenu` sets is drawn as a real strip inside it — an "Edit" bar above
     // the folder tree, which is what was reported. Hiding it rather than dropping the

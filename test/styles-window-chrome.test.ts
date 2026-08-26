@@ -42,7 +42,9 @@ const rule = (css: string, selector: string): string => {
 describe("styles: the note editor's chrome is shaded like the capture window's", () => {
   it("puts the reader's header and footer on the panel colour", () => {
     // `--surface` is what `.titlebar`, `.header` and `.statusbar` in `styles.css` have
-    // always used — white in the light theme, the lighter panel in the dark one. The
+    // always used — the grey framing the page in the light theme, the lighter panel in the
+    // dark one (B87; in the light theme it was white until then, which is what made this
+    // whole distinction invisible there). The
     // library's two strips had no background at all, so the writing surface between them
     // did not read as a page.
     expect(rule(library, "\\.reader-header")).toMatch(/background:\s*var\(--surface\);/);
@@ -63,7 +65,7 @@ describe("styles: the note editor's chrome is shaded like the capture window's",
   it("shades the search strip with them", () => {
     // The third thing at the top of this window, and the one you type into. It had no
     // background of its own, which put a band of `--background` between two strips that
-    // are white — a seam across the head of the window rather than a distinction.
+    // are not — a seam across the head of the window rather than a distinction.
     expect(rule(library, "\\.notes-search")).toMatch(/background:\s*var\(--surface\);/);
   });
 

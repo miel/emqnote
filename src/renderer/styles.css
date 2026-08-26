@@ -1,6 +1,15 @@
+/* Six roles, one system (B87). The page is `--background`, everything framing it is
+   `--surface`, a field you type a value into is `--field`, and the two states a row can be
+   in are `--hover` and `--selected`. `--border` is the divider between any two of them.
+
+   `color-scheme` is declared so the native parts obey the same theme: scrollbars and the
+   popup a `<select>` opens are drawn by the OS, and without it they stayed in the OS scheme
+   while the CSS went the other way — most visible now the content pane is pure white. */
 :root {
+  color-scheme: light dark;
   --background: #1e1f22;
   --surface: #26282c;
+  --field: #1e1f22;
   --border: #33363b;
   --text: #e8e9ec;
   --muted: #8b9099;
@@ -14,13 +23,29 @@
      once. Teal, so it also cannot be read as `--accent`, which is what a link wears. */
   --find-match: #2c5a52;
   --find-active: #3f9c85;
+  /* Hover and selection are translucent grey rather than a colour per theme, and that is
+     the one thing about them worth defending: a state tint lands on two different grounds —
+     a white list row and a grey chrome button — so an overlay steps relative to whatever is
+     under it where a solid grey can only be right on one of them. There are exactly two of
+     them, which is the other half: this was seven different alphas across fifteen rules,
+     with a hovered branch four hundredths from a selected note and a selected branch
+     indistinguishable from a hovered title-bar button. */
+  --hover: rgba(127, 127, 127, 0.1);
+  --selected: rgba(127, 127, 127, 0.22);
 }
 
+/* The light theme's polarity used to be upside down: `--surface` was `#ffffff` and
+   `--background` `#fbfbfc`, so the chrome was *lighter* than the page it framed. That is
+   what `DESIGN-CRITIQUE.md`'s Finding 2 measured — the note list and the reader the same
+   colour, divided by one pixel at 1.28 : 1 — and it is why a code block, a wiki-link chip
+   and a tag chip were all white on off-white. The page is white here and everything that
+   frames it is grey; the dark theme above already fell that way round and is unchanged. */
 @media (prefers-color-scheme: light) {
   :root {
-    --background: #fbfbfc;
-    --surface: #ffffff;
-    --border: #dfe1e5;
+    --background: #ffffff;
+    --surface: #f4f5f7;
+    --field: #ebedf1;
+    --border: #d7dbe1;
     --text: #1b1c1f;
     --muted: #6b7079;
     --accent: #1a63d8;
@@ -29,6 +54,8 @@
     --task-highlight: #f5c518;
     --find-match: #bfe9dc;
     --find-active: #57c9a8;
+    --hover: rgba(127, 127, 127, 0.1);
+    --selected: rgba(127, 127, 127, 0.22);
   }
 }
 
@@ -101,7 +128,7 @@ body {
 }
 
 .titlebar-button:hover {
-  background: rgba(127, 127, 127, 0.18);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -284,7 +311,7 @@ body {
 
 .header .tag-suggest button:hover,
 .header .tag-suggest button.tag-suggest-on {
-  background: rgba(127, 127, 127, 0.2);
+  background: var(--selected);
   border-color: transparent;
   color: var(--accent);
 }
@@ -307,12 +334,19 @@ body {
 }
 
 /* Three states, not two. A field used to be invisible until the pointer found it, so
-   there was nothing to say it *was* a field. The rest state is a neutral overlay rather
-   than a token: the header is `--surface`, and in light mode `--background` differs
-   from it by a level or two — the same trick `.branch:hover` uses. */
+   there was nothing to say it *was* a field. The rest state is `--field` — the header is
+   `--surface`, and a field is the step below it — which is the same colour every other
+   field in both windows now wears; it used to be a neutral overlay of its own, one of the
+   seven that B87 collapsed into two.
+
+   Focus fills with `--background`, so a field being typed in goes the colour of the page.
+   That is the light theme's signal and it is deliberate that the dark theme has no fill
+   change here at all: there `--field` and `--background` are the same value, and the
+   accent border carries focus on its own, exactly as it already does for `.ask input`,
+   `.link-prompt input` and `.settings select`, none of which ever had a focus fill. */
 .header input,
 .header button {
-  background: rgba(127, 127, 127, 0.08);
+  background: var(--field);
 }
 
 .header input:hover,
@@ -465,7 +499,7 @@ body {
   padding: 4px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--background);
+  background: var(--field);
   color: var(--text);
   font: inherit;
 }
@@ -490,7 +524,7 @@ body {
 
 .find-button:hover {
   border-color: var(--border);
-  background: var(--background);
+  background: var(--hover);
 }
 
 .editor-content {
@@ -1013,7 +1047,12 @@ body {
    there is no `tableHeader` to style and `toDOM` cannot see which row it is in. CSS can.
 
    Deliberately weight and fill only, no bottom rule: the delimiter row it stands for is
-   `---`, which says "header above" and nothing about a border. */
+   `---`, which says "header above" and nothing about a border.
+
+   The fill stays a literal rather than becoming `--hover` or `--surface`, and that is the
+   point of it: this is a header row *inside the note*, part of the document, and it must
+   not move the day someone retunes what a hovered row looks like. It is the one grey
+   overlay in this file that is not a UI state. */
 .editor-content table tr:first-child td {
   font-weight: 600;
   background: rgba(127, 127, 127, 0.1);
@@ -1136,7 +1175,7 @@ body {
   height: 18px;
   border: 1px solid var(--border);
   border-radius: 2px;
-  background: var(--background);
+  background: var(--field);
   cursor: default;
 }
 
@@ -1219,7 +1258,7 @@ body {
   object-fit: cover;
   border: 1px solid var(--border);
   border-radius: 3px;
-  background: var(--background);
+  background: var(--field);
 }
 
 .editor-content .wiki-link-preview[data-thumb="ok"] .wiki-link-thumb {
@@ -1498,7 +1537,7 @@ body {
   width: 3em;
   text-align: right;
   color: var(--text);
-  background: var(--bg);
+  background: var(--field);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 4px;
@@ -1630,7 +1669,7 @@ body {
   font-family: inherit;
   font-size: 13px;
   color: inherit;
-  background: var(--background);
+  background: var(--field);
   border: 1px solid var(--accent);
   border-radius: 5px;
   padding: 4px 7px;
@@ -1738,7 +1777,7 @@ body {
 }
 
 .context-menu-active:not(:disabled) {
-  background: rgba(127, 127, 127, 0.2);
+  background: var(--selected);
 }
 
 .context-menu-item.danger:not(:disabled) {
@@ -2045,7 +2084,7 @@ body {
   font: inherit;
   font-size: 14px;
   color: inherit;
-  background: var(--background);
+  background: var(--field);
   border: 1px solid var(--accent);
   border-radius: 6px;
   padding: 6px 9px;
@@ -2149,7 +2188,7 @@ body {
 }
 
 .palette-on {
-  background: rgba(127, 127, 127, 0.2);
+  background: var(--selected);
   color: var(--accent);
 }
 
@@ -2168,7 +2207,7 @@ body {
 }
 
 .palette-title strong {
-  color: var(--fg);
+  color: var(--text);
   font-weight: 600;
 }
 

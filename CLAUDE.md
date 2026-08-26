@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1898 tests
+npm test               # vitest run — 1910 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -137,6 +137,12 @@ undo by accident and expensive to rediscover:
 - **`package.json`'s `dependencies` is kept minimal.** electron-vite externalises everything listed there; a runtime package that can't be bundled belongs there, everything else in `devDependencies`. `npm run check:bundle` guards it.
 - **The capture window is hidden, never destroyed.** Only one `BrowserWindow` reference exists; destroying it is unrecoverable.
 - **Nothing this app deletes gets one attempt.** `trash-delete.ts` is the only code that permanently deletes anything, retries Windows' EBUSY/EPERM/ENOTEMPTY, and reports a specific refusal rather than asserting a cause.
+- **Colour comes from one of six roles, never from a value** (B87). The page is `--background`,
+  chrome and panels are `--surface`, a field is `--field`, and a row is `--hover` or
+  `--selected` — declared once per theme at the top of `styles.css`. The light theme had the
+  first two the wrong way round for a long time and nobody could see the three panes because of
+  it. `styles-surfaces.test.ts` counts the grey literals left outside `:root`; there are two,
+  and both carry a comment saying why they are not UI state.
 - **A diagnosis that survives its own bug report is incomplete, not wrong.** Reach for one of the diagnostic helpers above before shipping a second fix for the same complaint.
 
 ## Tests
@@ -147,7 +153,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1898 tests in roughly twenty-five seconds of test time (about a minute and a
+The suite runs its 1910 tests in roughly thirty-four seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly

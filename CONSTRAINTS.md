@@ -1643,7 +1643,8 @@ changes nothing on screen.
 (23 August 2026). B82 put `.reader-header`, `.reader-footer` and `.notes-header` on `--surface`;
 `.notes-search` and `.header-reader` kept no background of their own, so in the light theme they
 sat on `--background` — `#fbfbfc` against `#ffffff`, which is invisible in a screenshot from a
-sandbox and reads as a seam on a real display. `.header-reader` is the worse of the two: it is
+sandbox and reads as a seam on a real display. (Those two values are the wrong way round, and
+B87 has since swapped them; the seam and the fix for it are the same either way.) `.header-reader` is the worse of the two: it is
 the *same component* the capture window draws inside `.header`, which has always been
 `--surface`, so one shared block was drawing itself two different colours depending on the
 window. Measured rather than judged: `--library --screenshot` under `Xvfb`, pixels read out of
@@ -1679,3 +1680,43 @@ front of a dialog. Only the trash is read directly, because the index deliberate
 out. A note that will not parse counts as zero rather than taking the whole count down: these
 numbers are a warning in a sentence, not a manifest, and `emptyTrash` is what reports what
 actually went.
+
+**Chrome is `--surface`, the page is `--background`, a field is `--field`, and there are exactly
+two state tints** (B87, 26 August 2026). Six roles, declared once per theme at the top of
+`styles.css`, and a rule that wants a colour picks the role rather than a value. What broke
+without it was measured rather than argued: in the light theme the two surface tokens were the
+wrong way round — `--surface: #ffffff` framing a `--background: #fbfbfc` page — so the chrome was
+*lighter* than what it framed. `DESIGN-CRITIQUE.md`'s Finding 2 photographed the result: the note
+list and the reader the same colour, divided by one pixel at **1.28 : 1**, the tree a further
+1.6 % away, and a code block, a wiki-link chip and a tag chip all drawn white on off-white.
+**The dark theme had none of it, from the same two tokens**, which is the tell — a pair chosen
+where it works and never checked where it doesn't, and the same shape as the two strips one
+entry above that had to be patched by hand for the same underlying reason.
+
+Three things about it are load-bearing. **The dark theme's five surfaces keep their exact
+values**; it gains the three new names only, and `--field` is `#1e1f22` there — the old
+`--background` — because every field in the app sits inside a `--surface` container, so that one
+choice leaves every dark field where it was. **The note list stays `--background`**: "a list is
+not a surface" still holds, and `styles-window-chrome.test.ts` still pins that `.notes` is not
+`--surface`. **`--hover` and `--selected` stay translucent grey and are not overridden per
+theme** — a state tint lands on two different grounds, a white list row and a grey chrome
+button, and an overlay steps relative to whatever is under it where a solid grey can only be
+right on one of them.
+
+They are also **two** tints where there were seven: `rgba(127, 127, 127, α)` with
+α ∈ {0.08, 0.09, 0.10, 0.12, 0.14, 0.18, 0.20} across fifteen rules, which put a hovered branch
+four hundredths from a selected note and made a selected branch pixel-identical to a hovered
+title-bar button. `styles-surfaces.test.ts` counts the literals that are left — exactly one per
+sheet — so they cannot grow back: the note's own table header row (document content, not a UI
+state) and the scan bar's fill (a progress bar is not a selection). Both carry a comment saying
+so above them.
+
+Two smaller things the same test now guards. **Every `var()` names a token that exists**:
+`var(--bg)` and `var(--fg)` sat in `styles.css` for a long time, declared nowhere, resolving to
+nothing, in rules that therefore did nothing and looked fine in every review. And
+**`backgroundColor` is not a hardcoded `#1e1f22` in the two window files** — it is
+`windowBackground()`, which asks `nativeTheme` once at construction. A light-mode machine used to
+open every window with a dark flash before the CSS landed; that was mildly wrong against a
+`#fbfbfc` page and is the whole distance between the themes against a white one. No
+`nativeTheme.on("updated")` listener: the colour exists only in the moment before the first
+paint, and the capture window is the one waiting on a hotkey with an 80 ms budget.

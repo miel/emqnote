@@ -3,6 +3,37 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 26 August 2026 — **one surface system, six roles** (B87), out of
+`DESIGN-CRITIQUE.md`'s Finding 2. Not released yet, and **not seen on a real display**: every
+row of `TEST-PROTOCOL.md` §40 is a colour, and colours are the thing a sandbox is worst at.
+What *was* measured here, under `Xvfb` with the pixels read out of the PNGs: the light theme's
+three panes now sample `#f4f5f7` / `#d7dbe1` / `#ffffff` / `#ffffff` where the critique
+measured `#ffffff` / `#dfe1e5` / `#fbfbfc` / `#fbfbfc`, and the dark theme is byte-identical at
+the same five points. `npm run drive:capture` gives its nine `ok` lines.
+
+**The light theme's two surface tokens were the wrong way round**, which is the whole of it:
+`--surface: #ffffff` framing a `--background: #fbfbfc` page, so the chrome was lighter than
+what it framed and a code block, a wiki-link chip and a tag chip were all white on off-white.
+The page is white now and everything framing it is grey. Three roles that had no name got one —
+`--field`, `--hover`, `--selected` — and the last two replace **seven** different alphas of the
+same grey across fifteen rules. The dark theme keeps its five surfaces to the value.
+
+The suite is 1910 tests over 152 files. One new file: the surface system itself
+(`styles-surfaces.test.ts`), which pins the polarity, the two state tints, the count of grey
+literals left outside `:root`, and that every `var()` names a token that has been declared —
+`var(--bg)` and `var(--fg)` had both been sitting in `styles.css`, declared nowhere.
+
+**Open, and deliberately not done here.** `.disk-change-bar` and `.conflict-banner` are still
+hardcoded amber (`#ffe6b3`, `#ffd875`, with `#7a4a00` text) in *both* themes — a real defect,
+and a warning-colour decision rather than a surface one, so it wants its own thinking rather
+than a value picked in passing. The rest of the critique is untouched: Findings 1, 3, 4 and 5–8
+are still open, and Finding 3 in particular is the one this batch could only half-answer —
+hover and selection are now a clean two steps of one grey, and if the selected row still gets
+lost in its own hover trail the answer is a second channel (an accent edge on the focused
+pane's active row), not a darker grey.
+
+---
+
 Last updated 23 August 2026, released as `v0.11.2` — **five items from a day of using
 `v0.11.1`**, which is the batch immediately below this one. A **patch** release, like the one it
 answers and for the same reason: every item in it arrived as a defect report against that

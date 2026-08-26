@@ -3180,3 +3180,83 @@ Eén ding daaraan is een naam. De telling zelf was `trashItemTasks`, en die func
 iets met de prullenbak te maken gehad: ze loopt een pad af dat overal in de kluis mag liggen. Zo
 heet ze nu ook (`openTasksAt`). Een naam die het bereik van een functie kleiner voorstelt dan het
 is, is precies de naam die de tweede aanroeper een tweede kopie laat schrijven.
+
+## B87 — Eén oppervlakkenstelsel: zes rollen, en het lichte thema stond op zijn kop
+
+**Genomen** op 26 augustus 2026, na `DESIGN-CRITIQUE.md`.
+
+Het lichte thema had `--surface: #ffffff` en `--background: #fbfbfc`: de lijst *waar de notitie
+in staat* was grijzig, en alles wat eromheen zit — titelbalk, kopstrook, statusbalk, boom, elk
+zwevend paneel — was wit. De omlijsting was dus lichter dan wat ze omlijst, en dat is precies
+omgekeerd. Bevinding 2 van de kritiek heeft gemeten wat dat kost: notitielijst en lezer krijgen
+dezelfde kleur, gescheiden door één pixel op **1,28 : 1**, met de boom nog eens 1,6 % ernaast.
+Een venster met drie panelen rustte op een haarlijn die niemand ziet.
+
+Het donkere thema had het probleem niet, met dezelfde twee variabelen. Dat is de aanwijzing: het
+paar is gekozen waar het werkte en niet gecontroleerd waar het niet werkte.
+
+**Het besluit.** Zes rollen, één keer per thema vastgelegd:
+
+| Rol | Variabele | Licht | Donker |
+|---|---|---|---|
+| venster en inhoud | `--background` | `#ffffff` | `#1e1f22` |
+| balken, koppen, panelen | `--surface` | `#f4f5f7` | `#26282c` |
+| invoer- en waardevelden | `--field` | `#ebedf1` | `#1e1f22` |
+| aanwijzen | `--hover` | `rgba(127, 127, 127, 0.1)` | idem |
+| gekozen | `--selected` | `rgba(127, 127, 127, 0.22)` | idem |
+| scheidslijn | `--border` | `#d7dbe1` | `#33363b` |
+
+**Waarom het donkere thema onaangeroerd blijft.** De kritiek zegt het zelf: het donkere thema is
+degene om na te doen, niet degene om mee te middelen. Zijn vijf oppervlakken houden hun waarde
+tot op de pixel; het krijgt alleen de drie namen erbij. `--field` is er `#1e1f22` — de oude
+`--background` — want elk veld in deze app staat in een `--surface`-container, dus die ene keuze
+laat elk donker veld staan waar het stond.
+
+**Waarom de notitielijst wit blijft en dus dezelfde kleur houdt als de lezer.** "Een lijst is
+geen oppervlak" stond al in `CONSTRAINTS.md` en blijft staan: de lijst is inhoud, en wat er in
+een lijst moet opvallen is de gekozen regel, niet de lijst zelf. Een derde grijstint ertussen —
+overwogen, verworpen — zou een vierde oppervlak zijn om te onderhouden voor een scheiding die de
+kopstrook van de lezer er nu al bovenop legt. De scheiding tussen die twee panelen is dus de
+lijn, en die is van 1,28 : 1 naar **1,39 : 1** gegaan; de boom staat nu op een echt verschil met
+de lijst ernaast (1,11 tegen 1,016), en dat is waar Bevinding 2 werkelijk over ging.
+
+**Waarom zwevende panelen grijs meegaan.** Het palet, de rechtermuisknopmenu's, Help,
+Instellingen, de conflictvraag: alles wat niet de notitie is, is omlijsting. Ze stonden al op
+`--surface` en hoefden dus geen regel te veranderen — ze scheiden zich van de bladzijde met hun
+rand en hun schaduw, zoals ze dat altijd deden.
+
+**Aanwijzen en gekozen zijn twee variabelen, geen zeven getallen.** Het waren
+`rgba(127, 127, 127, α)` met α ∈ {0,08 0,09 0,10 0,12 0,14 0,18 0,20} over vijftien regels. Een
+aangewezen tak stond vier honderdsten van een gekozen notitie af, en een gekozen tak was niet te
+onderscheiden van een aangewezen titelbalkknop — twee dingen die niets met elkaar te maken
+hebben, in dezelfde kleur, om geen reden. Ze blijven **doorschijnend** grijs en krijgen met opzet
+geen kleur per thema: zo'n tint landt op twee ondergronden — een witte lijstregel en een grijze
+knop in de omlijsting — en een doorschijnende laag stapt mee met wat eronder ligt, waar een
+vaste grijstint maar op één van de twee goed kan zijn. Twee tinten blijven literal: de kopregel
+van een tabel *in de notitie* (dat is inhoud, geen toestand) en de vulling van de scanbalk (een
+voortgangsbalk is geen selectie). Beide zeggen dat nu ook boven zichzelf.
+
+**Wat er nog aan vast zat.** `.header input` vulde zich in rust met een eigen tint en bij focus
+met `--background`; nu is rust `--field` — dezelfde kleur als elk ander veld in beide vensters —
+en blijft focus `--background`, zodat een veld waar je in typt de kleur van de bladzijde krijgt.
+In het donkere thema zijn die twee dezelfde waarde en draagt de accentrand de focus alleen, wat
+ze bij `.ask input` en `.settings select` altijd al deed. `color-scheme` wordt eindelijk
+opgegeven, zodat schuifbalken en de lijst die een `<select>` opent hetzelfde thema volgen als de
+rest. En `var(--bg)` en `var(--fg)` stonden in `styles.css` zonder ooit ergens verklaard te zijn:
+twee regels die niets deden, en waar nu een test op staat die elke `var()` tegen de verklaarde
+namen houdt.
+
+**Het venster kleurt niet meer donker vóór zijn eerste frame.** `backgroundColor` stond in beide
+vensters hardgecodeerd op `#1e1f22` en vroeg `nativeTheme` niets. Dat was hinderlijk toen de
+lichte bladzijde `#fbfbfc` was en is onhoudbaar nu ze wit is: de flits is dan het hele verschil
+tussen de twee thema's. `windowBackground()` is die ene plek, één keer gelezen bij het bouwen van
+het venster — geen luisteraar op `nativeTheme`, want deze kleur is alleen te zien in het moment
+vóór de eerste verf, en het opnamevenster staat verborgen te wachten op een sneltoets met een
+budget van 80 ms.
+
+**Wat niet meegaat.** `pdfview.css` heeft een eigen, losse verzameling variabelen, met opzet:
+dat venster laadt `styles.css` niet en zou met de variabelen de hele cascade meekrijgen. Zijn
+`--pdf-chrome` is `#f4f4f5` — hetzelfde stelsel, apart bedacht — dus er is niets te herstellen.
+De twee amberkleurige balken (`.disk-change-bar`, `.conflict-banner`) staan nog hardgecodeerd in
+één kleur voor beide thema's; dat is een waarschuwingskleur en geen oppervlak, en het staat in
+`TODO.md` als zodanig.

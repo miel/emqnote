@@ -1,4 +1,5 @@
 import { app, BrowserWindow, screen } from "electron";
+import { windowBackground } from "./window-background.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
@@ -85,7 +86,7 @@ export function createCaptureWindow(): BrowserWindow {
     // above everything else would mean it permanently covers whatever you switch to.
     alwaysOnTop: false,
     title: "emqnote",
-    backgroundColor: "#1e1f22",
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(here, "../preload/index.cjs"),
       contextIsolation: true,
