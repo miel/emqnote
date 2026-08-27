@@ -3,10 +3,11 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 27 August 2026 — **four defects and two features from a day of using
-`v0.11.2`**, which is the batch immediately below this one. Two decisions, B88 and B89, and
-**B87 gains an addendum** on its own two items. Not a patch release: two of the six are
-things the app could not do before.
+Last updated 27 August 2026, released as `v0.12.0` — **four defects and two features from a
+day of using `v0.11.2`**, which is the batch immediately below this one. Two decisions, B88 and
+B89, and **B87 gains an addendum** on its own two items. A **minor** release rather than the
+three patches before it, and it carries the batch below with it: two of these six are things
+the app could not do at all, and B87 had not shipped.
 
 **Driven, not guessed.** Everything here was run in the real app under `Xvfb` with a real
 Chromium behind it, and the two items a sandbox is worst at were driven with real input
@@ -69,8 +70,9 @@ text size has no chord: if adjusting it while typing turns out to matter, `Mod+0
 
 ---
 
-Last updated 26 August 2026 — **one surface system, six roles** (B87), out of
-`DESIGN-CRITIQUE.md`'s Finding 2. Not released yet, and **not seen on a real display**: every
+Last updated 26 August 2026, released as `v0.12.0` alongside the batch above — **one surface
+system, six roles** (B87), out of
+`DESIGN-CRITIQUE.md`'s Finding 2. **Not seen on a real display**: every
 row of `TEST-PROTOCOL.md` §40 is a colour, and colours are the thing a sandbox is worst at.
 What *was* measured here, under `Xvfb` with the pixels read out of the PNGs: the light theme's
 three panes now sample `#f4f5f7` / `#d7dbe1` / `#ffffff` / `#ffffff` where the critique
