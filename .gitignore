@@ -10,3 +10,8 @@ build
 # real correspondence, kept out of this public repo's history on purpose.
 # Fixtures derived from them (trimmed, reviewed) live in test/ instead.
 /test-emails/
+
+# Claude Code session scratch. The diagnostics skill under `.claude/skills/` is checked in
+# — `CLAUDE.md` points at it — and these two are per-session state that is not.
+.claude/RESUME.md
+.claude/scheduled_tasks.lock

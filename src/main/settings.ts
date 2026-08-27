@@ -2,7 +2,7 @@ import { app } from "electron";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locale } from "../shared/i18n.js";
-import { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY } from "../shared/ipc.js";
+import { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY, type Theme } from "../shared/ipc.js";
 import type { SortKey } from "../shared/vault-types.js";
 import { readLaunchOptions } from "./launch-options.js";
 
@@ -93,6 +93,19 @@ export interface Settings {
    * any note size, and the OS already has a setting for the other question.
    */
   editorFontSize: number;
+  /**
+   * Which theme the app draws in (B90): the OS's answer, or light, or dark.
+   *
+   * Per machine, like `editorFontSize` and `keepPinnedInView` above it, and for the
+   * sharper version of the same reason — the two machines this app runs on are a Mac and
+   * a Windows box, and the OS setting they each carry is already per machine.
+   *
+   * Read once at startup and put on `nativeTheme.themeSource` before any window is built,
+   * which is what makes `windowBackground()` — the colour Chromium paints before the first
+   * frame — agree with the theme the CSS is about to draw. Nothing else in main or in
+   * either renderer reads it back: `prefers-color-scheme` answers for all of them.
+   */
+  theme: Theme;
 }
 
 export { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY };
@@ -111,6 +124,7 @@ function defaults(): Settings {
     loadRemoteImages: true,
     keepPinnedInView: false,
     editorFontSize: 16,
+    theme: "system",
   };
 }
 

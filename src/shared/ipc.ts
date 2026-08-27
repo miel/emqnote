@@ -224,6 +224,16 @@ export const IPC = {
    */
   setEditorFontSize: "app:set-editor-font-size",
   /**
+   * renderer → main: which of the three themes the app draws in (B90).
+   *
+   * The renderer only reports the choice. Nothing in the stylesheets reads it back —
+   * `styles.css` still asks `prefers-color-scheme`, and main answers that question for
+   * every window at once through `nativeTheme.themeSource`. That is what makes "system"
+   * a real third answer rather than a stored guess: with it set, Chromium follows the OS
+   * live, and the two explicit values override it.
+   */
+  setTheme: "app:set-theme",
+  /**
    * main → both windows: something in `settings.json` that a window *draws with* has
    * changed, so re-read the bootstrap.
    *
@@ -378,6 +388,17 @@ export const IPC = {
   vaultFileChanged: "vault:file-changed",
 } as const;
 
+/**
+ * Which theme the app draws in (B90).
+ *
+ * "system" is the default and is not a synonym for either of the others: it means the
+ * question is the OS's to answer, and to keep answering — a machine that switches at
+ * sunset switches the app with it. The two explicit values exist because that is not
+ * everyone's preference, and because a Windows machine in light mode and a Mac in dark is
+ * exactly the pair this app runs on.
+ */
+export type Theme = "system" | "light" | "dark";
+
 export interface Bootstrap {
   locale: Locale;
   platform: NodeJS.Platform;
@@ -400,6 +421,12 @@ export interface Bootstrap {
    * why it rides the bootstrap rather than being read by the panel that sets it.
    */
   editorFontSize: number;
+  /**
+   * The chosen theme (B90) — for the Settings row, and for nothing else. No window draws
+   * with it: main puts it on `nativeTheme.themeSource`, and the stylesheets go on asking
+   * `prefers-color-scheme` exactly as they did when the OS was the only voice in it.
+   */
+  theme: Theme;
 }
 
 /**
@@ -748,6 +775,8 @@ export interface CaptureApi {
   setKeepPinnedInView: (keep: boolean) => Promise<void>;
   /** B88's note size, in pixels. Awaited for the same reason `setKeepPinnedInView` is. */
   setEditorFontSize: (px: number) => Promise<void>;
+  /** B90's theme. Awaited for the same reason `setEditorFontSize` is. */
+  setTheme: (theme: Theme) => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */

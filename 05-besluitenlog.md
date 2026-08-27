@@ -3373,3 +3373,93 @@ zijn die hoe dan ook als één wijziging lezen.
 Het geldt voor `toggleBulletList`, `toggleOrderedList` en `toggleTask`. `wrapInBlockquote`
 niet: een `blockquote` neemt `block+` en kon een kop altijd al aan. `indent` ook niet: die
 valt in een kop terug op `wrapIn(blockquote)`, en dat is bestaand gedrag met zijn eigen vraag.
+
+---
+
+## B90 — Het thema is een keuze van deze machine: systeem, licht of donker
+
+**Genomen** op 27 augustus 2026.
+
+Gevraagd naar aanleiding van het donkere thema dat in gesprekken steeds langskwam: een rij in
+Instellingen om het thema te zetten op **systeem | licht | donker**.
+
+**Er was al een thema, en er was geen keuze.** `styles.css` draagt sinds B87 zes rollen per
+thema, en welk van de twee getekend werd hing volledig aan `prefers-color-scheme` — het
+besturingssysteem was de enige stem. Dat is voor de meeste dagen het goede antwoord en het is
+niet het enige: de twee machines waar dit op draait zijn een Mac en een Windows-doos, en die
+twee mogen best verschillend staan zonder dat je er een systeeminstelling voor omzet.
+
+**`nativeTheme.themeSource` in main, en geen klasse op het document.** Dat is het besluit dat
+ertoe doet, want de voor de hand liggende route — `data-theme` op `<html>` en elke regel in de
+drie stylesheets verdubbelen — kost drie bestanden en levert minder op. `themeSource` is
+precies de knop waarop `prefers-color-scheme` in élke renderer antwoordt, dus:
+
+- `styles.css`, `library.css` én `pdfview.css` blijven staan zoals ze staan; er is niets bij
+  te houden en niets te verdubbelen.
+- Het spul waar niemand CSS voor schrijft gaat mee: schuifbalken en het venstertje dat een
+  `<select>` opentrekt worden door het OS getekend, en de regel `color-scheme: light dark`
+  bovenaan `styles.css` is er al voor dat ze meelopen.
+- Chromium herberekent de mediaquery in elk open venster op het moment dat de bron verandert.
+  Er hoeft dus niets uitgezonden te worden en geen venster hoeft opnieuw te tekenen; het
+  paneel ververst alleen zijn eigen bootstrap, zodat zijn eigen keuzelijst klopt.
+
+**"Systeem" is een echt antwoord en niet de afwezigheid van een keuze.** Het is de vraag
+doorgeven aan de machine, die hem blijft beantwoorden — een computer die bij zonsondergang
+omslaat slaat de app mee om. Daarom staat het bovenaan en is het de standaard.
+
+**De instelling wordt vóór het eerste venster toegepast.** `windowBackground()` (B87) leest
+`nativeTheme.shouldUseDarkColors` bij de bouw van elk venster, om de kleur te kiezen die
+Chromium zet vóór het eerste frame van de renderer. Zou het thema pas bij het registreren van
+de IPC gezet worden, dan opent een machine die op licht staat en donker gekozen heeft ieder
+venster met een flits van het verkeerde thema — precies het gebrek waarvoor
+`window-background.ts` bestaat. Dus staat `applyTheme(settings.theme)` in `main()`, boven
+`createCaptureWindow()`.
+
+**Per machine, zoals `editorFontSize` en `keepPinnedInView`** (B88), en om de scherpere versie
+van dezelfde reden: de systeeminstelling waar dit een overschrijving van is, is zelf al per
+machine. En de waarde wordt in main gevalideerd en niet vertrouwd, net als de tekstgrootte:
+`settings.json` is een bestand dat een mens kan openen, en Electron gooit op een waarde die
+geen van de drie is.
+
+---
+
+## B91 — De notitielijst krijgt de focusrand terug, want weghalen haalde hem nooit weg
+
+**Genomen** op 27 augustus 2026.
+
+Gemeld als: "de rand om de geselecteerde notitie is oranje, en in de mappenboom is hij blauw."
+Dat is één rij in de bibliotheek die zich anders gedraagt dan de rij ernaast — en het is de
+directe rekening van de addendum bij B87 van gisteren.
+
+**Wat daar weggehaald werd, was nooit de rand.** `.note:focus-visible` verdween uit
+`library.css` op een Windows-melding: 2 px `--accent` rondom een rij over de volle breedte
+tekent op 125 % schaling als drie, en dat is hard. Maar een `.note` draagt een rovende
+`tabIndex` — package D's toetsenbordnavigatie — dus de rij is en blijft focusbaar, of dit
+bestand er nu iets over zegt of niet. De regel weghalen gaf de rand daarmee niet weg, maar
+wég: aan de UA, die hem tekent in de kleur van het platform. Op macOS is dat de systeemaccent
+uit Systeeminstellingen, en die stond op oranje.
+
+**Dus was de uitkomst het slechtste van de drie.** Niet "geen rand" (het argument van gisteren)
+en niet "dezelfde rand als de boom" (de toestand daarvoor), maar *een tweede rand in een
+kleur die een schuifje in het OS kiest*, in één van de drie panelen. Twee panelen, één
+gebaar, twee kleuren.
+
+**De drie panelen delen weer één regel.** `.branch:focus-visible`, `.note:focus-visible` en
+`.task-row:focus-visible` staan in één blok, en dat ze in één blok staan ís het besluit: een
+rand die in het ene paneel 2 px `--accent` is en in het andere iets anders, is precies het
+gebrek waar dit uit voortkomt. `styles-selection-accent.test.ts` telt daarom ook dat er geen
+tweede `.note:focus-visible` bij komt.
+
+**De Windows-melding blijft staan en wordt anders beantwoord.** Niet met "dan maar geen rand",
+maar met "dan dezelfde rand als de boom, die daar al net zo hard is". Het alternatief dat
+gisteren niet gezien werd, is `outline: none` op `.note` — dat had de UA-rand óók weggenomen
+— en dat is niet gekozen: het zet de notitielijst terug op geen enkele zichtbare
+toetsenbordpositie, wat `DESIGN-CRITIQUE.md`'s bevinding 3 is en open blijft. Wat B87's
+addendum als kosten opschreef ("terwijl je met de pijltjes door de lijst loopt is de rij
+onzichtbaar tot Enter hem opent") is daarmee van de baan; wat overblijft is bevinding 3 zelf,
+en het antwoord daarop is een behandeling op paneelniveau, niet deze rand nog eens.
+
+**Wat dit leert, los van de kleur:** een regel die een UA-standaard onderdrukt, kun je niet
+"weghalen". Je kunt hem vervangen door de standaard. Dat is een andere handeling met een
+ander resultaat, en het verschil is onzichtbaar op de machine waar de standaard toevallig
+onopvallend is.

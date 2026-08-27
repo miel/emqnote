@@ -157,11 +157,13 @@ function buildFake(): CaptureApi {
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,
+      theme: "system" as const,
     }),
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
+    setTheme: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
@@ -621,6 +623,37 @@ describe("keyboard navigation across the library's panes", () => {
     await flush();
 
     expect(newNoteCalls).toEqual([]);
+  });
+
+  it("Mod-. opens Settings, which had no keyboard route at all", async () => {
+    await mount();
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    treeRow.focus();
+
+    keydown(treeRow, ".", { metaKey: true });
+    await flush();
+
+    expect(container.querySelector(".settings")).not.toBeNull();
+  });
+
+  it("Mod-. stands aside while a modal owns the keyboard, unlike Mod-/", async () => {
+    // Not the same rule as `help`, which toggles from outside the overlay guard so a
+    // second press closes the sheet. The Settings panel records global accelerators, and
+    // a `HotkeyRow` armed inside it owns every key precisely so this chord can be recorded
+    // as one — a toggle above the guard would close the panel out from under it.
+    await mount();
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    treeRow.focus();
+
+    keydown(treeRow, "/", { metaKey: true });
+    await flush();
+    expect(container.querySelector(".help")).not.toBeNull();
+
+    keydown(container.querySelector<HTMLElement>(".help")!, ".", { metaKey: true });
+    await flush();
+
+    expect(container.querySelector(".settings")).toBeNull();
+    expect(container.querySelector(".help")).not.toBeNull();
   });
 
   it("Mod-F puts the caret in the search box when the caret is not in a note", async () => {

@@ -192,19 +192,28 @@
    effect of a mouse click (every click already calls `onFocus`, to keep `activePath`
    honest) does not draw an outline a pointer never asked for.
 
-   **The note list is deliberately not in this list any more.** It used to be, and on
-   Windows at 125% display scaling those two pixels paint as three — a saturated
-   `#1a63d8` box around a full-width row, reported as jarring and hard to disagree with.
-   The note list is also the one pane where the ring was mostly redundant: a row that is
-   reached by the keyboard is nearly always the row that is open, and `.note-on`'s fill
-   already says so.
+   **The note list is back in this list, and what it was taken out of was never the ring**
+   (B91).
+   It was removed once, on a Windows report that 2px of `--accent` around a full-width row
+   paints as three at 125 % display scaling. But a `.note` carries a roving `tabIndex`, so
+   the row is focusable whether or not this file says anything about it, and removing the
+   rule did not remove a ring — it handed the ring to the UA, which draws it in the
+   platform's own colour. On a Mac that is the system accent, and it was reported back as
+   "the note list's border is orange where the folder tree's is blue". Two panes, one
+   gesture, two colours, and the odd one out chosen by a System Settings slider.
 
-   What that costs is worth writing down rather than discovering: `roveArrowKey` moves
-   focus without selecting, so while walking the list with the arrow keys the focused row
-   is invisible until Enter selects it. The tree keeps its ring, which makes it the pane
-   that can still show where the keyboard is — `DESIGN-CRITIQUE.md`'s Finding 3 is about
-   exactly this and is still open. */
+   So the three panes share one ring again. The Windows complaint is answered by the ring
+   being the same two pixels the tree has always drawn rather than by there being none:
+   what was jarring there is now no more than the tree already is on the same screen, and
+   the alternative — `outline: none` on `.note` to get the UA's ring off it too — would put
+   the note list back to having no keyboard position at all, which is
+   `DESIGN-CRITIQUE.md`'s still-open Finding 3.
+
+   Keeping the three selectors in one rule is the point of writing it this way: a ring that
+   is 2px of `--accent` in one pane and something else in another is exactly the defect
+   this came from. */
 .branch:focus-visible,
+.note:focus-visible,
 .task-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;

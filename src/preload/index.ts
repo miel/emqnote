@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   setLoadRemoteImages: (load: boolean) => ipcRenderer.invoke(IPC.setLoadRemoteImages, load),
   setKeepPinnedInView: (keep: boolean) => ipcRenderer.invoke(IPC.setKeepPinnedInView, keep),
   setEditorFontSize: (px: number) => ipcRenderer.invoke(IPC.setEditorFontSize, px),
+  setTheme: (theme: string) => ipcRenderer.invoke(IPC.setTheme, theme),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setLibraryHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setLibraryHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>

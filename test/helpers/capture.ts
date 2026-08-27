@@ -283,6 +283,7 @@ export async function mountCapture(
       loadRemoteImages,
       keepPinnedInView: false,
       editorFontSize: 16,
+      theme: "system" as const,
     }),
     ...spies,
   };

@@ -128,6 +128,30 @@ describe("the registry holds together", () => {
     );
   });
 
+  it("gives Settings a chord, in the library window and nowhere else", () => {
+    const settings = shortcut("settings");
+
+    // ⌘. as asked for on macOS, and one binding rather than two: `Mod` is the whole of
+    // what this registry knows about the platform difference, so Ctrl+. is what Windows
+    // and Linux get. ⌘, — the macOS Preferences convention — is deliberately not a second
+    // alias, and the cost of that is written into `why` rather than left to be discovered.
+    expect(settings.keys).toEqual(["Mod-."]);
+    expect(matches(settings, press(".", { metaKey: true }), true)).toBe(true);
+    expect(matches(settings, press(".", { ctrlKey: true }), false)).toBe(true);
+    expect(matches(settings, press(",", { metaKey: true }), true)).toBe(false);
+
+    // The panel lives in the library, so an entry anywhere else would print a row in the
+    // capture window's help sheet for a key that does nothing there — and `where:
+    // "editor"` would make the first test in this file ask for a `COMMANDS` entry.
+    expect(settings.where).toBe("library");
+    expect(COMMANDS.settings).toBeUndefined();
+
+    // The panel is what records the global accelerators, so the placement of the handler
+    // relative to the overlay guard is load-bearing. That is in `Library.tsx`; what is
+    // pinned here is that the reason travels with the binding.
+    expect(settings.why).toMatch(/overlay guard/);
+  });
+
   it("keeps the new window chords off the editor keymap's plate", () => {
     // `newNoteHere` and `searchVault` are handled by `Library.tsx`'s window listener, not
     // by `outlookKeymap` — which is why they have no `COMMANDS` entry and must not be

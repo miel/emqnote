@@ -1615,3 +1615,67 @@ the harsh border did.
 The suite is 1945 tests over 157 files. Four new files — the spring-loaded folder, the two ways
 out of a heading, the two accent rules, and the note's own text size — plus `useBootstrap`'s
 settings subscription, which nothing had tested before.
+
+
+**Four items from a day of using `v0.12.0` landed on 27 August 2026.** Two carry decisions:
+**B90** — the theme is a choice of this machine, system / light / dark — and **B91** — the
+note list gets its focus ring back, because removing it never removed one. The other two are
+a measurement and a missing chord.
+
+**The theme is `nativeTheme.themeSource` and nothing else** (B90). A row in Settings beside
+the text size, per machine, defaulting to "system". What makes it three lines of main rather
+than a second set of rules in three stylesheets is the choice of mechanism: `themeSource` is
+the knob `prefers-color-scheme` answers from, so `styles.css`, `library.css` and `pdfview.css`
+go on asking exactly the question they already asked, and the parts nobody writes CSS for —
+scrollbars, the popup a `<select>` opens — come along because `color-scheme: light dark` was
+already declared for them. Chromium re-evaluates the query in every open renderer the moment
+the source changes, so nothing is broadcast and no window reloads. It is applied in `main()`
+above `createCaptureWindow()` rather than with the rest of the IPC, because
+`windowBackground()` reads `shouldUseDarkColors` at each window's construction to pick the
+colour painted before the first frame — set later, a machine whose choice differs from its OS
+opens every window with a flash of the wrong theme, which is the defect that function exists
+to have fixed. Driven under `Xvfb`: on a light-mode box, choosing dark put both the library
+*and* the hidden capture window on `prefers-color-scheme: dark` with `--surface` at `#26282c`,
+"system" came back to `#ffffff`/`#f4f5f7`, and the choice survived the bootstrap round trip.
+
+**The note list's focus ring is back, and the interesting part is why removing it did nothing**
+(B91). Reported as "the border round the selected note is orange, and in the folder tree it is
+blue". Yesterday's batch had taken `.note:focus-visible` out of `library.css` on a Windows
+report — 2px of `--accent` on a full-width row paints as three at 125 % scaling — and a `.note`
+carries a roving `tabIndex`, so the row is focusable whether or not the stylesheet says
+anything about it. The removal handed the ring to the UA, which draws it in the platform's own
+accent colour; on the reporting Mac that was orange. So the outcome was the worst of the three
+available: not "no ring" and not "the tree's ring", but a second ring in a colour chosen by a
+slider in System Settings. `.branch`, `.note` and `.task-row` share one rule again, and sharing
+it is the decision. The general lesson is written into `CONSTRAINTS.md`: **a rule that
+suppresses a UA default cannot be deleted, only replaced by the default** — a different act
+with a different result, invisible on whichever machine draws that default unobtrusively. It
+also retires the cost §41b was written to weigh: with our ring gone the focused row was never
+invisible, it was orange. Measured after the change: `rgb(26, 99, 216) solid 2px` at `-2px`
+offset, which is `--accent` to the byte.
+
+**The checkbox came 1 px left and the star 2 px left.** Reported against a real display after
+every number in those rules had been read off a rendering at four times size — which is what
+makes the report worth taking at face value: two marks placed by hand, each out by its own
+amount, is each mark's own ink extent (the SVG's box, the emoji strike's) rather than one
+shared mistake in `--marker-slot`, which the bullet itself is measured against and which must
+not move. So each is pulled back by what it was measured out by, in `em` at the editor's own
+16 px: `0.018em` → `0.0805em` for the checkbox, `0.102em` → `0.227em` for the star. `em` and
+not `px` because B88's `--editor-font-size` moves the whole note at once, and a marker
+corrected in pixels comes apart from its own bullet at every size but the one it was read at.
+Driven as a delta rather than judged: measured in the real reader against each item's own
+content edge, the boxes moved exactly 1.000 px and 2.000 px at a 16 px note.
+
+**Settings has a chord: `Mod-.`** — `⌘.` as asked for on macOS, `Ctrl+.` elsewhere. The panel
+was reachable by the title bar's gear and by nothing else, which made it the one part of the
+app the `--click-button` harness could reach and the keyboard could not; the same rule B75's
+pin exists for. One binding rather than two: `Mod` is the whole of what the registry knows
+about the platform difference, and the cost is stated in the entry's own `why` — a Mac user who
+tries `⌘,` first finds nothing. It is handled *below* `Library.tsx`'s overlay guard, unlike
+`help`, and that placement is the whole of the thought: the Settings panel is where global
+accelerators are recorded, a `HotkeyRow` armed inside it owns every key so that this chord can
+be recorded as one, and a toggle above the guard would close the panel out from under it.
+
+The suite is 1955 tests over 158 files. One new file — the theme row — plus the settings
+chord in `keyboard-nav.test.ts`, the two corrected marker offsets, and
+`styles-selection-accent.test.ts` rewritten around the ring coming back.

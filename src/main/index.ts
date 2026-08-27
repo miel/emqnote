@@ -6,6 +6,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  nativeTheme,
   net,
   protocol,
   shell,
@@ -14,7 +15,7 @@ import {
 } from "electron";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { IPC, type CapturePayload, type WikiLinkOutcome } from "../shared/ipc.js";
+import { IPC, type CapturePayload, type Theme, type WikiLinkOutcome } from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
@@ -554,6 +555,14 @@ async function main(): Promise<void> {
   const selfTestRounds = launch.selfTestRounds;
   const settings = loadSettings();
   cachedVaultPath = settings.vaultPath;
+
+  // B90, and it has to be here rather than in `registerAppIpc` below: `themeSource` is
+  // what `prefers-color-scheme` answers from, and `windowBackground()` — the colour
+  // Chromium paints before the renderer's first frame — reads `shouldUseDarkColors` at
+  // window construction. Applied after that, a dark-theme machine set to light would open
+  // every window with a flash of the wrong theme, which is the exact defect
+  // `window-background.ts` exists to have fixed.
+  applyTheme(settings.theme);
 
   installMinimalMenu();
   registerAttachmentProtocol();
@@ -1170,6 +1179,26 @@ function notifySettingsChanged(): void {
   }
 }
 
+/**
+ * B90's theme, applied to every window at once.
+ *
+ * `nativeTheme.themeSource` and not a class on the documents: `prefers-color-scheme` is
+ * what all three stylesheets already ask — `styles.css`, `library.css` and
+ * `pdfview.css` — and it is also what the parts nobody writes CSS for obey, the scrollbars
+ * and the popup a `<select>` opens (see the `color-scheme` line at the top of
+ * `styles.css`). Setting it re-answers that question live in every open renderer, so the
+ * panel needs no reload and no window has to be told.
+ *
+ * Validated rather than trusted, like `setEditorFontSize`: this is a string in a file a
+ * person can edit, and Electron throws on a value that is not one of the three.
+ */
+function applyTheme(theme: Theme): Theme {
+  const valid: Theme[] = ["system", "light", "dark"];
+  const chosen = valid.includes(theme) ? theme : "system";
+  nativeTheme.themeSource = chosen;
+  return chosen;
+}
+
 /** What a window needs before it can draw: language, platform and the shortcut. */
 function registerAppIpc(): void {
   ipcMain.handle(IPC.bootstrap, () => {
@@ -1185,6 +1214,7 @@ function registerAppIpc(): void {
       loadRemoteImages: settings.loadRemoteImages,
       keepPinnedInView: settings.keepPinnedInView,
       editorFontSize: settings.editorFontSize,
+      theme: settings.theme,
     };
   });
 
@@ -1215,6 +1245,16 @@ function registerAppIpc(): void {
     const size = Math.round(Math.min(32, Math.max(10, Number.isFinite(px) ? px : 16)));
     saveSettings({ editorFontSize: size });
     notifySettingsChanged();
+  });
+
+  /**
+   * B90. Saved and applied; nothing is broadcast, and that is not an omission — Chromium
+   * re-evaluates `prefers-color-scheme` in every open renderer the moment `themeSource`
+   * changes, so both windows have already redrawn by the time this resolves. The panel
+   * calls `onChanged` on its own account, which is what keeps its own `<select>` honest.
+   */
+  ipcMain.handle(IPC.setTheme, (_event, theme: Theme) => {
+    saveSettings({ theme: applyTheme(theme) });
   });
 
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {

@@ -34,6 +34,7 @@ const FALLBACK: Bootstrap = {
   loadRemoteImages: true,
   keepPinnedInView: false,
   editorFontSize: 16,
+  theme: "system",
 };
 
 /**

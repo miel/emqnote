@@ -1761,19 +1761,49 @@ folder wears accent text** (B87's addendum, 26 August 2026). Two reports, one va
 two unrelated jobs. `.branch-on .branch-name` carried `color: var(--accent)` *and*
 `font-weight: 600` on top of the `--selected` fill while `.note-on` carried the fill alone —
 Finding 3's "the folder shouts and the note whispers", so the eye reads the tree as the live
-pane whichever pane the keyboard is in. The colour is gone and the weight stays; "selected"
-now means the fill in both panes, which is what Finding 3 actually asked for. Separately,
-`.note:focus-visible` drew `outline: 2px solid var(--accent)` with `outline-offset: -2px`,
-and Windows at 125 % scaling paints those two pixels as three — a saturated `#1a63d8` box
-around a full-width row, reported as jarring. **The tree and the task list keep their ring
-and the note list does not**, deliberately asymmetric: removing it everywhere would leave
-`roveArrowKey` walking three panes with nothing on screen following it, and the note list is
-where it did least, the row the arrows are on being nearly always the row that is open.
-**What it costs is stated rather than discovered**: focus moves without selecting, so while
-arrowing through the list the focused row is invisible until Enter opens it. Finding 3 stays
-open, and its answer is a pane-level treatment on the focused pane's active row — not this
-ring back. `styles-selection-accent.test.ts` pins both halves, including that the shared
-rule still names the other two.
+pane whichever pane the keyboard is in.
+
+**The theme is `nativeTheme.themeSource`, set before the first window exists** (B90,
+27 August 2026). Settings offers system / light / dark; main puts the answer on
+`themeSource` and nothing else reads it back. That is the whole mechanism, and the two
+things it rules out are the point. **No `data-theme` attribute and no second set of rules**:
+`prefers-color-scheme` is what `styles.css`, `library.css` and `pdfview.css` already ask, and
+it is also what the parts nobody writes CSS for obey — the scrollbars and the popup a
+`<select>` opens, which follow `color-scheme: light dark` at the top of `styles.css`. Chromium
+re-evaluates the query in every open renderer the moment the source changes, so no window is
+told and none reloads. **And `applyTheme` runs in `main()` above `createCaptureWindow()`, not
+in `registerAppIpc`**: `windowBackground()` reads `nativeTheme.shouldUseDarkColors` once at
+each window's construction, to pick the colour Chromium paints before the renderer's first
+frame — applied later, a light-mode machine set to dark opens every window with a flash of
+the wrong theme, which is the exact defect that function exists to have fixed. "system" is a
+real third answer rather than a stored guess: with it set Chromium keeps following the OS, so
+a machine that darkens at sunset darkens the app with it. Per machine, beside `editorFontSize`
+and `keepPinnedInView`, and for the sharper version of the same reason — the OS setting this
+overrides is itself per machine. Validated in main like the font size, because Electron throws
+on a value that is not one of the three and `settings.json` is a file a person can edit. The colour is gone and the weight stays; "selected"
+now means the fill in both panes, which is what Finding 3 actually asked for. The colour half stands. **The ring half was
+reversed the next day and is now the opposite rule, so read this one and not the account of
+it in an older batch note** (B91, 27 August 2026).
+
+**One `:focus-visible` rule names all three panes, and a note row may not have one of its
+own** (B91). `.branch:focus-visible`, `.note:focus-visible` and `.task-row:focus-visible`
+share a block: 2px of `--accent`, inset. `.note:focus-visible` was taken out of it on a
+Windows report — at 125 % scaling those two pixels paint as three, a saturated `#1a63d8` box
+around a full-width row — and **that removal never removed a ring**. A `.note` carries a
+roving `tabIndex` (package D), so the row is focusable whether or not this stylesheet says
+anything about it, and with no rule of ours the UA draws its own in the platform's colour. On
+macOS that is the system accent, which came back as "the note list's border is orange where
+the folder tree's is blue": two panes, one gesture, two colours, and the odd one out chosen
+by a System Settings slider. So the rule is shared again, and being shared is the point — a
+ring that is `--accent` in one pane and something else in another is the defect itself.
+`outline: none` on `.note` was the other way to answer the Mac report and is deliberately not
+taken: it would put the note list back to showing no keyboard position at all, which is
+`DESIGN-CRITIQUE.md`'s Finding 3, still open and still answered by a pane-level treatment
+rather than by this ring. The general lesson outlives the colour: **a rule that suppresses a
+UA default cannot be deleted, only replaced by the default** — a different act with a
+different result, invisible on whichever machine draws that default unobtrusively.
+`styles-selection-accent.test.ts` pins the shared rule's shape and counts `.note:focus-visible`
+to exactly one.
 
 **Everything inside `.editor-content` is relative to `--editor-font-size`** (B88). The note's
 own text is settable from the Settings panel, and the only thing that makes "larger text"

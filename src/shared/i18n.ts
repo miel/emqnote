@@ -102,6 +102,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.newNoteHere": "Nieuwe notitie in deze map",
   "shortcut.pinNote": "Notitie bovenaan vastprikken",
   "shortcut.searchVault": "Zoeken in alle notities",
+  "shortcut.settings": "Instellingen openen",
 
   // Rechtermuisknop-menu's. De namen komen uit editor-menu.ts en de menu's op mappen/
   // notities; wat een actie *is* staat bij de sneltoets (hierboven), wat het menu-item
@@ -403,6 +404,15 @@ const DUTCH: Record<string, string> = {
   "settings.textNormal": "Normaal",
   "settings.textLarge": "Groot",
   "settings.textLarger": "Groter",
+  // B90. "Systeem" en niet "automatisch": het is geen gok van de app, het is de vraag
+  // doorgeven aan de computer — en die blijft hem beantwoorden, ook als hij bij
+  // zonsondergang van kleur wisselt.
+  "settings.theme": "Thema",
+  "settings.themeWhy":
+    "Volgt standaard de instelling van de computer, ook als die vanzelf wisselt. Licht en donker zetten dat vast. Deze keuze geldt op deze computer.",
+  "settings.themeSystem": "Systeem",
+  "settings.themeLight": "Licht",
+  "settings.themeDark": "Donker",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -558,6 +568,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.newNoteHere": "New note in this folder",
   "shortcut.pinNote": "Pin note to top",
   "shortcut.searchVault": "Search every note",
+  "shortcut.settings": "Open settings",
 
   // Right-click menus. The command names come from `editor-menu.ts` and the folder/
   // note-list menus; what an action *is* lives with the shortcut above, what the menu
@@ -848,6 +859,15 @@ const ENGLISH: Record<string, string> = {
   "settings.textNormal": "Normal",
   "settings.textLarge": "Large",
   "settings.textLarger": "Larger",
+  // B90. "System" rather than "automatic": the app is not guessing, it is handing the
+  // question to the computer — which goes on answering it, including on a machine that
+  // switches at sunset.
+  "settings.theme": "Theme",
+  "settings.themeWhy":
+    "Follows the computer's own setting by default, including when that switches on its own. Light and dark fix it either way. This choice is for this computer.",
+  "settings.themeSystem": "System",
+  "settings.themeLight": "Light",
+  "settings.themeDark": "Dark",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",
