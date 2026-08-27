@@ -147,6 +147,7 @@ function buildFake(
     setLoadRemoteImages: async () => {},
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
+    setTheme: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

@@ -114,6 +114,26 @@ describe("styles.css: bullet, star and checkbox on one line", () => {
     );
   });
 
+  it("carries the measured pull-back that put both marks in the bullet's column", () => {
+    // Reported against a real screen after every number above had been read off a
+    // rendering: the checkbox stood 1px right of the bullet's ink and the star 2px right
+    // of it. Two different amounts on two marks that are placed by hand is what says this
+    // is each mark's own ink extent — the SVG's box and the emoji strike's — rather than
+    // one shared mistake in `--marker-slot`, which the bullet is measured against and
+    // which must not move.
+    //
+    // So each is pulled back by its own amount, in `em` at the editor's own 16px: 1px is
+    // 0.0625em on top of the checkbox's 0.018em, and 2px is 0.125em on top of the star's
+    // 0.102em. Pixels would have been the other option and are the wrong unit here —
+    // B88's `--editor-font-size` moves the whole note at once, and a marker corrected in
+    // pixels comes apart from its own bullet at every size but the one it was read at.
+    const check = css.match(/\.editor-content \.task-check \{[^}]*\}/)?.[0];
+    expect(check).toMatch(/left:\s*calc\(-1 \* var\(--marker-slot\) - 0\.0805em\);/);
+
+    const star = css.match(/\.editor-content \.star-mark \{[^}]*\}/)?.[0];
+    expect(star).toMatch(/left:\s*calc\(-1 \* var\(--marker-slot\) - 0\.227em\);/);
+  });
+
   it("gives the checkbox the editor's font, so its ems mean what they say", () => {
     // A `<button>` does not inherit its font, so every em in this rule resolved against
     // the UA's 13.333px: `--marker-slot` came out 20px here and 24px everywhere else,

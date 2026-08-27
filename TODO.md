@@ -3,6 +3,62 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 27 August 2026, released as `v0.12.1` — **four items from a day of using
+`v0.12.0`**, the batch immediately below this one. Two decisions, **B90** (the theme is a
+choice of this machine) and **B91** (the note list's focus ring comes back). The other two
+are a measurement and a missing chord. Released as a **patch**, which was the call made when
+it went out: by the convention the tag before it followed, the theme would have made this a
+minor — it is something the app could not do at all — and the other three items are defects.
+
+**Driven, not guessed.** Three of the four were run in the real app under `Xvfb` with a real
+Chromium behind it before this was written. The theme flips both windows live: on this
+light-mode box, choosing dark put the library *and* the hidden capture window on
+`prefers-color-scheme: dark` with `--surface` at `#26282c`, "system" came back to
+`#ffffff` / `#f4f5f7`, and the choice survived the bootstrap round trip. `Ctrl+.` opened
+Settings from a focused note row. The note row's ring measures `rgb(26, 99, 216) solid 2px`
+at `-2px`, which is `--accent` to the byte. And the marker correction was measured as a
+delta rather than judged: the checkbox moved exactly 1.000 px and the star exactly 2.000 px
+at a 16 px note.
+
+**The theme is a setting** (B90): system / light / dark, per machine, in Settings beside the
+text size. `nativeTheme.themeSource` in main and **no** `data-theme` and no second set of
+rules — `prefers-color-scheme` is what all three stylesheets already ask, and it is also what
+the scrollbars and the `<select>` popup obey. Applied before the first window is built, or a
+machine whose choice differs from its OS opens every window with a flash of the wrong theme.
+
+**The note list's focus ring is back** (B91), and the lesson is bigger than the colour.
+Yesterday's batch removed `.note:focus-visible` on the Windows 125 %-scaling report — and
+**that removal never removed a ring**: a note row carries a roving `tabIndex`, so it is
+focusable regardless, and with no rule of ours the UA drew its own in the platform's accent
+colour. On macOS that is orange, which is exactly how it was reported. The three panes share
+one rule again. **§41a and §41b are superseded** — the ring is expected in the note list now,
+and the cost §41b asked about was never paid: the focused row was not invisible, it was
+orange.
+
+**The checkbox and the star came 1 px and 2 px left**, off a report against a real display.
+Two hand-placed marks each out by their own amount is each one's own ink extent, not a shared
+mistake in `--marker-slot` — which the bullet is measured against and which does not move. In
+`em` at 16 px, because B88's text size moves the whole note and a marker corrected in pixels
+would come apart at every other size.
+
+**Settings has a chord**: `⌘.` on macOS, `Ctrl+.` on Windows and Linux. One binding, since
+`Mod` is all the registry knows about the platform difference; `⌘,` is deliberately not a
+second alias and the cost of that is written into the entry. It fires below the overlay guard,
+unlike the help sheet, because the panel is where global accelerators are recorded and an
+armed `HotkeyRow` must be able to record this very chord.
+
+The suite is 1955 tests over 158 files. One new file — the theme row in Settings — plus the
+chord in `keyboard-nav.test.ts`, the two corrected marker offsets, and
+`styles-selection-accent.test.ts` rewritten around the ring.
+
+**Open, and deliberately not done here.** `DESIGN-CRITIQUE.md`'s Finding 3 is still open and
+is now back where it was before yesterday: a ring that only appears once an arrow key is
+pressed, and no pane-level treatment. Findings 1, 4, 5–8 untouched. `.disk-change-bar` and
+`.conflict-banner` are still hardcoded amber in both themes — and the theme setting makes
+that slightly more visible, not less. The text size still has no chord.
+
+---
+
 Last updated 27 August 2026, released as `v0.12.0` — **four defects and two features from a
 day of using `v0.11.2`**, which is the batch immediately below this one. Two decisions, B88 and
 B89, and **B87 gains an addendum** on its own two items. A **minor** release rather than the

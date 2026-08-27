@@ -318,6 +318,29 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "to mean different notes. `Mod-Shift-p` was free in every scope.",
   },
   {
+    id: "settings",
+    keys: ["Mod-."],
+    where: "library",
+    group: "window",
+    why:
+      "The Settings panel had no chord at all: it is reached by the gear in the library's " +
+      "title bar and by nothing else, which makes it the one part of the app the " +
+      "`--click-button` selftest can reach and the keyboard cannot. Asked for as ⌘. on " +
+      "macOS, and `Mod-.` is the same chord spelled once — Ctrl+. on Windows and Linux, " +
+      "which is free in Chromium and in this registry, and is the nearer analogue to what " +
+      "was asked for than Ctrl+, would be.\n\n" +
+      "Deliberately NOT ⌘, , the macOS convention for Preferences: that would have to be " +
+      "a second binding to stay conventional on one platform only, and this registry has " +
+      "no per-platform `keys` — `Mod` is the whole of what it knows about the difference. " +
+      "The cost is stated: a Mac user who tries ⌘, first finds nothing.\n\n" +
+      "`where: \"library\"` because that is the only window with a Settings panel — the " +
+      "capture window has no such command, and an entry there would print a row in its " +
+      "help sheet for a key that does nothing. Handled *after* the overlay guard in " +
+      "`Library.tsx`, unlike `help`: while a `HotkeyRow` is armed the panel owns every " +
+      "key so the chord can be recorded into a global accelerator, and a toggle placed " +
+      "before the guard would close the panel out from under it instead.",
+  },
+  {
     id: "searchVault",
     keys: ["Mod-f"],
     where: "library",

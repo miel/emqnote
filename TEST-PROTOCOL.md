@@ -1434,8 +1434,8 @@ whether losing the note list's focus ring costs more in use than the harsh borde
 
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
-| 41a | **On Windows**, at 125 % *and* 150 % display scaling: click a note, then walk the list with ↑/↓ | No blue box around any row, at either scaling. This is the report this batch answers, and the only machine that can confirm it |  |
-| 41b | Straight after 41a, keep walking with ↑/↓ without pressing Enter | Say plainly whether you can tell which row the keyboard is on. You cannot — the ring is gone and selection does not follow the arrows — and the question is whether that is worse in use than the border was. If it is, the fix is Finding 3's pane-level treatment, not this ring back |  |
+| 41a | ~~**On Windows**, at 125 % *and* 150 % display scaling: click a note, then walk the list with ↑/↓~~ | **Superseded by B91 — do §42d instead.** The ring is back in the note list, because taking it away never took it away: the row is focusable regardless, so the UA drew its own in the platform's accent colour. The blue box is expected again |  |
+| 41b | ~~Straight after 41a, keep walking with ↑/↓ without pressing Enter~~ | **Superseded by B91.** The question it asked came back answered from the other side: with our ring gone the row was not invisible at all, it was orange |  |
 | 41c | Look at the selected folder in the tree, both themes | Bold, in the ordinary text colour, on a grey fill. No blue. It should read as no louder than the open note in the list beside it |  |
 | 41d | Drag a note from the list and hold it over a **collapsed** folder | It unfolds after about half a second, and stays unfolded after you drop. Say whether the wait feels right — too short and every folder you cross opens behind you, too long and the drag reads as having stopped working |  |
 | 41e | Drag a note over the folder it **already lives in**, on the way to a subfolder underneath it | That parent still unfolds, even though it will refuse the drop itself (no highlight on it). This is the case the whole feature turns on |  |
@@ -1447,6 +1447,41 @@ whether losing the note list's focus ring costs more in use than the harsh borde
 | 41k | With both windows open, change the text size in Settings and look at the capture window **without restarting** | It follows immediately. Then change the **language** and look again — that never reached this window before, and it should now |  |
 | 41l | Click the pin on a pinned row | The pin comes off and the row drops to where the sort puts it. The note does not open and the selection does not move |  |
 | 41m | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
+
+---
+
+## 42. Four items from a day of using §41 (27 August 2026)
+
+Three of the four were driven here under `Xvfb` before this was written, so the rows below
+are what a sandbox genuinely cannot answer. What *was* settled: the theme setting flips both
+windows live and with no reload — the library and the hidden capture window both report
+`prefers-color-scheme: dark` after choosing dark on a light-mode machine, and `--surface`
+reads `#26282c` against `#f4f5f7` — "system" comes back to the OS's own answer and persists
+across the round trip, `Ctrl+.` opens Settings from a focused note row, and the note row's
+focus ring measures `rgb(26, 99, 216) solid 2px` at `-2px`, which is `--accent` to the byte.
+The marker correction was measured as a delta rather than judged: the checkbox moved exactly
+1.000 px and the star exactly 2.000 px at a 16 px note, which is what was asked for and what
+`0.0625em` and `0.125em` are worth there.
+
+Two things a sandbox cannot reach at all. **This Linux box has no dark mode**, so "system"
+was only ever seen answering *light* here — the explicit override was proven in the direction
+that could be proven (OS light, chosen dark). And **the alignment report is about a real
+display**: the numbers this batch changes came from a person's own screen at their own size,
+and no measurement here can say whether they are now right.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 42a | Look at a list holding a bullet, a task and a starred item, on **your own display**, at the text size you actually use | The three marks start in one column. This is the whole of the report — the checkbox came 1 px left and the star 2 px left — so if either is still out, say by how much and at what text size, since the correction is stated in `em` at 16 px |  |
+| 42b | Repeat 42a at 13 px and at 20 px (Settings → text size) | Still one column. The correction scales with the note, deliberately — it is `em`, not `px` — so a miss that grows or shrinks with the size means the wrong unit rather than the wrong number |  |
+| 42c | Repeat 42a **on the other machine** | Same answer. The star is a colour emoji and its ink extent differs by platform font, which is the one part of this that is pinned to a measurement rather than to geometry |  |
+| 42d | **On Windows**, at 125 % *and* 150 % scaling: click a note, then walk the list with ↑/↓ | A blue 2px ring on the focused row — the same one the folder tree draws, which is the point. It was removed for exactly this reason on §41a and that made it *worse*, not better. If it is still too harsh at scaling, the answer is a softer ring in all three panes, not none in one |  |
+| 42e | **On macOS**, set System Settings → Appearance → Accent colour to something loud (orange), then walk the note list with ↑/↓ | The ring stays blue. It is the app's `--accent` now, not the OS's, and orange is exactly what was reported |  |
+| 42f | Settings → Theme → Light, then Dark, with both windows open | Both windows change immediately, with no restart and no reopening of the panel. Scrollbars and the popup a `<select>` opens change with them — those are drawn by the OS and are the half that a `data-theme` attribute would have missed |  |
+| 42g | Choose the theme **opposite** to what the machine is set to, quit the app, start it again, and watch the first frame of each window | No flash of the other theme before the window paints. The colour Chromium paints first is chosen at window construction, which is why the setting is applied before any window is built |  |
+| 42h | Set Theme back to System, then switch the machine itself between light and dark (macOS: Appearance → Auto, or flip it by hand) | The app follows, live. "System" means the question stays with the OS rather than being answered once and stored |  |
+| 42i | Press `⌘.` (macOS) or `Ctrl+.` (Windows) from each of the three panes and from inside a note | Settings opens every time. It had no keyboard route at all before this |  |
+| 42j | With Settings open, click the capture-hotkey button (it says "press a combination") and press `⌘.` / `Ctrl+.` | It is *recorded as a hotkey*, and the panel stays open. The chord deliberately does not act while a panel is open, or you could not record this one |  |
+| 42k | On a Mac, try `⌘,` — the usual Preferences chord | Nothing happens, deliberately: one binding for all three platforms, and `⌘.` is what was asked for. Say if the missing `⌘,` costs more than the second claim would |  |
 
 ---
 

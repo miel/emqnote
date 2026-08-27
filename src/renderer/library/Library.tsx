@@ -933,7 +933,8 @@ export function Library(): React.ReactElement {
   }, [key, loadNotes]);
 
   /**
-   * This window's own shortcuts: the help sheet, a new note, the search box, the title.
+   * This window's own shortcuts: the help sheet, a new note, the search box, Settings,
+   * the title.
    *
    * Tested against the same registry the editor is built from, and installed once — every
    * changing value it reads comes through a ref, so a tree selection or an open note never
@@ -989,6 +990,22 @@ export function Library(): React.ReactElement {
         event.preventDefault();
         searchInput.current?.focus();
         searchInput.current?.select();
+        return;
+      }
+
+      // The gear in the title bar was the only way in, which made Settings the one part
+      // of this app that could not be reached without the mouse — the same rule `pinNote`
+      // above exists for.
+      //
+      // Below the overlay guard rather than beside `help` at the top, and that placement
+      // is the whole of the thought: a `HotkeyRow` inside the panel owns every key while
+      // it is armed, because the chord being recorded is a *global* accelerator and may
+      // legitimately be this one. A toggle above the guard would close the panel out from
+      // under the row that was recording. Escape and the Close button are the ways out,
+      // as they are for every other overlay this window opens.
+      if (fires("settings")) {
+        event.preventDefault();
+        setSettingsOpen(true);
         return;
       }
 
@@ -3117,6 +3134,7 @@ export function Library(): React.ReactElement {
           loadRemoteImages={app.loadRemoteImages}
           keepPinnedInView={app.keepPinnedInView}
           editorFontSize={app.editorFontSize}
+          theme={app.theme}
           vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}

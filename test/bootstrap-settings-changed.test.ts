@@ -39,6 +39,7 @@ const SETTINGS: Bootstrap = {
   loadRemoteImages: true,
   keepPinnedInView: false,
   editorFontSize: 16,
+  theme: "system" as const,
 };
 
 let current: Bootstrap = SETTINGS;

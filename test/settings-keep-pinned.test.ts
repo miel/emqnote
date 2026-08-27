@@ -74,6 +74,7 @@ describe("the settings panel's pinned-notes switch", () => {
           loadRemoteImages: true,
           keepPinnedInView,
           editorFontSize: 16,
+          theme: "system" as const,
           vaultPath: "/vault",
           // The real table, so a renamed key fails here rather than drawing an empty label.
           t: (key: string) => {

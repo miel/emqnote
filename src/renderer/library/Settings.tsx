@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LOCALES, type Locale } from "../../shared/i18n.js";
+import type { Theme } from "../../shared/ipc.js";
 import type { VaultLocation } from "../../shared/vault-types.js";
 import { trapTab } from "./focus-trap.js";
 
@@ -14,6 +15,8 @@ interface Props {
   keepPinnedInView: boolean;
   /** The size the note itself is drawn at, in pixels (B88). */
   editorFontSize: number;
+  /** Which theme the app draws in (B90): the OS's answer, or light, or dark. */
+  theme: Theme;
   vaultPath: string | null;
   t: (key: string) => string;
   onChanged: () => void;
@@ -41,6 +44,19 @@ const FONT_SIZES: { px: number; key: string }[] = [
   { px: 16, key: "settings.textNormal" },
   { px: 18, key: "settings.textLarge" },
   { px: 20, key: "settings.textLarger" },
+];
+
+/**
+ * The three answers to "which theme" (B90), and the string each is named by.
+ *
+ * "system" leads because it is the default and because it is the answer most people want
+ * without being asked — and it is a real answer rather than the absence of one: it keeps
+ * following the OS, so a machine that darkens at sunset darkens the app with it.
+ */
+const THEMES: { value: Theme; key: string }[] = [
+  { value: "system", key: "settings.themeSystem" },
+  { value: "light", key: "settings.themeLight" },
+  { value: "dark", key: "settings.themeDark" },
 ];
 
 /**
@@ -155,6 +171,7 @@ export function Settings({
   loadRemoteImages,
   keepPinnedInView,
   editorFontSize,
+  theme,
   vaultPath,
   t,
   onChanged,
@@ -168,6 +185,8 @@ export function Settings({
   const [keepPinned, setKeepPinned] = useState(keepPinnedInView);
   /** B88, held locally for that same reason. */
   const [fontSize, setFontSize] = useState(editorFontSize);
+  /** B90, held locally for that same reason. */
+  const [themeChoice, setThemeChoice] = useState(theme);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -318,6 +337,34 @@ export function Settings({
         </label>
 
         <p className="settings-note">{t("settings.textSizeWhy")}</p>
+
+        {/* B90. Beside the text size because the two are the same kind of question — how
+            this machine draws, not what any note contains — and the answer to both is per
+            machine. Its own state, same as every row above it and for the same reason.
+
+            Nothing here touches a stylesheet: main puts the choice on
+            `nativeTheme.themeSource` and every window's `prefers-color-scheme` follows,
+            which is what lets "system" go on meaning "keep asking the OS" rather than
+            "whatever the OS said when this was chosen". */}
+        <label className="settings-row">
+          <span>{t("settings.theme")}</span>
+          <select
+            value={themeChoice}
+            onChange={(event) => {
+              const next = event.target.value as Theme;
+              setThemeChoice(next);
+              void window.emqnote.setTheme(next).then(() => onChanged());
+            }}
+          >
+            {THEMES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.key)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="settings-note">{t("settings.themeWhy")}</p>
 
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is

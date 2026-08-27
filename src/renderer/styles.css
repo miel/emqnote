@@ -835,8 +835,19 @@ body {
      a marker standing out of the column, because a star is more than twice the bullet's
      width and centring it puts its ink 3.25px further left. The cost is stated rather
      than discovered: the ink extent of `⭐` varies by platform font, so what is pinned
-     here varies with it, where a centre would not. */
-  left: calc(-1 * var(--marker-slot) - 0.102em);
+     here varies with it, where a centre would not.
+
+     **The number carries a second, measured correction, and it is the reason it is not
+     0.102em.** Read against a real screen rather than against the geometry, the star stood
+     2px right of the bullet's ink and the checkbox 1px right of it — the two marks that
+     are placed by hand, each off by its own amount, which is what says this is the emoji's
+     own ink extent and the SVG's own box rather than one shared mistake in the slot. So
+     each is pulled back by what it was measured out by: 2px at the editor's own 16px is
+     0.125em, and 0.102 + 0.125 is what stands here. In `em` and not in `px` because
+     everything else on this axis is — B88's `--editor-font-size` moves the whole note at
+     once, and a marker corrected in pixels would come apart from its own bullet at every
+     size but the one it was read at. */
+  left: calc(-1 * var(--marker-slot) - 0.227em);
   /* Measured at the editor's own 16px and nowhere else, unlike everything else in this
      file's marker rules. The bullet and the checkbox are outlines and measure the same at
      any size, so rendering them four times up and dividing by four reads them honestly;
@@ -892,8 +903,14 @@ body {
      the other axis. What a reader means by "the same column" is where the mark starts;
      what they mean by "the same line" is where its weight is. Measured at four times
      size: bullet ink starts at −23.10 and its centroid sits at −12.10 from the item's
-     baseline, and these two numbers put the box on both. */
-  left: calc(-1 * var(--marker-slot) - 0.018em);
+     baseline, and these two numbers put the box on both.
+
+     Plus the same measured correction the star above carries the other half of: on a real
+     screen this box sat 1px right of the bullet's ink, so 0.0625em — 1px at the editor's
+     own 16px — comes off it, and 0.018 + 0.0625 is what stands here. The star's own
+     number is 2px, which is why the two are corrected separately and not by one shared
+     constant in `--marker-slot`. */
+  left: calc(-1 * var(--marker-slot) - 0.0805em);
   /* Per depth, and it has to be: `\2022`/`\25E6` sit on an ink centre 0.648em above the
      item's first baseline where `\25AA` sits at 0.766em, so no single constant can meet
      both — tuned to the bullet it leaves level three's box 0.115em high, and tuned to the

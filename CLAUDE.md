@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this is
 
 A resident Electron note-taking app that replaces a "email a note to myself" routine. Notes are plain markdown files in folders on a business OneDrive. One user, two machines (macOS and Windows), no server, no accounts.
@@ -10,69 +8,13 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ## Commands
 
-```bash
-npm run dev            # electron-vite dev
-npm test               # vitest run — 1945 tests
-npm run test:watch     # keep it running while working
-npm run typecheck      # tsc --noEmit
-npm run build          # electron-vite build + check:bundle
-npm run pack:mac       # packaged .app (zipped) in release/
-npm run pack:win       # per-user NSIS installer (.exe) in release/ — see B22
-```
+Build, test, typecheck and packaging scripts live in `package.json`.
 
-Single test file or single test:
-
-```bash
-npx vitest run test/roundtrip.test.ts
-npx vitest run -t "stays byte-identical"
-```
-
-Seven diagnostic helpers exist for questions this project has learned not to guess at — a
-reported bug that survives its own fix is a recurring theme here (B57 → B59, B62's Ctrl+Tab,
-B71), and each helper below exists because guessing had already had its turn:
-
-```bash
-npm run canonical -- test/corpus/24-vergadernotitie.md
-```
-
-Shows how the serializer *would* write a file, with a line diff. It exists to let you **judge** a difference, not paper over it: if the corpus differs from the serializer output, one of the two is wrong, and telling those apart is a decision.
-
-```bash
-emqnote --dump-clipboard=/tmp/paste-sample
-```
-
-Copy something from Outlook or Word first, then run this. Writes `<prefix>.html`/`.txt`/`.png` for whatever formats are on the clipboard and exits. Runs alongside the resident instance (bypasses the single-instance lock, like `--selftest`), so no need to quit the everyday app first.
-
-```bash
-emqnote.exe --selftest=50 --vault=%TEMP%\emqnote-proef
-```
-
-Runs on the *packaged* app. Measures hotkey → painted caret 50 times, then really types a note and checks a correct file lands in the Inbox. Exits with a status code, so it works in CI. Results go to `%LOCALAPPDATA%\emqnote\` / `~/Library/Application Support/emqnote/` as `selftest-result.json` plus `latency.log`. Other flags: `--library`, `--screenshot=<path>`, `--open-note=<title fragment>`, `--click-button=<label>`. `--click-button` takes a `>`-separated sequence, so `--click-button="Tags>#klantx"` unfolds the tag list and then picks one, and it matches folder and filter rows as well as buttons.
-
-```bash
-emqnote --trash-probe="_trash/Alpha"
-emqnote --key-probe
-emqnote --thumbnail-probe="2026-08-04-1030-offerte.pdf" --vault=/path/to/vault
-```
-
-`--trash-probe` says why something in `_trash` will not delete, per entry — read-only, held open by another process — and **deletes nothing**; the evidence is the point on the one operation with no way back. `--key-probe` logs every key a window is handed to `<userData>/key-probe.log`, one line per press, including whether `matches()` claimed it — it does not exit and does not bypass the single-instance lock, so quit the resident app first. `--thumbnail-probe` prints exactly which of four things went wrong for one named attachment's PDF preview. `CONSTRAINTS.md` has the full story behind each.
-
-```bash
-npm run drive:capture
-npm run drive:capture -- --screenshot=/tmp/capture.png
-```
-
-Drives the **capture window** in the real app, under its own `Xvfb`, over CDP. Scaffolds a
-throwaway vault, raises the window with the real global hotkey, hands it a note holding a
-picture, a table, a three-page PDF and a `#tag`, and checks the nine things only a real
-renderer can answer — most of all `naturalWidth`, which is whether the picture actually
-*decoded* rather than whether an `<img>` reached the DOM. Four of those nine are the ones
-jsdom is barred from by definition: a rectangle of table cells dragged out with a **real
-pointer** (B49), whether B51's sixteen-row `/` panel **fits on screen** when the caret is
-near the foot of the window, a **real PDF page rendered by pdf.js** into this window (B43),
-and **▶ turning to a page that is genuinely a different picture** — counted as dark pixels
-off a canvas, because a changed `src` is not a changed page. Exits non-zero on the first failed step and names it. Needs a display,
-so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.
+Beyond those, seven diagnostic helpers exist for questions this project has learned not to
+guess at — a reported bug that survives its own fix is a recurring theme here (B57 → B59,
+B62's Ctrl+Tab, B71), and each helper exists because guessing had already had its turn.
+They are documented in the `diagnostics` skill (`.claude/skills/diagnostics/SKILL.md`);
+reach for one before shipping a second fix for the same complaint.
 
 ## Architecture
 
@@ -143,9 +85,15 @@ undo by accident and expensive to rediscover:
   first two the wrong way round for a long time and nobody could see the three panes because of
   it. `styles-surfaces.test.ts` counts the grey literals left outside `:root`; there are two,
   and both carry a comment saying why they are not UI state. **`--accent` is not a seventh
-  role**: "selected" is the fill in both panes, so the selected folder wears no accent text and
-  a note row wears no `:focus-visible` ring — the tree and task list keep theirs, and that
-  asymmetry is deliberate. Both are pinned by `styles-selection-accent.test.ts`.
+  role**: "selected" is the fill in both panes, so the selected folder wears no accent text.
+  The keyboard ring is the other way round and is one rule for all three panes (B91) — the
+  tree, the note list and the task list — because removing it from the note list handed the
+  ring to the UA, which drew it in the platform's own accent colour. Both are pinned by
+  `styles-selection-accent.test.ts`.
+- **Which theme is drawn is `nativeTheme.themeSource`, and nothing else** (B90). Settings
+  offers system / light / dark; main sets the source before the first window is built, and
+  every stylesheet goes on asking `prefers-color-scheme` exactly as it did when the OS was the
+  only voice in it. No `data-theme`, no second set of rules.
 - **The note's own text size is one token** (B88). `--editor-font-size`, declared in `:root`
   and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
   a size change moves the whole note evenly and the window around it not at all.
@@ -160,7 +108,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1945 tests in roughly thirty-four seconds of test time (about a minute and a
+The suite runs its 1955 tests in roughly thirty-five seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -207,7 +155,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
-| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87; Findings 1 and 3–8 are open, and Finding 3 is the one this codebase has since made slightly worse on purpose |
+| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87; Findings 1 and 3–8 are open. Finding 3 was briefly made worse on purpose — the note list's focus ring was removed — and B91 put that back |
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |
