@@ -1679,3 +1679,14 @@ be recorded as one, and a toggle above the guard would close the panel out from 
 The suite is 1955 tests over 158 files. One new file — the theme row — plus the settings
 chord in `keyboard-nav.test.ts`, the two corrected marker offsets, and
 `styles-selection-accent.test.ts` rewritten around the ring coming back.
+
+
+**The Settings chord became `Mod-,` on 27 August 2026**, one release after it shipped. It went
+out as `Mod-.` — "⌘. on macOS" asked for and taken literally — and the comma was what was
+meant: ⌘, is Preferences on a Mac in every application since the HIG said so, and Ctrl+, is
+Settings in VS Code and its neighbours on Windows and Linux. That is what makes it a better
+binding rather than merely the right one: the registry has no per-platform `keys`, `Mod` being
+the whole of what it knows about the difference, so a chord that is conventional on both
+platforms at once is one entry instead of a compromise. `Mod-.` is not kept as an alias — it
+was a mis-spelling of this chord rather than a second way anyone reaches for it, and a claim
+costs the key for as long as the app runs. Released as `v0.12.2`.

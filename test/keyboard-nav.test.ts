@@ -625,18 +625,18 @@ describe("keyboard navigation across the library's panes", () => {
     expect(newNoteCalls).toEqual([]);
   });
 
-  it("Mod-. opens Settings, which had no keyboard route at all", async () => {
+  it("Mod-, opens Settings, which had no keyboard route at all", async () => {
     await mount();
     const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
     treeRow.focus();
 
-    keydown(treeRow, ".", { metaKey: true });
+    keydown(treeRow, ",", { metaKey: true });
     await flush();
 
     expect(container.querySelector(".settings")).not.toBeNull();
   });
 
-  it("Mod-. stands aside while a modal owns the keyboard, unlike Mod-/", async () => {
+  it("Mod-, stands aside while a modal owns the keyboard, unlike Mod-/", async () => {
     // Not the same rule as `help`, which toggles from outside the overlay guard so a
     // second press closes the sheet. The Settings panel records global accelerators, and
     // a `HotkeyRow` armed inside it owns every key precisely so this chord can be recorded
@@ -649,7 +649,7 @@ describe("keyboard navigation across the library's panes", () => {
     await flush();
     expect(container.querySelector(".help")).not.toBeNull();
 
-    keydown(container.querySelector<HTMLElement>(".help")!, ".", { metaKey: true });
+    keydown(container.querySelector<HTMLElement>(".help")!, ",", { metaKey: true });
     await flush();
 
     expect(container.querySelector(".settings")).toBeNull();

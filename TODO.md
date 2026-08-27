@@ -3,6 +3,17 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 27 August 2026, released as `v0.12.2` — **the Settings chord is the comma**.
+One line, one release. It went out in `v0.12.1` as `⌘.` / `Ctrl+.`, which was "⌘. on macOS"
+taken literally; `⌘,` was meant, and it is the better binding for a reason worth keeping: the
+comma is the convention on *both* platforms at once — Preferences on a Mac, Settings in VS
+Code and its neighbours — and this registry has no per-platform `keys`, so a chord that is
+conventional in both places is one entry rather than a compromise. `Mod-.` is not kept as an
+alias: it was a mis-spelling of this chord, not a second way anyone reaches for it, and a
+claim costs the key for as long as the app runs. `TEST-PROTOCOL.md` §42i–§42l carry it.
+
+---
+
 Last updated 27 August 2026, released as `v0.12.1` — **four items from a day of using
 `v0.12.0`**, the batch immediately below this one. Two decisions, **B90** (the theme is a
 choice of this machine) and **B91** (the note list's focus ring comes back). The other two
@@ -14,8 +25,8 @@ minor — it is something the app could not do at all — and the other three it
 Chromium behind it before this was written. The theme flips both windows live: on this
 light-mode box, choosing dark put the library *and* the hidden capture window on
 `prefers-color-scheme: dark` with `--surface` at `#26282c`, "system" came back to
-`#ffffff` / `#f4f5f7`, and the choice survived the bootstrap round trip. `Ctrl+.` opened
-Settings from a focused note row. The note row's ring measures `rgb(26, 99, 216) solid 2px`
+`#ffffff` / `#f4f5f7`, and the choice survived the bootstrap round trip. The Settings chord
+opened the panel from a focused note row. The note row's ring measures `rgb(26, 99, 216) solid 2px`
 at `-2px`, which is `--accent` to the byte. And the marker correction was measured as a
 delta rather than judged: the checkbox moved exactly 1.000 px and the star exactly 2.000 px
 at a 16 px note.
@@ -41,11 +52,10 @@ mistake in `--marker-slot` — which the bullet is measured against and which do
 `em` at 16 px, because B88's text size moves the whole note and a marker corrected in pixels
 would come apart at every other size.
 
-**Settings has a chord**: `⌘.` on macOS, `Ctrl+.` on Windows and Linux. One binding, since
-`Mod` is all the registry knows about the platform difference; `⌘,` is deliberately not a
-second alias and the cost of that is written into the entry. It fires below the overlay guard,
-unlike the help sheet, because the panel is where global accelerators are recorded and an
-armed `HotkeyRow` must be able to record this very chord.
+**Settings has a chord**: it shipped in `v0.12.1` as `⌘.` / `Ctrl+.` and is `⌘,` / `Ctrl+,`
+since `v0.12.2` — see the entry above this batch. It fires below the overlay guard, unlike the
+help sheet, because the panel is where global accelerators are recorded and an armed
+`HotkeyRow` must be able to record this very chord.
 
 The suite is 1955 tests over 158 files. One new file — the theme row in Settings — plus the
 chord in `keyboard-nav.test.ts`, the two corrected marker offsets, and

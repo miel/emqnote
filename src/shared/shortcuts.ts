@@ -319,20 +319,24 @@ export const SHORTCUTS: ShortcutEntry[] = [
   },
   {
     id: "settings",
-    keys: ["Mod-."],
+    keys: ["Mod-,"],
     where: "library",
     group: "window",
     why:
       "The Settings panel had no chord at all: it is reached by the gear in the library's " +
       "title bar and by nothing else, which makes it the one part of the app the " +
-      "`--click-button` selftest can reach and the keyboard cannot. Asked for as ⌘. on " +
-      "macOS, and `Mod-.` is the same chord spelled once — Ctrl+. on Windows and Linux, " +
-      "which is free in Chromium and in this registry, and is the nearer analogue to what " +
-      "was asked for than Ctrl+, would be.\n\n" +
-      "Deliberately NOT ⌘, , the macOS convention for Preferences: that would have to be " +
-      "a second binding to stay conventional on one platform only, and this registry has " +
-      "no per-platform `keys` — `Mod` is the whole of what it knows about the difference. " +
-      "The cost is stated: a Mac user who tries ⌘, first finds nothing.\n\n" +
+      "`--click-button` selftest can reach and the keyboard cannot.\n\n" +
+      "`Mod-,` is the platform convention on both platforms at once, which is the whole " +
+      "reason it can be one binding: ⌘, is Preferences on macOS in every application " +
+      "since the HIG said so, and Ctrl+, is Settings in VS Code and its neighbours on " +
+      "Windows and Linux. It shipped for one release as `Mod-.` — asked for as ⌘. and " +
+      "taken literally — and the comma is what was meant. `Mod-.` is not kept as an " +
+      "alias: it was a mis-spelling of this chord rather than a second way anyone reaches " +
+      "for it, and a claim costs the key everywhere for as long as the app runs.\n\n" +
+      "The one thing to know about the comma is macOS's own: ⌘, is a *menu* item in most " +
+      "Mac applications, and this app has no application menu to put it in " +
+      "(`installMinimalMenu`), so it is claimed in the window like every other chord " +
+      "here.\n\n" +
       "`where: \"library\"` because that is the only window with a Settings panel — the " +
       "capture window has no such command, and an entry there would print a row in its " +
       "help sheet for a key that does nothing. Handled *after* the overlay guard in " +
