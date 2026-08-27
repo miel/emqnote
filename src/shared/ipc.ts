@@ -214,6 +214,27 @@ export const IPC = {
    * through main only so it survives a relaunch, and so both windows' bootstrap agrees.
    */
   setKeepPinnedInView: "app:set-keep-pinned-in-view",
+  /**
+   * renderer → main: the size the note is drawn at, in pixels (B88).
+   *
+   * Unlike the two switches above, this one is broadcast onward with
+   * `settingsChanged` — both windows draw notes, only the library has a Settings panel,
+   * and a size that took effect in the window it was chosen in but not in the window notes
+   * are typed in would be the setting half working.
+   */
+  setEditorFontSize: "app:set-editor-font-size",
+  /**
+   * main → both windows: something in `settings.json` that a window *draws with* has
+   * changed, so re-read the bootstrap.
+   *
+   * Its own message rather than `libraryRefresh`, which means "ask the vault again" and is
+   * raised by every save. Overloading that one is what left `setLocale` sending a message
+   * neither window acted on: the capture window subscribed to nothing, and the library's
+   * handler reloads the tree, the notes and the facets — none of which is where the
+   * language lives. `useBootstrap` answers this one, so both windows get it from the one
+   * place they already share.
+   */
+  settingsChanged: "app:settings-changed",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
   /** renderer → main, fire-and-forget: the note list's sort order changed. */
@@ -373,6 +394,12 @@ export interface Bootstrap {
   loadRemoteImages: boolean;
   /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
   keepPinnedInView: boolean;
+  /**
+   * The size the note itself is drawn at, in pixels (B88). Both windows need it — the
+   * library draws the reader and the capture window draws what is being typed — which is
+   * why it rides the bootstrap rather than being read by the panel that sets it.
+   */
+  editorFontSize: number;
 }
 
 /**
@@ -719,6 +746,8 @@ export interface CaptureApi {
   /** B76's switch. Awaited like `setLoadRemoteImages`, so the panel can refresh the
    * bootstrap once it has landed rather than guessing that it did. */
   setKeepPinnedInView: (keep: boolean) => Promise<void>;
+  /** B88's note size, in pixels. Awaited for the same reason `setKeepPinnedInView` is. */
+  setEditorFontSize: (px: number) => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */
@@ -828,6 +857,8 @@ export interface CaptureApi {
    * `saveAttachment`, and for the same reason.
    */
   onVaultFileChanged: (handler: (event: VaultFileEvent) => void) => () => void;
+  /** A setting a window draws with has changed — re-read the bootstrap. `useBootstrap` owns this. */
+  onSettingsChanged: (handler: () => void) => () => void;
   /**
    * Rereads the note the capture window currently has claimed and hands it back over
    * `onLoad`, the same path a fresh `openInCapture` uses. Only ever sent when the

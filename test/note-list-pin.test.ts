@@ -146,6 +146,7 @@ function buildFake(
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
     setKeepPinnedInView: async () => {},
+    setEditorFontSize: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
@@ -156,6 +157,7 @@ function buildFake(
     saveAttachment: async () => null,
     fetchRemoteImage: async () => null,
     onVaultFileChanged: () => () => {},
+    onSettingsChanged: () => () => {},
     reloadNote: async () => {},
     pickAttachment: async () => null,
     openWikiLink: async () => "none" as const,
@@ -348,6 +350,57 @@ describe("a pinned note in the list", () => {
 
       expect(document.activeElement).toBe(rows[1]);
       expect(rows[1]!.querySelector(".note-title")?.textContent).toBe("Nieuwste");
+    });
+  });
+
+  /**
+   * The pin itself takes the pin off.
+   *
+   * It was a `<span>` — the row said "this one is pinned" and gave no way to say the
+   * opposite back. Unpinning lived in the right-click menu and on a chord, both of which
+   * are the wrong distance from a mark that is already under the pointer, and neither of
+   * which is where anyone looks. It goes through the same `setPinned` those two do, which
+   * is what makes main's two refusals and the list reload one behaviour rather than three.
+   */
+  describe("clicking the pin", () => {
+    it("asks main to take the pin off that note", async () => {
+      const fake = buildFake("modified", { pinned: false });
+      await mount(fake);
+
+      const pin = container.querySelector<HTMLButtonElement>(".notes-list .note-pin")!;
+      act(() => pin.click());
+      await flush();
+
+      expect(fake.setPinned).toHaveBeenCalledWith("00 Inbox/Vastgeprikt.md", false);
+    });
+
+    it("does not open the note it is drawn on", async () => {
+      // The row's own `onClick` selects and its `onDoubleClick` opens in the capture
+      // window. Both are stopped at the button, or taking a pin off would also be a
+      // navigation nobody asked for.
+      const fake = buildFake("modified", { pinned: false });
+      const openNote = vi.fn(async () => null);
+      (fake.emqnote.library as unknown as { openNote: unknown }).openNote = openNote;
+      await mount(fake);
+
+      const pin = container.querySelector<HTMLButtonElement>(".notes-list .note-pin")!;
+      act(() => pin.click());
+      await flush();
+
+      expect(openNote).not.toHaveBeenCalled();
+    });
+
+    it("is a button, named for what pressing it does", async () => {
+      // Not "Pin to top", which is what the mark used to be titled: once it is pressable,
+      // the label has to name the verb it carries out and not the state it reports.
+      await mount(buildFake("modified"));
+
+      const pin = container.querySelector<HTMLElement>(".notes-list .note-pin")!;
+      expect(pin.tagName).toBe("BUTTON");
+      expect(pin.getAttribute("aria-label")).toBe("Unpin");
+      // The row is the roving tab stop; a second one inside it would put a stop in the
+      // middle of the list that `roveArrowKey` knows nothing about.
+      expect(pin.getAttribute("tabindex")).toBe("-1");
     });
   });
 

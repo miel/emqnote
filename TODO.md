@@ -3,6 +3,72 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 27 August 2026 — **four defects and two features from a day of using
+`v0.11.2`**, which is the batch immediately below this one. Two decisions, B88 and B89, and
+**B87 gains an addendum** on its own two items. Not a patch release: two of the six are
+things the app could not do before.
+
+**Driven, not guessed.** Everything here was run in the real app under `Xvfb` with a real
+Chromium behind it, and the two items a sandbox is worst at were driven with real input
+rather than synthetic events: the spring-loaded folder over CDP's `Input.setInterceptDrags`
++ `Input.dispatchDragEvent`, which is a genuine HTML5 drag and not a `dispatchEvent` that
+happens to be named one; and the heading chords through `Input.dispatchKeyEvent` into the
+capture window's real keymap. Twelve checks, all `ok`. `npm run drive:capture`'s own nine
+still pass after the editor CSS change.
+
+**Two colours out of the library, and one of them was the same variable doing two jobs.**
+The selected folder lost `color: var(--accent)` — it kept the weight — and the note list
+lost its `:focus-visible` ring, which on Windows at 125 % scaling paints two pixels as
+three. "Selected" now means the `--selected` fill in both panes, which is what
+`DESIGN-CRITIQUE.md`'s Finding 3 asked for. **Finding 3 itself is not closed and is now
+slightly worse**: with no ring on a note row, the row the arrow keys are on is invisible
+until Enter opens it. The answer to that is the pane-level treatment Finding 3 describes, not
+this ring back. Sampled out of the PNGs: no `#1a63d8` on any of the four edges of the
+selected note row, and the selected folder's label is `--text`. The only accent left on that
+row is the `Tasks: 1` badge, which is by design.
+
+**A note held over a collapsed folder unfolds it after 600 ms.** The one thing about it that
+is not obvious is written up in `CONSTRAINTS.md`: the countdown is armed *before*
+`canDropNote` is consulted, because the folder a drag most needs to open is very often one
+the drop itself would refuse — the note's own parent, on the way to a sibling underneath it.
+A folder that springs stays open.
+
+**A heading is reversible two ways** (B89), which is how it was reported. `Mod+1` on an H1
+gives a paragraph; a list or task command with the caret in a heading lifts it to a paragraph
+first and then does what it was asked, in one transaction, so one Ctrl+Z undoes the whole
+press. The second half was not a bug in the sense of something broken — `wrapInList` finds no
+wrapping for a heading and correctly returns false — which is exactly why it was invisible.
+
+**The note has a text size** (B88), five steps in Settings, per machine. Everything inside
+`.editor-content` was already `em` against one `px` literal, so one token moves the whole
+note evenly: measured, the H1 "Kwartaalplan" is 142 / 174 / 219 px wide at 13 / 16 / 20
+against 141.4 and 217.5 predicted. Chrome does not scale with it. **It is a global setting
+and not a per-note one**, which was the question asked: a size per note would be a display
+preference in the frontmatter, travelling to the other machine and to Obsidian as noise.
+
+**And it turned up a hole that predates it.** Main has been broadcasting "a setting changed"
+to both windows since B60 and **neither window listened** — it was sent as `libraryRefresh`,
+which means "ask the vault again", so the library answered it by reloading the tree and the
+notes, and the capture window subscribed to nothing at all. Changing the language only ever
+took effect because the Settings panel refreshes its own window on the way out. There is a
+real `IPC.settingsChanged` now, with `useBootstrap` as its single subscriber, so both windows
+follow it — which also means the language finally reaches the capture window.
+
+**The pin on a pinned row is a button.** It unpins, through the same `setPinned` the menu
+item and the chord already use.
+
+The suite is 1945 tests over 157 files. Four new files: the spring-loaded folder, the two
+ways out of a heading, the two accent rules, and the note's own text size — plus `useBootstrap`'s
+settings subscription, which nothing tested before.
+
+**Open, and deliberately not done here.** `DESIGN-CRITIQUE.md`'s Findings 1, 4, 5–8 are
+untouched, and Finding 3 is open with a note above about what this batch cost it.
+`.disk-change-bar` and `.conflict-banner` are still hardcoded amber in both themes. And the
+text size has no chord: if adjusting it while typing turns out to matter, `Mod+0` is already
+"Ordinary paragraph", so a reset would have to be `Mod+Shift+0`.
+
+---
+
 Last updated 26 August 2026 — **one surface system, six roles** (B87), out of
 `DESIGN-CRITIQUE.md`'s Finding 2. Not released yet, and **not seen on a real display**: every
 row of `TEST-PROTOCOL.md` §40 is a colour, and colours are the thing a sandbox is worst at.

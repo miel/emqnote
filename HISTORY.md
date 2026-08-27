@@ -1424,3 +1424,194 @@ margin. That is as far as this sandbox goes — a real display and a real theme 
 speaks to.
 
 The suite is 1898 tests over 151 files. One new file: the Delete folder question.
+
+**One surface system, six roles, landed on 26 August 2026** (B87), out of a document written
+the same day: `DESIGN-CRITIQUE.md`, a photographed reading of the library window that this
+batch answers the second finding of and leaves the other seven open. It is the first batch
+here whose subject is the *look* of the app rather than what it does, and the first whose
+whole content is a colour.
+
+**The light theme's two surface tokens were the wrong way round, and had been since the light
+theme first existed** (`5051ca7`, phase 1, 25 July 2026).
+`--surface: #ffffff` framing a `--background: #fbfbfc` page — so the chrome was *lighter* than
+the thing it framed, which is exactly backwards. Finding 2 measured what that costs rather
+than asserting it: the note list and the reader came out the same colour, divided by one pixel
+at **1.28 : 1**, with the tree a further 1.6 % away. A three-pane window rested on a hairline
+nobody could see. It is also why a code block, a wiki-link chip and a tag chip were all drawn
+white on off-white. **The dark theme had none of it, from the same two variables** — which is
+the tell, and the shape this log keeps rediscovering: a pair chosen where it works and never
+checked where it doesn't.
+
+**Six roles, declared once per theme.** `--background` is the page, `--surface` is bars, headers
+and floating panels, `--field` is anything you type a value into, `--hover` and `--selected` are
+the two states a row can be in, `--border` is the line between any two of them. The last three
+had no name at all before. Hover and selection were `rgba(127, 127, 127, α)` with
+α ∈ {0.08, 0.09, 0.10, 0.12, 0.14, 0.18, 0.20} across **fifteen** rules, which put a hovered
+branch four hundredths from a selected note and made a selected branch pixel-identical to a
+hovered title-bar button — two things with nothing to do with each other, in the same colour,
+for no reason. They stay **translucent** and deliberately get no per-theme value: a state tint
+lands on two different grounds, a white list row and a grey chrome button, and an overlay steps
+relative to whatever is under it where a solid grey can only be right on one of the two.
+
+**The dark theme keeps its five surfaces to the value** and gains the three names only —
+`--field` is `#1e1f22` there, the old `--background`, because every field in this app sits
+inside a `--surface` container, so that one choice leaves every dark field where it was. **The
+note list stays `--background`**: "a list is not a surface" was already in `CONSTRAINTS.md` and
+still holds, so the separation between the list and the reader is the divider plus the reader's
+own header band, and that divider went from 1.28 : 1 to **1.39 : 1**. A third grey between them
+was considered and rejected: a fourth surface to maintain for a separation something else
+already draws.
+
+**Three things fell out of the same reading.** `.header input` filled itself with its own tint
+at rest and with `--background` on focus; rest is `--field` now — the same colour as every other
+field in both windows — and focus stays `--background`, so a field being typed in turns the
+colour of the page. In the dark theme those two are one value and the accent border carries
+focus alone, which it already did for `.ask input` and `.settings select`. `color-scheme` is
+finally declared, so scrollbars and the popup a `<select>` opens follow the app's theme instead
+of the OS's — most visible now the content pane is pure white. And `var(--bg)` and `var(--fg)`
+had been sitting in `styles.css` **declared nowhere**, resolving to nothing, in rules that
+therefore did nothing and looked fine in every review; `styles-surfaces.test.ts` now holds every
+`var()` against the tokens that actually exist.
+
+**The window stopped flashing dark before its first frame.** `backgroundColor` was a hardcoded
+`#1e1f22` in both window files and asked `nativeTheme` nothing. That was mildly wrong against a
+`#fbfbfc` page and is the whole distance between the themes against a white one.
+`windowBackground()` is the one place now, read once at construction — no `nativeTheme`
+listener, because this colour exists only in the moment before the first paint and the capture
+window is the one waiting on a hotkey with an 80 ms budget.
+
+**What did not go in.** `pdfview.css` keeps its own separate variables on purpose: that window
+does not load `styles.css` and taking the variables would take the whole cascade with them. Its
+`--pdf-chrome` is `#f4f4f5` — the same system, arrived at separately — so there was nothing to
+repair. The two amber bars (`.disk-change-bar`, `.conflict-banner`) are still hardcoded in one
+colour for both themes; that is a warning colour rather than a surface, and it wants its own
+thinking rather than a value picked in passing.
+
+**Measured in a sandbox, and none of it seen on a real display.** Under `Xvfb` with the pixels
+read out of the PNGs, at the five points the critique sampled: light is
+`#f4f5f7` / `#d7dbe1` / `#ffffff` / `#ffffff` where the critique measured
+`#ffffff` / `#dfe1e5` / `#fbfbfc` / `#fbfbfc`, and the dark theme is byte-identical at the same
+five. `drive:capture` gives its nine `ok` lines. That is as far as a sandbox goes on this
+subject, which is why `TEST-PROTOCOL.md` §40 is nine rows of colour for a human on both
+machines — and why §39b and §39c had to be rewritten, having been telling that human to look
+for white.
+
+The suite is 1910 tests over 152 files. One new file: the surface system itself, which pins the
+polarity, the two state tints, the count of grey literals left outside `:root`, and that every
+`var()` names something declared.
+
+**Four defects and two features from a day of using that batch landed on 27 August 2026**, on
+top of it. Two decisions — **B88**, the note's own text size, and **B89**, a heading being
+reversible — and **B87 gains an addendum** covering the two colour items. Not a patch release
+like the three before it: two of the six are things the app could not do at all.
+
+**Two of the four defects were the same variable doing two unrelated jobs.** `.branch-on
+.branch-name` carried `color: var(--accent)` *and* `font-weight: 600` on top of the
+`--selected` fill, while `.note-on` carried the fill alone — Finding 3's "the folder shouts and
+the note whispers", so the eye reads the tree as the live pane whichever pane the keyboard is
+actually in. The colour is gone and the weight stays: a folder name is one word in a column of
+words and has no second line to be recognised by. "Selected" now means the fill in both panes,
+which is what Finding 3 asked for in the first place. Separately and from the other end of the
+same variable, `.note:focus-visible` drew `outline: 2px solid var(--accent)` with
+`outline-offset: -2px`, and **Windows at 125 % display scaling paints those two pixels as
+three** — a saturated `#1a63d8` box around a full-width row, reported as jarring, which is hard
+to disagree with. The note list loses that ring; the tree and the task list keep theirs.
+
+That asymmetry is deliberate and is the interesting call in the batch. Removing the ring
+everywhere was the other option and is worse: `roveArrowKey` would then walk three panes with
+nothing on screen following it. The note list is where the ring did least — the row the arrows
+are on is nearly always the row that is open — so it is the one that can afford to lose it.
+**What it costs is written down rather than left to be discovered**: focus moves without
+selecting, so while arrowing through the list the focused row is now invisible until Enter
+opens it. Finding 3 is therefore slightly *worse* after this batch, not better, and the answer
+to it is still the pane-level treatment the critique describes — an accent edge on the active
+row of the pane that has the keyboard — and not this ring back.
+
+**A note held over a collapsed folder unfolds it after 600 ms.** The gesture every file manager
+on both platforms has, and the one thing about the implementation that is not obvious is the
+whole of it: the countdown is armed **before** `canDropNote` is consulted. `accepts` is false
+for the note's own folder and for everything inside `_trash`, so gating the timer on it — the
+obvious reading of that handler — would leave exactly the rows a drag most often has to pass
+through on its way down the tree unable to open. Unfolding is not dropping, so the drop's
+question is not its question. Three smaller things are load-bearing: the timer arms on a null
+ref rather than on `!over`, which is still false for a whole render after `setOver(true)` while
+`dragover` fires continuously; it is cleared in `dragleave`, in `drop`, on unmount, and in an
+effect on `dragging` going null, because a drag released over a row that refuses it fires
+*neither* `dragleave` nor `drop` here; and that last clause incidentally fixes a highlight that
+used to survive an abandoned drag until the next one came past. A folder that springs open
+**stays** open — Explorer's behaviour rather than Finder's, chosen because what unfolded during
+the drag is where the note now is.
+
+**A heading became reversible two ways, which is how it was reported** (B89). The complaint was
+one sentence — a line that becomes a heading will not become anything else — and it was two
+holes with separate causes. `setHeading` was a one-way `setBlockType`, so `Mod+1` on an H1 set
+H1 again; it is a toggle now, on the same level only, judged over every textblock in the
+selection rather than from `$from.parent`, since half a selection is not "already H1". The
+second hole was not a bug in the sense of anything being broken, and that is exactly why it was
+invisible: `listItem`'s content is `paragraph block*`, so a `heading` can never be a list item's
+first child, `wrapInList` finds no wrapping and correctly returns **false** — and a `Command`
+returning false is a key press that does nothing and says nothing. The heading is lifted to a
+paragraph on the way in now, which is what the press meant anyway, a bulleted heading being a
+shape this dialect cannot write. `test/limitations.test.ts` still holds unchanged: this route
+*avoids* that shape rather than relaxing it. **The two halves go out as one transaction** — the
+wrapped command runs against the intermediate state and its steps are replayed onto the first
+`tr`, which is sound because `state.apply(tr).doc` *is* `tr.doc` — because undone separately,
+the first Ctrl+Z would leave a paragraph where a heading was, a state nobody asked for and
+nobody can name.
+
+**The note has a text size** (B88): five steps in Settings, 13 to 20, per machine. One token
+does all of it, and only because the groundwork was already there — everything inside
+`.editor-content` was already expressed in `em` against a single `px` literal, the headings at
+`1.5em` / `1.28em` / `1.12em`, `pre` at `0.86em`, `code` at `0.88em`, the wiki chips at `0.9em`,
+the list gutter at `1.5em`. That was taste rather than rule, which is precisely the kind of
+property that quietly stops being true, so `styles-editor-font-size.test.ts` now holds every
+`font-size` under `.editor-content` to `em` or the token, with one exemption named out loud
+rather than pattern-matched away: `.table-tool`, the table toolbar's buttons, which are chrome
+that happens to be drawn inside the document. The chrome around the note does not scale — the
+OS already has a setting for that question. **Per machine and not per note**, which was the
+question actually asked: a size per note would put a display preference in the frontmatter,
+where `03-markdown-dialect.md` defines none, travelling to the other machine and to Obsidian as
+noise and making "reading a note on a laptop" a change to that note. Main clamps the value
+between 10 and 32, because `settings.json` is a file a person can open and
+`--editor-font-size: 0px` is a window with no note in it and no way back to the panel that
+would fix it.
+
+**And that setting turned up a hole three decisions old.** Main has been broadcasting "a
+setting changed" to both windows since B60, and **neither window ever acted on it**. It was
+sent as `libraryRefresh` — which means "ask the vault again", and every save raises it — so the
+library answered it by reloading the tree, the notes, the facets and the conflicts, none of
+which is where a language or a font size lives, and the capture window subscribed to that
+channel not at all. Changing the language had only ever taken effect because the Settings panel
+refreshes its own window on the way out. There is a real `IPC.settingsChanged` now with
+`useBootstrap` as its single subscriber, so every window that draws from settings follows it
+without either of them wiring it up separately — which also means the language finally reaches
+the capture window. It was found by driving it: the note size landed in the capture window and
+not in the library's own reader, which is the same hole seen from the other side.
+
+**The pin on a pinned row is a button.** It only ever unpins — the mark is only drawn on a note
+that has one — and it goes through the same `Library.tsx` `setPinned` the context-menu item and
+the chord already use, which is where main's two refusals become a dialog and where the list is
+reloaded. Both pointer events are stopped at the button, or taking a pin off would also select
+the row and, on a double-click, open it in the capture window.
+
+**More of this batch was driven than usual, and two items with real input rather than synthetic
+events.** Twelve CDP checks under `Xvfb`, all `ok`. The spring-loaded folder went through
+`Input.setInterceptDrags` + `Input.dispatchDragEvent`, which is a genuine HTML5 drag and not a
+`dispatchEvent` that happens to be named one — including the case the feature turns on, a
+parent that unfolds while refusing the drop itself — and the note really left the folder it was
+dragged out of. The heading chords went through `Input.dispatchKeyEvent` into the capture
+window's own keymap. The pin was clicked at real coordinates and left the selection where it
+was. The pixels were read out of the PNGs: no `#1a63d8` on any of the four edges of the selected
+note row, the selected folder's label at `--text`, and the H1 "Kwartaalplan" measuring
+142 / 174 / 219 px wide at 13 / 16 / 20, against 141.4 and 217.5 predicted — within a pixel of
+hinting, which is the evidence for "everything scales evenly". `drive:capture`'s nine still
+pass after the editor CSS change.
+
+**What a sandbox still could not answer** is `TEST-PROTOCOL.md` §41: Windows at a real scaling
+factor, both themes on a real panel, and the two judgements no measurement makes — whether
+600 ms is the right dwell, and whether losing the note list's focus ring costs more in use than
+the harsh border did.
+
+The suite is 1945 tests over 157 files. Four new files — the spring-loaded folder, the two ways
+out of a heading, the two accent rules, and the note's own text size — plus `useBootstrap`'s
+settings subscription, which nothing had tested before.

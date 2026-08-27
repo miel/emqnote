@@ -33,6 +33,7 @@ const FALLBACK: Bootstrap = {
   librarySort: "modified",
   loadRemoteImages: true,
   keepPinnedInView: false,
+  editorFontSize: 16,
 };
 
 /**
@@ -54,6 +55,36 @@ export function useBootstrap(): Bootstrapped {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /**
+   * A setting a window draws with has changed — the language, or B88's note size — so ask
+   * again.
+   *
+   * Here rather than in `Capture.tsx` and `Library.tsx`, because "what the bootstrap says"
+   * is exactly what this hook owns and both windows already call it. It also closes a hole
+   * that predates B88: main has been broadcasting a settings change since B60 and neither
+   * window listened, so changing the language in the panel reached the library only by way
+   * of the panel refreshing itself on the way out, and never reached the capture window at
+   * all.
+   */
+  useEffect(() => window.emqnote.onSettingsChanged(() => void reload()), [reload]);
+
+  /**
+   * B88's note size, put on the document as `--editor-font-size` — the token
+   * `.editor-content` reads (`styles.css`).
+   *
+   * Here rather than in `Capture.tsx` and `Library.tsx` separately: both windows draw a
+   * note, both already call this hook, and two copies of one rule is how the two of them
+   * come to disagree. The `:root` declaration is what covers the frames before the
+   * bootstrap round trip resolves, and it holds the same 16px the default does, so
+   * nothing flickers on the way.
+   */
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--editor-font-size",
+      `${state.editorFontSize}px`,
+    );
+  }, [state.editorFontSize]);
 
   return {
     ...state,

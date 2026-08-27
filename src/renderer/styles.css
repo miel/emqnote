@@ -32,6 +32,16 @@
      indistinguishable from a hovered title-bar button. */
   --hover: rgba(127, 127, 127, 0.1);
   --selected: rgba(127, 127, 127, 0.22);
+
+  /* Not a colour and not a theme: the one size the note itself is drawn at, settable from
+     the Settings panel (B88). It is declared here rather than only on `.editor-content`
+     because that is where `useBootstrap` writes the chosen value, and because a token used
+     in a rule but declared nowhere is the mistake `styles-surfaces.test.ts` exists to
+     catch. Everything inside the note is expressed against it — the headings in `em`, the
+     code block, the wiki chips, the list gutter — so this one number moves all of them by
+     the same proportion, which is the whole of what "larger text" means here. The window
+     around it does not move: chrome is chrome at any note size. */
+  --editor-font-size: 16px;
 }
 
 /* The light theme's polarity used to be upside down: `--surface` was `#ffffff` and
@@ -533,7 +543,7 @@ body {
   --editor-pad-x: 18px;
   padding: 14px var(--editor-pad-x) 25vh;
   outline: 0;
-  font-size: 16px;
+  font-size: var(--editor-font-size);
   /* Tighter than before: a wrapped bullet should read as one item, not as two. */
   line-height: 1.4;
 }
@@ -1107,6 +1117,11 @@ body {
   user-select: none;
 }
 
+/* The one fixed size inside `.editor-content`, and it is not note text: these are the
+   table toolbar's buttons, chrome that happens to be drawn inside the document because
+   that is where the table is. They stay 11px at every note size for the same reason the
+   status bar does — `styles-editor-font-size.test.ts` names this rule as the exception so
+   a second one cannot be added without saying why. */
 .editor-content .table-tool {
   font: inherit;
   font-size: 11px;

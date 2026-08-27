@@ -73,6 +73,7 @@ describe("the settings panel's pinned-notes switch", () => {
           libraryHotkey: "CommandOrControl+Shift+B",
           loadRemoteImages: true,
           keepPinnedInView,
+          editorFontSize: 16,
           vaultPath: "/vault",
           // The real table, so a renamed key fails here rather than drawing an empty label.
           t: (key: string) => {

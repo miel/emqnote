@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1910 tests
+npm test               # vitest run — 1945 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -142,7 +142,14 @@ undo by accident and expensive to rediscover:
   `--selected` — declared once per theme at the top of `styles.css`. The light theme had the
   first two the wrong way round for a long time and nobody could see the three panes because of
   it. `styles-surfaces.test.ts` counts the grey literals left outside `:root`; there are two,
-  and both carry a comment saying why they are not UI state.
+  and both carry a comment saying why they are not UI state. **`--accent` is not a seventh
+  role**: "selected" is the fill in both panes, so the selected folder wears no accent text and
+  a note row wears no `:focus-visible` ring — the tree and task list keep theirs, and that
+  asymmetry is deliberate. Both are pinned by `styles-selection-accent.test.ts`.
+- **The note's own text size is one token** (B88). `--editor-font-size`, declared in `:root`
+  and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
+  a size change moves the whole note evenly and the window around it not at all.
+  `styles-editor-font-size.test.ts` is what keeps that true.
 - **A diagnosis that survives its own bug report is incomplete, not wrong.** Reach for one of the diagnostic helpers above before shipping a second fix for the same complaint.
 
 ## Tests
@@ -153,7 +160,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1910 tests in roughly thirty-four seconds of test time (about a minute and a
+The suite runs its 1945 tests in roughly thirty-four seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -196,10 +203,11 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B86, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B89, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
+| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87; Findings 1 and 3–8 are open, and Finding 3 is the one this codebase has since made slightly worse on purpose |
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |

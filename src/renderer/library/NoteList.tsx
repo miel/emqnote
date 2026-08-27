@@ -111,6 +111,16 @@ interface Props {
    */
   onFileContextMenu: (file: FileSummary, x: number, y: number) => void;
   /**
+   * Taking the pin off a pinned row by clicking the pin itself.
+   *
+   * Only ever unpins: the mark is only drawn on a note that has one, so there is no state
+   * this can be pressed in where "pin" is the meaning. It goes through `Library.tsx`'s own
+   * `setPinned` like the context-menu item and the shortcut do — that is where main's two
+   * refusals are turned into a dialog and where the list is reloaded, and a second route
+   * that skipped it would be a second definition of what unpinning costs.
+   */
+  onUnpin: (note: NoteSummary) => void;
+  /**
    * B76: whether the pinned rows stay against the top edge while the rest of the list
    * scrolls under them, rather than scrolling away with it.
    *
@@ -239,6 +249,7 @@ export function NoteList({
   onDragNote,
   onContextMenu,
   onFileContextMenu,
+  onUnpin,
   keepPinnedInView,
   pinsApply,
   isMac,
@@ -371,9 +382,27 @@ export function NoteList({
     >
       <div className="note-top">
         {note.pinned && (
-          <span className="note-pin" title={t("library.pin")}>
+          /* A button, not a mark: the pin is what put this row at the top, so it is
+             where a hand goes to send it back down. `tabIndex={-1}` because the row is
+             the roving tab stop (`activePath`) and a second one inside it would put a
+             stop in the middle of the list that `roveArrowKey` knows nothing about.
+             Both pointer events are stopped: the row's own `onClick` selects the note
+             and its `onDoubleClick` opens it in the capture window, and neither is what
+             taking a pin off means. */
+          <button
+            type="button"
+            className="note-pin"
+            tabIndex={-1}
+            title={t("library.unpin")}
+            aria-label={t("library.unpin")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onUnpin(note);
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
             {pinGlyph}
-          </span>
+          </button>
         )}
         <span className="note-title">{note.title}</span>
         <span className="note-when">

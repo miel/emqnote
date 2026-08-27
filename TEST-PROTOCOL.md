@@ -1416,6 +1416,40 @@ probably a shaded list rather than a darker line — say so in the feedback colu
 
 ---
 
+## 41. Four defects and two features from a day of using §40 (26 August 2026)
+
+More of this batch was driven than usual, and the rows below are deliberately only what a
+sandbox could not answer. Under `Xvfb`, with real Chromium behind it, twelve checks came back
+`ok`: the spring-loaded folder over a **real** HTML5 drag (CDP's `Input.setInterceptDrags` +
+`Input.dispatchDragEvent`, not a synthetic `dispatchEvent`), the note really leaving the
+folder it was dragged out of, the pin taking itself off without selecting its row, `Mod+1`
+toggling a heading and `Mod+Shift+L` making a bullet of one, and B88's size landing in the
+capture window with no restart. The pixels were read out of the PNGs: no `#1a63d8` on any
+edge of the selected note row, the selected folder's label at `--text`, and the H1
+"Kwartaalplan" 142 / 174 / 219 px wide at 13 / 16 / 20 px.
+
+What is left for a person is **Windows at a real scaling factor**, **both themes on a real
+panel**, and the two judgements no measurement makes: whether 600 ms is the right dwell, and
+whether losing the note list's focus ring costs more in use than the harsh border did.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 41a | **On Windows**, at 125 % *and* 150 % display scaling: click a note, then walk the list with ↑/↓ | No blue box around any row, at either scaling. This is the report this batch answers, and the only machine that can confirm it |  |
+| 41b | Straight after 41a, keep walking with ↑/↓ without pressing Enter | Say plainly whether you can tell which row the keyboard is on. You cannot — the ring is gone and selection does not follow the arrows — and the question is whether that is worse in use than the border was. If it is, the fix is Finding 3's pane-level treatment, not this ring back |  |
+| 41c | Look at the selected folder in the tree, both themes | Bold, in the ordinary text colour, on a grey fill. No blue. It should read as no louder than the open note in the list beside it |  |
+| 41d | Drag a note from the list and hold it over a **collapsed** folder | It unfolds after about half a second, and stays unfolded after you drop. Say whether the wait feels right — too short and every folder you cross opens behind you, too long and the drag reads as having stopped working |  |
+| 41e | Drag a note over the folder it **already lives in**, on the way to a subfolder underneath it | That parent still unfolds, even though it will refuse the drop itself (no highlight on it). This is the case the whole feature turns on |  |
+| 41f | Start a drag, hold it over a collapsed folder for a moment, then press Escape | Nothing unfolds afterwards, and no folder is left highlighted |  |
+| 41g | Type a line, press `Ctrl+1` twice | Heading, then ordinary paragraph again |  |
+| 41h | On a heading, press `Ctrl+Shift+L`, then `Ctrl+Z` **once** | A bullet whose text is the heading's; one undo puts the heading back. Two presses of Ctrl+Z would mean the transaction was split |  |
+| 41i | Settings → text size, try 13 and 20, in **both** windows and on **both** machines | The note scales and the window around it does not. Headings keep their proportion to the body. Judge readability at your own display — this is the row the setting exists for |  |
+| 41j | At 13 and at 20, look at a bulleted list, a numbered list and a task list | Markers still line up under their own text at every depth, and a checkbox still sits on its line. The marker rules were measured at 16px and nowhere else, so this is the row most likely to show something |  |
+| 41k | With both windows open, change the text size in Settings and look at the capture window **without restarting** | It follows immediately. Then change the **language** and look again — that never reached this window before, and it should now |  |
+| 41l | Click the pin on a pinned row | The pin comes off and the row drops to where the sort puts it. The note does not open and the selection does not move |  |
+| 41m | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

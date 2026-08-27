@@ -115,6 +115,77 @@ export function toggleList(target: NodeType): Command {
 }
 
 /**
+ * Whether the selection touches a heading at all.
+ *
+ * A heading is always a textblock, never an ancestor of one, so this asks the plain
+ * question and stops on the first hit.
+ */
+function selectionHasHeading(state: EditorState): boolean {
+  const { from, to } = state.selection;
+  let found = false;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (node.type === heading) found = true;
+    return !found;
+  });
+  return found;
+}
+
+/**
+ * Runs a command that cannot see a heading, having first turned the headings in the
+ * selection into paragraphs — in **one** transaction.
+ *
+ * This is the fix for a silent refusal. `listItem`'s content is `paragraph block*`
+ * (`schema.ts`), so a `heading` can never be a list item's *first* child, which means
+ * `wrapInList` finds no wrapping for one and returns false — and a `Command` returning
+ * false is a key press that does nothing and says nothing. Pressing "bullet list" on a
+ * heading therefore appeared broken, with the shape of the file format as the cause and
+ * nothing on screen to suggest it. Turning the line into a paragraph first is what the
+ * user meant anyway: a bulleted heading is not a thing this dialect can write
+ * (`test/limitations.test.ts` pins that, and it still holds — this route *avoids* that
+ * shape rather than relaxing it).
+ *
+ * **One transaction, not two.** `withList` above dispatches twice and gets away with it
+ * because both halves are list edits that read as one change either way. Here the two
+ * halves are "stop being a heading" and "become a list", and undone separately the first
+ * Ctrl+Z would leave a paragraph where a heading used to be — the state the user never
+ * asked for and cannot name. So the second command is run against the intermediate state
+ * and its steps are replayed onto the first transaction, which is sound precisely because
+ * `state.apply(tr).doc` *is* `tr.doc`: the steps are already expressed in the coordinates
+ * they are being added to.
+ *
+ * The command is asked whether it would do anything *before* anything is dispatched, so a
+ * genuine refusal stays a refusal instead of flattening the heading on its way to doing
+ * nothing.
+ */
+function overParagraphs(command: Command): Command {
+  return (state, dispatch, view) => {
+    if (!selectionHasHeading(state)) return command(state, dispatch, view);
+
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    tr.setBlockType(from, to, paragraph!);
+    const lifted = state.apply(tr);
+
+    if (!command(lifted, undefined, view)) return false;
+    if (dispatch === undefined) return true;
+
+    command(
+      lifted,
+      (second) => {
+        for (const step of second.steps) tr.step(step);
+        // `tr.doc` and `second.doc` are the same document, so the selection is carried
+        // across by re-resolving it rather than by mapping through anything.
+        tr.setSelection(Selection.fromJSON(tr.doc, second.selection.toJSON()));
+      },
+      view,
+    );
+
+    dispatch(tr.scrollIntoView());
+    return true;
+  };
+}
+
+/**
  * The list items the selection actually sits in, innermost only.
  *
  * Walking `nodesBetween` for `listItem` nodes is the obvious version and it is wrong:
@@ -154,7 +225,7 @@ function itemsInSelection(state: EditorState): { pos: number; node: PMNode }[] {
  * separately, the way `toggleMark` does: half the selection ticking and the other half
  * clearing is not a gesture anyone means.
  */
-export const toggleTask: Command = (state, dispatch) => {
+const toggleTaskInPlace: Command = (state, dispatch) => {
   const list = findList(state.selection.$from);
 
   if (list === null) {
@@ -197,8 +268,16 @@ function withList(first: Command, state: EditorState, dispatch: Dispatch): boole
   });
 
   if (!ok || after === null) return ok;
-  return toggleTask(after, dispatch);
+  return toggleTaskInPlace(after, dispatch);
 }
+
+/**
+ * The exported form: a heading becomes a paragraph on the way in (see `overParagraphs`).
+ *
+ * Wrapped from outside rather than handled inside, so `withList`'s recursion — which runs
+ * against a state that already holds a list — never asks the question a second time.
+ */
+export const toggleTask: Command = overParagraphs(toggleTaskInPlace);
 
 /**
  * Ticks and unticks. Returns false on anything that is not a task, so the key falls
@@ -786,8 +865,45 @@ export const insertHorizontalRule: Command = (state, dispatch) => {
   return true;
 };
 
+/**
+ * Whether every textblock the selection touches is already a heading of this exact level.
+ *
+ * Asked over the whole range rather than from `$from.parent` alone: a selection spanning
+ * an H1 and a paragraph is not "already H1", and toggling it off from its first line
+ * would be the command reading one line and acting on five.
+ */
+function isEntirelyHeading(state: EditorState, level: number): boolean {
+  const { from, to } = state.selection;
+  let seen = 0;
+  let all = true;
+
+  state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isTextblock) return true;
+    seen += 1;
+    if (node.type !== heading || node.attrs.level !== level) all = false;
+    return false;
+  });
+
+  return seen > 0 && all;
+}
+
+/**
+ * Sets the heading level — and pressing the same one again takes it off.
+ *
+ * It was a plain `setBlockType`, which is one-way: `Mod+1` on a line that was already an
+ * H1 re-applied H1 and there was no gesture that undid it except knowing about `Mod+0`.
+ * That chord is real, it is in the help sheet and it is in the `/` panel, but "press the
+ * thing again" is what every editor with a heading button has taught, and a formatting
+ * command that cannot be pressed off reads as a line that is stuck.
+ *
+ * `Mod+2` on an H1 still simply sets H2 — only the *same* level toggles, so walking the
+ * levels never drops through the paragraph on the way.
+ */
 export function setHeading(level: number): Command {
-  return setBlockType(heading!, { level });
+  return (state, dispatch, view) =>
+    isEntirelyHeading(state, level)
+      ? setParagraph(state, dispatch, view)
+      : setBlockType(heading!, { level })(state, dispatch, view);
 }
 
 export const setParagraph: Command = setBlockType(paragraph!);
@@ -799,8 +915,8 @@ export const toggleStrike = toggleMark(schema.marks.strike!);
 export const toggleHighlight = toggleMark(schema.marks.highlight!);
 export const toggleCode = toggleMark(schema.marks.code!);
 
-export const toggleBulletList = toggleList(bulletList!);
-export const toggleOrderedList = toggleList(orderedList!);
+export const toggleBulletList = overParagraphs(toggleList(bulletList!));
+export const toggleOrderedList = overParagraphs(toggleList(orderedList!));
 
 export interface LinkTarget {
   href: string;

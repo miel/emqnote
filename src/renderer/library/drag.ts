@@ -19,6 +19,21 @@ import { folderOf, isInTrash, TRASH_FOLDER } from "../../shared/vault-types.js";
 export const NOTE_DRAG_TYPE = "application/x-emqnote-path";
 
 /**
+ * How long a dragged note has to rest on a collapsed folder before it springs open.
+ *
+ * Filing by drag only reaches what is on screen, so a destination two levels down used to
+ * mean dropping the note somewhere else, unfolding by hand, and dragging it again — or
+ * giving up and using "Move to…". Every file manager on both platforms answers this the
+ * same way and it is the one gesture nobody has to be taught.
+ *
+ * 600 ms is chosen against the two failures either side of it: shorter and every folder
+ * the pointer crosses on its way down the tree unfolds behind it, longer and the pause
+ * reads as the drag having stopped working. It lives here, beside the rules the drop
+ * itself follows, rather than as a number in `FolderTree.tsx`.
+ */
+export const SPRING_MS = 600;
+
+/**
  * Whether a note may be dropped on a folder.
  *
  * One function for the drop handler and for the highlight that precedes it, so a row can

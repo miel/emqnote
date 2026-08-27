@@ -12,6 +12,8 @@ interface Props {
   loadRemoteImages: boolean;
   /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
   keepPinnedInView: boolean;
+  /** The size the note itself is drawn at, in pixels (B88). */
+  editorFontSize: number;
   vaultPath: string | null;
   t: (key: string) => string;
   onChanged: () => void;
@@ -24,6 +26,22 @@ const LOCALE_NAMES: Record<Locale, string> = {
   "en-US": "English",
   "nl-NL": "Nederlands",
 };
+
+/**
+ * The five note sizes on offer (B88), and the string each is named by.
+ *
+ * Five steps rather than a spinner or a percentage: this is a question answered once per
+ * machine, and a number typed into a box invites the two sizes either side of the one
+ * that reads well. 16 is the middle and the default — the size every screenshot in the
+ * design documents was taken at.
+ */
+const FONT_SIZES: { px: number; key: string }[] = [
+  { px: 13, key: "settings.textSmallest" },
+  { px: 14, key: "settings.textSmall" },
+  { px: 16, key: "settings.textNormal" },
+  { px: 18, key: "settings.textLarge" },
+  { px: 20, key: "settings.textLarger" },
+];
 
 /**
  * Turns a key event into the accelerator string Electron expects.
@@ -136,6 +154,7 @@ export function Settings({
   libraryHotkey,
   loadRemoteImages,
   keepPinnedInView,
+  editorFontSize,
   vaultPath,
   t,
   onChanged,
@@ -147,6 +166,8 @@ export function Settings({
   const [remoteImages, setRemoteImages] = useState(loadRemoteImages);
   /** B76, held locally for the same reason `remoteImages` is — see its comment below. */
   const [keepPinned, setKeepPinned] = useState(keepPinnedInView);
+  /** B88, held locally for that same reason. */
+  const [fontSize, setFontSize] = useState(editorFontSize);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -275,6 +296,28 @@ export function Settings({
         </label>
 
         <p className="settings-note">{t("settings.keepPinnedWhy")}</p>
+
+        {/* B88. Below the two rows about one list, because this one is about the notes
+            themselves — and above the vault, which is the row that restarts the app. */}
+        <label className="settings-row">
+          <span>{t("settings.textSize")}</span>
+          <select
+            value={fontSize}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setFontSize(next);
+              void window.emqnote.setEditorFontSize(next).then(() => onChanged());
+            }}
+          >
+            {FONT_SIZES.map((option) => (
+              <option key={option.px} value={option.px}>
+                {t(option.key)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="settings-note">{t("settings.textSizeWhy")}</p>
 
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is
