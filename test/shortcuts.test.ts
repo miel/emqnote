@@ -131,14 +131,15 @@ describe("the registry holds together", () => {
   it("gives Settings a chord, in the library window and nowhere else", () => {
     const settings = shortcut("settings");
 
-    // ⌘. as asked for on macOS, and one binding rather than two: `Mod` is the whole of
-    // what this registry knows about the platform difference, so Ctrl+. is what Windows
-    // and Linux get. ⌘, — the macOS Preferences convention — is deliberately not a second
-    // alias, and the cost of that is written into `why` rather than left to be discovered.
-    expect(settings.keys).toEqual(["Mod-."]);
-    expect(matches(settings, press(".", { metaKey: true }), true)).toBe(true);
-    expect(matches(settings, press(".", { ctrlKey: true }), false)).toBe(true);
-    expect(matches(settings, press(",", { metaKey: true }), true)).toBe(false);
+    // ⌘, on macOS and Ctrl+, elsewhere, which is one binding precisely because the comma
+    // is the convention on both platforms at once — Preferences on a Mac, Settings in
+    // VS Code and its neighbours. It shipped for one release as `Mod-.`, which was ⌘.
+    // taken literally, and that spelling is gone rather than kept as an alias: a claim
+    // costs the key everywhere for as long as the app runs.
+    expect(settings.keys).toEqual(["Mod-,"]);
+    expect(matches(settings, press(",", { metaKey: true }), true)).toBe(true);
+    expect(matches(settings, press(",", { ctrlKey: true }), false)).toBe(true);
+    expect(matches(settings, press(".", { metaKey: true }), true)).toBe(false);
 
     // The panel lives in the library, so an entry anywhere else would print a row in the
     // capture window's help sheet for a key that does nothing there — and `where:

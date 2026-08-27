@@ -1457,7 +1457,7 @@ are what a sandbox genuinely cannot answer. What *was* settled: the theme settin
 windows live and with no reload — the library and the hidden capture window both report
 `prefers-color-scheme: dark` after choosing dark on a light-mode machine, and `--surface`
 reads `#26282c` against `#f4f5f7` — "system" comes back to the OS's own answer and persists
-across the round trip, `Ctrl+.` opens Settings from a focused note row, and the note row's
+across the round trip, the Settings chord opens the panel from a focused note row, and the note row's
 focus ring measures `rgb(26, 99, 216) solid 2px` at `-2px`, which is `--accent` to the byte.
 The marker correction was measured as a delta rather than judged: the checkbox moved exactly
 1.000 px and the star exactly 2.000 px at a 16 px note, which is what was asked for and what
@@ -1479,9 +1479,10 @@ and no measurement here can say whether they are now right.
 | 42f | Settings → Theme → Light, then Dark, with both windows open | Both windows change immediately, with no restart and no reopening of the panel. Scrollbars and the popup a `<select>` opens change with them — those are drawn by the OS and are the half that a `data-theme` attribute would have missed |  |
 | 42g | Choose the theme **opposite** to what the machine is set to, quit the app, start it again, and watch the first frame of each window | No flash of the other theme before the window paints. The colour Chromium paints first is chosen at window construction, which is why the setting is applied before any window is built |  |
 | 42h | Set Theme back to System, then switch the machine itself between light and dark (macOS: Appearance → Auto, or flip it by hand) | The app follows, live. "System" means the question stays with the OS rather than being answered once and stored |  |
-| 42i | Press `⌘.` (macOS) or `Ctrl+.` (Windows) from each of the three panes and from inside a note | Settings opens every time. It had no keyboard route at all before this |  |
-| 42j | With Settings open, click the capture-hotkey button (it says "press a combination") and press `⌘.` / `Ctrl+.` | It is *recorded as a hotkey*, and the panel stays open. The chord deliberately does not act while a panel is open, or you could not record this one |  |
-| 42k | On a Mac, try `⌘,` — the usual Preferences chord | Nothing happens, deliberately: one binding for all three platforms, and `⌘.` is what was asked for. Say if the missing `⌘,` costs more than the second claim would |  |
+| 42i | Press `⌘,` (macOS) or `Ctrl+,` (Windows) from each of the three panes and from inside a note | Settings opens every time. It had no keyboard route at all before this |  |
+| 42j | With Settings open, click the capture-hotkey button (it says "press a combination") and press `⌘,` / `Ctrl+,` | It is *recorded as a hotkey*, and the panel stays open. The chord deliberately does not act while a panel is open, or you could not record this one |  |
+| 42k | On a Mac, in an application that has a Preferences menu item, check `⌘,` still reaches *that* app while emqnote is running | It does. This chord is claimed in emqnote's own window, not with the OS — only the two hotkeys in Settings are global — so it costs no other application anything |  |
+| 42l | `⌘.` / `Ctrl+.` — the spelling v0.12.1 shipped by mistake | Nothing happens. It is gone rather than kept as an alias, so the key is free again |  |
 
 ---
 
