@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 27 August 2026, **not yet released** — **four items from a day of using
+Last updated 27 August 2026, released as `v0.12.1` — **four items from a day of using
 `v0.12.0`**, the batch immediately below this one. Two decisions, **B90** (the theme is a
 choice of this machine) and **B91** (the note list's focus ring comes back). The other two
 are a measurement and a missing chord. Released as a **patch**, which was the call made when
