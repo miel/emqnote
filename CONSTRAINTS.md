@@ -45,6 +45,22 @@ date" at 0.8.8 and "Update available → 0.8.8" at 0.8.0.
 
 **An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway.
 
+
+**A list command lifts a heading first, in one transaction** (B89, `overParagraphs` in
+`commands.ts`). `listItem`'s content is `paragraph block*`, so a `heading` can never be a
+list item's first child: `wrapInList` finds no wrapping and returns **false**, which is a
+key press that does nothing and says nothing. The heading is turned into a paragraph on the
+way in — the shape the dialect cannot write is avoided, never allowed, and
+`test/limitations.test.ts` still holds. **The two halves go out as one transaction**: the
+wrapped command runs against the intermediate state and its steps are replayed onto the
+first `tr`, which is sound because `state.apply(tr).doc` *is* `tr.doc`. Dispatching twice
+would put a paragraph-where-a-heading-was between two presses of Ctrl+Z — a state nobody
+asked for and nobody can name. (`withList` in the same file dispatches twice and is right
+to: both of its halves are list edits that read as one change either way.) The probe runs
+first with no `dispatch`, so a command that would genuinely decline still declines rather
+than flattening the heading on its way to doing nothing. And `setHeading` is a **toggle** on
+the same level only, judged over every textblock in the selection rather than from
+`$from.parent`: half a selection is not "already H1".
 **Windows reported it unchanged twice more, and `--key-probe` then closed it** (B71). On the
 reporting machine `Shift+T` logs a `KeyT` line and `Ctrl+T` logs a `KeyT` line, while
 `Ctrl+Shift+T` logs **no `KeyT` at all** — a `Ctrl+C` arrives in its place, Shift stripped and
@@ -86,6 +102,25 @@ Measured on a generated 4000-note vault (this Linux sandbox, not the Mac mini): 
 
 **Dragging a note onto a folder and "Move to…" are one operation, not two.** `Library.tsx`'s `moveNoteTo` is what both call; the dialog reaches a folder four levels deep without hunting for it, the drag reaches one already in front of you. The rules live in `src/renderer/library/drag.ts` — `canDropNote` answers for the drop *and* for the highlight that precedes it, so a folder can never light up and then refuse. **The trash is a destination since B54**, and the drop routes through the same `trashNote` Delete uses rather than through `moveNoteTo`, so there is one way into `_trash`. It takes no confirmation, which reverses this file's own earlier reasoning on purpose: that argument ("the one gesture with no confirmation must not be the one that destroys something") held only while there was no way back, and Restore is now the named handling that undoes it. Only the trash *root* is a destination, never a folder inside it — Delete files everything flat, so a deeper drop would mean nothing. Nothing drags out of the trash, which is the same sentence read the other way: restoring is a deliberate act, not a consequence of having grabbed the wrong row. The drag type is private (`application/x-emqnote-path`), never `text/plain`, which would make every row draggable into any text field on the machine. `onDrop` re-checks `canDropNote` against the path in the drop rather than trusting the highlight's state, so the consequential half never depends on a render having landed.
 
+
+**The spring-open timer is armed before `canDropNote` is asked, and that ordering is the
+whole feature.** A note held over a collapsed folder unfolds it after `SPRING_MS` (600 ms,
+in `drag.ts` with the rest of the drag rules). `Branch`'s `onDragOver` has an early return
+on `accepts` — the highlight, the `dropEffect` and `preventDefault` all belong behind it —
+and putting the countdown behind it as well is the obvious reading and is wrong: `accepts`
+is false for the note's *own* folder and for everything inside `_trash`, so exactly the
+rows a drag most often has to pass through on its way down the tree would be the ones
+unable to open. Unfolding is not dropping, so the drop's question is not its question.
+Three other things are load-bearing. The timer is armed on `springTimer.current === null`
+and never on `!over`, which is still false for a whole render after `setOver(true)` while
+`dragover` fires continuously. It is cleared in `onDragLeave`, in `onDrop`, on unmount, and
+in an effect on `dragging` going null — a drag released over a row that refuses it, or
+cancelled with Escape, fires *neither* `dragleave` nor `drop` here, and that same effect is
+what finally clears a highlight that used to survive until the next drag came past. And a
+folder that springs open **stays** open: what unfolded during the drag is where the note
+now is, and folding it again would hide the answer. `test/folder-tree-spring.test.ts` pins
+all of it; the real HTML5 drag, which is the half jsdom cannot have, was driven over CDP
+with `Input.setInterceptDrags` + `Input.dispatchDragEvent`.
 **`IPC.libraryMoveNote` refuses a note the capture window has claimed.** `CaptureWriter`'s session holds the path it will write to, decided when the note was loaded; moving the file does not update it, so the next debounced write recreates the note where it used to be — one note in two folders, the second written by a window that thinks it is still editing the first. The move dialog could only ever reach a note the reader had open; dragging can reach any row in the list, which is what turned this from a note into a guard.
 
 **Task state lives in the index, and the index knows its own schema version** (B26). `checked` is an attribute on `listItem`, not text, so `plainText()` drops it and FTS5 can say nothing about it — the Tasks view is answered from a `note_tasks` table filled by `buildRecord`, which the full scan and the watcher already share, and never by re-parsing a folder subtree on demand. That walk is the 470–535 ms main-thread stall that pushed the scan into a worker; reaching for it again through the back door undoes that. Because `needsRefresh` short-circuits on unchanged `mtime`+`size`, an existing index can never gain new columns on its own, so `migrate()` carries a `PRAGMA user_version` and drops its tables on a bump. That is allowed *because* of B9: the index is a derived cache outside the vault, so a rebuild costs one scan and destroys nothing. Any future column added to `NoteRecord` must bump that version.
@@ -1643,7 +1678,8 @@ changes nothing on screen.
 (23 August 2026). B82 put `.reader-header`, `.reader-footer` and `.notes-header` on `--surface`;
 `.notes-search` and `.header-reader` kept no background of their own, so in the light theme they
 sat on `--background` — `#fbfbfc` against `#ffffff`, which is invisible in a screenshot from a
-sandbox and reads as a seam on a real display. `.header-reader` is the worse of the two: it is
+sandbox and reads as a seam on a real display. (Those two values are the wrong way round, and
+B87 has since swapped them; the seam and the fix for it are the same either way.) `.header-reader` is the worse of the two: it is
 the *same component* the capture window draws inside `.header`, which has always been
 `--surface`, so one shared block was drawing itself two different colours depending on the
 window. Measured rather than judged: `--library --screenshot` under `Xvfb`, pixels read out of
@@ -1679,3 +1715,89 @@ front of a dialog. Only the trash is read directly, because the index deliberate
 out. A note that will not parse counts as zero rather than taking the whole count down: these
 numbers are a warning in a sentence, not a manifest, and `emptyTrash` is what reports what
 actually went.
+
+**Chrome is `--surface`, the page is `--background`, a field is `--field`, and there are exactly
+two state tints** (B87, 26 August 2026). Six roles, declared once per theme at the top of
+`styles.css`, and a rule that wants a colour picks the role rather than a value. What broke
+without it was measured rather than argued: in the light theme the two surface tokens were the
+wrong way round — `--surface: #ffffff` framing a `--background: #fbfbfc` page — so the chrome was
+*lighter* than what it framed. `DESIGN-CRITIQUE.md`'s Finding 2 photographed the result: the note
+list and the reader the same colour, divided by one pixel at **1.28 : 1**, the tree a further
+1.6 % away, and a code block, a wiki-link chip and a tag chip all drawn white on off-white.
+**The dark theme had none of it, from the same two tokens**, which is the tell — a pair chosen
+where it works and never checked where it doesn't, and the same shape as the two strips one
+entry above that had to be patched by hand for the same underlying reason.
+
+Three things about it are load-bearing. **The dark theme's five surfaces keep their exact
+values**; it gains the three new names only, and `--field` is `#1e1f22` there — the old
+`--background` — because every field in the app sits inside a `--surface` container, so that one
+choice leaves every dark field where it was. **The note list stays `--background`**: "a list is
+not a surface" still holds, and `styles-window-chrome.test.ts` still pins that `.notes` is not
+`--surface`. **`--hover` and `--selected` stay translucent grey and are not overridden per
+theme** — a state tint lands on two different grounds, a white list row and a grey chrome
+button, and an overlay steps relative to whatever is under it where a solid grey can only be
+right on one of them.
+
+They are also **two** tints where there were seven: `rgba(127, 127, 127, α)` with
+α ∈ {0.08, 0.09, 0.10, 0.12, 0.14, 0.18, 0.20} across fifteen rules, which put a hovered branch
+four hundredths from a selected note and made a selected branch pixel-identical to a hovered
+title-bar button. `styles-surfaces.test.ts` counts the literals that are left — exactly one per
+sheet — so they cannot grow back: the note's own table header row (document content, not a UI
+state) and the scan bar's fill (a progress bar is not a selection). Both carry a comment saying
+so above them.
+
+Two smaller things the same test now guards. **Every `var()` names a token that exists**:
+`var(--bg)` and `var(--fg)` sat in `styles.css` for a long time, declared nowhere, resolving to
+nothing, in rules that therefore did nothing and looked fine in every review. And
+**`backgroundColor` is not a hardcoded `#1e1f22` in the two window files** — it is
+`windowBackground()`, which asks `nativeTheme` once at construction. A light-mode machine used to
+open every window with a dark flash before the CSS landed; that was mildly wrong against a
+`#fbfbfc` page and is the whole distance between the themes against a white one. No
+`nativeTheme.on("updated")` listener: the colour exists only in the moment before the first
+paint, and the capture window is the one waiting on a hotkey with an 80 ms budget.
+
+**And the accent is not a seventh role: no note row wears a focus ring, and no selected
+folder wears accent text** (B87's addendum, 26 August 2026). Two reports, one variable doing
+two unrelated jobs. `.branch-on .branch-name` carried `color: var(--accent)` *and*
+`font-weight: 600` on top of the `--selected` fill while `.note-on` carried the fill alone —
+Finding 3's "the folder shouts and the note whispers", so the eye reads the tree as the live
+pane whichever pane the keyboard is in. The colour is gone and the weight stays; "selected"
+now means the fill in both panes, which is what Finding 3 actually asked for. Separately,
+`.note:focus-visible` drew `outline: 2px solid var(--accent)` with `outline-offset: -2px`,
+and Windows at 125 % scaling paints those two pixels as three — a saturated `#1a63d8` box
+around a full-width row, reported as jarring. **The tree and the task list keep their ring
+and the note list does not**, deliberately asymmetric: removing it everywhere would leave
+`roveArrowKey` walking three panes with nothing on screen following it, and the note list is
+where it did least, the row the arrows are on being nearly always the row that is open.
+**What it costs is stated rather than discovered**: focus moves without selecting, so while
+arrowing through the list the focused row is invisible until Enter opens it. Finding 3 stays
+open, and its answer is a pane-level treatment on the focused pane's active row — not this
+ring back. `styles-selection-accent.test.ts` pins both halves, including that the shared
+rule still names the other two.
+
+**Everything inside `.editor-content` is relative to `--editor-font-size`** (B88). The note's
+own text is settable from the Settings panel, and the only thing that makes "larger text"
+mean *the whole note* is that no rule inside the editor states a size in pixels — the
+headings are `em`, so are `pre`, `code`, the wiki chips and the list gutter. That was already
+true before the setting existed, by taste rather than by rule, which is exactly the kind of
+property that quietly stops being true; `styles-editor-font-size.test.ts` holds every
+`font-size` under `.editor-content` to `em` or the token itself. One rule is exempt and is
+named there rather than pattern-matched away: `.table-tool`, the table toolbar's buttons,
+which are chrome that happens to be drawn inside the document. The token is declared in
+`:root` (a `var()` naming nothing is what `styles-surfaces.test.ts` exists to catch) and
+overwritten on `document.documentElement` from `useBootstrap`. Measured under `Xvfb`: the H1
+"Kwartaalplan" is 142 / 174 / 219 px wide at 13 / 16 / 20, against 141.4 and 217.5 predicted.
+
+**A settings change is its own message, and `libraryRefresh` is not it** (B88). `IPC.settingsChanged`
+is sent to both windows and answered in exactly one place — `useBootstrap`, which is what
+"what the bootstrap says" already means and which both windows already call. It is not
+`libraryRefresh`: that one means "ask the vault again", every save raises it, and the
+library answers it by reloading the tree, the notes, the facets and the conflicts, none of
+which is where a language or a font size lives. `setLocale` had been sending `libraryRefresh`
+to both windows for precisely this purpose since B60 and **neither window ever acted on it** —
+the capture window subscribed to nothing at all, and the library appeared to work only
+because the Settings panel refreshes its own bootstrap on the way out. Found by driving it
+over CDP with the panel bypassed: the note size landed in the capture window and not in the
+library's own reader, which is the same hole seen from the other side — the library had only
+ever looked right because the button that changes the setting also refreshes the window it
+is in.

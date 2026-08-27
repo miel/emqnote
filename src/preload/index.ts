@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),
   setLoadRemoteImages: (load: boolean) => ipcRenderer.invoke(IPC.setLoadRemoteImages, load),
   setKeepPinnedInView: (keep: boolean) => ipcRenderer.invoke(IPC.setKeepPinnedInView, keep),
+  setEditorFontSize: (px: number) => ipcRenderer.invoke(IPC.setEditorFontSize, px),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setLibraryHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setLibraryHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
@@ -80,6 +81,7 @@ contextBridge.exposeInMainWorld("emqnote", {
 
   onVaultFileChanged: (handler: (event: VaultFileEvent) => void) =>
     subscribe<VaultFileEvent>(IPC.vaultFileChanged, handler),
+  onSettingsChanged: (handler: () => void) => subscribe<void>(IPC.settingsChanged, handler),
   reloadNote: () => ipcRenderer.invoke(IPC.captureReload),
 
   library: {

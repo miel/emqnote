@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   canCreateFolderIn,
   canDeleteFolder as canDeleteFolderAt,
@@ -12,7 +12,7 @@ import {
 } from "../../shared/vault-types.js";
 import { ContextMenu, type MenuItem } from "./ContextMenu.js";
 import { FilterSection } from "./FilterSection.js";
-import { canDropNote, NOTE_DRAG_TYPE } from "./drag.js";
+import { canDropNote, NOTE_DRAG_TYPE, SPRING_MS } from "./drag.js";
 import { isContextMenuKey, roveArrowKey, sidebarRowProps, SIDEBAR_ROWS } from "./roving.js";
 
 interface Props {
@@ -271,6 +271,34 @@ function Branch({
   const accepts =
     onDropNote !== undefined && dragging !== null && canDropNote(dragging, node.path);
 
+  /** The spring-open countdown, while a dragged note is resting on this row. */
+  const springTimer = useRef<number | null>(null);
+
+  const cancelSpring = (): void => {
+    if (springTimer.current === null) return;
+    clearTimeout(springTimer.current);
+    springTimer.current = null;
+  };
+
+  /**
+   * The drag ended — dropped somewhere, or abandoned — so nothing is resting here any
+   * more.
+   *
+   * `over` is cleared here as well as in `onDragLeave`, and it has to be: a drag released
+   * over this row fires `drop` (which clears it), but one released over a row that
+   * refuses it, or cancelled with Escape, fires neither `dragleave` nor `drop` here, and
+   * the highlight stayed on until the next drag came past.
+   */
+  useEffect(() => {
+    if (dragging !== null) return;
+    cancelSpring();
+    setOver(false);
+  }, [dragging]);
+
+  // Nothing must fire into a row that has gone away — a folder renamed or deleted mid-drag
+  // unmounts this branch, and so does its own parent springing shut.
+  useEffect(() => cancelSpring, []);
+
   return (
     <li>
       <div
@@ -332,6 +360,23 @@ function Branch({
         // `preventDefault` on dragover is what marks an element as a drop target at all;
         // without it the browser's default "no drop here" wins and the drop never fires.
         onDragOver={(event) => {
+          // **Armed before the `accepts` gate below, deliberately.** `canDropNote` is
+          // false for the note's own folder and for everything inside `_trash`, and a
+          // collapsed folder that is merely *on the way* to the destination is exactly
+          // the row a drag has to be able to open. Unfolding is not a drop, so it is not
+          // that question's to answer; `accepts` still owns `preventDefault`, the
+          // `dropEffect` and the highlight, which are.
+          //
+          // `dragover` fires continuously while the pointer rests, so the countdown is
+          // armed once — on the null ref, not on `!over`, which is false again for a
+          // whole render after `setOver`.
+          if (dragging !== null && hasChildren && !open && springTimer.current === null) {
+            springTimer.current = window.setTimeout(() => {
+              springTimer.current = null;
+              setOpen(true);
+            }, SPRING_MS);
+          }
+
           if (!accepts) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
@@ -341,6 +386,7 @@ function Branch({
         // dropped on the element the pointer actually left, not on every crossing.
         onDragLeave={(event) => {
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          cancelSpring();
           setOver(false);
         }}
         // Asks `canDropNote` again with the path out of the drop itself, rather than
@@ -349,6 +395,7 @@ function Branch({
         // picking a row up and moving the pointer — but it makes the consequential half
         // of this depend on a render having happened, and the answer is right here.
         onDrop={(event) => {
+          cancelSpring();
           setOver(false);
           if (onDropNote === undefined) return;
           const notePath = event.dataTransfer.getData(NOTE_DRAG_TYPE);

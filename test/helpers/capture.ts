@@ -260,6 +260,10 @@ export async function mountCapture(
     // (`editor-keys.ts`); nothing here drives them, since `Input.dispatchKeyEvent` and a
     // synthetic `KeyboardEvent` both arrive past `before-input-event` anyway.
     onEditorCommand: () => () => {},
+    // Subscribed from `useBootstrap`, so every window that draws from settings needs it
+    // present. Nothing here fires it: what it does is re-run `bootstrap`, and this stub
+    // answers that with a constant — `bootstrap-settings-changed.test.ts` owns the effect.
+    onSettingsChanged: () => () => {},
     tagSuggestions: async () => [],
     // Reached from `attachment-view.ts` the moment a `.pdf` embed gets a node view, not
     // from `Capture.tsx`. Null is the honest answer here: there is no pdf.js in jsdom, and
@@ -278,6 +282,7 @@ export async function mountCapture(
       librarySort: "modified" as const,
       loadRemoteImages,
       keepPinnedInView: false,
+      editorFontSize: 16,
     }),
     ...spies,
   };

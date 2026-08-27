@@ -12,7 +12,7 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 ```bash
 npm run dev            # electron-vite dev
-npm test               # vitest run — 1898 tests
+npm test               # vitest run — 1945 tests
 npm run test:watch     # keep it running while working
 npm run typecheck      # tsc --noEmit
 npm run build          # electron-vite build + check:bundle
@@ -137,6 +137,19 @@ undo by accident and expensive to rediscover:
 - **`package.json`'s `dependencies` is kept minimal.** electron-vite externalises everything listed there; a runtime package that can't be bundled belongs there, everything else in `devDependencies`. `npm run check:bundle` guards it.
 - **The capture window is hidden, never destroyed.** Only one `BrowserWindow` reference exists; destroying it is unrecoverable.
 - **Nothing this app deletes gets one attempt.** `trash-delete.ts` is the only code that permanently deletes anything, retries Windows' EBUSY/EPERM/ENOTEMPTY, and reports a specific refusal rather than asserting a cause.
+- **Colour comes from one of six roles, never from a value** (B87). The page is `--background`,
+  chrome and panels are `--surface`, a field is `--field`, and a row is `--hover` or
+  `--selected` — declared once per theme at the top of `styles.css`. The light theme had the
+  first two the wrong way round for a long time and nobody could see the three panes because of
+  it. `styles-surfaces.test.ts` counts the grey literals left outside `:root`; there are two,
+  and both carry a comment saying why they are not UI state. **`--accent` is not a seventh
+  role**: "selected" is the fill in both panes, so the selected folder wears no accent text and
+  a note row wears no `:focus-visible` ring — the tree and task list keep theirs, and that
+  asymmetry is deliberate. Both are pinned by `styles-selection-accent.test.ts`.
+- **The note's own text size is one token** (B88). `--editor-font-size`, declared in `:root`
+  and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
+  a size change moves the whole note evenly and the window around it not at all.
+  `styles-editor-font-size.test.ts` is what keeps that true.
 - **A diagnosis that survives its own bug report is incomplete, not wrong.** Reach for one of the diagnostic helpers above before shipping a second fix for the same complaint.
 
 ## Tests
@@ -147,7 +160,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1898 tests in roughly twenty-five seconds of test time (about a minute and a
+The suite runs its 1945 tests in roughly thirty-four seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -155,61 +168,12 @@ becomes a wish. What the budget is *for* still holds — the suite has to stay c
 run on every change — and the jsdom files that mount a real component are what most of the
 time goes on.
 
-`test/index-watch.test.ts` is the one deliberate exception: it runs `chokidar` against a real temp directory rather than mocking the filesystem, so real events need real wall-clock waiting. It uses a much smaller `stabilityThreshold` than the 300 ms production default (see `index-watch.ts`) and the smallest settle margin found to be reliable across repeated runs, not an arbitrary one — still worth noticing if the suite's total time starts to matter.
-
-**Everything in that file starts its watcher through `startWatching`, and the reason is a
-backend property rather than a slow runner.** chokidar's `ready()` resolves when its initial
-crawl has finished, which is not the moment the watcher is actually armed: a file written
-into that gap produces **no event at all**, and an event that was never sent cannot be
-waited out — which is why raising the timeouts, twice, never settled it, and why it went on
-failing a release every few dozen runs. The helper pays one settle after `ready()` on every
-platform but Linux, where inotify delivers from the moment the watch is added.
-
-**That used to say "on darwin only", and the sentence that excused Windows is what cost a
-third release** (v0.8.9). It reasoned that polling has no gap — only an interval — so
-`watchInterval` answered it and no settle was owed. It does have a gap, and a worse one: a
-poller finds a new file by re-reading a directory and diffing against the entries it already
-knows, so a file that lands before that baseline is taken is *in* the baseline and is never
-called new at all. Permanently missed, not noticed a poll later, which is why the failure
-reads as total silence and why no ceiling could have helped. Measured by forcing
-`pollingOptions` on off-Windows and running the failing sequence 40 times per delay: **23 of
-40 missed with no wait, 0 of 40 at 25 ms and at every longer wait, 0 of 100 at the settle
-now paid** — against native watching missing 0 of 40 with no wait at all. The general lesson
-is the one this file keeps relearning: a platform excused from a wait because of how its
-backend is *described* is a platform whose behaviour nobody measured. `index-watch.ts`'s
-`ready()` carries what this means for the app, which is not nothing — on Windows the startup
-full scan is the only thing that will see a file OneDrive lands in those first moments.
-
-The poll interval is `WatchOptions.watchInterval`, turned down in the tests exactly as
-`stabilityThreshold` already is: at the production two seconds every waiting assertion in
-that file waits out a poll, which put it at 23 seconds on the Windows runner.
-
-**And that file's `waitFor` ceiling is deliberately generous rather than tight.** It was
-four seconds, picked to fit under vitest's five-second default, and that is the wrong way
-round — this is real filesystem timing on a shared CI machine, and it failed two releases
-in a row while *the same tests on the same commit* passed in the `build` workflow minutes
-earlier. `waitFor` returns the moment its condition holds, so a high ceiling costs nothing
-on the happy path and is only ever reached by a genuine breakage or a runner having a bad
-minute; the per-test timeout is raised above it (`vi.setConfig`) so a timeout still reports
-the assertion that failed rather than a bare "test timed out". A wrong red is worse than a
-slow red — especially in the file whose whole job is watching a filesystem. The two tests there that
-assert something is *not* indexed go through it too: a missed event makes those pass for the
-wrong reason, which is worse than failing.
-
-**And it was not the only file waiting on a number.** `capture-writer.test.ts` failed the
-`v0.10.0` release on Windows while the same tests on the same commit had passed in `build`
-twenty minutes earlier — the identical shape, one file over. `vi.advanceTimersByTimeAsync`
-fakes the *timer* and nothing else, so the disk I/O the debounce callback starts is real,
-and a flat `sleep(20)` after it was the whole margin. **The failure was a write racing
-itself, not a slow assertion**: `writeAtomic` goes to `<path>.tmp` and then renames, so a
-second `update` provoked while the first was still in flight renamed a temporary file the
-first had already consumed — `ENOENT … rename '….md.tmp'`, arriving as an unhandled
-rejection attributed to whichever test was running by then, which is why the reported test
-and the broken one were two different tests. The rule is the one above: **wait for the
-result of a write before provoking the next one**, never for a duration. Only that one test
-needed it — every other test in the file already goes through `await writer.flush()`, which
-awaits the write itself. `capture-store.test.ts`'s own `sleep(20)` is a different thing and
-is fine: a deliberate gap between two *awaited* writes so an mtime change would be visible.
+`test/index-watch.test.ts` and `test/capture-writer.test.ts` are the two files that wait on
+real filesystem timing, and both have cost a release by getting that wait wrong. What each
+one learned — chokidar's `ready()` gap and why Windows polling is worse than it sounds, and
+why a debounced write can race itself — lives in **`test/CLAUDE.md`**, which loads when you
+work under `test/` rather than on every turn. Read it before changing a timeout, a settle,
+or a `sleep` in either file.
 
 ## Where the project stands
 
@@ -239,10 +203,11 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B86, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B89, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
+| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87; Findings 1 and 3–8 are open, and Finding 3 is the one this codebase has since made slightly worse on purpose |
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |

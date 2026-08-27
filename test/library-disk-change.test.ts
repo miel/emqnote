@@ -143,10 +143,12 @@ function buildFake(initial: OpenedNote): Fake {
       librarySort: "modified",
       loadRemoteImages: true,
       keepPinnedInView: false,
+      editorFontSize: 16,
     }),
     setLocale: async () => {},
     setLoadRemoteImages: async () => {},
     setKeepPinnedInView: async () => {},
+    setEditorFontSize: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
@@ -168,6 +170,7 @@ function buildFake(initial: OpenedNote): Fake {
     openTag: async () => {},
     openInSystemViewer: async () => {},
     copyText: async () => {},
+    onSettingsChanged: () => () => {},
     onVaultFileChanged: (handler) => {
       fileChangedHandler = handler;
       return () => {

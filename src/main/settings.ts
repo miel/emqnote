@@ -76,6 +76,23 @@ export interface Settings {
    * disagree about it.
    */
   keepPinnedInView: boolean;
+  /**
+   * The size the note itself is drawn at, in pixels — the body text, with every heading,
+   * code block, chip and list marker inside the note moving by the same proportion,
+   * because all of them are expressed in `em` against it (B88).
+   *
+   * **A fact about this screen, not about any note.** The alternative was a size per note,
+   * written into its frontmatter — and that would put a display preference into the file,
+   * where `03-markdown-dialect.md` does not define one, where it travels to the other
+   * machine and to Obsidian as noise, and where reading a note on a laptop would change
+   * the note. So it sits here with `libraryPaneWidths`, `librarySort` and
+   * `keepPinnedInView`: per machine, and the two machines are entitled to disagree, which
+   * is the point when one of them is docked to a 27-inch panel.
+   *
+   * The window around the note is deliberately *not* scaled with it. Chrome is chrome at
+   * any note size, and the OS already has a setting for the other question.
+   */
+  editorFontSize: number;
 }
 
 export { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY };
@@ -93,6 +110,7 @@ function defaults(): Settings {
     librarySort: "modified",
     loadRemoteImages: true,
     keepPinnedInView: false,
+    editorFontSize: 16,
   };
 }
 

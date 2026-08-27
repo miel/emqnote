@@ -218,6 +218,7 @@ const DUTCH: Record<string, string> = {
   // B75. Eén label voor beide richtingen: het menu-item staat aangevinkt als de notitie
   // al vastgeprikt is, dus "Losmaken" ernaast zou hetzelfde twee keer zeggen.
   "library.pin": "Bovenaan vastprikken",
+  "library.unpin": "Losmaken",
   "library.pinLocked":
     "Deze notitie staat open in het notitievenster. Sluit hem daar eerst, dan kan hij vastgeprikt worden.",
   // Het getal komt van de hoofdproces-kant, die de grens ook echt afdwingt, en wordt op
@@ -391,6 +392,17 @@ const DUTCH: Record<string, string> = {
   "settings.keepPinned": "Vastgeprikte notities in beeld houden",
   "settings.keepPinnedWhy":
     "Vastgeprikte notities staan altijd bovenaan de lijst. Staat dit aan, dan blijven ze tegen de bovenrand staan terwijl de rest van de lijst eronder doorschuift; staat het uit, dan schuiven ze bij het scrollen gewoon mee omhoog.",
+  // B88. "Tekstgrootte in de notitie" en niet "zoom": zoomen is het hele venster, en dit
+  // is alleen wat er in de notitie staat. De vijf namen zeggen geen getal — een pixelmaat
+  // is precies het soort keuze waar je twee maten naast de goede over gaat twijfelen.
+  "settings.textSize": "Tekstgrootte in de notitie",
+  "settings.textSizeWhy":
+    "Geldt voor de notitie zelf — koppen, opsommingen en code schalen evenredig mee. De rest van het venster blijft even groot, en in de notitiebestanden verandert er niets. Deze keuze geldt op deze computer.",
+  "settings.textSmallest": "Kleinst",
+  "settings.textSmall": "Klein",
+  "settings.textNormal": "Normaal",
+  "settings.textLarge": "Groot",
+  "settings.textLarger": "Groter",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -662,6 +674,7 @@ const ENGLISH: Record<string, string> = {
   // B75. One label for both directions: the menu item shows a tick when the note is
   // already pinned, so a separate "Unpin" would be saying the same thing twice.
   "library.pin": "Pin to top",
+  "library.unpin": "Unpin",
   "library.pinLocked":
     "This note is open in the note window. Close it there first, then it can be pinned.",
   // The number comes from main, which is what actually enforces the limit, and is
@@ -824,6 +837,17 @@ const ENGLISH: Record<string, string> = {
   "settings.keepPinned": "Keep pinned notes in view while scrolling",
   "settings.keepPinnedWhy":
     "Pinned notes always sit at the top of the list. With this on they stay against the top edge while the rest of the list scrolls underneath them; with it off they scroll up out of sight along with everything else.",
+  // B88. "Text size in the note" rather than "zoom": zoom is the whole window, and this is
+  // only what the note is written in. The five names carry no number — a pixel size is
+  // exactly the sort of choice that invites doubting the two sizes either side of it.
+  "settings.textSize": "Text size in the note",
+  "settings.textSizeWhy":
+    "Applies to the note itself — headings, lists and code scale with it in proportion. The rest of the window stays the size it is, and nothing changes in the note files. This choice is for this computer.",
+  "settings.textSmallest": "Smallest",
+  "settings.textSmall": "Small",
+  "settings.textNormal": "Normal",
+  "settings.textLarge": "Large",
+  "settings.textLarger": "Larger",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

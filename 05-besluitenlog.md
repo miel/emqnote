@@ -3180,3 +3180,196 @@ Eén ding daaraan is een naam. De telling zelf was `trashItemTasks`, en die func
 iets met de prullenbak te maken gehad: ze loopt een pad af dat overal in de kluis mag liggen. Zo
 heet ze nu ook (`openTasksAt`). Een naam die het bereik van een functie kleiner voorstelt dan het
 is, is precies de naam die de tweede aanroeper een tweede kopie laat schrijven.
+
+## B87 — Eén oppervlakkenstelsel: zes rollen, en het lichte thema stond op zijn kop
+
+**Genomen** op 26 augustus 2026, na `DESIGN-CRITIQUE.md`.
+
+Het lichte thema had `--surface: #ffffff` en `--background: #fbfbfc`: de lijst *waar de notitie
+in staat* was grijzig, en alles wat eromheen zit — titelbalk, kopstrook, statusbalk, boom, elk
+zwevend paneel — was wit. De omlijsting was dus lichter dan wat ze omlijst, en dat is precies
+omgekeerd. Bevinding 2 van de kritiek heeft gemeten wat dat kost: notitielijst en lezer krijgen
+dezelfde kleur, gescheiden door één pixel op **1,28 : 1**, met de boom nog eens 1,6 % ernaast.
+Een venster met drie panelen rustte op een haarlijn die niemand ziet.
+
+Het donkere thema had het probleem niet, met dezelfde twee variabelen. Dat is de aanwijzing: het
+paar is gekozen waar het werkte en niet gecontroleerd waar het niet werkte.
+
+**Het besluit.** Zes rollen, één keer per thema vastgelegd:
+
+| Rol | Variabele | Licht | Donker |
+|---|---|---|---|
+| venster en inhoud | `--background` | `#ffffff` | `#1e1f22` |
+| balken, koppen, panelen | `--surface` | `#f4f5f7` | `#26282c` |
+| invoer- en waardevelden | `--field` | `#ebedf1` | `#1e1f22` |
+| aanwijzen | `--hover` | `rgba(127, 127, 127, 0.1)` | idem |
+| gekozen | `--selected` | `rgba(127, 127, 127, 0.22)` | idem |
+| scheidslijn | `--border` | `#d7dbe1` | `#33363b` |
+
+**Waarom het donkere thema onaangeroerd blijft.** De kritiek zegt het zelf: het donkere thema is
+degene om na te doen, niet degene om mee te middelen. Zijn vijf oppervlakken houden hun waarde
+tot op de pixel; het krijgt alleen de drie namen erbij. `--field` is er `#1e1f22` — de oude
+`--background` — want elk veld in deze app staat in een `--surface`-container, dus die ene keuze
+laat elk donker veld staan waar het stond.
+
+**Waarom de notitielijst wit blijft en dus dezelfde kleur houdt als de lezer.** "Een lijst is
+geen oppervlak" stond al in `CONSTRAINTS.md` en blijft staan: de lijst is inhoud, en wat er in
+een lijst moet opvallen is de gekozen regel, niet de lijst zelf. Een derde grijstint ertussen —
+overwogen, verworpen — zou een vierde oppervlak zijn om te onderhouden voor een scheiding die de
+kopstrook van de lezer er nu al bovenop legt. De scheiding tussen die twee panelen is dus de
+lijn, en die is van 1,28 : 1 naar **1,39 : 1** gegaan; de boom staat nu op een echt verschil met
+de lijst ernaast (1,11 tegen 1,016), en dat is waar Bevinding 2 werkelijk over ging.
+
+**Waarom zwevende panelen grijs meegaan.** Het palet, de rechtermuisknopmenu's, Help,
+Instellingen, de conflictvraag: alles wat niet de notitie is, is omlijsting. Ze stonden al op
+`--surface` en hoefden dus geen regel te veranderen — ze scheiden zich van de bladzijde met hun
+rand en hun schaduw, zoals ze dat altijd deden.
+
+**Aanwijzen en gekozen zijn twee variabelen, geen zeven getallen.** Het waren
+`rgba(127, 127, 127, α)` met α ∈ {0,08 0,09 0,10 0,12 0,14 0,18 0,20} over vijftien regels. Een
+aangewezen tak stond vier honderdsten van een gekozen notitie af, en een gekozen tak was niet te
+onderscheiden van een aangewezen titelbalkknop — twee dingen die niets met elkaar te maken
+hebben, in dezelfde kleur, om geen reden. Ze blijven **doorschijnend** grijs en krijgen met opzet
+geen kleur per thema: zo'n tint landt op twee ondergronden — een witte lijstregel en een grijze
+knop in de omlijsting — en een doorschijnende laag stapt mee met wat eronder ligt, waar een
+vaste grijstint maar op één van de twee goed kan zijn. Twee tinten blijven literal: de kopregel
+van een tabel *in de notitie* (dat is inhoud, geen toestand) en de vulling van de scanbalk (een
+voortgangsbalk is geen selectie). Beide zeggen dat nu ook boven zichzelf.
+
+**Wat er nog aan vast zat.** `.header input` vulde zich in rust met een eigen tint en bij focus
+met `--background`; nu is rust `--field` — dezelfde kleur als elk ander veld in beide vensters —
+en blijft focus `--background`, zodat een veld waar je in typt de kleur van de bladzijde krijgt.
+In het donkere thema zijn die twee dezelfde waarde en draagt de accentrand de focus alleen, wat
+ze bij `.ask input` en `.settings select` altijd al deed. `color-scheme` wordt eindelijk
+opgegeven, zodat schuifbalken en de lijst die een `<select>` opent hetzelfde thema volgen als de
+rest. En `var(--bg)` en `var(--fg)` stonden in `styles.css` zonder ooit ergens verklaard te zijn:
+twee regels die niets deden, en waar nu een test op staat die elke `var()` tegen de verklaarde
+namen houdt.
+
+**Het venster kleurt niet meer donker vóór zijn eerste frame.** `backgroundColor` stond in beide
+vensters hardgecodeerd op `#1e1f22` en vroeg `nativeTheme` niets. Dat was hinderlijk toen de
+lichte bladzijde `#fbfbfc` was en is onhoudbaar nu ze wit is: de flits is dan het hele verschil
+tussen de twee thema's. `windowBackground()` is die ene plek, één keer gelezen bij het bouwen van
+het venster — geen luisteraar op `nativeTheme`, want deze kleur is alleen te zien in het moment
+vóór de eerste verf, en het opnamevenster staat verborgen te wachten op een sneltoets met een
+budget van 80 ms.
+
+**Wat niet meegaat.** `pdfview.css` heeft een eigen, losse verzameling variabelen, met opzet:
+dat venster laadt `styles.css` niet en zou met de variabelen de hele cascade meekrijgen. Zijn
+`--pdf-chrome` is `#f4f4f5` — hetzelfde stelsel, apart bedacht — dus er is niets te herstellen.
+De twee amberkleurige balken (`.disk-change-bar`, `.conflict-banner`) staan nog hardgecodeerd in
+één kleur voor beide thema's; dat is een waarschuwingskleur en geen oppervlak, en het staat in
+`TODO.md` als zodanig.
+
+**Aangevuld** op 26 augustus 2026, uit een dag gebruiken van het bovenstaande: **de zesde rol
+was nooit een kleur, en het accent deed in het ene paneel het werk van "gekozen" en in het
+andere dat van "waar de toetsen zijn".**
+
+Twee meldingen, één oorzaak. De gekozen map stond in `--accent` én vet én op een `--selected`
+vulling; de geopende notitie stond op diezelfde vulling en verder niets. Bevinding 3 van de
+kritiek had dat al gemeten en er de goede zin bij geschreven — "de map schreeuwt en de notitie
+fluistert" — zodat het oog de boom voor het levende paneel aanziet, ongeacht waar de toetsen
+werkelijk staan. `color: var(--accent)` is uit `.branch-on .branch-name` weg; het vet blijft,
+want een mapnaam is één woord in een kolom van woorden en heeft geen tweede regel om aan
+herkend te worden. Sindsdien betekent "gekozen" in beide panelen hetzelfde: de vulling.
+
+De tweede melding kwam van Windows en gaat over de andere kant van dezelfde variabele.
+`.branch:focus-visible, .note:focus-visible, .task-row:focus-visible` tekende een kader van
+2px `--accent` met `outline-offset: -2px`, en bij 125 % schaling zet Windows daar drie pixels
+neer — een verzadigd `#1a63d8` om een regel die de hele breedte van het paneel beslaat. De
+notitielijst verliest die ring; de boom en de takenlijst houden hem. Dat is met opzet géén
+symmetrisch besluit: de ring overal weghalen zou `roveArrowKey` door drie panelen laten lopen
+zonder dat er ook maar iets meebeweegt, en de notitielijst is nu juist het paneel waar de
+ring het minst deed — de regel waar de pijltjes staan is er bijna altijd ook de geopende.
+
+**Wat dat kost, opgeschreven in plaats van later ontdekt.** `roveArrowKey` verplaatst focus
+zonder te selecteren, dus wie met de pijltjes door de lijst loopt ziet de aangewezen regel
+niet tot Enter hem opent. Bevinding 3 blijft daarmee open, en het antwoord daarop is een
+paneelbrede behandeling — een accentrand op de actieve regel van het paneel dát de toetsen
+heeft — en niet deze ring terug.
+
+---
+
+## B88 — De tekstgrootte in de notitie is een instelling van dit scherm, niet van de notitie
+
+**Genomen** op 26 augustus 2026.
+
+Gevraagd: de tekst in het bewerkvenster groter en kleiner kunnen maken — niet het vensterwerk
+eromheen — en alles evenredig, zodat een kleinere broodtekst even kleinere koppen geeft.
+
+**Eén hendel, en die was er al.** Alles binnen `.editor-content` was al relatief uitgedrukt:
+de koppen in `1.5em` / `1.28em` / `1.12em`, `pre` in `0.86em`, `code` in `0.88em`, de
+wiki-chips in `0.9em`, de opsommingsgoot in `1.5em`. Er stond precies één `px` in het midden
+van dat stelsel — `font-size: 16px` op `.editor-content` zelf. Die is nu
+`var(--editor-font-size)`, en daarmee schuift één getal alles evenredig mee. Gemeten onder
+`Xvfb` met de pixels uit de PNG's: "Kwartaalplan" als H1 is 142 / 174 / 219 px breed bij
+13 / 16 / 20, waar 13/16 en 20/16 141,4 en 217,5 voorspellen — binnen één pixel hinting.
+
+Dat het al zo was, was smaak en geen regel, en precies zulke eigenschappen houden stilletjes
+op te bestaan. `styles-editor-font-size.test.ts` houdt elke `font-size` onder
+`.editor-content` tegen "relatief of `var(--editor-font-size)`", met één uitzondering die
+bij naam genoemd wordt in plaats van weggepatroond: `.table-tool`, de knoppen van de
+tabelbalk, die vensterwerk zijn dat toevallig ín het document getekend wordt.
+
+**Per machine, niet per notitie.** Een grootte per notitie zou in de frontmatter moeten, en
+daarmee: een weergave-instelling in het bestand, waar `03-markdown-dialect.md` er geen kent,
+die naar de andere machine en naar Obsidian meereist als ruis, en die van "een notitie lezen
+op een laptop" een wijziging van die notitie maakt. B10 zegt al dat openen het bestand niet
+raakt. Dus staat hij bij `libraryPaneWidths`, `librarySort` en `keepPinnedInView` — per
+machine, en de twee machines mogen van mening verschillen, wat het hele punt is als de ene
+aan een 27-inch paneel hangt en de andere niet.
+
+**Het vensterwerk gaat niet mee.** De boom, de notitielijst, de titelbalk, de kopstrook, de
+statusbalk: alles blijft staan waar het stond. Het besturingssysteem heeft voor die andere
+vraag al een instelling, en dit is de vraag naar de tekst waar je in typt.
+
+**Een rij in Instellingen, geen sneltoets.** Vijf stappen — 13 / 14 / 16 / 18 / 20 — met
+namen in plaats van getallen, want een maat die je intypt nodigt uit tot twijfelen over de
+twee maten ernaast. Het is een vraag die je één keer per machine beantwoordt. De prijs is
+gezien en aanvaard: het venster met het paneel is de bibliotheek, dus in het opnamevenster is
+de grootte niet te veranderen terwijl je typt. De sneltoetsroute blijft beschikbaar als dat
+alsnog blijkt te tellen; `Mod+0` is dan wél al bezet door "Gewone alinea", dus terugzetten
+zou `Mod+Shift+0` worden.
+
+**Main klemt de waarde.** `settings.json` is een bestand dat een mens kan openen, en
+`--editor-font-size: 0px` is een venster zonder notitie erin en zonder weg terug naar het
+paneel dat het zou repareren. Tussen 10 en 32, in main, niet in de renderer.
+
+---
+
+## B89 — Een kop is omkeerbaar, en een lijstopdracht tilt er een uit
+
+**Genomen** op 26 augustus 2026.
+
+Gemeld als één klacht — "een regel die eenmaal kop is, wordt niets anders meer" — en het
+waren twee gaten met elk hun eigen oorzaak.
+
+**Het eerste: `setHeading` was een `setBlockType` in één richting.** `Mod+1` op een regel die
+al H1 was zette H1 opnieuw, en de enige weg terug was `Mod+0`. Die toets bestáát, staat op het
+spiekbriefje en in het `/`-paneel, en is nog steeds niet wat iemand indrukt: elke editor met
+een kopknop heeft "druk hem nog een keer in" aangeleerd. Alleen hetzelfde niveau schakelt uit;
+`Mod+2` op een H1 zet gewoon H2, want anders zou langs de niveaus lopen elke keer door de
+alinea heen zakken. Over een selectie wordt de vraag over álle tekstblokken gesteld en niet
+alleen over het eerste — een halve selectie is niet "al H1", en uitschakelen op grond van de
+eerste regel zou de opdracht één regel laten lezen en er vijf behandelen.
+
+**Het tweede was geen fout en juist daarom erger.** `listItem` heeft als inhoud
+`paragraph block*` (`schema.ts`), dus een `heading` kan nooit het eerste kind van een lijstitem
+zijn; `wrapInList` vindt geen omhulsel en geeft **false** terug. Een `Command` die false
+teruggeeft is een toetsaanslag die niets doet en niets zegt. Een kop weigerde dus bullet te
+worden, met de vorm van het bestandsformaat als oorzaak en niets op het scherm dat daarop
+wees. De kop wordt nu onderweg een alinea, wat toch al is wat de aanslag betekende: een
+opgesomde kop is een vorm die dit dialect niet kan schrijven. `test/limitations.test.ts` pint
+dat nog steeds — deze route *vermijdt* die vorm, ze versoepelt hem niet.
+
+**Eén transactie, geen twee.** De opgetilde kop en de lijst eromheen worden samen
+gedispatcht: het tweede commando draait tegen de tussenliggende toestand en zijn stappen
+worden op dezelfde transactie teruggespeeld, wat mag omdat `state.apply(tr).doc` letterlijk
+`tr.doc` is. Apart ongedaan gemaakt zou de eerste Ctrl+Z een alinea achterlaten waar een kop
+stond — een toestand die niemand gevraagd heeft en niemand een naam kan geven. `withList`
+hierboven dispatcht wél twee keer en komt daarmee weg, omdat beide helften lijstbewerkingen
+zijn die hoe dan ook als één wijziging lezen.
+
+Het geldt voor `toggleBulletList`, `toggleOrderedList` en `toggleTask`. `wrapInBlockquote`
+niet: een `blockquote` neemt `block+` en kon een kop altijd al aan. `indent` ook niet: die
+valt in een kop terug op `wrapIn(blockquote)`, en dat is bestaand gedrag met zijn eigen vraag.

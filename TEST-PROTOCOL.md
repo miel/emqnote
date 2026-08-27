@@ -1378,12 +1378,75 @@ is held harmless by the rule beside it: the folder currently chosen is never dro
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
 | 39a | In a vault where one folder holds only *finished* tasks, open the Tasks view and drop the scope list open | That folder is not in it. Untick "open only" and open the list again: it is back. Now scope *to* that folder and tick the box — the chooser still says its name, and the pane below is empty |  |
-| 39b | Look at the strip holding the search box in the note list — judge by eye, on a real display | Pure white in the light theme, level with the note-list header under it and the note editor's header beside it. The search field itself stays a shade off it, being a field |  |
-| 39c | Open a note in the library and look at the When / Where / Tags / Who block — judge by eye, on a real display | The block sits on the same white as the header above it, with the writing surface below it a shade off. It is the same component the capture window draws, and it should now be the same colour in both |  |
+| 39b | Look at the strip holding the search box in the note list — judge by eye, on a real display | One colour with the note-list header under it and the note editor's header beside it. **Since B87 that colour is the light grey of the chrome, not white** — the white is the list below it. The search field itself stays a shade darker again, being a field |  |
+| 39c | Open a note in the library and look at the When / Where / Tags / Who block — judge by eye, on a real display | The block sits on the same grey as the header above it, with the writing surface below it white (B87 turned that pair the right way round; before it, both were white-on-off-white). It is the same component the capture window draws, and it should be the same colour in both |  |
 | 39d | Look at the foot of the **capture** window, then at the foot of the library's note editor | `[Insert] [Actions] [Help]` ends against the right margin in both. In the capture window the timing readout has moved to the left, in beside "Ctrl+Enter closes", which is what was keeping the buttons out of the corner |  |
 | 39e | Right-click a note with two unfinished tasks in it and choose Delete | The question names the note and, in brackets, "2 open tasks". Cancel, tick both tasks off, and ask again: no brackets |  |
 | 39f | Right-click a folder holding a few notes and some open tasks, choose Delete folder | One bracket, three numbers: notes, subfolders, open tasks — the tasks counted through the whole subtree, not just the folder's own notes. An empty folder with no tasks gets no brackets at all |  |
 | 39g | Do §39e from the reader's **Actions** menu instead of the note list | The same question, and confirming deletes **the note the question named** — not whatever else may have been open |  |
+
+---
+
+## 40. One surface system, six roles (26 August 2026)
+
+B87, out of `DESIGN-CRITIQUE.md`'s Finding 2. Every row here is a colour, which makes this
+the section automation is worst at: the light theme's panes were photographed under `Xvfb`
+and the pixels read out of the PNGs — tree `#f4f5f7`, divider `#d7dbe1`, list and reader
+`#ffffff`, and the dark theme byte-identical to before at the same five points — but a
+screenshot in a sandbox cannot answer what a real panel at a real brightness looks like at
+arm's length, which is the whole premise of the critique this answers. **Judge every row by
+eye, on both machines, in both themes.**
+
+The one number worth carrying into it: the divider between the note list and the reader is
+the *only* thing separating those two panes, by decision, and it went from 1.28 : 1 to
+1.39 : 1. If it still reads as nothing on a real display, that is a finding and the answer is
+probably a shaded list rather than a darker line — say so in the feedback column.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 40a | Open the library in the **light** theme and look at the three panes | Three panes. The folder tree is plainly grey against a white note list; the list and the reader are both white, separated by a line and by the reader's own grey header band above it |  |
+| 40b | The same window in the **dark** theme | Exactly what it looked like before this batch. Any difference here other than a hovered or selected row is a defect |  |
+| 40c | Run the pointer down the note list, then look at the note that is open | The open note is still obvious after the mouse has crossed every row above it. Hover and selection are one grey at two strengths — if the selected row gets lost in its own hover trail, that is Finding 3 and it needs a second channel, not a darker grey |  |
+| 40d | Open a note holding a code block, a wiki-link chip and a `#tag` (light theme) | All three are visibly tinted boxes on the white page. Before B87 they were white on off-white and effectively invisible |  |
+| 40e | Open the command palette, a right-click menu, Help and Settings over a note (light theme) | Each is a grey panel with a border and a shadow, over a white page. None of them reads as a hole in the page |  |
+| 40f | Look at the When / Where / Tags / Who fields, then click into one | The boxes are a shade darker than the strip they sit in; the one you are typing in turns the white of the page. In the dark theme there is no fill change at all — the accent border is the whole signal, and that is deliberate |  |
+| 40g | On a **light-mode** machine, quit the app entirely and start it, then press the hotkey | No dark flash before the window paints. This is the row that only a cold start on a light-mode OS can answer, and it is per platform |  |
+| 40h | Scroll a long note, and open the Language dropdown in Settings, in **both** themes | The scrollbar and the dropdown's own popup are in the same theme as the app. `color-scheme` is what makes that true, and it had never been declared |  |
+| 40i | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
+
+---
+
+## 41. Four defects and two features from a day of using §40 (26 August 2026)
+
+More of this batch was driven than usual, and the rows below are deliberately only what a
+sandbox could not answer. Under `Xvfb`, with real Chromium behind it, twelve checks came back
+`ok`: the spring-loaded folder over a **real** HTML5 drag (CDP's `Input.setInterceptDrags` +
+`Input.dispatchDragEvent`, not a synthetic `dispatchEvent`), the note really leaving the
+folder it was dragged out of, the pin taking itself off without selecting its row, `Mod+1`
+toggling a heading and `Mod+Shift+L` making a bullet of one, and B88's size landing in the
+capture window with no restart. The pixels were read out of the PNGs: no `#1a63d8` on any
+edge of the selected note row, the selected folder's label at `--text`, and the H1
+"Kwartaalplan" 142 / 174 / 219 px wide at 13 / 16 / 20 px.
+
+What is left for a person is **Windows at a real scaling factor**, **both themes on a real
+panel**, and the two judgements no measurement makes: whether 600 ms is the right dwell, and
+whether losing the note list's focus ring costs more in use than the harsh border did.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 41a | **On Windows**, at 125 % *and* 150 % display scaling: click a note, then walk the list with ↑/↓ | No blue box around any row, at either scaling. This is the report this batch answers, and the only machine that can confirm it |  |
+| 41b | Straight after 41a, keep walking with ↑/↓ without pressing Enter | Say plainly whether you can tell which row the keyboard is on. You cannot — the ring is gone and selection does not follow the arrows — and the question is whether that is worse in use than the border was. If it is, the fix is Finding 3's pane-level treatment, not this ring back |  |
+| 41c | Look at the selected folder in the tree, both themes | Bold, in the ordinary text colour, on a grey fill. No blue. It should read as no louder than the open note in the list beside it |  |
+| 41d | Drag a note from the list and hold it over a **collapsed** folder | It unfolds after about half a second, and stays unfolded after you drop. Say whether the wait feels right — too short and every folder you cross opens behind you, too long and the drag reads as having stopped working |  |
+| 41e | Drag a note over the folder it **already lives in**, on the way to a subfolder underneath it | That parent still unfolds, even though it will refuse the drop itself (no highlight on it). This is the case the whole feature turns on |  |
+| 41f | Start a drag, hold it over a collapsed folder for a moment, then press Escape | Nothing unfolds afterwards, and no folder is left highlighted |  |
+| 41g | Type a line, press `Ctrl+1` twice | Heading, then ordinary paragraph again |  |
+| 41h | On a heading, press `Ctrl+Shift+L`, then `Ctrl+Z` **once** | A bullet whose text is the heading's; one undo puts the heading back. Two presses of Ctrl+Z would mean the transaction was split |  |
+| 41i | Settings → text size, try 13 and 20, in **both** windows and on **both** machines | The note scales and the window around it does not. Headings keep their proportion to the body. Judge readability at your own display — this is the row the setting exists for |  |
+| 41j | At 13 and at 20, look at a bulleted list, a numbered list and a task list | Markers still line up under their own text at every depth, and a checkbox still sits on its line. The marker rules were measured at 16px and nowhere else, so this is the row most likely to show something |  |
+| 41k | With both windows open, change the text size in Settings and look at the capture window **without restarting** | It follows immediately. Then change the **language** and look again — that never reached this window before, and it should now |  |
+| 41l | Click the pin on a pinned row | The pin comes off and the row drops to where the sort puts it. The note does not open and the selection does not move |  |
+| 41m | `npm run build` **then** `npm run drive:capture` | Nine `ok` lines. Same order, same reason as §37o |  |
 
 ---
 

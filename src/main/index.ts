@@ -1147,6 +1147,29 @@ function registerIpc(): void {
   registerAppIpc();
 }
 
+/**
+ * Tells both windows that a setting they *draw with* has changed, so they re-read the
+ * bootstrap.
+ *
+ * Its own message rather than `libraryRefresh`. That one means "ask the vault again" and
+ * every save raises it; the library answers it by reloading the tree, the notes, the
+ * facets and the conflicts, none of which is where a language or a font size lives, and
+ * the capture window answered it not at all. `setLocale` had been sending it to both
+ * windows for exactly this purpose since B60, and neither window ever acted on it — which
+ * is why changing the language only took effect in the library, and only because the
+ * Settings panel refreshes itself on the way out.
+ *
+ * `useBootstrap` is the single subscriber, so this reaches every window that draws from
+ * settings without either of them wiring it up separately.
+ */
+function notifySettingsChanged(): void {
+  for (const target of [getCaptureWindow(), getLibraryWindow()]) {
+    if (target !== null && !target.isDestroyed()) {
+      target.webContents.send(IPC.settingsChanged);
+    }
+  }
+}
+
 /** What a window needs before it can draw: language, platform and the shortcut. */
 function registerAppIpc(): void {
   ipcMain.handle(IPC.bootstrap, () => {
@@ -1161,6 +1184,7 @@ function registerAppIpc(): void {
       librarySort: settings.librarySort,
       loadRemoteImages: settings.loadRemoteImages,
       keepPinnedInView: settings.keepPinnedInView,
+      editorFontSize: settings.editorFontSize,
     };
   });
 
@@ -1178,14 +1202,25 @@ function registerAppIpc(): void {
     saveSettings({ keepPinnedInView: keep });
   });
 
+  /**
+   * B88. Told to both windows, which the two switches above are not: the panel that sets
+   * this lives in the library and the window that most needs it is the other one, so a
+   * save alone would leave the capture window drawing the old size until the next login.
+   *
+   * Clamped in main rather than trusted from the renderer: the setting is a number in a
+   * file a person can edit, and `--editor-font-size: 0px` is a window with no note in it
+   * and no way to get the panel back to fix it.
+   */
+  ipcMain.handle(IPC.setEditorFontSize, (_event, px: number) => {
+    const size = Math.round(Math.min(32, Math.max(10, Number.isFinite(px) ? px : 16)));
+    saveSettings({ editorFontSize: size });
+    notifySettingsChanged();
+  });
+
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {
     saveSettings({ locale });
     buildTrayMenu();
-    for (const target of [getCaptureWindow(), getLibraryWindow()]) {
-      if (target !== null && !target.isDestroyed()) {
-        target.webContents.send(IPC.libraryRefresh);
-      }
-    }
+    notifySettingsChanged();
   });
 
   /**
