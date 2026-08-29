@@ -16,6 +16,12 @@ B62's Ctrl+Tab, B71), and each helper exists because guessing had already had it
 They are documented in the `diagnostics` skill (`.claude/skills/diagnostics/SKILL.md`);
 reach for one before shipping a second fix for the same complaint.
 
+Two more scripts build the **UI kit** — `npm run ui:kit` photographs about seventy parts of
+the running app into `design/ui-kit/`, and `npm run ui:deck` assembles them into a
+PowerPoint parts bin at `design/emqnote-ui-kit.pptx` for drawing mockups by hand. `design/`
+is generated and gitignored; the two scripts are not. The deck builder wants python-pptx in
+a `.venv`, deliberately outside `package.json`: it builds a design asset, never the app.
+
 ## Architecture
 
 ### The one rule everything else follows
