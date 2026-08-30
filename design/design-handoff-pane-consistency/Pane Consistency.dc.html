@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+  body { margin:0; background:#e8eaec; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; color:#1e2226; }
+  a { color:#2563c9; text-decoration:none; }
+  a:hover { color:#1d4ea3; }
+  *::-webkit-scrollbar { width:10px; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;gap:18px;padding:28px">
+  <div style="display:flex;flex-direction:column;gap:4px">
+    <div style="font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6b7280">Pane consistency — two directions</div>
+    <div style="font-size:13px;color:#4b5259;max-width:900px">Shared header/footer geometry, one button language, one type + shade scale. <a href="#1a">1a</a> keeps today's proportions; <a href="#1b">1b</a> tightens every row. Panes drag-resize; search collapses to an icon in both.</div>
+  </div>
+
+  <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+
+    <div id="1a" style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:700;background:#1e2226;color:#fff;border-radius:3px;padding:2px 7px">1a</span>
+        <span style="font-size:13px;font-weight:600">Conservative — 40px headers, 28px footers (Emiel's pick, updated)</span>
+      </div>
+      <div style="width:1400px;height:820px;display:flex;background:#f5f6f7;border:1px solid #c9ced4;border-radius:6px;overflow:hidden;font-size:13px;box-shadow:0 8px 24px rgba(20,25,30,.10)">
+
+        <div style="display:flex;flex-direction:column;min-width:180px;flex:0 0 auto;width:{{ aTree }}px;background:#f5f6f7">
+          <div style="height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <span style="font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Vault</span>
+            <button title="New folder" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:14px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">＋</button>
+            <button title="Rename folder" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">✎</button>
+            <button title="Delete folder" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">✕</button>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto;padding:4px 0">
+            <sc-for list="{{ folders }}" as="f" hint-placeholder-count="8">
+              <sc-if value="{{ f.isRoot }}">
+                <div style="display:flex;align-items:center;gap:6px;height:22px;padding:0 10px;cursor:default" style-hover="background:#e7eaed">
+                  <span style="width:10px;flex:none;color:#8b9299;font-size:9px">{{ f.caret }}</span>
+                  <span style="font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8b9299">All folders</span>
+                </div>
+              </sc-if>
+              <div onClick="{{ f.select }}" style="display:flex;align-items:center;gap:6px;height:26px;padding-right:10px;cursor:default;background:{{ f.bg }};padding-left:{{ f.pad }}px;display:{{ f.display }}" style-hover="background:#e7eaed">
+                <span style="width:10px;flex:none;color:#8b9299;font-size:9px">{{ f.caret }}</span>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:{{ f.weight }}">{{ f.name }}</span>
+                <sc-if value="{{ f.hasCounts }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-size:12px;color:#8b9299;font-variant-numeric:tabular-nums">{{ f.total }}<span style="color:#8b9299"> / </span><span style="color:{{ f.unreadColor }};font-weight:{{ f.unreadWeight }}">{{ f.unread }}</span></span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex:none;border-top:1px solid #dcdfe3;padding:4px 0 6px">
+            <sc-for list="{{ menu }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;cursor:default" style-hover="background:#e7eaed">
+                <span style="width:10px;flex:none;color:#8b9299;font-size:9px">{{ m.caret }}</span>
+                <span style="width:14px;flex:none;color:#6b7280;text-align:center">{{ m.icon }}</span>
+                <span>{{ m.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div onMouseDown="{{ dragTreeA }}" style="width:4px;flex:none;cursor:col-resize;background:#dcdfe3" style-hover="background:#b9c0c7"></div>
+
+        <div style="display:flex;flex-direction:column;min-width:220px;flex:0 0 auto;width:{{ aList }}px;background:#f5f6f7;border-right:0">
+          <div style="height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <sc-if value="{{ aSearchClosed }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Alpha</span>
+            </sc-if>
+            <sc-if value="{{ aSearchOpen }}">
+              <input value="{{ aQuery }}" onChange="{{ setQueryA }}" placeholder="Search in this folder…  (⌘F)" autoFocus="{{ true }}" style="flex:1;min-width:0;height:26px;border:1px solid #b9c0c7;border-radius:4px;background:#fff;padding:0 8px;font-size:13px;font-family:inherit;color:#1e2226;outline:none">
+            </sc-if>
+            <button title="Search (⌘F)" onClick="{{ toggleSearchA }}" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;cursor:pointer" style-hover="background:#dfe3e7;border-color:#c9ced4">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3c4349" stroke-width="1.6"><circle cx="6.8" cy="6.8" r="4.4"></circle><line x1="10.2" y1="10.2" x2="14" y2="14"></line></svg>
+            </button>
+            <button title="New note (⌘N)" style="height:26px;display:flex;align-items:center;gap:5px;padding:0 9px;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#dfe3e7;border-color:#c9ced4"><span style="font-size:14px">＋</span>New note</button>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto">
+            <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+              <div onClick="{{ n.select }}" style="padding:7px 10px 8px;border-bottom:1px solid #e4e7ea;cursor:default;background:{{ n.bg }}" style-hover="background:#eceff1">
+                <div style="display:flex;align-items:baseline;gap:6px">
+                  <sc-if value="{{ n.pinned }}">
+                    <span style="color:#6b7280;font-size:11px">⚲</span>
+                  </sc-if>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">{{ n.title }}</span>
+                  <span style="font-size:12px;color:#8b9299;white-space:nowrap">{{ n.time }}</span>
+                </div>
+                <div style="margin-top:2px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.snippet }}</div>
+                <sc-if value="{{ n.showTags }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+                    <sc-for list="{{ n.tags }}" as="t" hint-placeholder-count="2">
+                      <span style="font-size:12px;color:#2563c9;background:#e6ecf7;border-radius:3px;padding:1px 5px">#{{ t }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ n.showPeople }}">
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;color:#2563c9">
+                    <span style="color:#8b9299">◍</span>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.people }}</span>
+                    <sc-if value="{{ n.tasks }}">
+                      <span style="white-space:nowrap">Tasks: {{ n.tasks }}</span>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:28px;flex:none;display:flex;align-items:center;gap:10px;padding:0 8px 0 10px;border-top:1px solid #dcdfe3;background:#eef0f2;font-size:12px;color:#6b7280">
+            <span>4 notes</span>
+            <span style="flex:1"></span>
+            <button style="height:20px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">⇅ Modified</button>
+            <button style="height:20px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">☑ Tasks</button>
+          </div>
+        </div>
+
+        <div onMouseDown="{{ dragListA }}" style="width:4px;flex:none;cursor:col-resize;background:#dcdfe3" style-hover="background:#b9c0c7"></div>
+
+        <div style="flex:1;min-width:320px;display:flex;flex-direction:column;background:#f5f6f7">
+          <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <span style="font-size:15px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stuurgroep Alpha - besluitvorming fase 2</span>
+            <button title="More actions" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:14px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">⋯</button>
+          </div>
+          <div style="flex:none;border-bottom:1px solid #dcdfe3;background:#f5f6f7;padding:6px 12px;display:grid;grid-template-columns:52px 1fr 44px 1fr;gap:5px 8px;align-items:center;font-size:13px">
+            <span style="color:#8b9299;font-size:12px">When</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:3px 8px;height:22px;display:flex;align-items:center">Sat, Jul 25, 11:10</div>
+            <span style="color:#8b9299;font-size:12px">Tags</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:3px 8px;height:22px;display:flex;align-items:center;color:#2563c9">#stuurgroep #alpha</div>
+            <span style="color:#8b9299;font-size:12px">Where</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:3px 8px;height:22px;display:flex;align-items:center">Teams</div>
+            <span style="color:#8b9299;font-size:12px">Who</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:3px 8px;height:22px;display:flex;align-items:center;color:#2563c9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Jan de Vries, Els Bakker, Ruben Ockhuizen, Sanne Wijngaard</div>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto;padding:10px 14px 16px;line-height:1.45">
+            <div style="font-size:17px;font-weight:600;color:#3c4349;margin:2px 0 6px">Doel van dit overleg</div>
+            <div style="margin-bottom:10px">Besluit over de scope van fase 2 en over de vraag of we de testomgeving zelf inrichten of afnemen bij de leverancier. Els zit voor, Sanne notuleert normaal maar is later.</div>
+            <div style="font-size:17px;font-weight:600;color:#3c4349;margin:14px 0 6px">Terugblik fase 1</div>
+            <ol style="margin:0 0 10px;padding-left:22px;display:flex;flex-direction:column;gap:3px">
+              <li>Opgeleverd binnen de planning
+                <ul style="margin:3px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px">
+                  <li>Migratie van de eerste twee datasets is afgerond</li>
+                  <li>De acceptatietest is doorlopen met <strong>twee openstaande bevindingen</strong>
+                    <ol style="margin:3px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px">
+                      <li>Rapportagemodule rekent verkeerd bij een gebroken boekjaar</li>
+                      <li>Export naar Excel verliest de opmaak van de kopregel</li>
+                    </ol>
+                  </li>
+                  <li>Beide bevindingen staan gepland voor de eerste sprint van fase 2</li>
+                </ul>
+              </li>
+              <li>Budget
+                <ul style="margin:3px 0 0;padding-left:20px"><li>Uitgeput tot 94 procent, dus binnen de marge</li></ul>
+                <div style="margin:3px 0 0">Peter merkt op dat de resterende 6 procent al is toegezegd aan het meerwerk voor de koppeling. Dat is nog niet formeel vastgelegd.</div>
+              </li>
+              <li>Wat niet goed ging
+                <ul style="margin:3px 0 0;padding-left:20px"><li>De doorlooptijd van de acceptatie was drie weken in plaats van één</li></ul>
+              </li>
+            </ol>
+            <div style="font-size:17px;font-weight:600;color:#3c4349;margin:14px 0 6px">Scope fase 2</div>
+            <div style="margin-bottom:8px">Voorstel van Jan, met de reacties erbij:</div>
+            <table style="border-collapse:collapse;width:100%;font-size:13px">
+              <tr style="background:#eef0f2"><th style="text-align:left;border:1px solid #dcdfe3;padding:4px 8px;font-weight:600">Onderdeel</th><th style="text-align:left;border:1px solid #dcdfe3;padding:4px 8px;font-weight:600">Voorstel</th><th style="text-align:left;border:1px solid #dcdfe3;padding:4px 8px;font-weight:600">Reactie</th></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:4px 8px">Koppeling met het bronsysteem</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Wel</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Akkoord, met de kanttekening van Peter</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:4px 8px">Rapportagemodule uitbreiden</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Wel</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Els wil eerst de bevinding opgelost zien</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:4px 8px">Mobiele weergave</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Niet</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Akkoord, doorschuiven naar fase 3</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:4px 8px">Tweede migratieslag</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Wel</td><td style="border:1px solid #dcdfe3;padding:4px 8px">Ruben twijfelt over de capaciteit</td></tr>
+            </table>
+          </div>
+          <div style="height:28px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;border-top:1px solid #dcdfe3;background:#eef0f2;font-size:12px;color:#6b7280">
+            <sc-if value="{{ showWarning }}" hint-placeholder-val="{{ true }}">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Read-only preview — <a href="#1a">open for editing in the capture window</a></span>
+            </sc-if>
+            <sc-if value="{{ showPath }}">
+              <span title="{{ notePath }}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left">{{ notePath }}</span>
+            </sc-if>
+<sc-if value="{{ showPath }}">
+              <button title="Insert image, attachment, table or divider" style="height:20px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4"><span style="font-size:13px">＋</span>Insert ▾</button>
+            </sc-if>
+            <button style="height:20px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">Actions ▾</button>
+            <button title="Keyboard shortcuts" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">?</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:700;background:#1e2226;color:#fff;border-radius:3px;padding:2px 7px">1b</span>
+        <span style="font-size:13px;font-weight:600">Denser — earlier alternative, kept for reference</span>
+      </div>
+      <div style="width:1400px;height:820px;display:flex;background:#f5f6f7;border:1px solid #c9ced4;border-radius:6px;overflow:hidden;font-size:12.5px;box-shadow:0 8px 24px rgba(20,25,30,.10)">
+
+        <div style="display:flex;flex-direction:column;min-width:170px;flex:0 0 auto;width:{{ bTree }}px;background:#f5f6f7">
+          <div style="height:28px;flex:none;display:flex;align-items:center;gap:4px;padding:0 4px 0 8px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <span style="font-size:12.5px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Vault</span>
+            <button title="New folder" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">＋</button>
+            <button title="Rename folder" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">✎</button>
+            <button title="Delete folder" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">✕</button>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto;padding:2px 0">
+            <sc-for list="{{ folders }}" as="f" hint-placeholder-count="8">
+              <div onClick="{{ f.select }}" style="display:flex;align-items:center;gap:5px;height:22px;padding-right:8px;cursor:default;background:{{ f.bg }};padding-left:{{ f.pad }}px" style-hover="background:#e7eaed">
+                <span style="width:9px;flex:none;color:#8b9299;font-size:8px">{{ f.caret }}</span>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:{{ f.weight }}">{{ f.name }}</span>
+                <sc-if value="{{ f.hasCounts }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-size:11.5px;color:#8b9299;font-variant-numeric:tabular-nums">{{ f.total }} / <span style="color:{{ f.unreadColor }};font-weight:{{ f.unreadWeight }}">{{ f.unread }}</span></span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex:none;border-top:1px solid #dcdfe3;padding:2px 0 4px">
+            <sc-for list="{{ menu }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:7px;height:22px;padding:0 8px;cursor:default" style-hover="background:#e7eaed">
+                <span style="width:9px;flex:none;color:#8b9299;font-size:8px">{{ m.caret }}</span>
+                <span style="width:13px;flex:none;color:#6b7280;text-align:center">{{ m.icon }}</span>
+                <span>{{ m.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div onMouseDown="{{ dragTreeB }}" style="width:4px;flex:none;cursor:col-resize;background:#dcdfe3" style-hover="background:#b9c0c7"></div>
+
+        <div style="display:flex;flex-direction:column;min-width:210px;flex:0 0 auto;width:{{ bList }}px;background:#f5f6f7">
+          <div style="height:28px;flex:none;display:flex;align-items:center;gap:4px;padding:0 4px 0 8px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <sc-if value="{{ bSearchClosed }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:12.5px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">01 Projecten / Alpha</span>
+            </sc-if>
+            <sc-if value="{{ bSearchOpen }}">
+              <input value="{{ bQuery }}" onChange="{{ setQueryB }}" placeholder="Search in this folder…  (⌘F)" autoFocus="{{ true }}" style="flex:1;min-width:0;height:20px;border:1px solid #b9c0c7;border-radius:3px;background:#fff;padding:0 6px;font-size:12.5px;font-family:inherit;color:#1e2226;outline:none">
+            </sc-if>
+            <button title="Search (⌘F)" onClick="{{ toggleSearchB }}" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;cursor:pointer" style-hover="background:#dfe3e7;border-color:#c9ced4">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#3c4349" stroke-width="1.6"><circle cx="6.8" cy="6.8" r="4.4"></circle><line x1="10.2" y1="10.2" x2="14" y2="14"></line></svg>
+            </button>
+            <button title="Sort and filter" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:12px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">⇅</button>
+            <button title="New note (⌘N)" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">＋</button>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto">
+            <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+              <div onClick="{{ n.select }}" style="padding:5px 8px 6px;border-bottom:1px solid #e4e7ea;cursor:default;background:{{ n.bg }}" style-hover="background:#eceff1">
+                <div style="display:flex;align-items:baseline;gap:5px">
+                  <sc-if value="{{ n.pinned }}">
+                    <span style="color:#6b7280;font-size:10px">⚲</span>
+                  </sc-if>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">{{ n.title }}</span>
+                  <span style="font-size:11.5px;color:#8b9299;white-space:nowrap">{{ n.time }}</span>
+                </div>
+                <div style="color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.snippet }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;font-size:11.5px;color:#2563c9;min-height:0">
+                  <sc-if value="{{ n.showTags }}">
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ n.tagLine }}</span>
+                  </sc-if>
+                  <span style="flex:1"></span>
+                  <sc-if value="{{ n.tasks }}">
+                    <span style="white-space:nowrap;color:#6b7280">☑ {{ n.tasks }}</span>
+                  </sc-if>
+                  <sc-if value="{{ n.showPeople }}">
+                    <span style="white-space:nowrap;color:#6b7280">◍ {{ n.peopleCount }}</span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:24px;flex:none;display:flex;align-items:center;gap:8px;padding:0 6px 0 8px;border-top:1px solid #dcdfe3;background:#eef0f2;font-size:11.5px;color:#6b7280">
+            <span>4 notes</span>
+            <span style="flex:1"></span>
+            <button style="height:18px;display:flex;align-items:center;gap:3px;padding:0 5px;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:11.5px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">⇅ Modified</button>
+            <button style="height:18px;display:flex;align-items:center;gap:3px;padding:0 5px;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:11.5px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">☑ Tasks</button>
+          </div>
+        </div>
+
+        <div onMouseDown="{{ dragListB }}" style="width:4px;flex:none;cursor:col-resize;background:#dcdfe3" style-hover="background:#b9c0c7"></div>
+
+        <div style="flex:1;min-width:320px;display:flex;flex-direction:column;background:#f5f6f7">
+          <div style="height:28px;flex:none;display:flex;align-items:center;gap:6px;padding:0 4px 0 10px;border-bottom:1px solid #dcdfe3;background:#eef0f2">
+            <span style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56%">Stuurgroep Alpha - besluitvorming fase 2</span>
+            <span title="01 Projecten/Alpha/24-vergadernotitie.md" style="font-size:11.5px;color:#8b9299;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">01 Projecten/Alpha/24-vergadernotitie.md</span>
+            <button title="Insert" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">＋</button>
+            <button title="More actions" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:13px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">⋯</button>
+          </div>
+          <div style="flex:none;border-bottom:1px solid #dcdfe3;padding:4px 10px;display:grid;grid-template-columns:46px 1fr 40px 1fr;gap:3px 6px;align-items:center;font-size:12.5px">
+            <span style="color:#8b9299;font-size:11.5px">When</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:2px 6px;height:19px;display:flex;align-items:center">Sat, Jul 25, 11:10</div>
+            <span style="color:#8b9299;font-size:11.5px">Tags</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:2px 6px;height:19px;display:flex;align-items:center;color:#2563c9">#stuurgroep #alpha</div>
+            <span style="color:#8b9299;font-size:11.5px">Where</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:2px 6px;height:19px;display:flex;align-items:center">Teams</div>
+            <span style="color:#8b9299;font-size:11.5px">Who</span>
+            <div style="background:#e9ecef;border-radius:3px;padding:2px 6px;height:19px;display:flex;align-items:center;color:#2563c9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Jan de Vries, Els Bakker, Ruben Ockhuizen, Sanne Wijngaard</div>
+          </div>
+          <div style="flex:1;min-height:0;overflow:auto;padding:8px 12px 14px;line-height:1.4">
+            <div style="font-size:15px;font-weight:600;color:#3c4349;margin:0 0 4px">Doel van dit overleg</div>
+            <div style="margin-bottom:8px">Besluit over de scope van fase 2 en over de vraag of we de testomgeving zelf inrichten of afnemen bij de leverancier. Els zit voor, Sanne notuleert normaal maar is later.</div>
+            <div style="font-size:15px;font-weight:600;color:#3c4349;margin:10px 0 4px">Terugblik fase 1</div>
+            <ol style="margin:0 0 8px;padding-left:20px;display:flex;flex-direction:column;gap:2px">
+              <li>Opgeleverd binnen de planning
+                <ul style="margin:2px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:2px">
+                  <li>Migratie van de eerste twee datasets is afgerond</li>
+                  <li>De acceptatietest is doorlopen met <strong>twee openstaande bevindingen</strong>
+                    <ol style="margin:2px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:2px">
+                      <li>Rapportagemodule rekent verkeerd bij een gebroken boekjaar</li>
+                      <li>Export naar Excel verliest de opmaak van de kopregel</li>
+                    </ol>
+                  </li>
+                  <li>Beide bevindingen staan gepland voor de eerste sprint van fase 2</li>
+                </ul>
+              </li>
+              <li>Budget
+                <ul style="margin:2px 0 0;padding-left:18px"><li>Uitgeput tot 94 procent, dus binnen de marge</li></ul>
+                <div>Peter merkt op dat de resterende 6 procent al is toegezegd aan het meerwerk voor de koppeling. Dat is nog niet formeel vastgelegd.</div>
+              </li>
+              <li>Wat niet goed ging
+                <ul style="margin:2px 0 0;padding-left:18px"><li>De doorlooptijd van de acceptatie was drie weken in plaats van één</li></ul>
+              </li>
+            </ol>
+            <div style="font-size:15px;font-weight:600;color:#3c4349;margin:10px 0 4px">Scope fase 2</div>
+            <div style="margin-bottom:6px">Voorstel van Jan, met de reacties erbij:</div>
+            <table style="border-collapse:collapse;width:100%;font-size:12.5px">
+              <tr style="background:#eef0f2"><th style="text-align:left;border:1px solid #dcdfe3;padding:3px 6px;font-weight:600">Onderdeel</th><th style="text-align:left;border:1px solid #dcdfe3;padding:3px 6px;font-weight:600">Voorstel</th><th style="text-align:left;border:1px solid #dcdfe3;padding:3px 6px;font-weight:600">Reactie</th></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:3px 6px">Koppeling met het bronsysteem</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Wel</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Akkoord, met de kanttekening van Peter</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:3px 6px">Rapportagemodule uitbreiden</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Wel</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Els wil eerst de bevinding opgelost zien</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:3px 6px">Mobiele weergave</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Niet</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Akkoord, doorschuiven naar fase 3</td></tr>
+              <tr><td style="border:1px solid #dcdfe3;padding:3px 6px">Tweede migratieslag</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Wel</td><td style="border:1px solid #dcdfe3;padding:3px 6px">Ruben twijfelt over de capaciteit</td></tr>
+            </table>
+          </div>
+          <div style="height:24px;flex:none;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;border-top:1px solid #dcdfe3;background:#eef0f2;font-size:11.5px;color:#6b7280">
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Read-only preview — <a href="#1b">open for editing in the capture window</a></span>
+            <button style="height:18px;display:flex;align-items:center;gap:3px;padding:0 5px;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:11.5px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">Actions</button>
+            <button title="Keyboard shortcuts" style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;background:transparent;color:#3c4349;font-size:11.5px;cursor:pointer;font-family:inherit" style-hover="background:#dfe3e7;border-color:#c9ced4">?</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1000px;font-size:13px;line-height:1.55;color:#3c4349;display:flex;flex-direction:column;gap:6px">
+    <div style="font-weight:600;color:#1e2226">What changed, and why nothing was lost</div>
+    <div>Every pane opens with one 40px heading row — vault name, active folder name, note title — all 15px/600 on the same #eef0f2 band, actions right-aligned. The tree's New / Rename / Delete became 26px icon buttons inside that row (tooltips + right-click keep them discoverable). The tree's root row no longer repeats the vault name: it reads "ALL FOLDERS" in small caps and still collapses everything, so the heading owns the vault identity.</div>
+    <div>Notes and reader share a 28px footer. The notes count, sort and Tasks filter live there — the header no longer carries a second sort control, so "⇅ Modified" in the footer is the single sort affordance (click opens the sort menu), and the header is free for the collapsing search field (⌘F expands it in place over the heading). The reader footer shows the read-only warning when there is one and the file path when there isn't (toggle it in Tweaks). Insert — an editor command menu (image, attachment, table, divider) — moved out of the heading into that footer beside Actions, and appears only when the note is editable; the heading stays purely identity plus ⋯.</div>
+    <div>One button language throughout: transparent by default, grey fill and 1px border on hover, icon-only where the glyph is unambiguous, icon + label where it isn't. Shades: panes #f5f6f7, header/footer bands #eef0f2, dividers #dcdfe3, text #1e2226, secondary #6b7280, muted #8b9299, links and tags #2563c9. Weights: 600 headings and note titles, 500 labelled buttons, 400 everything else — no other weights.</div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;readOnlyWarning&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Reader footer&quot;},&quot;showFolderCounts&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Density&quot;},&quot;showTagsInList&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Density&quot;},&quot;showPeopleInList&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Density&quot;}}">
+class Component extends DCLogic {
+  state = {
+    aTree: 240, aList: 320, bTree: 218, bList: 296,
+    aSearch: false, bSearch: false, aQuery: '', bQuery: '',
+    selFolder: 3, selNote: 1, drag: null
+  };
+
+  componentDidMount() {
+    this._move = e => {
+      const d = this.state.drag;
+      if (!d) return;
+      const dx = e.clientX - d.x;
+      const min = d.key === 'aTree' || d.key === 'bTree' ? 170 : 210;
+      this.setState({ [d.key]: Math.max(min, Math.min(620, d.start + dx)) });
+    };
+    this._up = () => { if (this.state.drag) this.setState({ drag: null }); };
+    window.addEventListener('mousemove', this._move);
+    window.addEventListener('mouseup', this._up);
+    this._key = e => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        this.setState({ aSearch: true, bSearch: true });
+      }
+      if (e.key === 'Escape') this.setState({ aSearch: false, bSearch: false });
+    };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('mousemove', this._move);
+    window.removeEventListener('mouseup', this._up);
+    window.removeEventListener('keydown', this._key);
+  }
+
+  drag(key) { return e => { e.preventDefault(); this.setState({ drag: { key, x: e.clientX, start: this.state[key] } }); }; }
+
+  renderVals() {
+    const showCounts = this.props.showFolderCounts ?? true;
+    const showTags = this.props.showTagsInList ?? true;
+    const showPeople = this.props.showPeopleInList ?? true;
+
+    const raw = [
+      ['Vault', 0, '▾', '', ''],
+      ['00 Inbox', 1, '', '3', '3'],
+      ['01 Projecten', 1, '▾', '', ''],
+      ['Alpha', 2, '', '4', '4'],
+      ['Beta', 2, '', '2', '0'],
+      ['02 Klanten', 1, '', '2', '0'],
+      ['03 Archief', 1, '', '1', '0'],
+      ['04 Voorbeelden', 1, '', '8', '0'],
+      ['05 Leeg', 1, '', '', '']
+    ];
+    const folders = raw.map(([name, depth, caret, total, unread], i) => ({
+      name, caret, total, unread,
+      pad: 8 + depth * 16,
+      hasCounts: showCounts && total !== '',
+      isRoot: depth === 0,
+      display: depth === 0 ? 'none' : 'flex',
+      bg: this.state.selFolder === i ? '#d9dcdf' : 'transparent',
+      weight: this.state.selFolder === i ? 600 : 400,
+      unreadColor: unread && unread !== '0' ? '#3c4349' : '#8b9299',
+      unreadWeight: unread && unread !== '0' ? 600 : 400,
+      select: () => this.setState({ selFolder: i })
+    }));
+
+    const notesRaw = [
+      { title: 'Vastgeprikt bovenaan de lijst', time: 'Aug 20, 09:40', snippet: 'Deze notitie staat bovenaan de lijst, ongeacht de sortering', tags: ['klantx'], people: '', peopleCount: 0, tasks: 0, pinned: true },
+      { title: 'Stuurgroep Alpha - besluitvorming fase 2', time: '12:46', snippet: 'Doel van dit overleg', tags: ['stuurgroep', 'alpha'], people: 'Jan de Vries, Els Bakker, Ruben Ockhuizen, Sanne Wijngaard', peopleCount: 4, tasks: 4, pinned: false },
+      { title: 'Tabel binnen een lijstitem', time: '12:46', snippet: 'Openstaande acties', tags: [], people: '', peopleCount: 0, tasks: 0, pinned: false },
+      { title: 'Stuurgroep: kwartaalrapportage', time: 'Jul 25, 16:42', snippet: 'Alle velden gevuld, om te controleren dat de vaste velden kloppen', tags: ['stuurgroep', 'klantx', 'rapportage'], people: 'Jan de Vries, Els Bakker, Ruben Ockhuizen, Sanne Wijngaard', peopleCount: 4, tasks: 0, pinned: false }
+    ];
+    const notes = notesRaw.map((n, i) => ({
+      ...n,
+      bg: this.state.selNote === i ? '#d9dcdf' : 'transparent',
+      showTags: showTags && n.tags.length > 0,
+      showPeople: showPeople && n.peopleCount > 0,
+      tagLine: n.tags.map(t => '#' + t).join('  '),
+      select: () => this.setState({ selNote: i })
+    }));
+
+    const menu = [
+      { caret: '▸', icon: '#', label: 'Tags' },
+      { caret: '▸', icon: '◍', label: 'People' },
+      { caret: '', icon: '☑', label: 'Tasks' },
+      { caret: '', icon: '⚙', label: 'Settings' },
+      { caret: '', icon: '?', label: 'Keyboard shortcuts' },
+      { caret: '', icon: '⎘', label: 'Unlinked attachments' }
+    ];
+
+    const showWarning = this.props.readOnlyWarning ?? false;
+    return {
+      folders, notes, menu, showCounts,
+      showWarning, showPath: !showWarning,
+      notePath: '01 Projecten/Alpha/24-vergadernotitie.md',
+      aTree: this.state.aTree, aList: this.state.aList,
+      bTree: this.state.bTree, bList: this.state.bList,
+      aSearchOpen: this.state.aSearch, aSearchClosed: !this.state.aSearch,
+      bSearchOpen: this.state.bSearch, bSearchClosed: !this.state.bSearch,
+      aQuery: this.state.aQuery, bQuery: this.state.bQuery,
+      setQueryA: e => this.setState({ aQuery: e.target.value }),
+      setQueryB: e => this.setState({ bQuery: e.target.value }),
+      toggleSearchA: () => this.setState({ aSearch: !this.state.aSearch }),
+      toggleSearchB: () => this.setState({ bSearch: !this.state.bSearch }),
+      dragTreeA: this.drag('aTree'), dragListA: this.drag('aList'),
+      dragTreeB: this.drag('bTree'), dragListB: this.drag('bList'),
+      noop: () => {}
+    };
+  }
+}
+</script>
+</body>
+</html>
