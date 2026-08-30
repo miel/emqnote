@@ -1038,6 +1038,29 @@ green after it. `table-drag-claim.test.ts` pins the ordering, and it exists beca
 decision needs no layout — the part that does is still unreachable under vitest, and this
 was the part hiding behind it.
 
+**And the claim is dropped by a key as readily as by a press** — `v0.12.3` shipped it
+released on `mousedown` alone, which reads as enough until you remember how little caret
+motion ProseMirror performs itself. An arrow, Home, End and Ctrl+End are all moved by the
+browser and read back out of the DOM afterwards, through the very guard the claim arms; with
+no key releasing it, a rectangle left the caret unable to move until something was clicked.
+Ctrl+End after a drag moved nothing, the Enters after it landed inside a cell, and the `/`
+that followed replaced the rectangle instead of opening the menu. `keydown` is a
+`handleDOMEvents` entry rather than a keymap so it runs *ahead* of the keymaps: the key that
+drops the claim is the same key that then acts, not the one after it. **A guard that has to
+be released is only as good as its list of releases**, and the list has to be every way the
+thing being guarded can legitimately change — which for a selection is not just the mouse.
+
+**A driver step inherits the selection the step before it finished with.** The `/` menu step
+(B51) had been failing every so often for weeks and was written off as flaky; it was reading
+a rectangle that the drag step above it had left behind. Ctrl+End is not bound in any keymap,
+so the browser performs it on the native selection — and `CellSelection` is `visible = false`,
+so while a rectangle is up there is no native selection to move. The step now presses an
+arrow until the rectangle is gone, and checks rather than assumes, because that collapse goes
+through the same DOM read-back everything else here has to survive. This is the selection half
+of the lesson two entries above about layout: **a step that measures owes the steps before it
+a settled layout, and a step that types owes itself a known selection.** Five runs green under
+six busy loops on two cores, where it had been failing about half of them.
+
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
 
 **A folder's badge counts its notes and the open tasks in them** (B67). `[# notes] / [# open

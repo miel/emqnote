@@ -1731,3 +1731,25 @@ stylesheet's own selector against the paragraph that mount produced, since a rul
 wrong element is invisible from either half alone; and `table-drag-claim.test.ts` drives the
 claim directly, the pointer half of that plugin still being out of reach under vitest — which
 is what this bug had been hiding behind. Released as `v0.12.3`.
+
+
+**And `v0.12.3` broke the caret on its way past the rectangle, fixed the same day.** The
+claim that stops a drag's stale read-back from replacing the rectangle was released by
+`mousedown` and by nothing else, which reads as enough right up until you remember how little
+caret motion ProseMirror performs itself: an arrow, Home, End and Ctrl+End are all moved by
+the browser and read back out of the DOM afterwards, through the very guard the claim arms.
+After a drag the caret could not move until something was clicked. `keydown` now drops the
+claim too, as a `handleDOMEvents` entry rather than a keymap so that it runs *ahead* of the
+keymaps — the key that drops the claim is the same key that then acts, not the one after it.
+**A guard that has to be released is only as good as its list of releases**, and for a
+selection that list is not just the mouse.
+
+It also settled the `/` menu step of `scripts/drive-capture.ts`, which had been failing every
+so often for weeks and had been written off as flaky twice. It was reading a rectangle the
+drag step above it had left behind: Ctrl+End is not bound in any keymap, the browser performs
+it on the native selection, and `CellSelection` is `visible = false`, so while a rectangle is
+up there is nothing native to move. The step presses an arrow until the rectangle is gone and
+checks rather than assumes. **A step that measures owes the steps before it a settled layout,
+and a step that types owes itself a known selection** — the same lesson as the PDF ordering
+one, in the other half of the state. Five runs green under six busy loops on two cores, where
+it had been failing about half. Released as `v0.12.4`.
