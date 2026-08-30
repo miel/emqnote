@@ -7,7 +7,7 @@
  */
 
 import type { DraftStorage } from "../draft.js";
-import { graphBridge } from "../graph-bridge.js";
+import { graphBridge, type AccountKind } from "../graph-bridge.js";
 import { inboxBridge } from "../inbox-bridge.js";
 import type { Deliverer, DestinationId } from "./deliverer.js";
 import { filesDeliverer } from "./files.js";
@@ -15,15 +15,21 @@ import { graphDeliverer } from "./graph.js";
 
 export const DESTINATION_KEY = "emqnote.iphone.destination.v1";
 export const VAULT_FOLDER_KEY = "emqnote.iphone.vault-folder.v1";
+export const ACCOUNT_KIND_KEY = "emqnote.iphone.account-kind.v1";
 
 /**
  * The vault folder's name inside the user's own OneDrive, as the desktop knows it.
  *
- * Stored rather than compiled in because Graph addresses it by path exactly once, when
- * resolving `00 Inbox`, and getting it wrong should be a settings correction rather than a
- * rebuild. `src/main/vault.ts` on the desktop reaches the same folder by looking for
- * `OneDrive - <tenant>` in the home directory; there is no equivalent to discover here, so
- * it is asked for.
+ * Matches `VAULT_FOLDER_NAME` in `src/main/vault.ts`. Stored rather than compiled in
+ * because Graph addresses it by path exactly once, when resolving `00 Inbox`, and getting
+ * it wrong should be a settings correction rather than a rebuild.
+ *
+ * There is nothing to discover here the way the desktop discovers it. Worth knowing that
+ * the desktop's `findOneDriveCandidates` would not find this vault either: it rejects any
+ * path matching `/personal/i` on the grounds that a personal OneDrive is not a work
+ * environment. That only suppresses the *suggestion* — B21 makes the vault a click in a
+ * chooser rather than a guess — so a personal-OneDrive vault is picked by hand on the
+ * desktop and named here on the phone.
  */
 export const DEFAULT_VAULT_FOLDER = "emqnote";
 
@@ -33,6 +39,27 @@ export function loadDestination(storage: DraftStorage): DestinationId {
 
 export function storeDestination(storage: DraftStorage, id: DestinationId): void {
   storage.setItem(DESTINATION_KEY, id);
+}
+
+/**
+ * Which kind of Microsoft account this install expects to deliver through.
+ *
+ * `personal`, because the business tenant does not permit an app registration and there is
+ * no portal access to ask for one — so both the registration and the vault live on a
+ * personal Microsoft account (B80).
+ *
+ * It is stored, and checked against what actually signed in, because the app registration
+ * accepts both kinds and the two drives are different places. Signing into the wrong one
+ * does not fail: it delivers a real note into a real `00 Inbox` on a drive nobody is
+ * looking at. That is the failure worth catching, and it can only be caught by knowing
+ * which one was meant.
+ */
+export function loadExpectedAccountKind(storage: DraftStorage): AccountKind {
+  return storage.getItem(ACCOUNT_KIND_KEY) === "work" ? "work" : "personal";
+}
+
+export function storeExpectedAccountKind(storage: DraftStorage, kind: AccountKind): void {
+  storage.setItem(ACCOUNT_KIND_KEY, kind);
 }
 
 export function loadVaultFolder(storage: DraftStorage): string {

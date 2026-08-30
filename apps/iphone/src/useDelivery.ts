@@ -17,9 +17,14 @@ import {
   type DeliveredRecord,
   type DraftStorage,
 } from "./draft.js";
-import { graphBridge } from "./graph-bridge.js";
+import { graphBridge, type AccountKind } from "./graph-bridge.js";
 import { connectGraph, disconnectGraph, NO_CONNECTION, type Connection } from "./delivery/connect.js";
-import { activeDeliverer, loadDestination, loadVaultFolder } from "./delivery/destination.js";
+import {
+  activeDeliverer,
+  loadDestination,
+  loadExpectedAccountKind,
+  loadVaultFolder,
+} from "./delivery/destination.js";
 import { drainOutbox } from "./delivery/drain.js";
 import { unblock } from "./delivery/outbox.js";
 
@@ -33,6 +38,8 @@ export interface DeliveryView {
   problem: string | null;
   lastDelivered: DeliveredRecord | null;
   connection: Connection;
+  /** Which account kind this vault lives on, so signing into the other one is visible. */
+  expectedAccountKind: AccountKind;
   /** False in a browser, where there is no native bridge and nothing can be delivered. */
   available: boolean;
   busy: boolean;
@@ -162,6 +169,7 @@ export function useDelivery(storage: DraftStorage): DeliveryView {
     problem,
     lastDelivered,
     connection,
+    expectedAccountKind: loadExpectedAccountKind(storage),
     available,
     busy,
     drain,

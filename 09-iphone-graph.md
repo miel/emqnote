@@ -19,6 +19,10 @@ links against MSAL 2.15, and the TypeScript half is covered by `npm run test:iph
 line of it has spoken to a real tenant or a real drive. The whole point of §G0 and §G2 below
 is to change that, in that order, before anything depends on it.
 
+**Read §2 before §1.** The account this delivers to changed after the rest of this document was
+written: there is no Entra portal access for the business account, so the registration and the
+vault are both on a personal Microsoft account (B80).
+
 ## 1. What is being built, and where the line falls
 
 ```text
@@ -52,49 +56,68 @@ webview cannot reach the broker, and a corporate Conditional Access policy requi
 approved client app then fails with an error about the app rather than about the policy. And a
 token in webview storage is a token in the part of the app that renders untrusted-ish content.
 
-## 2. Phase G0 — registration and consent (blocking)
+## 2. Phase G0 — registration (settled, and it settled the target too)
 
-**No code. Prove the tenant permits this before building against it.** This is the same
-discipline Phase 0 used, and Phase 0 is the reason to keep using it.
+This section originally opened with the question of whether the business tenant would permit an
+app registration. **It will not be asked, because there is no access to the Entra portal for the
+business account at all** — not a refusal to work around, an absence of the door. The fallback
+this section described has therefore become the plan: the registration lives in a personal
+Microsoft account, **and so does the vault**. That is B80, and it is a bigger change than a
+registration detail, so it is written down as its own decision.
 
-Register a **public client** — no client secret exists anywhere in this app; it uses PKCE — as
-**multi-tenant plus personal accounts** (`signInAudience:
-AzureADandPersonalMicrosoftAccount`), authority `https://login.microsoftonline.com/common`.
+What this removes is most of the uncertainty G0 existed to measure. A personal Microsoft
+account is its own consent authority: there is no tenant admin to approve `Files.ReadWrite`, no
+Conditional Access policy, and no approved-client-app requirement. The broker is not involved.
+What is left is mechanical.
 
-That shape is chosen for the specific uncertainty at hand. If the business tenant refuses to
-let a user register an application, the registration can live in a personal Microsoft account's
-directory while the *runtime* sign-in still targets the work account — which works as long as
-the tenant allows user consent to third-party multi-tenant apps. `Files.ReadWrite` is
-user-consentable by default, but plenty of tenants disable user consent wholesale, and that is
-a setting no code here can read.
+Register a **public client** — no client secret exists anywhere in this app; it uses PKCE:
 
-Redirect URI: `msauth.com.emqnote.capture://auth`, registered as an **iOS/macOS** platform.
+- Supported account types: **Accounts in any organizational directory and personal Microsoft
+  accounts** (`AzureADandPersonalMicrosoftAccount`), authority
+  `https://login.microsoftonline.com/common`.
+- Redirect URI: `msauth.com.emqnote.capture://auth`, platform **iOS/macOS**.
+- Delegated scope: **`Files.ReadWrite`** and nothing else. MSAL adds `openid`, `profile` and
+  `offline_access` itself.
 
-Delegated scope: **`Files.ReadWrite`** and nothing more. Not `Files.ReadWrite.All`: this app
-writes one file into one folder on the signed-in user's own drive, and asking a corporate
-tenant for tenant-wide file access it has no use for is the kind of request that gets an
-application refused for good reasons. MSAL adds `openid`, `profile` and `offline_access`
-itself.
+**The audience stays wider than today's need on purpose.** Registering for personal accounts
+only would mean authority `consumers` and a rebuild on the day the business tenant becomes
+available. `common` costs nothing and keeps that door unlocked. The price of the wider audience
+is that signing into the wrong account kind silently succeeds against the wrong drive — which
+is exactly why `loadExpectedAccountKind` exists and why the capture screen says so when the two
+disagree.
 
-Record, per attempt, in `apps/iphone/graph-results.md`:
+Then fill in `apps/iphone/graph-results.md`:
 
 | Question | Evidence to capture |
 |---|---|
-| Can an app be registered in the business tenant? | Yes, or the exact portal refusal |
-| Does sign-in with `Files.ReadWrite` succeed without an admin? | Yes, or `AADSTS65001` / `AADSTS90094` |
-| Is Microsoft Authenticator installed, and does Conditional Access require it? | Broker present; any approved-client-app or app-protection prompt |
-| Does a personal-account registration reach the *work* drive? | The fallback's actual limit |
-| Which drive holds the vault? | That `GET /me/drive/root:/<vault>/00 Inbox` resolves |
+| Client id | The value put into `EMQNOTE_CLIENT_ID` |
+| Redirect URI accepted as registered | Exactly `msauth.com.emqnote.capture://auth` |
+| Does `Files.ReadWrite` consent go through on the personal account? | Yes, or the consent screen's wording |
+| Does `GET /me/drive/root:/emqnote/00 Inbox` resolve on that account? | 200 with `"name": "00 Inbox"`, or the 404 |
 
-All of it in Graph Explorer and the Entra portal — no Xcode needed. The client id is not a
-secret and is committed via the `EMQNOTE_CLIENT_ID` build setting; the authority stays `common`
-so that no tenant identifier is committed anywhere (`08` §6) and so one build can sign into
-either account type.
+The client id is not a secret and is committed via the `EMQNOTE_CLIENT_ID` build setting. The
+authority stays `common`, so no tenant identifier is committed anywhere (`08` §6).
 
-**Go/no-go.** If neither the tenant nor a multi-tenant personal registration can obtain
-delegated `Files.ReadWrite` for the work drive, stop and reopen the no-app question. Do **not**
-compensate with `Files.ReadWrite.All`, a service principal, an application permission, or a
-stored password.
+**Go/no-go.** If `Files.ReadWrite` cannot be obtained even on a personal account, stop and
+reopen the no-app question. Do **not** compensate with `Files.ReadWrite.All`, a service
+principal, an application permission, or a stored password.
+
+### What moving to a personal drive actually changes
+
+- **The vault has to exist there.** `emqnote/00 Inbox` on the personal OneDrive, and the
+  desktop pointed at the same folder. G2's `resolveInbox` row fails until it does.
+- **The desktop will not suggest it.** `findOneDriveCandidates` in `src/main/vault.ts` rejects
+  any path matching `/personal/i`, on the stated grounds that a personal OneDrive is not a work
+  environment. That only suppresses the *suggestion*: B21 already makes the vault a click in a
+  chooser rather than a guess, so the folder is picked by hand once per machine. Worth deciding
+  separately whether that filter should change now that the premise behind it has.
+- **B79 gets easier to justify, not harder.** A personal drive does publish `sha1Hash`, and
+  sometimes `sha256Hash`, where a business drive publishes only `quickXorHash`. Downloading and
+  comparing bytes stays the rule anyway — it is now the one comparison that does not depend on
+  which facet a given drive happens to expose, which is a better reason than the one B79 was
+  written with.
+- **Nothing in the delivery code changes.** `/me/drive`, path addressing, `conflictBehavior`
+  and the 409 shape are the same API on both. The one open measurement in §4 is still open.
 
 ## 3. Project configuration that fails silently when wrong
 
@@ -219,6 +242,6 @@ Worth writing down so it is not mistaken for finished:
   instrument, and the evidence sheet is its only record.
 - Nothing here has been measured against `07-iphone.md` §6's latency targets on a named device.
   That is Phase 4's job, and it needs Graph in place first.
-- Delivery to a SharePoint or shared library is out of scope. The vault is on the user's own
-  OneDrive for Business, so `/me/drive` and `Files.ReadWrite` are the whole story; a shared
-  library would need different addressing and a wider scope, and that would be a new decision.
+- Delivery to a SharePoint or shared library is out of scope. The vault is on the signed-in
+  user's own drive, so `/me/drive` and `Files.ReadWrite` are the whole story; a shared library
+  would need different addressing and a wider scope, and that would be a new decision.

@@ -2892,3 +2892,58 @@ geraden. `delivery/graph.ts` doet dat expliciet, en `test/delivery-graph.test.ts
 de andere. Wie er één van verandert zonder de ander maakt van elke vergelijking stilzwijgend
 "andere bytes", en dat leest de leveringslaag als andermans notitie — waarna hij er netjes
 omheen hernoemt en de notitie dus dubbel staat.
+
+## B80 — De vault voor de iPhone staat op een persoonlijke OneDrive, want de zakelijke tenant heeft geen deur
+
+**Genomen** op 22 augustus 2026, direct na B77 en als gevolg ervan.
+
+**Wat er gebeurde.** B77 koos Graph en `09-iphone-graph.md` §G0 zette daar één blokkerende
+stap voor: uitzoeken of de zakelijke tenant een app-registratie toestaat. Die stap is niet
+uitgevoerd en gaat ook niet uitgevoerd worden — er is geen toegang tot de Entra-portal voor het
+zakelijke account. Dat is geen weigering waar omheen te werken valt, het is de afwezigheid van
+de deur.
+
+**Het besluit.** De registratie komt in een persoonlijk Microsoft-account, en de vault die de
+iPhone beschrijft komt daar dan ook te staan. `emqnote/00 Inbox` op de persoonlijke OneDrive,
+met de desktop op diezelfde map gericht.
+
+**Dat is een grotere verandering dan een registratiedetail,** en daarom staat het hier en niet
+als voetnoot bij B77. §G0's terugvaloptie was oorspronkelijk: registreren op een persoonlijk
+account maar bij het *aanmelden* het zakelijke account gebruiken, wat werkt zolang de tenant
+toestemming van gebruikers toelaat. Dat blijft technisch open — de registratie is bewust
+`AzureADandPersonalMicrosoftAccount` met authority `common` — maar het is geen plan meer, want
+niemand kan controleren of die toestemming er is en de vault moet ergens staan waar de app
+vandaag bij kan.
+
+**Wat het wegneemt.** Bijna alles wat §G0 ging meten. Een persoonlijk Microsoft-account is zijn
+eigen toestemmingsautoriteit: geen beheerder die `Files.ReadWrite` moet goedkeuren, geen
+Conditional Access, geen eis van een goedgekeurde client-app, en de broker doet niet mee. Wat
+overblijft is mechanisch werk.
+
+**Wat het kost, en dat hoort er eerlijk bij te staan.** Werknotities komen op een persoonlijke
+opslag te staan in plaats van op de zakelijke. Dat is een afweging over waar bedrijfsinhoud mag
+wonen, en die is hier gemaakt door degene die het aangaat; deze regel legt hem vast, hij
+verdedigt hem niet. Als de zakelijke tenant ooit alsnog een registratie toelaat, is `common` de
+reden dat dat geen herbouw kost.
+
+**De brede audience heeft één prijs, en die is afgedekt.** Omdat de registratie beide
+accountsoorten accepteert, mislukt aanmelden met het verkeerde account niet — het levert een
+echte notitie in een echte `00 Inbox` op een schijf waar niemand kijkt. Daarom onthoudt de app
+in `loadExpectedAccountKind` wélke soort bedoeld is (standaard `personal`) en zegt het
+opnamescherm het hardop zodra de twee niet overeenkomen. Het alternatief, hardcoderen dat
+"persoonlijk" verdacht is, was precies de eerste versie hiervan en die had het op deze
+installatie omgekeerd.
+
+**Wat het níet verandert.** Geen regel leveringcode. `/me/drive`, adressering via pad,
+`conflictBehavior` en de vorm van de 409 zijn dezelfde API op beide soorten schijf. Ook B79
+blijft staan, en krijgt er zelfs een beter argument bij: een persoonlijke schijf publiceert wél
+een `sha1Hash` waar een zakelijke alleen `quickXorHash` geeft, en juist daarom is bytes
+ophalen en vergelijken de enige vergelijking die niet afhangt van welke facet een schijf
+toevallig aanbiedt.
+
+**Eén losse draad, bewust niet meegenomen.** `findOneDriveCandidates` in `src/main/vault.ts`
+weigert elk pad dat op `/personal/i` matcht, met als opgeschreven reden dat een persoonlijke
+OneDrive geen werkomgeving is. Die premisse klopt vanaf vandaag niet meer voor deze opstelling.
+Het gevolg is beperkt — B21 maakt de vault sowieso een klik in een kiezer en geen gok, dus de
+map wordt één keer per machine met de hand aangewezen — en het omdraaien van een expliciet
+onderbouwde filterregel is een apart besluit, geen bijvangst van dit besluit.

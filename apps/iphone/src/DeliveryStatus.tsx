@@ -16,6 +16,7 @@ function plural(count: number, one: string, many: string): string {
 
 export function DeliveryStatus({ delivery }: { delivery: DeliveryView }) {
   const { waiting, needsSignIn, failed, problem, lastDelivered, connection, busy } = delivery;
+  const { expectedAccountKind } = delivery;
   const held = waiting + needsSignIn + failed;
 
   if (!delivery.available) {
@@ -67,10 +68,22 @@ export function DeliveryStatus({ delivery }: { delivery: DeliveryView }) {
     );
   }
 
-  if (connection.signedIn && connection.accountKind === "personal") {
-    // Worth saying out loud. The app registration accepts both account types, so signing
-    // into the wrong one delivers real notes to a real Inbox that is not the work vault.
-    return <p className="delivery-status">Signed in to a personal Microsoft account</p>;
+  if (
+    connection.signedIn &&
+    connection.accountKind !== null &&
+    connection.accountKind !== expectedAccountKind
+  ) {
+    // Worth saying out loud, and worth stating as a mismatch rather than as "personal".
+    // The registration accepts both kinds and the two drives are different places, so
+    // signing into the wrong one does not fail — it puts a real note in a real `00 Inbox`
+    // that nobody is looking at. Which kind is *wrong* depends on the install (B80), so
+    // hardcoding either one here would be right on one machine and backwards on the next.
+    return (
+      <p className="delivery-status delivery-error">
+        Signed in to a {connection.accountKind} Microsoft account, but this vault is on the{" "}
+        {expectedAccountKind} one
+      </p>
+    );
   }
 
   return null;
