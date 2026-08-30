@@ -20,7 +20,7 @@ npm run pack:mac       # packaged .app (zipped) in release/
 npm run pack:win       # per-user NSIS installer (.exe) in release/ — see B22
 
 npm run build:iphone   # apps/iphone: tsc --noEmit && vite build
-npm run test:iphone    # apps/iphone: vitest run — 75 tests, separate from the root suite
+npm run test:iphone    # apps/iphone: vitest run — 81 tests, separate from the root suite
 ```
 
 The iPhone app is a second workspace with its own vitest config, so `npm test` at the root does
