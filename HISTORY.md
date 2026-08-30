@@ -1690,3 +1690,44 @@ the whole of what it knows about the difference, so a chord that is conventional
 platforms at once is one entry instead of a compromise. `Mod-.` is not kept as an alias — it
 was a mis-spelling of this chord rather than a second way anyone reaches for it, and a claim
 costs the key for as long as the app runs. Released as `v0.12.2`.
+
+
+**Two defects, found by looking at the app rather than at the tests, on 30 August 2026.**
+Both came out of `npm run ui:kit`: the first was in its own commit message as a known gap,
+the second was hiding behind a step of `scripts/drive-capture.ts` that had been failing
+about half its runs and getting away with it.
+
+**The empty capture window draws its hint.** "Just type." had never once appeared, for two
+independent reasons at the same time — `data-placeholder` was written onto the contenteditable
+root while the sheet read it back from the paragraph inside, and `attr()` sees only its own
+element's attributes; and the selector asked for `:empty`, which no ProseMirror paragraph is,
+an empty textblock carrying a trailing `<br>` for the caret. The second reason is the one that
+generalises: **CSS cannot see text**, so emptiness is not a question a stylesheet can answer at
+all, and any future attempt to do this in the sheet alone is the same bug again.
+`empty-placeholder.ts` decides it where the document is and carries the answer out as a
+decoration, which puts the attribute on the very paragraph whose `::before` reads it — and,
+like `tag-decoration.ts`, can never reach the serializer. The text arrives as a getter rather
+than a string, so it follows a language change instead of staying in the one the app started
+in. What let it live so long is that nothing tested the *rendered* result: three test files
+mentioned "placeholder" and all three meant an `<input>`.
+
+**A cell drag keeps its rectangle after the button comes up.** `createSelectionBetween` was
+guarded by "while the button is down", and the read-back it defends against is not synchronous
+with the drag — `prosemirror-view`'s DOM observer reads the native selection whenever it next
+flushes, which under load is *after* `mouseup`. The guard was disarmed by then and a
+`TextSelection` built out of the DOM replaced the rectangle. It is now a `SelectionClaim`
+released by the next `mousedown` instead, which is safe in both directions: that press runs
+before any `selectionchange` it can produce, so a caret still lands in a cell, and the claim is
+asked of the live state, so it can never outlast the rectangle it protects. The investigation
+is worth more than the fix: the failure looked like a flaky driver for a long time, and every
+probe added to explain it made it go away. **A Heisenbug that a probe silences is still a
+bug** — what found it was raising the failure rate rather than lowering it, three busy loops
+on a two-core box, where it failed three runs in six and every failing timeline had the same
+shape. Eight loaded runs green after the fix.
+
+The suite is 1966 tests over 160 files. Two new files, and both exist because of where the
+bugs were: `editor-placeholder.test.ts` mounts the real component and then checks the
+stylesheet's own selector against the paragraph that mount produced, since a rule aimed at the
+wrong element is invisible from either half alone; and `table-drag-claim.test.ts` drives the
+claim directly, the pointer half of that plugin still being out of reach under vitest — which
+is what this bug had been hiding behind. Released as `v0.12.3`.

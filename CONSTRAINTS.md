@@ -1016,6 +1016,28 @@ belong to the document before the cells were emptied. Merged cells stay impossib
 pasting a rectangle *into* a rectangle is deliberately not built. `table-geometry.ts` holds
 the matrix arithmetic both files need, so neither has to import the other.
 
+**And the claim on that selection has to outlive `mouseup`** — the sentence above was right
+about the mechanism and one event short on the timing. `createSelectionBetween` was guarded
+by `anchorCell !== null`, meaning "while the button is down", and the read-back it defends
+against is not synchronous with the drag: `prosemirror-view`'s DOM observer reads the native
+selection whenever it next flushes, which under load is *after* the button comes up. The
+guard was disarmed by then, a `TextSelection` was built out of the DOM, and the rectangle
+vanished on release. Every failing timeline had the same shape — four cells at `mousemove`,
+still four at `mouseup`, gone on the `selectionchange` six milliseconds later — and every
+passing one had that `selectionchange` arrive *before* `mouseup`. Nothing else differed,
+which is why it read as a flaky driver for a long time: `scripts/drive-capture.ts`'s table
+step failed about half its runs and passed the moment anything was added that slowed the
+synthetic events down, the probe included. **A Heisenbug that a probe silences is still a
+bug**; what made it visible was raising the failure rate rather than lowering it — three
+busy loops on this two-core VM, where it failed three runs in six. The fix is a
+`SelectionClaim` released by the *next* `mousedown` rather than by `mouseup`, which is safe
+in both directions: `mousedown` runs before any `selectionchange` that same click can
+produce, so a caret still lands in a cell, and `holds` asks the live state whether a
+rectangle is even there, so a claim can never outlast what it protects. Eight loaded runs
+green after it. `table-drag-claim.test.ts` pins the ordering, and it exists because that
+decision needs no layout — the part that does is still unreachable under vitest, and this
+was the part hiding behind it.
+
 **PDF previews are drawn by pdf.js in a hidden window, not by the OS** (B36, superseding B30's mechanism). A hidden `BrowserWindow` renders in its own renderer process, so the main thread's 80 ms hotkey budget is untouched without a worker thread, and `pdfjs-dist` stays a `devDependency` that electron-vite bundles — a native canvas binding would have meant a `dependencies` entry, a `check:bundle` exception and packaging risk on two platforms. The sandbox and `contextIsolation` stay on for that page: a PDF is untrusted input. Only `.pdf` gets an inline preview now; Office formats stay attachable and draw as a plain chip. The protocol handler answers **422 for "resolved, but could not be rendered" against 404 for "nothing to preview here"**, and the chip shows a marker with the reason — before that, a corrupt PDF looked exactly like a `.txt`. The bug that had hidden the whole feature was neither: `emqnote-thumb` is a `standard: true` scheme, so Chromium appends a trailing slash, `isPreviewable` saw `.pdf/` and 404'd. `attachmentNameFromUrl` (`src/shared/attachment-url.ts` since B38) is what both protocol handlers use to read a name back out of a URL.
 
 **A folder's badge counts its notes and the open tasks in them** (B67). `[# notes] / [# open
@@ -1817,6 +1839,35 @@ which are chrome that happens to be drawn inside the document. The token is decl
 `:root` (a `var()` naming nothing is what `styles-surfaces.test.ts` exists to catch) and
 overwritten on `document.documentElement` from `useBootstrap`. Measured under `Xvfb`: the H1
 "Kwartaalplan" is 142 / 174 / 219 px wide at 13 / 16 / 20, against 141.4 and 217.5 predicted.
+
+**A placeholder cannot come out of the stylesheet, because CSS cannot see text.** The
+empty capture window is meant to say "Just type." under the caret, and for a long time it
+said nothing at all — `Editor.tsx` wrote `data-placeholder` onto the contenteditable root
+while `styles.css` read it back from `.editor-content p:only-child:empty::before` with
+`attr()`. Two independent faults, either one enough on its own. `attr()` resolves against
+the element its pseudo-element hangs off and never an ancestor, so the paragraph was asked
+for an attribute only its parent had — which yields the empty string rather than an error,
+and so draws an empty box instead of failing loudly. And `:empty` matches no ProseMirror
+paragraph ever: an empty textblock carries a trailing `<br>` so the caret has somewhere to
+sit, and an element child is exactly what `:empty` excludes. The second fault is the one
+that generalises. **Emptiness is not a question a stylesheet can answer** — CSS has no
+selector for text content, so nothing in the sheet can tell an empty paragraph from one
+holding the word "a", and any future attempt to do this in CSS alone is the same bug again.
+`empty-placeholder.ts` decides it where the document is and carries the answer out as a
+decoration, which puts the attribute on the paragraph itself — the element whose `::before`
+reads it. Like `tag-decoration.ts`, nothing it produces can reach the serializer, so no
+placeholder can ever be written to a file. The text arrives as a getter rather than a
+string, for the reason `Editor.tsx` holds its handlers in a ref: the view is built once and
+outlives every render, so a placeholder captured at mount would still be in the language
+the app started in. Found by `npm run ui:kit`, which photographed the empty editor as a
+flat rectangle. It survived as long as it did because nothing tested the rendered result —
+three test files mentioned "placeholder" and all three meant an `<input>`. What pins it now
+is `editor-placeholder.test.ts`, which mounts the real component and then checks the
+sheet's own selector against the paragraph that mount produced: a rule aimed at the wrong
+element is invisible from either half alone. Confirmed in the running app over CDP, which
+is the half jsdom cannot answer — computed `::before` content `"Just type."` in
+`rgb(107 112 121)`, a 75px float, and the paragraph still 22px tall at x=19, so the text is
+drawn beside the caret rather than pushing it anywhere.
 
 **A settings change is its own message, and `libraryRefresh` is not it** (B88). `IPC.settingsChanged`
 is sent to both windows and answered in exactly one place — `useBootstrap`, which is what

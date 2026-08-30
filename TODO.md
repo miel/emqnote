@@ -3,6 +3,27 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 30 August 2026, released as `v0.12.3` — **two defects, found by looking at the
+app rather than at the tests**. Both came out of the UI kit. The empty capture window had
+never drawn its "Just type." hint, for two independent reasons at once; and a rectangle of
+table cells was thrown away a few milliseconds after the button came up, whenever the machine
+was busy enough for the browser's own selection to be read back late.
+
+Neither is new, and that is the part worth keeping. The hint was never covered by a test of
+the *rendered* result — three files mentioned "placeholder" and all three meant an `<input>` —
+so a rule aimed at the wrong element sat there in plain sight. The drag had a test for
+everything except the one decision that had no layout in it. **A Heisenbug that a probe
+silences is still a bug**: every attempt to instrument the drag made it pass, and what found
+it was raising the failure rate instead — three busy loops on a two-core box, where it failed
+three runs in six. `TEST-PROTOCOL.md` §43 carries both, and §43g is the one to walk on a busy
+machine.
+
+The `/` menu step of `scripts/drive-capture.ts` (B51) flaked once under that same load and
+was not chased. Different symptom, possibly the same class — the next person to see it should
+reach for the load rather than for a probe.
+
+---
+
 Last updated 27 August 2026, released as `v0.12.2` — **the Settings chord is the comma**.
 One line, one release. It went out in `v0.12.1` as `⌘.` / `Ctrl+.`, which was "⌘. on macOS"
 taken literally; `⌘,` was meant, and it is the better binding for a reason worth keeping: the

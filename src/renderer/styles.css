@@ -2082,10 +2082,23 @@ body {
   justify-content: flex-start;
 }
 
-/* Placeholder for an empty editor, since contenteditable has none of its own. The
-   attribute is copied onto the content node by the view so CSS can reach it. */
-.editor .editor-content p:only-child:empty::before {
+/* Placeholder for an empty editor, since contenteditable has none of its own.
+
+   The attribute is put on *this paragraph* by `empty-placeholder.ts`, as a decoration,
+   and the two halves of that sentence are both load-bearing. It was on the contenteditable
+   root for a long time and this rule drew nothing, because `attr()` reads only its own
+   element's attributes and never an ancestor's. And the selector was `p:only-child:empty`,
+   which no ProseMirror paragraph ever matches: an empty textblock holds a trailing `<br>`
+   so the caret has somewhere to sit. CSS also cannot see text, so emptiness is not a
+   question a stylesheet can answer at all — hence the decoration.
+
+   `float` with no height keeps the caret at the start of the line: the placeholder is
+   drawn beside it rather than in front of it, and the paragraph reserves no space for a
+   box that is about to be typed over. */
+.editor .editor-content p[data-placeholder]::before {
   content: attr(data-placeholder);
+  float: left;
+  height: 0;
   color: var(--muted);
   pointer-events: none;
 }

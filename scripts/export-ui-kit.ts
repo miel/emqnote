@@ -741,11 +741,15 @@ async function main(): Promise<number> {
       name: "header-grid-empty", family: "Header block", selector: ".header-grid",
       caption: "Header block, empty — When / Tags / Where / Who", bg: "background",
     });
-    // No shot of the empty editor: it photographs as a flat rectangle, because the
-    // placeholder does not draw. `Editor.tsx` puts `data-placeholder` on the contenteditable
-    // root while `styles.css` reads it from `p:only-child:empty::before` with `attr()`,
-    // which only ever reads an element's own attributes — and a ProseMirror paragraph is
-    // never `:empty` anyway, it carries a trailing <br>.
+    // This photographed as a flat rectangle when the kit was first built, and the reason
+    // was a bug the kit found: the placeholder did not draw at all. `empty-placeholder.ts`
+    // is the fix — it puts `data-placeholder` on the paragraph, which is the element the
+    // sheet reads it from, and decides emptiness where the document is rather than asking
+    // CSS a question CSS cannot answer.
+    await tryShoot(capture, {
+      name: "editor-empty", family: "Editor", selector: ".editor",
+      caption: "Editor, empty — the placeholder under the caret", bg: "background", pad: 10,
+    });
     await tryShoot(capture, {
       name: "chrome-statusbar", family: "Chrome", selector: ".statusbar",
       caption: "Capture window footer: state, hint, Insert / Help",
