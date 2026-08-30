@@ -797,6 +797,37 @@ async function main(): Promise<number> {
       name: "the / menu opens with room to open in, near the foot of the window (B51)",
       run: async () => {
         await open.capture!.evaluate(`document.querySelector('.ProseMirror').focus()`);
+
+        // **This step needs a caret, and the one before it leaves a rectangle.** A step
+        // inherits the selection its predecessor finished with, which is the selection
+        // half of the lesson already written down about layout: a step that measures
+        // anything owes the steps before it a settled state, and a step that *types*
+        // owes itself a known selection.
+        //
+        // Ctrl+End is the reason it matters here rather than anywhere else. It is not
+        // bound in any keymap: the browser performs it, on the native selection — and
+        // `CellSelection` is `visible = false`, so while a rectangle is up there is no
+        // native selection to move. The key then does nothing, the twenty-four Enters
+        // land inside a cell, and the `/` replaces the rectangle instead of opening the
+        // menu. It passed most of the time only because the rectangle usually stopped
+        // being one first, and "usually" is what made this look like a flake for weeks.
+        //
+        // An arrow key is what dissolves it — those *are* handled, and one press collapses
+        // a rectangle to a caret in the cell it left off at. Checked rather than assumed,
+        // because the collapse goes through the same DOM read-back the rectangle itself
+        // has to survive, and this script exists to stop guessing about exactly that.
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const rectangle = await open.capture!.evaluate<number>(
+            `document.querySelectorAll('.table-cell-selected').length`,
+          );
+          if (rectangle === 0) break;
+          // eslint-disable-next-line no-await-in-loop
+          await open.capture!.key("ArrowRight", { windowsVirtualKeyCode: 39, code: "ArrowRight" });
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((done) => setTimeout(done, 100));
+        }
+
         // To the end of the note, then far enough down that the panel cannot fit below the
         // caret — which is the case the flip exists for and the one no jsdom test can set
         // up, every box there being zero.

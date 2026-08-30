@@ -3,6 +3,24 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 30 August 2026, released as `v0.12.4` — **what `v0.12.3` broke on its way past
+the thing it fixed**, and the flake that had been hiding behind it. The claim that keeps a
+dragged rectangle alive past `mouseup` was released by a mouse press and by nothing else, so
+after a drag the caret could not move until something was clicked: an arrow, Home, End and
+Ctrl+End are all performed by the browser and read back out of the DOM, through the very
+guard that claim arms. A key drops it now, ahead of the keymaps.
+
+The same day's other finding is about the harness rather than the app. The `/` menu step of
+`scripts/drive-capture.ts` had been failing every so often for weeks and had been called
+flaky twice, including by me in the release before this one; it was reading a rectangle the
+step above it had left behind. **A step that types owes itself a known selection.** It
+presses an arrow until the rectangle is gone and checks rather than assumes.
+
+`TEST-PROTOCOL.md` §44 carries the six rows, and every one of them deliberately starts from a
+rectangle — the state nothing had been tried from, which is exactly how `v0.12.3` got out.
+
+---
+
 Last updated 30 August 2026, released as `v0.12.3` — **two defects, found by looking at the
 app rather than at the tests**. Both came out of the UI kit. The empty capture window had
 never drawn its "Just type." hint, for two independent reasons at once; and a rectangle of

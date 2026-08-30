@@ -1516,6 +1516,35 @@ reads as a prompt rather than as text somebody left behind is not a measurement.
 
 ---
 
+## 44. What v0.12.3 broke on its way past the thing it fixed (30 August 2026)
+
+One row of §43 fixed a rectangle that vanished on release, and the fix took the caret with
+it. The claim it puts on the selection was released by a mouse press and by nothing else —
+and ProseMirror performs very little caret motion itself, so an arrow, Home, End and Ctrl+End
+are all moved by the browser and read back out of the DOM afterwards, through the very guard
+that claim arms. After a drag, the caret could not move until something was clicked. A key
+now drops the claim exactly as a press does.
+
+Driven here before this was written: `Ctrl+End` after a drag moved nothing at all, twenty-four
+Enters after it landed inside a cell, and a typed `/` replaced the rectangle instead of
+opening the menu — all of which now behave. Arrows were never affected and were checked
+rather than assumed.
+
+The rows below are about the seam between the two, which is where this went wrong the first
+time: every one of them starts *from a rectangle*, because that is the state nothing had been
+tried from.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 44a | Drag a rectangle of cells, let go, then press → | The caret lands in a cell and the rectangle goes. This one worked even while the rest did not, so a failure here is something new rather than the bug this row is about |  |
+| 44b | Drag a rectangle, let go, then press `Ctrl+End` (`⌘↓` on macOS is *not* the same key — use `Ctrl+End` on Windows and `Fn+→`/`⌘→`'s document equivalent on a Mac, whichever your keyboard actually sends) | The caret goes to the end of the note. **This is what v0.12.3 broke**: it did nothing at all, and went on doing nothing until something was clicked |  |
+| 44c | Drag a rectangle, let go, then press Home, then End | The caret moves to the start and end of a line. Same family as 44b — motion the browser performs and the editor reads back |  |
+| 44d | Drag a rectangle, let go, then type an ordinary letter | The letter replaces the rectangle, which is what typing over a selection has always meant here. This is the one case where acting *on* the rectangle is right, and it must not have been broken by teaching keys to release it |  |
+| 44e | Drag a rectangle, let go, wait a moment, then press → | Same as 44a. The claim is meant to be dropped by the next input rather than to time out, so waiting must change nothing either way |  |
+| 44f | Drag a rectangle, let go, and click a single cell | The caret lands there and the rectangle goes — §43i again, checked from the other side of this fix |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

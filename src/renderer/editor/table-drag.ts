@@ -9,13 +9,22 @@ import { CellSelection, cellPointerAt, isCellSelection } from "./table-selection
  * that can be reasoned about without a laid-out page should be reachable by a test, and
  * this part is where the bug was. `table-drag-claim.test.ts` drives it directly.
  *
- * Three calls, and the order between them is the whole point. `begin` on every pointer
- * gesture, `take` when a rectangle has actually been dispatched, and `holds` when
+ * Three calls, and the order between them is the whole point. `drop` on every deliberate
+ * input, `take` when a rectangle has actually been dispatched, and `holds` when
  * `prosemirror-view` asks whether it may build a selection out of the DOM instead.
  */
 export interface SelectionClaim {
-  /** A new pointer gesture starts: whatever was claimed before is no longer claimed. */
-  begin: () => void;
+  /**
+   * Somebody has reached for the selection — a press or a key — so whatever was claimed
+   * before is no longer claimed.
+   *
+   * **A key counts, and leaving it out was a bug of its own.** `v0.12.3` dropped the claim
+   * on `mousedown` alone, which reads as enough right up until you remember how much caret
+   * motion ProseMirror does not perform itself: arrows, Home/End and Ctrl+End are moved by
+   * the browser and read back out of the DOM afterwards, and a claim nothing had released
+   * refused every one of them. After a drag the caret simply stopped moving.
+   */
+  drop: () => void;
   /** A rectangle was just dispatched, so the selection is this plugin's. */
   take: () => void;
   /**
@@ -29,7 +38,7 @@ export function selectionClaim(): SelectionClaim {
   let claimed = false;
 
   return {
-    begin: () => {
+    drop: () => {
       claimed = false;
     },
     take: () => {
@@ -90,13 +99,33 @@ export function cellDragging(): Plugin {
        * flaky driver for as long as it did.
        *
        * Still narrow, but along a different axis: the claim is dropped by the next
-       * `mousedown` — which runs before any `selectionchange` that click can produce, so a
-       * caret placed in a cell is untouched — and `holds` asks the live state whether a
-       * rectangle is even there, so a claim can never outlast the thing it is protecting.
+       * deliberate input, press *or* key — each of which runs before any `selectionchange`
+       * it can itself produce, so a caret placed in a cell or moved with an arrow is
+       * untouched — and `holds` asks the live state whether a rectangle is even there, so a
+       * claim can never outlast the thing it is protecting. The key half is not optional:
+       * without it, `v0.12.3` left the caret unable to move after a drag until something
+       * was clicked, which is a worse bug than the one being fixed.
        */
       createSelectionBetween: (view) =>
         claim.holds(isCellSelection(view.state.selection)) ? view.state.selection : null,
       handleDOMEvents: {
+        /**
+         * The other gesture boundary, and the one whose absence was a bug.
+         *
+         * ProseMirror performs very little caret motion itself: an arrow key, Home, End and
+         * Ctrl+End are all moved by the browser and read back out of the DOM afterwards,
+         * through the same `createSelectionBetween` a drag's stale read-back arrives by.
+         * With `mousedown` as the only release, a rectangle left the caret unable to move
+         * at all until something was clicked — `v0.12.3` shipped exactly that.
+         *
+         * Before the keymaps, because `handleDOMEvents` is consulted ahead of them: the key
+         * that releases the claim is the same key that then acts, rather than the one
+         * after it. `false` so nothing else about the key changes.
+         */
+        keydown() {
+          claim.drop();
+          return false;
+        },
         mousedown(view, event) {
           if (!(event instanceof MouseEvent) || event.button !== 0) return false;
 
@@ -104,7 +133,7 @@ export function cellDragging(): Plugin {
           // selection stays this plugin's until somebody actually reaches for another one
           // — and dropped before anything else, so every path out of this handler leaves
           // the claim in the state that path deserves.
-          claim.begin();
+          claim.drop();
 
           const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
           if (at === null || at === undefined) return false;
