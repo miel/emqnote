@@ -1486,6 +1486,36 @@ and no measurement here can say whether they are now right.
 
 ---
 
+## 43. Two defects found by looking at the app rather than at the tests (30 August 2026)
+
+Both were driven here in the real app over CDP before this was written, so the rows below are
+narrower than a batch's usually are. What was settled: the empty capture window really does
+draw its hint now — computed `::before` content `"Just type."` in `rgb(107 112 121)`, a 75 px
+float, and the paragraph still 22 px tall at x=19, so the text sits beside the caret rather
+than pushing it anywhere — and the cell drag survived eight consecutive runs of
+`scripts/drive-capture.ts` under three busy loops on a two-core box, having failed three runs
+in six before the fix.
+
+Two things this sandbox cannot reach. **A synthetic pointer is not a mouse**: the drag here is
+three `Input.dispatchMouseEvent` calls, and a real drag is a stream of them with a human's
+timing behind it, which is the shape the race was always about. And **the hint is a judgement
+about weight** — it is drawn at `--muted`, at whatever size the note is set to, and whether it
+reads as a prompt rather than as text somebody left behind is not a measurement.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 43a | Press the capture hotkey on an empty note | "Just type." under the caret, dimmer than the note's own text. It drew **nothing at all** before this — two independent faults, either enough on its own — so a blank editor here is the original bug rather than a near miss |  |
+| 43b | Type one character | The hint goes on the first keystroke, and the character lands at the very start of the line. The hint is a float with no height precisely so it reserves no space to be pushed out of |  |
+| 43c | Dismiss the window (Ctrl+Enter or Esc-to-hide), then bring it back with the hotkey | The hint is there again. The document is cleared on *hide*, so this is the ordinary path back to an empty note rather than a special case |  |
+| 43d | Repeat 43a at 13 px and at 20 px (Settings → text size) | The hint moves with the note, like everything else inside it. This is where to say if it reads too heavy or too faint at the size you actually use |  |
+| 43e | Switch the language (Settings), then open an empty capture window | "Typ maar." in Dutch, "Just type." in English. The text is read on every draw rather than captured when the window was built, which is the whole reason it can follow a language change at all |  |
+| 43f | Open a note that **ends in a table** and look at the empty line below it | No hint there. That line exists so there is somewhere to type past a table, and a note that has one is not an empty note |  |
+| 43g | In a table, drag a rectangle of cells and **let go** — ideally while the machine is busy (a build running, a big note open) | The rectangle is still there after you release. It used to vanish on release when the machine was loaded: the fill was correct all through the drag and gone a few milliseconds after `mouseup`. A rectangle that disappears on release is the original bug back |  |
+| 43h | Repeat 43g with Shift+click to extend instead of a drag | Same answer. The extension takes the same claim on the selection that a drag does, which it did not before |  |
+| 43i | With a rectangle selected, click a single cell | The caret lands in that cell and the rectangle goes. The claim is released by the *next* press rather than by the release of the last one, and this row is what says that release is not too late |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

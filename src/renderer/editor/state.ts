@@ -22,6 +22,7 @@ import { cellDragging } from "./table-drag.js";
 import { tableToolbar } from "./table-toolbar.js";
 import { slashMenu } from "./slash-menu.js";
 import { findInNote } from "./find-in-note.js";
+import { emptyPlaceholder } from "./empty-placeholder.js";
 
 /** The list item a matched rule sits in, with the position of the item itself. */
 function itemAround($pos: ResolvedPos): { pos: number; node: PMNode } | null {
@@ -167,9 +168,16 @@ export function emptyDocument(): PMNode {
   return schema.nodes.doc!.create(null, [schema.nodes.paragraph!.create()]);
 }
 
+/**
+ * `placeholder` is a getter, not a string, and optional: the window that has one reads it
+ * from its own translator, and a test mounting the editor bare passes none. See
+ * `empty-placeholder.ts` for why the text has to come through here at all rather than out
+ * of the stylesheet.
+ */
 export function createEditorState(
   doc: PMNode,
   context: CommandContext,
+  placeholder?: () => string | undefined,
 ): EditorState {
   return EditorState.create({
     // A note that already ends in a table (or a code block, an HTML block, a rule) gets
@@ -211,6 +219,10 @@ export function createEditorState(
       // Ctrl+F inside the note: matches as decorations, a bar of its own, nothing written
       // to the document or the file (B63).
       findInNote(context),
+      // "Just type." while the note is still empty. A decoration rather than a stylesheet
+      // rule because CSS can neither read an ancestor's attribute nor see that a
+      // paragraph holds no text — see `empty-placeholder.ts`.
+      ...(placeholder === undefined ? [] : [emptyPlaceholder(placeholder)]),
       keymap(outlookKeymap(context)),
       keymap(baseKeymap),
     ],

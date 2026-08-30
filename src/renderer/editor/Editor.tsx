@@ -128,7 +128,10 @@ interface Props {
    * reads it from the bootstrap; main decides again for every request either way.
    */
   loadRemoteImages?: boolean;
-  /** Shown while the document is empty, via CSS. */
+  /**
+   * Shown while the document is still empty — see `empty-placeholder.ts`, which is where
+   * this ends up. Optional, and left out entirely by a test mounting this component bare.
+   */
   placeholder?: string;
 }
 
@@ -182,6 +185,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onContextMenu,
     t,
     loadRemoteImages,
+    placeholder,
   });
   handlers.current = {
     onChange,
@@ -193,6 +197,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     onContextMenu,
     t,
     loadRemoteImages,
+    placeholder,
   };
 
   // Built fresh each time rather than stored, since it only ever wraps the ref above —
@@ -210,11 +215,16 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     ...(t === undefined ? {} : { t: (key: string) => handlers.current.t!(key) }),
   });
 
+  // Read through the ref rather than closed over, for the reason the handlers above are:
+  // the view outlives every render, so a placeholder captured when it was built would
+  // still be in the language the app started in after the locale changed under it.
+  const placeholderText = (): string | undefined => handlers.current.placeholder;
+
   useEffect(() => {
     if (host.current === null) return;
 
     const created = new EditorView(host.current, {
-      state: createEditorState(emptyDocument(), commandContext()),
+      state: createEditorState(emptyDocument(), commandContext(), placeholderText),
       dispatchTransaction(transaction) {
         const next = created.state.apply(transaction);
         created.updateState(next);
@@ -226,7 +236,10 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       attributes: {
         class: "editor-content",
         spellcheck: "false",
-        ...(placeholder === undefined ? {} : { "data-placeholder": placeholder }),
+        // No `data-placeholder` here. It sat on this root for a while and drew nothing:
+        // the stylesheet read it from the paragraph *inside* the root, and `attr()` sees
+        // only its own element's attributes. `empty-placeholder.ts` puts it on the
+        // paragraph, which is the element whose `::before` asks for it.
       },
       // `wikiEmbed` can be a picture; `wikiLink` needs no different a look, only a
       // click that opens whatever it names in the system viewer.
@@ -350,14 +363,14 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const current = view.current;
       if (current === null) return;
       clearHighlightTimer();
-      current.updateState(createEditorState(emptyDocument(), commandContext()));
+      current.updateState(createEditorState(emptyDocument(), commandContext(), placeholderText));
     },
     getDoc: () => view.current?.state.doc ?? null,
     setDoc: (doc: PMNode) => {
       const current = view.current;
       if (current === null) return;
       clearHighlightTimer();
-      current.updateState(createEditorState(doc, commandContext()));
+      current.updateState(createEditorState(doc, commandContext(), placeholderText));
     },
     getSelection: () => {
       const current = view.current;
