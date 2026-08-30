@@ -9,7 +9,9 @@ import { HeaderBlock, type HeaderValues } from "./HeaderBlock.js";
 import { Help } from "./Help.js";
 import { Ask } from "./library/Ask.js";
 import { LinkPrompt } from "./LinkPrompt.js";
-import { TitleBar } from "./TitleBar.js";
+import { ChromeButton } from "./ChromeButton.js";
+import { PaneFooter } from "./PaneFooter.js";
+import { PaneHeader } from "./PaneHeader.js";
 import { formatFirstKey, matches, shortcut } from "../shared/shortcuts.js";
 import type { StatusPayload } from "../shared/ipc.js";
 import type { VaultFileEvent } from "../shared/vault-types.js";
@@ -485,11 +487,50 @@ export function Capture(): React.ReactElement {
 
   return (
     <div className="window">
-      <TitleBar
-        onClose={() => window.emqnote.close()}
-        native={app.isMac}
-        isMac={app.isMac}
-        t={app.t}
+      {/* **The 40px band, where the title bar used to be.**
+
+          It was 30px of `.titlebar` carrying the word "emqnote" and, off macOS, three
+          window buttons this app drew itself. Both are gone: the band is the same one the
+          library's three panes wear, the note's own title stands in it, and the window
+          controls are the platform's — traffic lights inset into it on macOS,
+          `titleBarOverlay` on Windows 11 (`capture-window.ts`). One row instead of two,
+          and the note starts ten pixels further up the window than it did.
+
+          A brand-new note gets the subject field; a note handed over from the library gets
+          its file name, read-only, because the title of a saved note belongs to Rename —
+          renaming moves the file, and a second way to change it here would let the two
+          drift (`HeaderBlock`'s own note on the variants). That is exactly what the
+          library's reader pane does with the same two states. */}
+      <PaneHeader
+        trafficLights={app.isMac}
+        captionButtons
+        title={
+          existing ? (
+            // The note's *title*, not its file name — the reader pane's heading is the
+            // title too, and the file name is already said in full at the other end of
+            // the window (`.filename`, "Saved as …"). Read-only either way: the title of
+            // a saved note belongs to Rename in the library, which moves the file with it.
+            (header.subject || (status.savedAs?.split(/[\\/]/).pop() ?? "emqnote"))
+          ) : (
+            <input
+              ref={subjectInput}
+              // `.title-field` is the note editor's title, shared with the library's
+              // reader; `.subject` is what says it is the elastic child of a band.
+              className="title-field subject"
+              placeholder={app.t("capture.title")}
+              value={header.subject}
+              onChange={(event) => onHeaderChange({ ...header, subject: event.target.value })}
+              // Enter moves on into the note; the title should never be a place you get
+              // stuck when all you want is to type. `HeaderBlock` still does this for the
+              // four fields below, and this is the same rule for the one above them.
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                editor.current?.focus();
+              }}
+            />
+          )
+        }
       />
 
       <HeaderBlock
@@ -501,7 +542,6 @@ export function Capture(): React.ReactElement {
         locale={app.locale}
         t={app.t}
         bodyTags={bodyTags}
-        subjectRef={subjectInput}
       />
 
       <Editor
@@ -626,13 +666,13 @@ export function Capture(): React.ReactElement {
         />
       )}
 
-      <div className="statusbar">
-        {/* One group, so `.statusbar`'s `space-between` has two children to distribute
-            rather than four — which is what put Insert/Actions/Help somewhere in the
-            middle of the bar instead of against its right edge. The library's
-            `.reader-footer` has always been status-left, menus-right; this is the same
-            arrangement, wearing the same rule (`styles.css`, `.reader-status`). */}
-        <div className="capture-status">
+      {/* **The 28px band at the foot**, matched to the library's — status left, menus
+          right, the same `PaneFooter` drawing both. It was `.statusbar` at 7px of padding
+          and 11px text, which is a different bar under the same editor. */}
+      <PaneFooter
+        className="statusbar"
+        status={
+          <>
           <span className="filename">
             {status.savedAs === null
               ? app.t("capture.nothingSaved")
@@ -659,29 +699,30 @@ export function Capture(): React.ReactElement {
           <span className="latency" data-over-budget={overBudget}>
             {status.lastLatencyMs === null ? "" : `${status.lastLatencyMs.toFixed(0)} ms`}
           </span>
-        </div>
-        {/* One group, `.capture-actions`, wearing the very rule the library's
-            `.reader-actions` wears — see `styles.css`, where that rule now lives. These
-            three used to be `.help-button`/`.insert-button`: a smaller font, a tighter
-            radius, muted text, and a Help button with no border at rest beside two that
-            had one. The two windows edit the same note with the same editor and the same
-            three controls under it, so a reader should not be able to tell which window
-            they are in from the shape of the buttons. */}
-        <div className="capture-actions">
-          <button
-            type="button"
-            title={app.t("library.insert")}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              // Above the button, not below it: this bar is at the foot of the window, so
-              // a menu opening downwards would be clamped back over the button it came
-              // from. `ContextMenu` clamps to the viewport, and this hands it a point it
-              // can honour.
-              setInsertMenu({ x: rect.left, y: rect.top });
-            }}
-          >
-            {app.t("library.insert")}
-          </button>
+          </>
+        }
+        actions={
+          <>
+            {/* These three used to be `.help-button`/`.insert-button`: a smaller font, a
+                tighter radius, muted text, and a Help button with no border at rest beside
+                two that had one. They are `ChromeButton`s now, the same component the
+                library's footer uses and the same one the tree's icons use — the two
+                windows edit the same note with the same editor and the same three controls
+                under it, so a reader should not be able to tell which window they are in
+                from the shape of the buttons. */}
+            <ChromeButton
+              label={app.t("library.insert")}
+              small
+              menu
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                // Above the button, not below it: this bar is at the foot of the window,
+                // so a menu opening downwards would be clamped back over the button it
+                // came from. `ContextMenu` clamps to the viewport, and this hands it a
+                // point it can honour.
+                setInsertMenu({ x: rect.left, y: rect.top });
+              }}
+            />
           {/* **Discard used to be a button of its own here; it is the one item in this
               menu.** Insert beside Actions is the pair the library's note editor carries,
               and a window that shares this app's editor should not carry a different set of
@@ -698,31 +739,31 @@ export function Capture(): React.ReactElement {
               (`existing`), main answers `null` for such a session anyway
               (`CaptureWriter.discard`), and a menu whose only entry is missing is worse
               than no menu. */}
-          {!existing && (
-            <button
-              type="button"
-              title={app.t("library.moreActions")}
-              onClick={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                setActionsMenu({ x: rect.left, y: rect.top });
-              }}
-            >
-              {app.t("library.actions")}
-            </button>
-          )}
+            {!existing && (
+              <ChromeButton
+                label={app.t("library.actions")}
+                title={app.t("library.moreActions")}
+                small
+                menu
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setActionsMenu({ x: rect.left, y: rect.top });
+                }}
+              />
+            )}
           {/* "Help" rather than "?". A question mark is the label you can only read once
               you already know what it opens, in the one window where the sheet behind it is
               how you find out. `help.button` and not `help.title`, which is the sheet's own
               heading ("Keyboard shortcuts") and too long to stand in this bar. */}
-          <button
-            type="button"
-            title={app.t("help.title")}
-            onClick={() => setHelpOpen(true)}
-          >
-            {app.t("help.button")}
-          </button>
-        </div>
-      </div>
+            <ChromeButton
+              label={app.t("help.button")}
+              title={app.t("help.title")}
+              small
+              onClick={() => setHelpOpen(true)}
+            />
+          </>
+        }
+      />
 
       {confirmDiscard && (
         <Ask

@@ -3463,3 +3463,71 @@ en het antwoord daarop is een behandeling op paneelniveau, niet deze rand nog ee
 "weghalen". Je kunt hem vervangen door de standaard. Dat is een andere handeling met een
 ander resultaat, en het verschil is onzichtbaar op de machine waar de standaard toevallig
 onopvallend is.
+
+---
+
+## B92 — Drie panelen, één koplijn: 40 px boven, 28 px onder, in beide vensters
+
+**Genomen** op 30 augustus 2026.
+
+Dit is het antwoord op bevinding 7 van `DESIGN-CRITIQUE.md`, de laatste van de drie die de
+foto's van 26 augustus opleverden en de enige die over de vorm van het venster zelf ging.
+Gemeten vanaf de bovenrand: de mappenboom droeg drie knoppen op de paneelkleur en had
+helemaal geen balk (~40 px), de notitielijst stapelde een zoekregel op een tel-/sorteerregel
+(78 px), en de notitie zelf liep tot 127 px voordat het eerste woord ervan begon. Er liep
+nergens een horizontale lijn over de bovenkant van het venster, en dus had het inhoudsvlak
+geen bovenrand: drie losse stapels die toevallig naast elkaar stonden.
+
+Aanleiding was een uitgewerkt ontwerpvoorstel (`design/design-handoff-pane-consistency/`,
+variant 1a). Wat hieronder staat is niet dat voorstel, maar wat ervan overeind blijft nadat
+het door de regels van dit project is gehaald — dat verschil is het besluit.
+
+**Eén koplijn en één voetlijn, en ze zijn regels en geen getallen.** `PaneHeader` (40 px) en
+`PaneFooter` (28 px) tekenen alle vier de balken in beide vensters. Dat het regels zijn en
+geen maat die per paneel is overgeschreven, ís het punt: een vierde paneel, of een kop die
+er een knop bij krijgt, mag de lijn niet kunnen breken. `styles-pane-bands.test.ts` telt
+daarom niet alleen de twee hoogtes maar ook dat er verder *nergens* een tweede staat.
+
+**De notitielijst gaf twee chromeregels op en kreeg er één balk en één voet voor terug.**
+Niets is geschrapt: de telling, de sorteerkiezer en Taken staan in de voet, en het zoekveld
+is in de kop gaan zitten, waar het de plaats van de mapnaam inneemt zolang het openstaat.
+Dat laatste heeft een gevolg dat het ontwerp niet had voorzien — de kop was juist wat zei in
+welke map je stond — en daarom leest de scopeschakelaar (B83) nu de mapnaam zelf in plaats
+van "Deze map". Hij staat binnen het veld, niet ernaast, en blijft een *woord*: `--click-button`
+zoekt op tekst, en een schakelaar zonder label bestaat niet voor de zelftest.
+
+**Pictogrammen wel, pictogrammen-alleen niet.** De drie knoppen van de mappenboom zijn 26 px
+iconen geworden. Dat mag omdat `ChromeButton` `label` verplicht stelt en op `aria-label` zet
+wanneer er geen tekst staat, en omdat `--click-button` sindsdien op die naam terugvalt als
+een knop geen eigen tekst heeft. De regel uit CLAUDE.md is dus niet versoepeld maar op één
+plek nagekomen in plaats van op vijf. De voetknoppen houden hun woorden: *Modified*, *Tasks*,
+*Insert*, *Actions*, *Help* — daar is geen breedte te winnen die het lezen waard is.
+
+**En ze worden getekend, niet getypt.** Het ontwerp leverde `＋ ✎ ✕` als tekst aan. In het
+draaiende venster (`npm run ui:kit`) kwam U+270E uit een vervangingsfont als iets dat de
+meeste mensen een paperclip zouden noemen — naast een échte paperclip, zes rijen lager, in
+dezelfde kolom. Dat is `trashGlyph`'s les van B67, en hij geldt hier opnieuw. Dit is ook het
+enige wat alleen door te kijken gevonden kon worden, wat het derde punt van CLAUDE.md nog
+eens onderstreept.
+
+**Het palet van het ontwerp is overgenomen, maar op de rollen gezet.** Elf kleuren zijn zes
+geworden: de paneelgrond en de balk zijn samen `--surface`, de vier tinten tekst zijn `--text`
+en `--muted`, en de twee hovertinten zijn er niet — dat is één *toestand* die op twee
+ondergronden landt, wat `--hover` als doorschijnende laag al oplost en wat precies de
+zeven-alfa's is die B87 heeft opgeruimd. De waarden zelf zijn die van het ontwerp; alleen het
+lichte thema verschuift, het donkere stapte al dezelfde kant op.
+
+**Randloos, met de knoppen van het besturingssysteem ín de balk.** Beide vensters staan nu op
+`titleBarStyle: "hidden"` — met `titleBarOverlay` op Windows 11, waar de knoppen daarmee die
+van het systeem blijven en de snap-layouts en het systeemmenu behouden. 40 px dekt beide
+platforms (stoplichten ~28, Windows 11 32), dus het chroom kost geen eigen hoogte en de drie
+koppen blijven op één lijn. Nadrukkelijk *geen* eigen sluitknoppen meer: `TitleBar.tsx` is
+verdwenen, en de echte Close betekent wat die van ons betekende — opslaan en wegleggen, wat
+de `close`-handler in `capture-window.ts` altijd al deed. Linux houdt zijn eigen lijst: daar
+is `titleBarOverlay` een no-op en zou randloos alleen verlies zijn.
+
+**Wat dit niet oplost.** Bevinding 6 — een werkwoord in de kop waarvan het lijdend voorwerp
+elders staat — wordt hier verzácht en niet gesloten: `✎` en `✕` noemen de map in hun tooltip,
+en Verwijderen vroeg al door met de naam erin (B54). De echte oplossingen die de kritiek
+noemde (het voorwerp in de kop zetten, of de werkwoorden naar de rij verplaatsen) staan nog
+open. Bevindingen 1, 4, 5 en 8 zijn niet aangeraakt.

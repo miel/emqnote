@@ -38,6 +38,11 @@
    against it, so there is a few pixels of hit area on both sides of the 1px border the
    tree and note list already draw. */
 .pane-splitter {
+  /* **The one `no-drag` that is not inside a header band, and the easy one to forget.**
+     The splitters run the full height of the window, so their top 40px overlaps the
+     drag region — without this, starting a drag anywhere near the top of a divider moves
+     the window instead of resizing the pane. */
+  -webkit-app-region: no-drag;
   position: absolute;
   top: 0;
   bottom: 0;
@@ -54,49 +59,6 @@
   outline: 0;
 }
 
-/* The group sits against the panel's left edge, on the same 8px the folder rows below it
-   start from, so the three buttons read as belonging to the tree rather than floating
-   above the middle of it. Only the *group* moves: each button keeps its natural width and
-   its centred text (a button's own default), which is what the note above the rule below
-   is about — `flex: 1` with left-aligned text was the version that made "+ New" read like
-   a heading the row started with. */
-.tree-toolbar {
-  display: flex;
-  justify-content: flex-start;
-  gap: 4px;
-  padding: 0 8px 8px;
-}
-
-/* Natural width — matching the note list's and the reader's own buttons rather than
-   stretching to fill the row. */
-.tree-toolbar button {
-  font: inherit;
-  font-size: 12px;
-  text-align: center;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 8px;
-  cursor: default;
-}
-
-.tree-toolbar button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.tree-toolbar .danger:hover:not(:disabled) {
-  border-color: #c42b1c;
-  color: #c42b1c;
-}
-
-/* The vault root and the trash cannot be renamed, so the button says so rather than
-   waiting to refuse. */
-.tree-toolbar button:disabled {
-  opacity: 0.4;
-}
-
 /* ---- folder tree ---- */
 
 /* A column, so the folders scroll and the footer below them does not: Trash and
@@ -105,15 +67,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 10px 0 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
   user-select: none;
 }
 
+/* The 10px of top padding this pane used to open with belongs to the scroll region now,
+   not to the pane: above it there is a header band, and a gap between a band and the
+   first row it heads is a seam. */
 .tree-branches {
   flex: 1;
   overflow-y: auto;
+  padding: 4px 0;
 }
 
 /* The footer can now unfold two lists, so it needs its own ceiling and its own scroll —
@@ -158,7 +123,7 @@
 
 .filter-note {
   margin: 2px 10px 6px 22px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -174,13 +139,35 @@
   list-style: none;
 }
 
+/* A fixed 26px rather than 4px of padding around whatever the line box came out as: the
+   rows either side of a wrapped-looking one used to sit a pixel apart from it, and a list
+   whose rows are all the same height is the one you can count down. `padding-left` is
+   inline (`8 + depth * 16`), so only the right-hand padding is here. */
 .branch {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px 4px 0;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 0;
   font-size: 13px;
   cursor: default;
+}
+
+/* The vault's own row, drawn as a section label rather than as a folder (`rootLabel` in
+   `FolderTree.tsx`). It is not somewhere you file a note — it selects the whole vault and
+   collapses the tree — and dressed like its own children it read as the one folder you
+   could never quite find anything in. Small caps in `--muted`, 22px, so it separates the
+   band above from the folders below without becoming a third heading. */
+.branch-root {
+  height: 22px;
+}
+
+.branch-root .branch-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .branch:hover {
@@ -271,7 +258,8 @@
 }
 
 .twisty {
-  width: 16px;
+  flex: 0 0 auto;
+  width: 10px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -285,14 +273,17 @@
 }
 
 .branch-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .branch-count {
+  flex: 0 0 auto;
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -324,35 +315,46 @@
   overflow: hidden;
 }
 
-/* A row now, rather than a box holding one control: the × sits beside the field while
-   there is something to clear, and the scope switch beside that. The buttons take their
-   own space rather than floating over the text, so a long query is never painted
-   underneath them.
+/* The search field, in the heading's own seat.
+
+   It was a strip of its own above the note list — the top half of the 78px of chrome
+   `DESIGN-CRITIQUE.md`'s Finding 7 measured — and it is the same three controls in the
+   same order: the scope switch, the box, and the × that appears while there is something
+   to clear. What changed is where they stand. `flex: 1` because `PaneHeader` hands its
+   title slot the whole width the action buttons leave.
 
    `position: relative` is here for the syntax panel below, which is the one thing in this
-   row that does float: it hangs off this element rather than off the input, so it spans
-   the row instead of stopping at the field's right edge.
+   row that floats: it hangs off this wrapper rather than off the input, so it spans the
+   field and its two neighbours instead of stopping at the box's own edge. `.pane-header`
+   declares no `overflow`, which is what lets a 40px band show a panel taller than itself.
 
-   `--surface`, with `.notes-header` under it and `.reader-header` beside it: this strip
-   is chrome — a control you type into — and the three at the top of this window now agree
-   about that. The note list below them stays on `--background`, which is the distinction
-   the shading is *for*. */
+   `no-drag`, and this is the one that bites: the band around it is the frameless window's
+   grab area, so without this a press meant for the box moves the window instead. */
 .notes-search {
+  -webkit-app-region: no-drag;
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.notes-search input {
   flex: 1;
   min-width: 0;
+}
+
+/* `--field` and not the design's white box. B87's rule is that a field you type a value
+   into wears `--field`, and this is the only search box in the app: a white one here
+   would be the one input in either window that answered the question differently, in the
+   light theme only — the dark theme has no white to reach for. The 1px `--border` is what
+   separates it from the band, which is what that border is for. */
+.notes-search input {
+  flex: 1 1 auto;
+  /* A floor rather than the usual `min-width: 0`: this is the one child of the row that
+     must stay usable. 60px is what leaves the switch its 45 % and the × its 20 at the note
+     list's 200px minimum, with nothing overflowing the band. */
+  min-width: 60px;
   font: inherit;
-  font-size: 12px;
-  padding: 4px 8px;
+  font-size: 13px;
+  height: 26px;
+  padding: 0 8px;
   color: inherit;
   background: var(--field);
   border: 1px solid var(--border);
@@ -384,20 +386,33 @@
   color: var(--accent);
 }
 
-/* Where the search is looking (B83). Quiet at rest and lit when it is widened, because
-   the vault-wide state is the one worth noticing: narrowed is the default and reads as
-   the absence of a state, while "you are searching everything" is a fact about the list
-   below that the list itself cannot show. `nowrap` because the two labels are different
-   lengths and a row that reflows as you toggle it reads as something breaking. */
+/* Where the search is looking (B83), and — since the field took the heading's seat —
+   which folder that is. It reads the folder's own name while it is narrowed and
+   "All notes" when it is widened, so the pane never loses the ability to say what it is
+   showing; quiet at rest and lit when widened, because the vault-wide state is the one
+   worth noticing. Narrowed is the default and reads as the absence of a state, while
+   "you are searching everything" is a fact about the list below that the list cannot show.
+
+   `max-width` rather than `nowrap` alone: a deeply-named folder must not push the box it
+   labels off the end of a 210px pane. `nowrap` stays because the two labels are different
+   lengths and a chip that reflows as you toggle it reads as something breaking. */
 .search-scope {
+  /* Does not shrink, but is capped: a short label like "All notes" must never ellipsise
+     into "All …" — which it did, because the box beside it grows and the two were sharing
+     the shortfall — while a deeply-named folder still has to give way rather than push the
+     box off the end of a 200px pane. `max-width` answers both; `flex-shrink` answered
+     neither. */
   flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
   padding: 3px 7px;
   cursor: default;
 }
@@ -417,13 +432,14 @@
    than a fourth that looks nearly like the others; everything here is what a `<dl>` needs
    that a `<ul>` of buttons did not.
 
-   `left: 12px; right: 12px` against the row's own padding rather than `width: 100%`, so
-   it lines up with the field above it at any pane width. `min-width` is overridden away
-   for the same reason — `.tag-suggest`'s 220px floor is for a panel anchored to a narrow
-   header cell, and here it would only stop the panel shrinking with the pane. */
+   `left: 0; right: 0` against the wrapper it now hangs from, rather than the row's old
+   12px inset, so it still lines up with the field at any pane width. `min-width` is
+   overridden away for the same reason — `.tag-suggest`'s 220px floor is for a panel
+   anchored to a narrow header cell, and here it would only stop the panel shrinking with
+   the pane. */
 .search-hints {
-  left: 12px;
-  right: 12px;
+  left: 0;
+  right: 0;
   min-width: 0;
   padding: 6px 0;
 }
@@ -455,100 +471,20 @@
   color: var(--muted);
 }
 
-/* The strip above the note list, shaded like `.reader-header` beside it: these are the
-   two things at the top of the window and a header that is panel-coloured next to one
-   that is not reads as a mistake rather than as a distinction. The list itself is
-   deliberately left on `--background` — it is a list of things, not a surface, and the
-   selected row's own highlight is what has to stand out there. */
-.notes-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--muted);
-}
+/* `.notes-header`, `.notes-sort`, `.notes-actions`, `.new-note` and `.sort-glyph` all
+   stood here and are gone. The count, the sort chooser and the Tasks button live in
+   `PaneFooter` now and + New note in `PaneHeader`, and every one of them is a
+   `ChromeButton` — one rule, in `styles.css`, rather than five ideas about what a button
+   in this window's chrome looks like. `.new-note` survives only as a handle for
+   `--click-button` and the tests; it carries no rule of its own any more.
 
-.notes-sort {
-  display: flex;
-  gap: 2px;
-}
+   `.sort-choose` likewise: the glyph slot is `.chrome-glyph` and the open state is
+   `.chrome-button-open`, both shared with every other menu-opening button in the app. */
 
-.notes-sort button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: default;
+.notes-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.notes-sort button:hover {
-  background: var(--hover);
-}
-
-/* Open reads like hover on purpose, and not like the old `.sort-on` tint: the chooser is
-   not *chosen*, it is unfolded, and a control that turns accent-coloured while its menu is
-   down would be saying the same thing the tick inside the menu already says. */
-.notes-sort .sort-choose-open {
-  background: var(--selected);
-}
-
-/* The same 12px icon slot `.note-pin` and the tree's `.filter-glyph` use, so the three
-   icon columns in this window agree. `flex: 0 0 auto` because the label beside it is what
-   changes width when the sort does — the glyph never should. */
-.sort-glyph {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  width: 12px;
-}
-
-.sort-glyph svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* The header's two buttons, grouped so `.notes-header`'s `space-between` keeps handing out
-   the same three gaps it did when + New note stood there alone. Four loose children would
-   have spread count, sort, Tasks and New note evenly across the bar and put the sort
-   chooser somewhere different from where it has always been. */
-.notes-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* The only other way in is the global hotkey, so this button gets to stand out a
-   little more than the sort buttons beside it. */
-.new-note {
-  font: inherit;
-  font-size: 11px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 8px;
-  cursor: default;
-}
-
-.new-note:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Empty trash replaces + New note while the Trash folder is selected — same shape,
-   the destructive-red hover the reader's own Delete button already uses. */
-.new-note.danger:hover {
-  border-color: #c42b1c;
-  color: #c42b1c;
 }
 
 /* `flex: 1 1 auto` and not the default `0 1 auto`: without the grow, a short note list left
@@ -565,7 +501,7 @@
 }
 
 .note {
-  padding: 9px 12px;
+  padding: 7px 10px 8px;
   border-bottom: 1px solid var(--border);
   cursor: default;
 }
@@ -671,7 +607,7 @@
 }
 
 .note-when {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -697,10 +633,15 @@
 
 /* Shared geometry only. They used to share the colour as well — both 11px `--accent` at
    the same opacity — which made a line of body text and a list of names literally
-   indistinguishable in a column of titles. */
+   indistinguishable in a column of titles.
+
+   13px, which is this window's body size: the excerpt is a line of the note, and the
+   scale has one size for body text rather than a smaller one for body text that happens
+   to be quoted in a list. The row is no taller for it — it gave back the two pixels of
+   vertical padding `.note` used to carry. */
 .note-excerpt,
 .note-attendees {
-  font-size: 11px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -754,7 +695,7 @@
    right when it is alone on the excerpt row. */
 .note-tasks {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -762,7 +703,7 @@
 
 /* Only shown under a tag or a person, where the notes are not all from one folder. */
 .note-folder {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -778,7 +719,7 @@
 }
 
 .note-tag {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   padding: 0 5px;
   color: var(--accent);
@@ -799,31 +740,16 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* `.new-note`'s recipe, on the count row rather than in the toolbar above it — the one
-   way out of this view that says its own name, standing where the note list puts its own
-   buttons rather than in front of the scope chooser, where it read as the first step of
-   setting the view up. `.notes-header` is `space-between` and this is its second child,
-   so the count keeps the left edge and this takes the right with no rule of its own.
+/* `.task-exit` has no rule of its own any more: "Exit tasks" is a `ChromeButton` in the
+   view's header band, wearing the same shape as every other button in either window's
+   chrome. The class stays on the element as a handle for `--click-button` and the tests.
 
-   `flex: 0 0 auto` survives the move and still earns its place: `.notes-count` beside it
-   has no basis of its own, and without this the button would give up width to a long
-   count rather than the other way round. */
-.task-exit {
-  flex: 0 0 auto;
-  font: inherit;
-  font-size: 11px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 8px;
-  cursor: default;
-}
-
-.task-exit:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+   It has moved twice and the reason has held both times. It began at the head of the
+   toolbar, in front of the scope chooser, where it read as the first step of setting the
+   view up rather than as the way out of it; then it sat beside the count. Now it is where
+   the tree's and the note list's own actions are. What matters is unchanged: it is a
+   *word*, not an ×, because `--click-button="Exit tasks"` is how the packaged self-test
+   leaves this view. */
 
 .task-scope {
   flex: 1;
@@ -841,7 +767,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   cursor: default;
@@ -919,7 +845,7 @@
 }
 
 .task-row-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -964,32 +890,22 @@
   font-size: 12px;
 }
 
-/* Never wraps. The title and path used to fall onto extra lines as the window narrowed,
-   which made the header grow and shrink while dragging the edge.
+/* **Everything this rule used to say is `.pane-header`'s now** — the height, the shading,
+   the border, the `nowrap`, the drag region. What is left is the one number that is about
+   *this* pane: 12px of left padding rather than the tree's and the note list's 10, because
+   the note's own body below it is indented 14 and the title should stand nearer to the
+   text it names than to the pane edge.
 
-   It holds the title and the path and nothing else since B82: the save state and the two
-   menus moved to `.reader-footer`, which is where the capture window has always kept the
-   same three. So the `nowrap` is doing less work than it was — the row it used to be
-   protecting the title inside is gone — but the rule that produced the bug has not
-   changed, and `.reader-titles` is still the only elastic child. */
-/* `--surface` rather than nothing, so the note editor is shaded the way the capture
-   window is: header and footer on the panel colour with the writing surface between them.
-   The capture window has always done this (`.header` and `.statusbar` in `styles.css`),
-   and the two windows edit the same note with the same editor — a strip that is one colour
-   in one of them and another in the other reads as two different editors. In the light
-   theme `--surface` is the grey framing the white page the body sits on; in the dark one
-   it is the lighter panel against a darker page. The two themes step opposite ways and
-   mean the same thing: the strip is chrome, the body is the note. (B87 corrected the light
-   half of that — it used to be white chrome on an off-white page, which is a step of 1.6 %
-   and reads as no step at all.) */
+   The history is worth keeping, because both halves of it are still load-bearing
+   somewhere. The `nowrap` was for a title and a path that fell onto extra lines as the
+   window narrowed, which made the header grow and shrink while dragging the edge — the
+   path lives in the footer now and `.pane-title` carries the ellipsis. And `--surface`
+   was B82's: the capture window has always shaded `.header` and `.statusbar`, the two
+   windows edit the same note with the same editor, and a strip that is one colour in one
+   of them and another in the other reads as two different editors. Both windows get that
+   from one rule now rather than from two that agreed. */
 .reader-header {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 12px;
-  padding: 12px 18px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  padding-left: 12px;
 }
 
 /* The shared header block, in the library. No drag region here — that exists for the
@@ -1011,17 +927,7 @@
    the subject at a fixed 22% and the second tag was already cut off. The grid gives
    both windows the same four columns, so there is nothing left to override. */
 
-.reader-titles {
-  flex: 1 1 auto;
-  min-width: 0;
-}
 
-.reader-path {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* **The note pane's status bar**, which is what this strip has become. It began as the
    way back out of a followed `[[…]]` link — moved down here because in `.reader-titles`
@@ -1039,21 +945,12 @@
    `flex: 0 0 auto` because `.reader` is a column and `.reader-body` above it takes the
    rest: without it this strip would be squeezed by a long note instead of holding its
    own line. */
-/* Shaded with `.reader-header` above and for its reason — the pair is what makes the
-   writing surface between them read as the page. */
+/* `.pane-footer`'s, for `.reader-header`'s reason directly above, and matched to it so
+   the note is inset by the same 12px at both ends. The left-hand group is `.pane-status`
+   in `styles.css`; the right-hand one is `.pane-actions`. */
 .reader-footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 18px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  padding-left: 12px;
 }
-
-/* `.reader-status`, the left-hand group of this bar, lives in `styles.css` beside
-   `.reader-actions` — both windows' footers wear it now. */
 
 /* Quieter than the note it sits under: this names a note you are *leaving*, and it must
    not compete with the one you are reading. The ellipsis stays for a long title. */
@@ -1083,12 +980,19 @@
    font-size and font-weight, so the header does not visibly reflow"); what changed is
    that the box now has a padding and a transparent border in it, because the shared field
    needs somewhere to put a focus colour without moving the text. Every number that
-   matters is `.title-field`'s in `styles.css`, and this rule exists to copy them. */
+   matters is `.title-field`'s in `styles.css`, and this rule exists to copy them.
+
+   The size and the weight are not among them any more: the `<h1>` wears `.pane-title`, so
+   it is 15px/600 with the other two panes' headings, and `.title-field` is the same
+   15px/600 in both windows. Naming a size here again would be the drift this pair of
+   rules exists to prevent — but the box has to be spelled out, because an `<h1>` and an
+   `<input>` agree about nothing else by default.
+
+   The two-part selector is deliberate for `.title-field`'s own reason: see `styles.css`. */
 .reader-header h1 {
   margin: 0;
   padding: 2px 6px;
   border: 1px solid transparent;
-  font-size: 17px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1102,24 +1006,38 @@
    would be a second opinion about a shared control, and a `font: inherit` in it would
    quietly reset the size and weight that shared rule sets. */
 
-/* Indented past the title's own padding and border, so the path reads as sitting under
-   the title rather than a few pixels left of it. */
+/* Where the file is, at the foot of the note rather than under its title.
+
+   **Truncated from the left**, which is the one thing worth explaining: a path that runs
+   out of room is one whose *end* you want — the file name — and an ordinary ellipsis eats
+   exactly that. `direction: rtl` moves the ellipsis to the head of the string, and the
+   `⁨…⁩` isolate around the value keeps the slashes and any right-to-left folder name from
+   being reordered with it. The full path is on the `title` regardless.
+
+   `flex: 0 1 auto` with `min-width: 0`: it is the piece of this bar that gives way, so the
+   save state and the back link keep their words while the path shortens. */
 .reader-path {
-  padding-left: 7px;
-  font-size: 11px;
+  flex: 0 1 auto;
+  min-width: 0;
+  direction: rtl;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
   color: var(--muted);
 }
 
-/* `.reader-actions` has no rule of its own here any more, for `.reader-title-input`'s
-   reason one screen up: the group and its buttons are defined in `styles.css`, beside
-   `.capture-actions`, because the capture window's footer carries the same three controls
-   and the two had drifted into different sizes, colours and borders. A rule here would be
-   a second opinion about a shared control. */
+/* The footer's two groups have no rule here, for `.reader-title-input`'s reason one screen
+   up: they are `.pane-status` and `.pane-actions` in `styles.css`, and its buttons are
+   `.chrome-button`, because the capture window's footer carries the same three controls and
+   the two had drifted into different sizes, colours and borders. A rule here would be a
+   second opinion about a shared control. */
 
+/* No size of its own: 12px is `.pane-footer`'s, and this is the plainest thing in it. */
 .reader-state {
-  font-size: 11px;
+  flex: 0 0 auto;
   color: var(--muted);
-  margin-right: 4px;
 }
 
 /* ---- settings dialog ---- */
@@ -1479,7 +1397,7 @@
   padding: 8px 12px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 

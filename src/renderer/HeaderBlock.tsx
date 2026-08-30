@@ -70,12 +70,15 @@ export interface HeaderValues {
 /**
  * Where the block is being shown, which decides what belongs in it.
  *
- * `capture` is the original: subject, time and tags. `reader` is the library, where the
- * title is owned by Rename — that renames the file too, so a second way to change it
- * would let the two drift.
+ * `capture` is the original: time and tags for a note being written. `reader` is the
+ * library, where the title is owned by Rename — that renames the file too, so a second
+ * way to change it would let the two drift.
  *
- * The fields themselves no longer differ. Both variants show When, Where, Who and Tags;
- * only the subject depends on the window.
+ * **The fields no longer differ at all.** Both variants show When, Where, Who and Tags,
+ * and nothing else: the subject field was the last thing that depended on the window, and
+ * it has moved up into the 40px header band, where the reader keeps its own title. The
+ * variant survives because the two still want different padding — and because "which
+ * window is this" is a question the block may need to answer again.
  */
 export type HeaderVariant = "capture" | "reader";
 
@@ -95,12 +98,6 @@ interface Props {
    * `bodyTagsOf` serializing the body to get at them.
    */
   bodyTags?: string[];
-  /**
-   * The subject input, so the capture window can put the caret there on `show()`
-   * instead of in the editor. Only meaningful in the `capture` variant — the reader
-   * renders no subject field at all, since its title belongs to Rename.
-   */
-  subjectRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 /**
@@ -154,9 +151,7 @@ export function HeaderBlock({
   t,
   variant = "capture",
   bodyTags = [],
-  subjectRef,
 }: Props): React.ReactElement {
-  const inCapture = variant === "capture";
   const [editingTime, setEditingTime] = useState(false);
   const timeInput = useRef<HTMLInputElement>(null);
 
@@ -518,19 +513,6 @@ export function HeaderBlock({
 
   return (
     <div className={`header header-${variant}`}>
-      {inCapture && (
-        <input
-          ref={subjectRef}
-          // `.title-field` is the note editor's title, shared; `.subject` is only the
-          // margin below it, which the reader's title does not want.
-          className="title-field subject"
-          placeholder={t("capture.title")}
-          value={values.subject}
-          onChange={(event) => set("subject", event.target.value)}
-          onKeyDown={leaveOnEnter}
-        />
-      )}
-
       <div className="header-grid">
         <span className="header-label">{t("capture.when")}</span>
         <div className="header-cell header-when">

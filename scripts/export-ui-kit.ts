@@ -372,9 +372,17 @@ async function clickNamed(session: Session, name: string, scope: "page" | "menu"
     const within = ${scope === "menu"} ? document.querySelector('.context-menu') : document;
     if (within === null) return false;
     const targets = [...within.querySelectorAll('button, .branch, .context-menu-item')];
-    const label = (node) =>
-      (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
-        .textContent.trim();
+    // Text first, then the accessible name — an icon-only button carries its label on
+    // aria-label, which is the folder tree's three since the header band took over from
+    // the toolbar. Same fallback, and for the same reason, as --click-button in
+    // library-window.ts. (No backticks in here: this comment is inside the template
+    // literal, exactly as the note above the function says.)
+    const label = (node) => {
+      const own =
+        (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
+          .textContent.trim();
+      return own !== '' ? own : (node.getAttribute('aria-label') ?? node.title ?? '').trim();
+    };
     const match = targets.find((node) => label(node) === ${JSON.stringify(name)});
     match?.click();
     return match !== undefined;
@@ -734,8 +742,8 @@ async function main(): Promise<number> {
       caption: "Capture window, empty — the blank to build on", pad: 0, isolate: false,
     });
     await tryShoot(capture, {
-      name: "chrome-titlebar", family: "Chrome", selector: ".titlebar",
-      caption: "Title bar with minimise / maximise / save-and-close",
+      name: "chrome-pane-header", family: "Chrome", selector: ".pane-header",
+      caption: "The 40px header band — the note's title, and where the OS draws its own window controls",
     });
     await tryShoot(capture, {
       name: "header-grid-empty", family: "Header block", selector: ".header-grid",
@@ -784,7 +792,7 @@ async function main(): Promise<number> {
       });
     }
     await tryShoot(capture, {
-      name: "chrome-capture-actions", family: "Chrome", selector: ".capture-actions",
+      name: "chrome-pane-actions", family: "Chrome", selector: ".pane-footer .pane-actions",
       caption: "Capture window actions: Insert, Help", pad: 8,
     });
 
@@ -882,8 +890,8 @@ async function main(): Promise<number> {
       caption: "The note list pane", pad: 0,
     });
     await tryShoot(library, {
-      name: "tree-toolbar", family: "Folder tree", selector: ".tree-toolbar",
-      caption: "New / Rename / Delete", pad: 8,
+      name: "tree-header", family: "Folder tree", selector: ".tree .pane-header",
+      caption: "The vault's name, and New / Rename / Delete as 26px icons", pad: 0,
     });
     await tryShoot(library, {
       name: "tree-row-selected", family: "Folder tree", selector: ".branch-on",
@@ -923,12 +931,12 @@ async function main(): Promise<number> {
     });
 
     await tryShoot(library, {
-      name: "notes-search", family: "Note list", selector: ".notes-search",
-      caption: "Search box with its scope button", pad: 8,
+      name: "notes-header", family: "Note list", selector: ".notes .pane-header",
+      caption: "The folder's name, the search magnifier and + New note", pad: 0,
     });
     await tryShoot(library, {
-      name: "notes-header", family: "Note list", selector: ".notes-header",
-      caption: "Count, sort, Tasks, + New note", pad: 8,
+      name: "notes-footer", family: "Note list", selector: ".notes .pane-footer",
+      caption: "Count, sort chooser and the Tasks filter", pad: 0,
     });
     await tryShoot(library, {
       name: "note-row-selected", family: "Note list", selector: ".note-on",
@@ -988,6 +996,12 @@ async function main(): Promise<number> {
     });
 
     await act("a search across the vault", async () => {
+      // The field is only mounted while a search is open — it lives in the note list's
+      // heading now rather than in a strip of its own — so this starts on the magnifier,
+      // which is where a hand starts too. Then the scope switch, which is *inside* the
+      // field and therefore does not exist until it is unfolded.
+      await library.js(`document.querySelector('.notes .search-toggle')?.click()`);
+      await wait(400);
       await library.js(`(() => {
         const scope = document.querySelector('.search-scope');
         if (scope && scope.getAttribute('aria-pressed') !== 'true') scope.click();
@@ -1056,7 +1070,9 @@ async function main(): Promise<number> {
       await wait(400);
     });
     await act("the new-folder prompt", async () => {
-      await clickNamed(library, "+ New");
+      // "New", not "+ New": the label is the button's accessible name now, and the plus
+      // is a drawn glyph beside it rather than a character in it.
+      await clickNamed(library, "New");
       await wait(600);
       await tryShoot(library, {
         name: "dialog-ask", family: "Dialogs", selector: ".ask",

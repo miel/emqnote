@@ -10,6 +10,8 @@ import {
   type FolderNode,
   type Selection,
 } from "../../shared/vault-types.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu, type MenuItem } from "./ContextMenu.js";
 import { FilterSection } from "./FilterSection.js";
 import { canDropNote, NOTE_DRAG_TYPE, SPRING_MS } from "./drag.js";
@@ -90,6 +92,13 @@ interface Props {
   newLabel: string;
   renameLabel: string;
   deleteLabel: string;
+  /**
+   * "All folders" — the vault's own row, which used to repeat the vault name.
+   *
+   * The name moved up into the pane's heading, and two rows saying the same thing with
+   * the lower one dressed as a folder is worse than either alone.
+   */
+  allFoldersLabel: string;
   newNoteLabel: string;
   helpLabel: string;
   settingsLabel: string;
@@ -132,8 +141,12 @@ const trashGlyph = (
  * A small ticked box, in the same drawn-not-typed spirit as `trashGlyph` — this is the
  * footer menu entry, not the checkbox on a task row itself, so it does not go through
  * `drawBox` in `checkbox.ts` (see `TaskList.tsx` for that one).
+ *
+ * Exported because the note list's footer opens the very same view from the very same
+ * handler, and two drawings of one destination is how the sidebar row and the footer
+ * button would start to look like two different places to go.
  */
-const tasksGlyph = (
+export const tasksGlyph = (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <rect
       x="2.6"
@@ -174,9 +187,92 @@ const unlinkedGlyph = (
   </svg>
 );
 
+/**
+ * The three verbs in the header band, drawn rather than typed — `trashGlyph`'s reason
+ * exactly, and it was not theoretical here.
+ *
+ * The design handed over `＋ ✎ ✕` as text. `✕` is fine and `＋` is merely thin, but U+270E
+ * LOWER RIGHT PENCIL comes out of a fallback font on this machine as something most people
+ * would call a paperclip — beside a real paperclip six rows down, in the same column. Seen
+ * in the running window (`npm run ui:kit`), which is the only place it could have been
+ * seen. Drawn in `currentColor` they inherit the band's text colour and follow both themes,
+ * and they are the same weight as each other, which no three characters from three font
+ * fallbacks ever are.
+ */
+const newFolderGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M8 3.4v9.2M3.4 8h9.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const renameGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M3 13h2.2l6.5-6.5a1.55 1.55 0 0 0-2.2-2.2L3 10.8V13Zm6.2-8.1 2.2 2.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const deleteGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+/**
+ * Restore, for a folder sitting in the trash: an arrow curling back the way it came.
+ */
+const restoreGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M3.4 7.6a4.6 4.6 0 1 1 1.5 4M3.2 4.4v3.4h3.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * `Rename "01 Projecten"` — the verb in the header band, with the folder it would act on.
+ *
+ * `DESIGN-CRITIQUE.md`'s Finding 6: these three verbs act on `lastFolder`, which may be
+ * several rows below the button and, with a tag or the Tasks view selected, is not the row
+ * that *looks* selected at all. Delete already confirms with a dialog that names what goes
+ * (B54); Rename does not, so this tooltip is the only place it is stated. The bare verb
+ * stays on `aria-label`, because that is what `--click-button` matches.
+ *
+ * The vault root has no name of its own here — the heading beside these buttons is already
+ * the vault — so it falls back to the plain verb rather than quoting an empty string.
+ */
+function naming(verb: string, folderPath: string): string {
+  const name = folderPath.split("/").pop() ?? "";
+  return name === "" ? verb : `${verb} "${name}"`;
+}
+
 function Branch({
   node,
   depth,
+  rootLabel,
   selected,
   onSelect,
   onCreateFolder,
@@ -193,6 +289,15 @@ function Branch({
 }: {
   node: FolderNode;
   depth: number;
+  /**
+   * Drawn instead of `node.name` on the one row that is the vault itself — "All folders",
+   * in the small-caps style `.branch-root` gives it.
+   *
+   * The vault's own name is the pane's heading now, so this row repeating it was two
+   * labels for one thing with the second one looking like a folder you could file into.
+   * What the row *does* is unchanged: it selects the vault root, and collapses the tree.
+   */
+  rootLabel?: string;
   selected: Selection;
   onSelect: (selection: Selection) => void;
   onCreateFolder: (parent: string) => void;
@@ -305,9 +410,10 @@ function Branch({
         className={
           `branch${selectionKey(selected) === `folder:${node.path}` ? " branch-on" : ""}` +
           `${over && accepts ? " branch-drop" : ""}` +
-          `${trashed === true ? " branch-trashed" : ""}`
+          `${trashed === true ? " branch-trashed" : ""}` +
+          `${rootLabel === undefined ? "" : " branch-root"}`
         }
-        style={{ paddingLeft: `${depth * 14 + 8}px` }}
+        style={{ paddingLeft: `${depth * 16 + 8}px` }}
         role="treeitem"
         aria-expanded={hasChildren ? open : undefined}
         aria-selected={selectionKey(selected) === `folder:${node.path}`}
@@ -423,7 +529,7 @@ function Branch({
         </button>
 
         {glyph !== undefined && <span className="filter-glyph">{glyph}</span>}
-        <span className="branch-name">{node.name}</span>
+        <span className="branch-name">{rootLabel ?? node.name}</span>
         {/*
           Notes in this folder, then the open tasks in them: `[# notes] / [# open tasks]`.
           Neither number counts subfolders — the badge is about the notes filed right here,
@@ -510,6 +616,7 @@ export function FolderTree({
   newLabel,
   renameLabel,
   deleteLabel,
+  allFoldersLabel,
   newNoteLabel,
   helpLabel,
   settingsLabel,
@@ -617,60 +724,89 @@ export function FolderTree({
     <nav className="tree">
       {/* Right-clicking a folder works too, but a button is the discoverable way —
           "no option to create a new folder" was a fair complaint about a feature that
-          existed only as a hidden gesture. */}
-      <div className="tree-toolbar">
-        {/* Standing on a deleted folder, the three ordinary buttons are all disabled —
-            every one of them refuses a trashed path — so the toolbar said nothing where
-            the two things anyone wants to do with one belong. They swap, exactly as
-            `NoteList` swaps + New note for Empty trash in the same place for the same
-            reason. It is also what keeps Restore reachable at all: its other route is a
-            right-click menu, and `--click-button` cannot open one of those, which is the
-            rule CLAUDE.md draws around every action in this app. */}
-        {isInTrash(lastFolder) && lastFolder !== TRASH_FOLDER ? (
-          <>
-            <button type="button" onClick={() => onRestoreFolder(lastFolder)}>
-              {restoreLabel}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => onDeleteFolderPermanently(lastFolder)}
-            >
-              {deletePermanentlyLabel}
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={onNewFolder} disabled={!canCreateFolder}>
-              + {newLabel}
-            </button>
-            {/* Beside it rather than hidden behind a gesture, for the reason above — and
-                renaming had no gesture at all, hidden or otherwise. */}
-            <button
-              type="button"
-              onClick={() => onRenameFolder(lastFolder)}
-              disabled={!canRenameFolder}
-            >
-              {renameLabel}
-            </button>
-            {/* A folder never had a way out of the app's own trash discipline before this
-                — only Explorer/Finder, outside the app entirely. */}
-            <button
-              type="button"
-              className="danger"
-              onClick={() => onDeleteFolder(lastFolder)}
-              disabled={!canDeleteFolder}
-            >
-              {deleteLabel}
-            </button>
-          </>
-        )}
-      </div>
+          existed only as a hidden gesture.
+
+          These three used to be full-width text buttons on no band at all, which is half
+          of `DESIGN-CRITIQUE.md`'s Finding 7: they read as floating in white space above
+          the tree rather than belonging to it. In the band they are 26px icons, and the
+          pane gains a heading without gaining a row.
+
+          Icons, but never *only* icons: `ChromeButton` puts `label` on `aria-label`, so
+          `--click-button="Rename"` reaches the same control it always did. The tooltip is
+          where each verb names its object — Finding 6, which is about a `Delete` whose
+          target is `lastFolder`, several rows below the button and sometimes not the row
+          that looks selected at all. */}
+      <PaneHeader
+        trafficLights={isMac}
+        title={root.name}
+        actions={
+          /* Standing on a deleted folder, the three ordinary buttons are all disabled —
+             every one of them refuses a trashed path — so the toolbar said nothing where
+             the two things anyone wants to do with one belong. They swap, exactly as
+             `NoteList` swaps + New note for Empty trash in the same place for the same
+             reason. It is also what keeps Restore reachable at all: its other route is a
+             right-click menu, and `--click-button` cannot open one of those, which is the
+             rule CLAUDE.md draws around every action in this app. */
+          isInTrash(lastFolder) && lastFolder !== TRASH_FOLDER ? (
+            <>
+              <ChromeButton
+                label={restoreLabel}
+                title={naming(restoreLabel, lastFolder)}
+                icon={restoreGlyph}
+                iconOnly
+                onClick={() => onRestoreFolder(lastFolder)}
+              />
+              <ChromeButton
+                label={deletePermanentlyLabel}
+                title={naming(deletePermanentlyLabel, lastFolder)}
+                icon={deleteGlyph}
+                iconOnly
+                danger
+                onClick={() => onDeleteFolderPermanently(lastFolder)}
+              />
+            </>
+          ) : (
+            <>
+              <ChromeButton
+                label={newLabel}
+                icon={newFolderGlyph}
+                iconOnly
+                disabled={!canCreateFolder}
+                onClick={onNewFolder}
+              />
+              {/* Beside it rather than hidden behind a gesture, for the reason above —
+                  and renaming had no gesture at all, hidden or otherwise. It is also the
+                  one of the three with no confirmation behind it, which is why the
+                  tooltip naming the folder matters most here. */}
+              <ChromeButton
+                label={renameLabel}
+                title={naming(renameLabel, lastFolder)}
+                icon={renameGlyph}
+                iconOnly
+                disabled={!canRenameFolder}
+                onClick={() => onRenameFolder(lastFolder)}
+              />
+              {/* A folder never had a way out of the app's own trash discipline before
+                  this — only Explorer/Finder, outside the app entirely. */}
+              <ChromeButton
+                label={deleteLabel}
+                title={naming(deleteLabel, lastFolder)}
+                icon={deleteGlyph}
+                iconOnly
+                danger
+                disabled={!canDeleteFolder}
+                onClick={() => onDeleteFolder(lastFolder)}
+              />
+            </>
+          )
+        }
+      />
 
       <ul className="tree-branches" role="tree">
         <Branch
           node={filed}
           depth={0}
+          rootLabel={allFoldersLabel}
           selected={selected}
           onSelect={onSelect}
           onCreateFolder={onCreateFolder}

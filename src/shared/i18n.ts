@@ -281,6 +281,8 @@ const DUTCH: Record<string, string> = {
    *  "folders", so "+ Nieuwe map" shrank to "+ Nieuw". The context menu keeps the long
    *  form, where nothing else on screen says what "Nieuw" would otherwise mean. */
   "library.new": "Nieuw",
+  /** De rij van de vault zelf, bovenaan de boom. Zie de Engelse versie hieronder. */
+  "library.allFolders": "Alle mappen",
   "library.newFolder": "Nieuwe map",
   "library.renameFolder": "Map hernoemen",
   "library.deleteFolder": "Map verwijderen",
@@ -305,6 +307,8 @@ const DUTCH: Record<string, string> = {
   // centimeter — onleesbaar op die breedte en weg zodra je typte. Die staat nu in het
   // paneel eronder (B84).
   "library.search": "Zoeken…",
+  /** De knop die het zoekveld uitklapt. Zie de Engelse versie hieronder. */
+  "library.searchTitle": "Zoeken",
   // Het bereik van het zoekvak (B83). De knop draagt het bereik dat *nu geldt* als naam,
   // niet het bereik waar hij heen schakelt: een knop die "Alle notities" heet terwijl hij
   // in één map zoekt, leest als een stand en niet als een aanbod.
@@ -399,11 +403,11 @@ const DUTCH: Record<string, string> = {
   "settings.textSize": "Tekstgrootte in de notitie",
   "settings.textSizeWhy":
     "Geldt voor de notitie zelf — koppen, opsommingen en code schalen evenredig mee. De rest van het venster blijft even groot, en in de notitiebestanden verandert er niets. Deze keuze geldt op deze computer.",
-  "settings.textSmallest": "Kleinst",
-  "settings.textSmall": "Klein",
   "settings.textNormal": "Normaal",
   "settings.textLarge": "Groot",
   "settings.textLarger": "Groter",
+  "settings.textLargest": "Grootst",
+  "settings.textHuge": "Enorm",
   // B90. "Systeem" en niet "automatisch": het is geen gok van de app, het is de vraag
   // doorgeven aan de computer — en die blijft hem beantwoorden, ook als hij bij
   // zonsondergang van kleur wisselt.
@@ -740,6 +744,10 @@ const ENGLISH: Record<string, string> = {
   // behaviour, and `emptyTrash` is already taken twice on the main side.
   "library.clearTrash": "Empty trash",
   "library.new": "New",
+  /** The vault's own row at the top of the tree. It used to repeat the vault name, which
+   *  is the pane's heading now — two labels for one thing, the lower one dressed as a
+   *  folder you could file into. It still selects the vault root and collapses the tree. */
+  "library.allFolders": "All folders",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
   "library.deleteFolder": "Delete folder",
@@ -764,6 +772,9 @@ const ENGLISH: Record<string, string> = {
   // centimetres wide — unreadable at that width and gone the moment you typed. It is in
   // the panel below the box instead (B84).
   "library.search": "Search…",
+  /** The button that unfolds the search field in the note list's heading. The name is
+   *  what `--click-button` presses, so it is a word rather than only a magnifier. */
+  "library.searchTitle": "Search",
   // The search box's scope (B83). The button is named for the scope in force rather than
   // the one it switches to: a button reading "All notes" while the search is confined to
   // one folder reads as a state, not as an offer.
@@ -854,11 +865,11 @@ const ENGLISH: Record<string, string> = {
   "settings.textSize": "Text size in the note",
   "settings.textSizeWhy":
     "Applies to the note itself — headings, lists and code scale with it in proportion. The rest of the window stays the size it is, and nothing changes in the note files. This choice is for this computer.",
-  "settings.textSmallest": "Smallest",
-  "settings.textSmall": "Small",
   "settings.textNormal": "Normal",
   "settings.textLarge": "Large",
   "settings.textLarger": "Larger",
+  "settings.textLargest": "Largest",
+  "settings.textHuge": "Huge",
   // B90. "System" rather than "automatic": the app is not guessing, it is handing the
   // question to the computer — which goes on answering it, including on a machine that
   // switches at sunset.

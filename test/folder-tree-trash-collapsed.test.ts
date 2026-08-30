@@ -91,6 +91,7 @@ beforeEach(() => {
         newLabel: "New",
         renameLabel: "Rename",
         deleteLabel: "Delete",
+        allFoldersLabel: "All folders",
         newNoteLabel: "New note",
         helpLabel: "Help",
         settingsLabel: "Settings",

@@ -165,8 +165,6 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",

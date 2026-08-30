@@ -29,6 +29,11 @@ import { describe, expect, it } from "vitest";
  * jsdom has no cascade and no layout, so this reads the sheets as text — the same
  * limitation and the same shape as `styles-window-chrome.test.ts`, and `library.css` is
  * read alongside `styles.css` because the library window's cascade is both files.
+ *
+ * Several of the selectors below moved to `styles.css` with the pane-consistency pass:
+ * the note list's sort chooser, the tree's toolbar buttons and the capture window's title
+ * bar buttons are all one `.chrome-button` now, which is *why* there is one hover rule to
+ * assert instead of four. The list is shorter for the right reason.
  */
 
 const shared = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
@@ -101,15 +106,15 @@ describe("styles: hover and selection come from two tokens, not from literals", 
     [library, "\\.branch:hover"],
     [library, "\\.note:hover"],
     [library, "\\.task-row:hover"],
-    [library, "\\.notes-sort button:hover"],
-    [shared, "\\.titlebar-button:hover"],
+    [shared, "\\.chrome-button:hover:not\\(:disabled\\)"],
     [shared, "\\.find-button:hover"],
   ] as const;
 
   const selected = [
     [library, "\\.branch-on"],
     [library, "\\.note-on"],
-    [library, "\\.notes-sort \\.sort-choose-open"],
+    [shared, "\\.chrome-button-open"],
+    [shared, "\\.chrome-button:active:not\\(:disabled\\)"],
     [shared, "\\.palette-on"],
     [shared, "\\.header \\.tag-suggest button\\.tag-suggest-on"],
     [shared, "\\.context-menu-active:not\\(:disabled\\)"],

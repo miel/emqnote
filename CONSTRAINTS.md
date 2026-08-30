@@ -1905,3 +1905,50 @@ over CDP with the panel bypassed: the note size landed in the capture window and
 library's own reader, which is the same hole seen from the other side — the library had only
 ever looked right because the button that changes the setting also refreshes the window it
 is in.
+
+**Every pane's header is 40px and every footer is 28px, and both are one rule** (B92,
+30 August 2026, `PaneHeader.tsx`/`PaneFooter.tsx`, `.pane-header`/`.pane-footer` in
+`styles.css`). `DESIGN-CRITIQUE.md`'s Finding 7 measured what there was before: a folder
+tree with three buttons on the pane colour and no band at all, a note list stacking a search
+row on a count/sort row to 78px, and the note running to 127px before its first word — three
+unrelated stacks with no horizontal line across the top of the window, so no top edge to the
+content area at all. What matters for anyone editing it is that the heights are *rules*
+rather than numbers copied into each pane: a fourth pane, or a header that grows a control,
+must not be able to break the line, and `styles-pane-bands.test.ts` therefore counts that no
+third height exists anywhere in either sheet. The tree's bottom menu is deliberately outside
+the alignment — Tags/People/Tasks/Settings are destinations, not a status bar, and the
+section unfolds to 55% of the pane. **The acceptance check that actually matters cannot run
+under jsdom**: "all three headers report the same `offsetHeight`" needs layout, so it lives
+in `npm run ui:kit` and the packaged `--library --screenshot` pass.
+
+**An icon-only button still has a name, and `--click-button` falls back to it** (B92).
+`ChromeButton` makes `label` mandatory and puts it on `aria-label` whenever `iconOnly` is
+set; `captureWindowTo` in `library-window.ts` reads `textContent` first and only then
+`aria-label`/`title`. That fallback is what lets the folder tree's three verbs and the note
+list's magnifier be icons at all without breaking CLAUDE.md's rule that nothing may live
+only behind a gesture the self-test cannot reach. `scripts/export-ui-kit.ts`'s `clickNamed`
+carries the same two lines for the same reason — and note the comment inside that injected
+script has no backticks in it, because it lives inside a template literal.
+
+**Chrome glyphs are drawn, not typed** (B67's `trashGlyph`, and B92 again). The
+pane-consistency design specified `＋ ✎ ✕` as text. In the running window U+270E arrives
+from a fallback font as something most people would call a paperclip — beside a real
+paperclip six rows down, in the same column — and `＋` is a fullwidth character at a
+different weight from the label beside it. Both are now inline SVG in `currentColor` at the
+14px slot, like `pinGlyph`, `sortGlyph` and the tree's other three. **This was findable only
+by looking**: nothing under `test/` can see which font a character resolves to, and
+`npm run ui:kit` is what saw it.
+
+**The search field is mounted only while a search is open, and `Library.tsx` owns that
+flag** (B92). It lives in the note list's heading now rather than in a strip of its own, so
+`Mod-F` has to *mount* the box before it can put the caret in `searchInput` — which is why
+`searchOpen` is state in `Library` and not in `NoteList`, and why `openSearch` is two steps
+with an effect between them (`searchInput.current` being null is exactly the question "is it
+mounted"). Two more things fall out of that and both have already been got wrong once.
+**Closing the field is not leaving the search**: `onCloseSearch` only folds it away, while
+`exitSearch` also reloads the folder's list and hands focus to a row in it — calling the
+latter on blur took the caret out of whatever had just been clicked into, which
+`keyboard-nav.test.ts` caught on the Ctrl-Shift-Tab into the editor. And **the scope switch
+now reads the folder's own name** (B83's control, restated): the heading it replaced was
+what used to say which folder you were standing in. Every test that types into the box opens
+it first, the way a hand does.

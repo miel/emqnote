@@ -24,6 +24,11 @@ import { describe, expect, it } from "vitest";
  * the library that the first pass had left off, and the capture window's footer turned out
  * to have no left-hand group at all — which is why its buttons stood in the middle of the
  * bar where the library's stand at the end of it.
+ *
+ * The pane-consistency pass finished the argument rather than adding to it. The strips are
+ * `.pane-header` and `.pane-footer` now — one rule each, four bands, two windows — and
+ * every button in either window's chrome is `.chrome-button`. So what this file pins has
+ * not changed; there is simply less of it, which is the point.
  */
 
 const shared = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
@@ -32,6 +37,10 @@ const library = readFileSync(
   "utf8",
 );
 const capture = readFileSync(new URL("../src/renderer/Capture.tsx", import.meta.url), "utf8");
+const libraryPane = readFileSync(
+  new URL("../src/renderer/library/Library.tsx", import.meta.url),
+  "utf8",
+);
 
 const rule = (css: string, selector: string): string => {
   const found = css.match(new RegExp(`${selector} \\{[^}]*\\}`))?.[0];
@@ -39,34 +48,50 @@ const rule = (css: string, selector: string): string => {
   return found!;
 };
 
-describe("styles: the note editor's chrome is shaded like the capture window's", () => {
-  it("puts the reader's header and footer on the panel colour", () => {
-    // `--surface` is what `.titlebar`, `.header` and `.statusbar` in `styles.css` have
-    // always used — the grey framing the page in the light theme, the lighter panel in the
-    // dark one (B87; in the light theme it was white until then, which is what made this
-    // whole distinction invisible there). The
-    // library's two strips had no background at all, so the writing surface between them
-    // did not read as a page.
-    expect(rule(library, "\\.reader-header")).toMatch(/background:\s*var\(--surface\);/);
-    expect(rule(library, "\\.reader-footer")).toMatch(/background:\s*var\(--surface\);/);
+describe("styles: one header band and one footer band, in both windows", () => {
+  it("shades and sizes them once, in the shared stylesheet", () => {
+    // `--surface` is what `.header` and `.statusbar` have always used — the grey framing
+    // the page in the light theme, the lighter panel in the dark one (B87; in the light
+    // theme it was white until then, which is what made this whole distinction invisible
+    // there). What changed with the pane-consistency pass is that there is now exactly
+    // one rule saying so, for four bands across two windows, rather than four that agreed.
+    const header = rule(shared, "\\.pane-header");
+    expect(header).toMatch(/background:\s*var\(--surface\);/);
+    expect(header).toMatch(/border-bottom:\s*1px solid var\(--border\);/);
+
+    const footer = rule(shared, "\\.pane-footer");
+    expect(footer).toMatch(/background:\s*var\(--surface\);/);
+    expect(footer).toMatch(/border-top:\s*1px solid var\(--border\);/);
   });
 
-  it("shades the note list's header with them, and leaves the list itself alone", () => {
-    // The two headers sit side by side at the top of the window; one on the panel colour
-    // beside one that is not reads as a mistake rather than as a distinction. The list
-    // below stays on `--background` — it is a list of things, not a surface, and the
-    // selected row's own highlight is what has to stand out in it.
-    expect(rule(library, "\\.notes-header")).toMatch(/background:\s*var\(--surface\);/);
-
-    const notes = rule(library, "\\.notes");
-    expect(notes).not.toMatch(/background:\s*var\(--surface\);/);
+  it("leaves the library's own sheet no second opinion about either band", () => {
+    // The drift this file exists for came from two copies of one control's rule. The
+    // library may still say what is *particular* to a pane — the reader's 12px inset is
+    // here, because the note body below it is indented and the tree's is not — but a
+    // background, a height or a border here is the drift starting again.
+    for (const selector of ["\\.reader-header", "\\.reader-footer"]) {
+      const own = rule(library, selector);
+      expect(own, selector).not.toMatch(/background:/);
+      expect(own, selector).not.toMatch(/height:/);
+      expect(own, selector).not.toMatch(/border-(top|bottom):/);
+    }
   });
 
-  it("shades the search strip with them", () => {
-    // The third thing at the top of this window, and the one you type into. It had no
-    // background of its own, which put a band of `--background` between two strips that
-    // are not — a seam across the head of the window rather than a distinction.
-    expect(rule(library, "\\.notes-search")).toMatch(/background:\s*var\(--surface\);/);
+  it("leaves the note list itself on the page colour", () => {
+    // The list below the band stays on `--background` — it is a list of things, not a
+    // surface, and the selected row's own highlight is what has to stand out in it.
+    expect(rule(library, "\\.notes")).not.toMatch(/background:\s*var\(--surface\);/);
+  });
+
+  it("puts the search field on the band rather than making a strip of its own", () => {
+    // It used to be a `--surface` strip under the headers, which is the row that is gone:
+    // the field sits *in* the note list's heading now. So it must carry no background at
+    // all — a second `--surface` inside the band would draw a box around the field.
+    const search = rule(library, "\\.notes-search");
+    expect(search).not.toMatch(/background:/);
+    // And it must opt out of the drag region, or a press meant for the box moves the
+    // frameless window instead.
+    expect(search).toMatch(/-webkit-app-region:\s*no-drag;/);
   });
 
   it("puts the note's own fields on the same surface in both windows", () => {
@@ -79,59 +104,81 @@ describe("styles: the note editor's chrome is shaded like the capture window's",
     expect(block).not.toMatch(/background:\s*transparent;/);
     expect(rule(shared, "\\.header")).toMatch(/background:\s*var\(--surface\);/);
   });
+
+  it("is drawn by the two components, in both windows' markup", () => {
+    // A rule naming a class nothing wears is the silent failure this file exists for, one
+    // step earlier than the cascade: it passes every text check about the stylesheet and
+    // changes nothing on screen. Both windows have to be reading the same two components,
+    // or the shared rules above are a description of one window.
+    expect(capture).toContain("<PaneHeader");
+    expect(capture).toContain("<PaneFooter");
+    expect(libraryPane).toContain("<PaneHeader");
+    expect(libraryPane).toContain("<PaneFooter");
+  });
 });
 
-describe("styles: [Insert] [Actions] [Help] is one rule for both windows", () => {
-  it("names both windows' groups in the shared stylesheet", () => {
+describe("styles: every button in the chrome is one rule for both windows", () => {
+  it("names the shape once, in the shared stylesheet", () => {
     // In `styles.css` and not `library.css`, because only one of the two windows loads
-    // that file — the same reason `.title-field`, `.palette` and `.ask` are here.
-    const group = rule(shared, "\\.reader-actions,\\s*\\n\\.capture-actions");
-    expect(group).toMatch(/display:\s*flex;/);
+    // that file — the same reason `.title-field`, `.palette` and `.ask` are here. This
+    // began as `.reader-actions button`; it is now the tree's icons, the note list's
+    // search and New note, the sort chooser, Insert, Actions and Help.
+    const button = rule(shared, "\\.chrome-button");
+    expect(button).toMatch(/font-size:\s*13px;/);
+    expect(button).toMatch(/border-radius:\s*4px;/);
+    expect(button).toMatch(/height:\s*26px;/);
 
-    const buttons = rule(shared, "\\.reader-actions button,\\s*\\n\\.capture-actions button");
-    expect(buttons).toMatch(/font-size:\s*12px;/);
-    expect(buttons).toMatch(/border:\s*1px solid var\(--border\);/);
-    expect(buttons).toMatch(/border-radius:\s*5px;/);
-    expect(buttons).toMatch(/padding:\s*3px 9px;/);
+    // The border is 1px *transparent* at rest, not absent: hover gives it a colour rather
+    // than a width, so nothing moves under the pointer. That is the whole reason the rest
+    // state names a border at all.
+    expect(button).toMatch(/border:\s*1px solid transparent;/);
+    expect(rule(shared, "\\.chrome-button:hover:not\\(:disabled\\)")).toMatch(
+      /border-color:\s*var\(--border\);/,
+    );
   });
 
-  it("names the colour rather than inheriting it, so the status bar cannot grey them", () => {
-    // `color: inherit` is what the library's own rule said, and in the library it is
-    // right: `.reader-footer` sets no colour. The capture window's `.statusbar` sets
-    // `--muted` for the status text in it, so the very same declaration would draw these
-    // three grey — and a `.statusbar .capture-actions button` fix would then outrank the
-    // plain `:hover` below it, which is the cascade defeating correct-looking CSS in the
-    // way this codebase keeps a list of.
-    const buttons = rule(shared, "\\.reader-actions button,\\s*\\n\\.capture-actions button");
-    expect(buttons).toMatch(/color:\s*var\(--text\);/);
-    expect(buttons).not.toMatch(/color:\s*inherit;/);
+  it("names the colour rather than inheriting it, so the footer cannot grey them", () => {
+    // `color: inherit` is what the library's own rule said, and in the library it was
+    // right: its footer set no colour. `.pane-footer` sets `--muted` for the status text
+    // in it, so the very same declaration would draw these grey — and a
+    // `.pane-footer .chrome-button` fix would then outrank the plain `:hover`, which is
+    // the cascade defeating correct-looking CSS in the way this codebase keeps a list of.
+    const button = rule(shared, "\\.chrome-button");
+    expect(button).toMatch(/color:\s*var\(--text\);/);
+    expect(button).not.toMatch(/color:\s*inherit;/);
+  });
+
+  it("has exactly three sizes, and the two smaller ones are modifiers", () => {
+    // 26px header icon, 26px header labelled, 20px footer. A fourth size is how a button
+    // language stops being one, so the sizes are modifiers on the one rule rather than
+    // rules of their own.
+    expect(rule(shared, "\\.chrome-button-icon")).toMatch(/width:\s*26px;/);
+    expect(rule(shared, "\\.chrome-button-small")).toMatch(/height:\s*20px;/);
   });
 
   it("leaves no second opinion behind in the library's own stylesheet", () => {
     // The drift came from two copies of one control's rule. One copy is the fix; a rule
-    // here naming `.reader-actions` is the drift starting again.
-    expect(library).not.toMatch(/^\.reader-actions/m);
+    // here naming any of the five the pass replaced is the drift starting again.
+    for (const gone of [".reader-actions", ".notes-sort", ".notes-actions", ".tree-toolbar"]) {
+      expect(library, gone).not.toContain(`\n${gone} {`);
+    }
+    // `.new-note` survives as a handle for `--click-button` and the tests, and must stay
+    // exactly that: a rule for it would be a sixth idea about what a button looks like.
+    expect(library).not.toContain("\n.new-note {");
   });
 
   it("gives the status text at the other end of the bar one rule as well", () => {
-    // `.statusbar` is `space-between`, which distributes however many children it is
-    // given: four loose ones put the three buttons somewhere in the middle of the bar
-    // instead of against its right edge, where the library's have always been. Grouping
-    // the status text makes it the two children that rule is for — and the group wears
-    // `.reader-status`, moved here rather than copied, for the reason above it.
-    const group = rule(shared, "\\.reader-status,\\s*\\n\\.capture-status");
+    // `.pane-footer` is `space-between`, which distributes however many children it is
+    // given: four loose ones put the buttons somewhere in the middle of the bar instead
+    // of against its right edge. Grouping the status text makes it the two children that
+    // rule is for. It was `.reader-status, .capture-status` — one rule under two names,
+    // which is one name too many.
+    const group = rule(shared, "\\.pane-status");
     expect(group).toMatch(/display:\s*flex;/);
     // `min-width: 0` is what lets a long file name ellipsis inside this group instead of
     // pushing the buttons off the right edge — the group beside it does not give way.
     expect(group).toMatch(/min-width:\s*0;/);
     expect(library).not.toMatch(/^\.reader-status/m);
-  });
-
-  it("is a class the capture window's markup actually carries", () => {
-    // A rule naming a class nothing wears is the silent failure this file exists for, one
-    // step earlier than the cascade: it passes every text check about the stylesheet and
-    // changes nothing on screen.
-    expect(capture).toContain('className="capture-status"');
   });
 
   it("has dropped the capture window's own two button classes", () => {
@@ -140,6 +187,9 @@ describe("styles: [Insert] [Actions] [Help] is one rule for both windows", () =>
     // that had one.
     expect(shared).not.toContain(".help-button");
     expect(shared).not.toContain(".insert-button");
+    // And the title bar the capture window used to draw itself, buttons and all: the
+    // window controls are the platform's on both platforms now (`capture-window.ts`).
+    expect(shared).not.toContain(".titlebar-button");
   });
 });
 

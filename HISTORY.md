@@ -1753,3 +1753,62 @@ checks rather than assumes. **A step that measures owes the steps before it a se
 and a step that types owes itself a known selection** — the same lesson as the PDF ordering
 one, in the other half of the state. Five runs green under six busy loops on two cores, where
 it had been failing about half. Released as `v0.12.4`.
+
+## Pane consistency: one header line across the window, both windows frameless (30 August 2026)
+
+B92, and the answer to `DESIGN-CRITIQUE.md`'s Finding 7 — the last of the three that the
+26 August photographs produced and the only one about the shape of the window itself. It
+began from a worked-up design bundle (`design/design-handoff-pane-consistency/`, variant
+1a). About a third of that bundle was already shipped — it had been written from screenshots
+rather than from the code, so it proposed moving Insert into the footer (B82 had), removing a
+duplicate sort control (B78 had) and shading the reader's strips (B87 had). **What is worth
+recording is the third that was translated rather than taken.**
+
+**The palette was kept and put on the roles.** Eleven named colours became six: the design's
+pane ground and its header band are one `--surface`, its four text shades are `--text` and
+`--muted`, and its two hover tints do not appear at all — that is one *state* landing on two
+different grounds, which a translucent `--hover` already solves and which is exactly the
+seven-alpha drift B87 cleared. Only the light theme's values move; the dark theme already
+stepped the same way.
+
+**The heights are rules, not numbers.** `PaneHeader` (40px) and `PaneFooter` (28px) draw all
+four bands across both windows, and `ChromeButton` draws every button in either window's
+chrome at one of three sizes. That is the whole mechanism: the failure mode Finding 7
+measured was not a wrong height but *three* heights, so `styles-pane-bands.test.ts` counts
+that no third one is written down anywhere in either sheet. The note list gave up two chrome
+rows (78px) for one band and one footer; the search field moved into the heading, which had a
+consequence the design had not seen — the heading was what said which folder you were
+standing in, so the scope switch (B83) now reads the folder's own name.
+
+**Icon-only buttons, without breaking the self-test.** `ChromeButton` makes `label`
+mandatory and puts it on `aria-label` when the button draws only a glyph, and
+`--click-button` falls back from `textContent` to `aria-label`. So the tree's three verbs
+could become 26px icons without anything moving out of the packaged self-test's reach —
+CLAUDE.md's rule met in one place instead of five. The footer buttons keep their words.
+
+**And the glyphs are drawn, which only looking could have told us.** The design specified
+`＋ ✎ ✕` as text. In the running window U+270E came out of a fallback font as something most
+people would call a paperclip — beside a real paperclip six rows down, in the same column.
+`npm run ui:kit` is what saw it; nothing under `test/` can see which font a character
+resolves to. The same pass caught the scope switch ellipsising its own label to "All …" at
+the note list's default width, which was fixed by folding "+ New note" down to its plus while
+the field is open. **Two defects, both found by photographing the app**, which is the
+recurring lesson of the last three batches rather than a new one.
+
+**Both windows went frameless, with the platform's own controls inside the band.**
+`titleBarStyle: "hidden"` on macOS and Windows, plus `titleBarOverlay` on Windows 11 so the
+caption buttons stay the system's — which keeps the snap-layouts flyout and the system menu,
+and is why that was chosen over `frame: false` with three buttons of our own. `TitleBar.tsx`
+is gone, and with it the `window:minimise` / `window:toggle-maximise` IPC: the real Close
+already meant save-and-put-away, because `capture-window.ts` has always intercepted it.
+40px covers both platforms' controls, so the chrome costs no vertical space and the three
+headings stay on one line. Linux keeps its native frame — `titleBarOverlay` is a no-op there
+and hiding the frame would only lose the window manager's controls.
+
+**What is confirmed and what is not.** The light theme was photographed at two widths and
+corrected twice from what the photographs showed. Everything involving a window frame is
+unseen: this sandbox is Linux, which is the one platform deliberately left framed.
+`TEST-PROTOCOL.md` §45 walks it, and §45f is the row that matters most — on Windows the
+application menu can no longer be drawn in a frameless window, and its Edit accelerators
+used to be reachable through that bar. Chromium handles those natively in a text field, but
+that is a claim about Chromium rather than a thing anyone here has watched happen.

@@ -100,6 +100,16 @@ undo by accident and expensive to rediscover:
   offers system / light / dark; main sets the source before the first window is built, and
   every stylesheet goes on asking `prefers-color-scheme` exactly as it did when the OS was the
   only voice in it. No `data-theme`, no second set of rules.
+- **Every pane's header is 40px and every footer 28px, from one rule** (B92). `PaneHeader`
+  and `PaneFooter` in `src/renderer/` draw all four bands across both windows, and every
+  button in either window's chrome is one `ChromeButton` at one of three sizes. The heights
+  are rules rather than numbers per pane precisely so a new control cannot break the line
+  across the top of the window, which is what `DESIGN-CRITIQUE.md`'s Finding 7 measured;
+  `styles-pane-bands.test.ts` counts that no third height exists. Both windows are frameless
+  and the OS draws its own controls *into* the band — traffic lights on macOS,
+  `titleBarOverlay` on Windows 11 — so anything clickable in a header needs `no-drag`, the
+  pane splitters included. An icon-only button keeps its name on `aria-label`, and
+  `--click-button` falls back to it; chrome glyphs are drawn as inline SVG, never typed.
 - **The note's own text size is one token** (B88). `--editor-font-size`, declared in `:root`
   and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
   a size change moves the whole note evenly and the window around it not at all.
@@ -114,7 +124,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1967 tests in roughly thirty-five seconds of test time (about a minute and a
+The suite runs its 1975 tests in roughly thirty-five seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -161,7 +171,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
-| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87; Findings 1 and 3–8 are open. Finding 3 was briefly made worse on purpose — the note list's focus ring was removed — and B91 put that back |
+| `DESIGN-CRITIQUE.md` | A photographed reading of the library window, 26 August 2026. Finding 2 became B87, Finding 3 B91, Finding 7 B92 (which also mitigated Finding 6); Findings 1, 4, 5 and 8 are open. Finding 3 was briefly made worse on purpose — the note list's focus ring was removed — and B91 put that back |
 | `HISTORY.md` | The batch-by-batch build log behind this codebase, in the detail `00-PLAN.md`'s own status table doesn't carry |
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |

@@ -143,8 +143,6 @@ function buildFake(): CaptureApi {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -276,7 +274,7 @@ describe("keyboard navigation across the library's panes", () => {
     await mount();
     const rows = treeRows();
     const names = rows.map((node) => node.querySelector(".branch-name")?.textContent);
-    expect(names).toEqual(expect.arrayContaining(["Vault", "00 Inbox", "01 Projects"]));
+    expect(names).toEqual(expect.arrayContaining(["All folders", "00 Inbox", "01 Projects"]));
 
     const first = rows.find((node) => node.tabIndex === 0)!;
     first.focus();
@@ -450,6 +448,7 @@ describe("keyboard navigation across the library's panes", () => {
     // not recognise as belonging to it (only `.note[role="option"]` counts), so this is
     // another "cold" spot exactly like the one above, but with a note already open — the
     // reverse chord has an editor to land in this time.
+    openSearch();
     const searchInput = container.querySelector<HTMLInputElement>(".notes-search input")!;
     searchInput.focus();
     expect(document.activeElement).toBe(searchInput);
@@ -679,7 +678,20 @@ describe("keyboard navigation across the library's panes", () => {
    * reload is a round trip, so the rows under `focusPane` at that moment are the ones about
    * to be unmounted — which is why `focusNotesOnNextList` waits for the new list instead.
    */
+  /**
+   * Unfolds the search field. It is only mounted while a search is open now — it lives in
+   * the note list's heading rather than in a strip of its own — so reaching for the box
+   * starts with the magnifier, which is what a hand does too.
+   */
+  function openSearch(): void {
+    if (container.querySelector(".notes-search input") !== null) return;
+    act(() => {
+      container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+    });
+  }
+
   function setSearch(value: string): void {
+    openSearch();
     const input = container.querySelector<HTMLInputElement>(".notes-search input")!;
     const setter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -703,7 +715,9 @@ describe("keyboard navigation across the library's panes", () => {
     keydown(searchBox(), "Escape");
     await flush();
 
-    expect(searchBox().value).toBe("");
+    // The field folds back into the heading rather than sitting there emptied — leaving
+    // a search puts the folder's own name back in the seat the box was borrowing.
+    expect(container.querySelector(".notes-search input")).toBeNull();
     expect(document.activeElement).toBe(noteRows().find((node) => node.tabIndex === 0));
   });
 
@@ -727,7 +741,7 @@ describe("keyboard navigation across the library's panes", () => {
     // already on the roving row here, so asserting it lands there proves nothing — it
     // would hold just as well if this branch did not exist at all. The row above it is
     // where the focus hand-off is actually pinned.
-    expect(searchBox().value).toBe("");
+    expect(container.querySelector(".notes-search input")).toBeNull();
     expect(event.defaultPrevented).toBe(true);
   });
 

@@ -1545,6 +1545,42 @@ tried from.
 
 ---
 
+## 45. Pane consistency, and both windows going frameless (30 August 2026)
+
+B92. The three panes now share one 40px header band and the two that have a footer share one
+28px band; every button in either window's chrome is one component; and both windows are
+frameless with the operating system's own controls drawn *into* the header band.
+
+**What has been seen here and what has not.** The layout was photographed in the running
+library window under `Xvfb` (`npm run ui:kit`, 71 parts) and corrected twice from what those
+photographs showed — the pencil glyph came out of a fallback font as a paperclip, and the
+scope switch was ellipsising its own label at the pane's default width. So the *light* theme
+at 1200 and 1440px is confirmed. Nothing below that involves a window frame has been seen at
+all: this sandbox is Linux, which deliberately keeps its native frame, so **every macOS and
+Windows row here is a first sighting**. §45f is the sharpest of them — it is the one thing in
+this batch that could take functionality away rather than move it.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 45a | Open the library and look across the top of the window | One unbroken horizontal line: the tree's heading, the folder name and the note's title all sit in a band of the same height, with the dividers running through it. Three chrome heights with no shared line is the original complaint |  |
+| 45b | Drag both pane dividers to their extremes and back | The bands stay the same height at every width, and the count/sort footer stays level with the note's own footer. Only the middle of each pane scrolls |  |
+| 45c | Press ⌘F / Ctrl-F in the library | The folder's name is replaced *in place* by a search box, with a switch at its left naming the folder being searched. Escape puts the name back. The old separate search row is gone, so a second row appearing anywhere is wrong |  |
+| 45d | With the search open, click the switch | It reads "All notes" in the accent colour and the search widens to the vault (B83 unchanged). Click again to narrow. The label must never be cut short to "All …" — that was a real defect, caught in a photograph |  |
+| 45e | Narrow the note list pane to its minimum with the search open | The box stays wide enough to read a query in, "+ New note" folds down to its plus, and nothing overflows the band |  |
+| 45f | **On Windows**, in the library: put the caret in a folder-rename field or the search box and press Ctrl+Z, Ctrl+X, Ctrl+C, Ctrl+V, Ctrl+A | All five still work. The window is frameless now, so the application menu can no longer be drawn in it, and its Edit accelerators used to be reachable through that bar. If any of these has stopped working, say so — the fallback is a Windows-only decision to bring the frame back, not something to guess at |  |
+| 45g | **On Windows 11**, hover the maximise button in the top-right of the note pane's band | The snap-layouts flyout opens. These are the system's own caption buttons drawn inside our band, not buttons the app draws — that is why they get the flyout, and it is the reason `titleBarOverlay` was chosen over a frameless window with our own three |  |
+| 45h | **On Windows 11**, switch the theme (Settings → system / light / dark) | The caption buttons change colour with the rest of the window. They are painted from colours handed over at construction, so this is the one part of the chrome `prefers-color-scheme` cannot reach on its own |  |
+| 45i | **On macOS**, look at the traffic lights | They sit inside the tree's heading band, vertically centred, with "Vault" clear of them. In the capture window they sit in the note's title band the same way |  |
+| 45j | **On macOS**, take the library fullscreen and come back | The heading stays legible throughout. The inset the lights need disappears in fullscreen, so this is where a fixed 78px of padding would show as a gap |  |
+| 45k | On either platform, drag the window by an empty part of a header band, then double-click it | It moves, and the double-click zooms. Then drag a pane divider starting near the *top* of the window: it must resize the pane and not move the window |  |
+| 45l | Open the capture window on a brand-new note, then on an existing note from the library | New: the title field is in the band, and the caret starts there. Existing: the note's *title* is in the band, read-only, and the file name is at the foot ("Saved as …"). The window's own title bar with its three drawn buttons is gone; closing is still save-and-put-away |  |
+| 45m | Compare the two windows' footers side by side | Same height, same buttons, same order — Insert, Actions, Help. The library adds the file path on the left when the note is editable, in the slot the read-only notice takes when it is not |  |
+| 45n | Open a note with a long path in the library and narrow the reader pane | The path shortens from the *left*, so the file name stays readable. The full path is on its tooltip |  |
+| 45o | In Settings, look at the note text size | The default is now the first entry and it is called "Normal" (13 px). A machine that had already chosen a size keeps it — the five values are unchanged, only their names moved — so if yours has jumped, that is worth reporting |  |
+| 45p | Check the tree's three header icons at your display scaling | Plus, pencil, cross — drawn, all the same weight. Hover each: the tooltip names the folder it would act on. A glyph that looks like a paperclip is the defect this row exists for |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

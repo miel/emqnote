@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { TaskItem } from "../../shared/vault-types.js";
 import { drawBox } from "../editor/checkbox.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneFooter } from "../PaneFooter.js";
+import { PaneHeader } from "../PaneHeader.js";
 import { roveArrowKey } from "./roving.js";
 
 interface Props {
@@ -143,6 +146,23 @@ export function TaskList({
     // task leaves it on `<body>` — neither is inside this element, so neither reached it.
     // `Library.tsx`'s window listener owns the key instead, which sees it from anywhere.
     <div className="notes task-list">
+      {/* The same 40px band the folder tree and the note list wear, so this view does not
+          break the line across the top of the window when it replaces the note list.
+
+          "Exit tasks" is named rather than an ×. `--click-button="Exit tasks"` is how the
+          packaged self-test reaches it, and a glyph has no label for that to match — the
+          same reason the sort chooser says its own name. It has moved twice now (the head
+          of the toolbar, then the count row, now the band) and the match is on the label,
+          not on where the label is. */}
+      <PaneHeader
+        title={t("library.tasks")}
+        actions={<ChromeButton label={t("tasks.exit")} className="task-exit" onClick={onExit} />}
+      />
+
+      {/* Below the band rather than inside it, which is where the note's own
+          When/Where/Tags/Who block sits for the same reason: these two are what the view
+          is scoped *to*, they are wider than a 40px row of buttons, and the shared line
+          across the three panes is what would pay for putting them up there. */}
       <div className="task-toolbar">
         <select
           className="task-scope"
@@ -167,27 +187,6 @@ export function TaskList({
           />
           {t("tasks.openOnly")}
         </label>
-      </div>
-
-      {/* The count on the left and the way out on the right, which is `.notes-header`'s
-          own `space-between` doing exactly what it does for the note list — two children,
-          no new CSS. The exit used to sit at the head of the toolbar above, in front of
-          the scope chooser, where it read as the first step of setting the view up rather
-          than as the way out of it. Two children and not three: that rule distributes
-          however many it is given, and a third would push the count off the left edge. */}
-      <div className="notes-header">
-        <span className="notes-count">
-          {items.length === 0
-            ? t("tasks.none")
-            : `${items.length} ${t(items.length === 1 ? "tasks.one" : "tasks.many")}`}
-        </span>
-        {/* Named, not an ×. `--click-button="Exit tasks"` is how the packaged self-test
-            reaches it, and a glyph has no label for that to match — the same reason the
-            sort chooser says its own name. Moving it changed nothing for that: the match
-            is on the label, not on where the label is. */}
-        <button type="button" className="task-exit" onClick={onExit}>
-          {t("tasks.exit")}
-        </button>
       </div>
 
       <ul className="task-rows" role="listbox">
@@ -235,6 +234,17 @@ export function TaskList({
           </li>
         ))}
       </ul>
+
+      {/* The count, in the 28px band the note list keeps its own count in. */}
+      <PaneFooter
+        status={
+          <span className="notes-count">
+            {items.length === 0
+              ? t("tasks.none")
+              : `${items.length} ${t(items.length === 1 ? "tasks.one" : "tasks.many")}`}
+          </span>
+        }
+      />
     </div>
   );
 }

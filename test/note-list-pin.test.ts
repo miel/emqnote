@@ -129,8 +129,6 @@ function buildFake(
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -420,6 +418,13 @@ describe("a pinned note in the list", () => {
    */
   describe("outside a folder's own list", () => {
     async function search(query: string): Promise<void> {
+      // The box lives in the note list's heading and is mounted only while a search is
+      // open, so this starts where a hand does: on the magnifier.
+      if (container.querySelector(".notes-search input") === null) {
+        await act(async () => {
+          container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+        });
+      }
       const input = container.querySelector<HTMLInputElement>(".notes-search input")!;
       await act(async () => {
         // Through the native setter, or React's own value tracker sees no change and the

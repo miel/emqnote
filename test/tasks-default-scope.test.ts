@@ -103,8 +103,6 @@ function buildFake(
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -177,7 +175,7 @@ function clickTasksButton(container: HTMLDivElement): void {
   // The header's own button, not the sidebar row: `.notes-actions` is what tells the two
   // apart, since both carry the same word — deliberately, they open the same view.
   const button = Array.from(
-    container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
+    container.querySelectorAll<HTMLButtonElement>(".notes .pane-actions button"),
   ).find((el) => el.textContent === "Tasks");
   expect(button).not.toBeUndefined();
   act(() => {

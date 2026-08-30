@@ -1,5 +1,5 @@
 import { app, BrowserWindow, screen } from "electron";
-import { windowBackground } from "./window-background.js";
+import { titleBarColours, windowBackground } from "./window-background.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
@@ -72,12 +72,34 @@ export function createCaptureWindow(): BrowserWindow {
     minWidth: CAPTURE_MIN_WIDTH,
     minHeight: CAPTURE_MIN_HEIGHT,
     show: false,
-    // macOS gets its own traffic lights, inset into our title bar; every other
-    // platform gets the buttons the renderer draws. Nobody wants a Windows-shaped
-    // close button on a Mac.
+    // **Every platform's own window controls, drawn into our 40px header band.**
+    //
+    // macOS has always had its real traffic lights here; Windows and Linux got three
+    // buttons the renderer drew itself, in `TitleBar.tsx`, because `frame: false` leaves
+    // a window with no controls and no grab area at all. Those never matched the OS, and
+    // on Windows 11 they cost the snap-layouts flyout that hovering the real maximise
+    // button opens.
+    //
+    // `titleBarOverlay` is the answer Chromium grew for exactly this: the frame is hidden
+    // but the caption buttons are still the system's, drawn over the top-right of the page
+    // in colours we hand it. The window keeps its system menu, its snap layouts, and its
+    // Alt+Space. `height: 40` is the band's own height, so they sit inside it rather than
+    // pushing it down. Colours from `titleBarColours`, re-pushed by `applyTheme` when the
+    // theme changes (B90) — they are on screen for as long as the window is.
+    //
+    // The close button means *save and put away* on both, which is what the `close`
+    // handler below is for: the same contract `IPC.captureClose` has always had.
+    //
+    // Linux keeps its native frame: `titleBarOverlay` is a no-op there, and hiding the
+    // frame without it would lose the window manager's own controls.
     ...(process.platform === "darwin"
-      ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 9 } }
-      : { frame: false }),
+      ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 12 } }
+      : process.platform === "win32"
+        ? {
+            titleBarStyle: "hidden" as const,
+            titleBarOverlay: { ...titleBarColours(), height: 40 },
+          }
+        : {}),
     resizable: true,
     // The note window belongs in Alt+Tab. It stays open until dismissed, so treating
     // it as a transient popup that cannot be switched back to was simply wrong.
@@ -109,13 +131,16 @@ export function createCaptureWindow(): BrowserWindow {
     if (created.isVisible()) onBlur();
   });
 
-  // On macOS the traffic lights are real (see `titleBarStyle` above), so the red button
-  // would otherwise destroy this BrowserWindow outright — and the module only ever
-  // holds one, assigned once below and never reassigned, so every path built on `window`
-  // (the hotkey's `reveal()`, "New note", the library's double-click-to-edit) would find
-  // it destroyed forever. Treat a close exactly like `IPC.captureClose` already does:
-  // commit through `onHide()` — the same save-and-put-away contract `TitleBar.tsx`
-  // documents for its own close button — and keep the window around, hidden.
+  // The window controls are the platform's on both platforms now (see `titleBarStyle`
+  // above), so the close button would otherwise destroy this BrowserWindow outright — and
+  // the module only ever holds one, assigned once below and never reassigned, so every
+  // path built on `window` (the hotkey's `reveal()`, "New note", the library's
+  // double-click-to-edit) would find it destroyed forever. Treat a close exactly like
+  // `IPC.captureClose` already does: commit through `onHide()` — the save-and-put-away
+  // contract this window has always had — and keep the window around, hidden.
+  //
+  // This is what let the renderer stop drawing its own three buttons: the real Close now
+  // means the same thing that one did.
   created.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();

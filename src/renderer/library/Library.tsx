@@ -36,6 +36,9 @@ import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
 import { ConflictBanner } from "./ConflictBanner.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneFooter } from "../PaneFooter.js";
+import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
 import { SIDEBAR_ROWS } from "./roving.js";
@@ -305,6 +308,23 @@ export function Library(): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState("");
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+
+  /**
+   * Whether the note list's search field is unfolded in its heading.
+   *
+   * Here rather than in `NoteList`, because `Mod-F` is this component's shortcut and it
+   * has to mount the field before it can put the caret in `searchInput` — held one level
+   * down, the shortcut would focus a box that does not exist yet. `openSearch` below is
+   * the pair of steps that has to happen in that order.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  /**
+   * Set when the field is being opened *in order to type in it*, so the effect below
+   * knows the difference between "unfold this" and "unfold this and take the caret".
+   * A ref rather than state: it is read once, in the render the flip causes, and a second
+   * piece of state would re-render for something nothing draws.
+   */
+  const focusSearchOnOpen = useRef(false);
 
   /**
    * Whether the search box is looking at the whole vault rather than the folder you are
@@ -806,6 +826,10 @@ export function Library(): React.ReactElement {
     if (searchTimer.current !== null) clearTimeout(searchTimer.current);
     searchQueryRef.current = "";
     setSearchQuery("");
+    // The field folds away with the query, and the folder's name comes back into the
+    // heading it was sitting in. Leaving it open and empty would leave the pane unable to
+    // say what it is showing.
+    setSearchOpen(false);
     // Back to the folder, so the next search starts where the default says it does. Same
     // hand-written ref as the query above, for the same reason.
     searchAllRef.current = false;
@@ -813,6 +837,39 @@ export function Library(): React.ReactElement {
     focusNotesOnNextList.current = true;
     void loadNotes(selectionRef.current);
   }, [loadNotes]);
+
+  /**
+   * Into the search: unfolds the field in the note list's heading and takes the caret.
+   *
+   * Two steps that cannot happen in one tick — the field has to be mounted before it can
+   * be focused — so this either focuses a box that is already there or asks for one and
+   * lets the effect below finish the job. `searchInput.current` is exactly the question
+   * "is it mounted": React nulls a ref when the element it points at goes away, so there
+   * is no second flag to keep in step with the first.
+   *
+   * `Mod-F` and the magnifier both come through here, which is what keeps the keyboard
+   * route and the mouse route landing in the same state (B64's rule, one control over).
+   */
+  const openSearch = useCallback(() => {
+    if (searchInput.current !== null) {
+      searchInput.current.focus();
+      searchInput.current.select();
+      return;
+    }
+    focusSearchOnOpen.current = true;
+    setSearchOpen(true);
+  }, []);
+
+  // The other half of `openSearch`: the field exists by now. Deliberately not "focus
+  // whenever the field opens" — clicking the magnifier does that, but so would any future
+  // route that merely wants the field visible, and a caret that moves on its own is the
+  // thing `focusNotesOnNextList` exists to keep deliberate elsewhere in this file.
+  useEffect(() => {
+    if (!searchOpen || !focusSearchOnOpen.current) return;
+    focusSearchOnOpen.current = false;
+    searchInput.current?.focus();
+    searchInput.current?.select();
+  }, [searchOpen]);
 
   /**
    * And out of the Tasks view, back to the folder list.
@@ -988,8 +1045,7 @@ export function Library(): React.ReactElement {
 
       if (fires("searchVault")) {
         event.preventDefault();
-        searchInput.current?.focus();
-        searchInput.current?.select();
+        openSearch();
         return;
       }
 
@@ -2442,6 +2498,7 @@ export function Library(): React.ReactElement {
           newLabel={app.t("library.new")}
           renameLabel={app.t("library.rename")}
           deleteLabel={app.t("library.delete")}
+          allFoldersLabel={app.t("library.allFolders")}
           newNoteLabel={app.t("library.newNote")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
@@ -2528,6 +2585,9 @@ export function Library(): React.ReactElement {
             // uses it: a tag or the Tasks view is not a place to put a note.
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             searchRef={searchInput}
+            searchOpen={searchOpen}
+            onSearchOpen={openSearch}
+            onCloseSearch={() => setSearchOpen(false)}
             // Counted now rather than read off the rows on screen. Those come from one
             // non-recursive `readdir` of `.md` files, so a folder dragged in here with
             // forty notes in it counted as nothing — in the sentence that asks whether to
@@ -2570,9 +2630,18 @@ export function Library(): React.ReactElement {
             </div>
           ) : (
             <>
-              <header className="reader-header">
-                <div className="reader-titles">
-                  {editingTitle !== null ? (
+              {/* Title and nothing else. The path moved to the footer — a note's location
+                  is a fact about the file, not the heading of the pane — and with it gone
+                  this band is the same 40px the two panes beside it wear, which is the
+                  line across the top of the window Finding 7 was asking for.
+
+                  It is also where Windows draws its caption buttons, over on the right;
+                  `.pane-header-reader` is what keeps the title clear of them. */}
+              <PaneHeader
+                captionButtons
+                className="reader-header"
+                title={
+                  editingTitle !== null ? (
                     <input
                       ref={titleInput}
                       className="title-field reader-title-input"
@@ -2606,16 +2675,16 @@ export function Library(): React.ReactElement {
                     />
                   ) : (
                     <h1
+                      className="pane-title"
                       onClick={() => {
                         if (open.editable) setEditingTitle(open.title);
                       }}
                     >
                       {open.title}
                     </h1>
-                  )}
-                  <span className="reader-path">{open.path}</span>
-                </div>
-              </header>
+                  )
+                }
+              />
   
               {/* `pointer-events: none` when a note is claimed by the capture window: the
                   content stays visible — reading it while it is being typed into
@@ -2676,47 +2745,65 @@ export function Library(): React.ReactElement {
                   leaving the note you are reading is exactly the thing that must keep
                   working while somebody else is typing into it. Insert carries its own
                   `disabled` for that case, as it always has. */}
-              <div className="reader-footer">
-                <div className="reader-status">
-                  <span className="reader-state">
-                    {open.editable
-                      ? app.t(dirty ? "library.saving" : "library.saved")
-                      : app.t("library.openInCapture")}
-                  </span>
-                  {backTo !== null && (
-                    <button
-                      type="button"
-                      className="reader-back"
-                      title={app.t("library.backTo").replace("{title}", backTo.title)}
-                      onClick={goBack}
-                    >
-                      ← {backTo.title}
-                    </button>
-                  )}
-                </div>
-
-                <div className="reader-actions">
+              <PaneFooter
+                className="reader-footer"
+                status={
+                  <>
+                    <span className="reader-state">
+                      {open.editable
+                        ? app.t(dirty ? "library.saving" : "library.saved")
+                        : app.t("library.openInCapture")}
+                    </span>
+                    {backTo !== null && (
+                      <button
+                        type="button"
+                        className="reader-back"
+                        title={app.t("library.backTo").replace("{title}", backTo.title)}
+                        onClick={goBack}
+                      >
+                        ← {backTo.title}
+                      </button>
+                    )}
+                    {/* Where the file is, in the seat the read-only notice takes when
+                        there is one. The path came down from the header — a note's
+                        location is a fact about the file rather than the heading of the
+                        pane — and it yields rather than sharing the line, because a 28px
+                        bar can hold one long ellipsised string and not two. The notice is
+                        the one that wins: it is the answer to "why can I not type here",
+                        and the path is one hover on the title away regardless. */}
+                    {open.editable && (
+                      <span className="reader-path" title={open.path}>
+                        {/* `<bdi>` because the span is `direction: rtl` — that is how the
+                            ellipsis is moved to the *head* of the path so the file name
+                            at the end survives (see `library.css`), and without an
+                            isolate the run's trailing punctuation is reordered with it. */}
+                        <bdi>{open.path}</bdi>
+                      </span>
+                    )}
+                  </>
+                }
+                actions={
+                  <>
                   {/* 🖼 🔗 ▦ 📎 used to be four always-on icon buttons here, and four
                       glyphs nobody can read at a glance is exactly the clutter the ⋯
                       menu below was made to end for the five actions before them. One
                       named menu instead, built from `insertMenuItems` so the toolbar and
                       the note panel's right-click menu cannot come to disagree. */}
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("library.insert")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      // `rect.top`, not `rect.bottom`: this bar is at the foot of the
-                      // window now, so a menu opening downwards is clamped straight back
-                      // over the button it came from. `ContextMenu` clamps to the
-                      // viewport, and this hands it a point it can honour — the same
-                      // line, for the same reason, that `Capture.tsx` has always used.
-                      setInsertMenu({ x: rect.left, y: rect.top });
-                    }}
-                  >
-                    {app.t("library.insert")}
-                  </button>
+                    <ChromeButton
+                      label={app.t("library.insert")}
+                      small
+                      menu
+                      disabled={!open.editable}
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        // `rect.top`, not `rect.bottom`: this bar is at the foot of the
+                        // window now, so a menu opening downwards is clamped straight back
+                        // over the button it came from. `ContextMenu` clamps to the
+                        // viewport, and this hands it a point it can honour — the same
+                        // line, for the same reason, that `Capture.tsx` has always used.
+                        setInsertMenu({ x: rect.left, y: rect.top });
+                      }}
+                    />
                   {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
                       buttons here, squeezing the title in the `nowrap` header next to
                       them — collapsed into one menu button, opened at its own rect the
@@ -2726,16 +2813,16 @@ export function Library(): React.ReactElement {
                       the CLAUDE.md context-menu constraint's note on why that keeps
                       `--click-button` working here. The label was "⋯" until a glyph
                       beside a second glyph-labelled menu stopped saying anything. */}
-                  <button
-                    type="button"
-                    title={app.t("library.moreActions")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setReaderMenu({ x: rect.left, y: rect.top });
-                    }}
-                  >
-                    {app.t("library.actions")}
-                  </button>
+                    <ChromeButton
+                      label={app.t("library.actions")}
+                      title={app.t("library.moreActions")}
+                      small
+                      menu
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setReaderMenu({ x: rect.left, y: rect.top });
+                      }}
+                    />
                   {/* Third, after Insert and Actions, because that is the order the
                       capture window's footer has always carried and this window's editor
                       is the same editor. The sheet was reachable only from the sidebar's
@@ -2743,15 +2830,15 @@ export function Library(): React.ReactElement {
                       for it while writing — the row of controls under the note is where
                       the question comes up. Same `Help` component, told which window it
                       is in, so the shortcuts it lists are this window's. */}
-                  <button
-                    type="button"
-                    title={app.t("help.title")}
-                    onClick={() => setHelpOpen(true)}
-                  >
-                    {app.t("help.button")}
-                  </button>
-                </div>
-              </div>
+                    <ChromeButton
+                      label={app.t("help.button")}
+                      title={app.t("help.title")}
+                      small
+                      onClick={() => setHelpOpen(true)}
+                    />
+                  </>
+                }
+              />
 
               {link !== null && (
                 <LinkPrompt

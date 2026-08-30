@@ -35,15 +35,21 @@ const LOCALE_NAMES: Record<Locale, string> = {
  *
  * Five steps rather than a spinner or a percentage: this is a question answered once per
  * machine, and a number typed into a box invites the two sizes either side of the one
- * that reads well. 16 is the middle and the default — the size every screenshot in the
- * design documents was taken at.
+ * that reads well.
+ *
+ * **The numbers are unchanged and the names moved down one.** 13 is the default now, with
+ * the pane-consistency pass — it is the size the design was drawn at and the size the note
+ * list beside it uses — and it used to be called "Smallest", which is a poor thing for a
+ * default to be called. The five *values* stay exactly as they were on purpose: the chosen
+ * size is a number in a settings file, and dropping 16 from the list would leave every
+ * machine that had picked it looking at an empty dropdown.
  */
 const FONT_SIZES: { px: number; key: string }[] = [
-  { px: 13, key: "settings.textSmallest" },
-  { px: 14, key: "settings.textSmall" },
-  { px: 16, key: "settings.textNormal" },
-  { px: 18, key: "settings.textLarge" },
-  { px: 20, key: "settings.textLarger" },
+  { px: 13, key: "settings.textNormal" },
+  { px: 14, key: "settings.textLarge" },
+  { px: 16, key: "settings.textLarger" },
+  { px: 18, key: "settings.textLargest" },
+  { px: 20, key: "settings.textHuge" },
 ];
 
 /**

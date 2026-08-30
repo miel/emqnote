@@ -96,8 +96,6 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -183,6 +181,9 @@ describe("the library window's debounces and teardown", () => {
     fake.search.mockClear();
 
     // Arms the debounce and does not wait it out — that ordering is the test.
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+    });
     const box = container.querySelector<HTMLInputElement>(".notes-search input")!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(

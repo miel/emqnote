@@ -51,10 +51,15 @@ describe("styles.css: one title field in both windows", () => {
     expect(styles).not.toMatch(/^\.title-field \{/m);
   });
 
-  it("draws the capture title at the note editor's size and weight", () => {
+  it("draws the capture title at the pane-heading size and weight", () => {
+    // 15px/600 — the size a pane's heading is drawn at in either window, because a note's
+    // title *is* the heading of the pane it is in. It was 17px/bold until the three panes
+    // agreed on one scale, and the number is asserted here rather than left to the
+    // cascade because two other rules copy it: `.reader-header h1`, which trades places
+    // with this input, and `.pane-title`, which every other heading wears.
     const box = rule(styles, shared());
-    expect(box).toMatch(/font-size:\s*17px;/);
-    expect(box).toMatch(/font-weight:\s*bold;/);
+    expect(box).toMatch(/font-size:\s*15px;/);
+    expect(box).toMatch(/font-weight:\s*600;/);
     expect(box).toMatch(/background:\s*transparent;/);
   });
 
@@ -83,7 +88,12 @@ describe("styles.css: one title field in both windows", () => {
     const heading = rule(library, "\\.reader-header h1");
     expect(heading).toMatch(/padding:\s*2px 6px;/);
     expect(heading).toMatch(/border:\s*1px solid transparent;/);
-    expect(heading).toMatch(/font-size:\s*17px;/);
+
+    // And it must *not* name a size of its own any more: it carries `.pane-title`, which
+    // is where 15px/600 comes from for all three panes. A size here would out-rank that
+    // one class with a class and an element, and the reader's heading would quietly stop
+    // matching the two beside it — which is the whole of what this pass fixed.
+    expect(heading).not.toMatch(/font-size:/);
   });
 
   it("leaves the library's input no second opinion of its own", () => {

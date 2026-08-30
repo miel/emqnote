@@ -101,8 +101,6 @@ function buildFake(contents: Contents): CaptureApi {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -206,7 +204,7 @@ describe("the Empty-trash question", () => {
     await flush();
 
     const button = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".notes-actions button"),
+      container.querySelectorAll<HTMLButtonElement>(".notes .pane-actions button"),
     ).find((node) => node.textContent === "Empty trash");
     expect(button, "no Empty trash button").not.toBeUndefined();
     await act(async () => {

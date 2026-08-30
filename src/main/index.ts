@@ -39,6 +39,7 @@ import {
   showLibraryWindow,
 } from "./library-window.js";
 import { readLaunchOptions, shouldOpenLibraryAtLaunch } from "./launch-options.js";
+import { titleBarColours } from "./window-background.js";
 import { applyLoginItem } from "./login-item.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
@@ -1143,15 +1144,6 @@ function registerIpc(): void {
     return true;
   });
 
-  ipcMain.on(IPC.windowMinimise, () => getCaptureWindow()?.minimize());
-
-  ipcMain.on(IPC.windowToggleMaximise, () => {
-    const target = getCaptureWindow();
-    if (target === undefined || target === null) return;
-    if (target.isMaximized()) target.unmaximize();
-    else target.maximize();
-  });
-
   registerLibraryIpc();
   registerAppIpc();
 }
@@ -1196,6 +1188,23 @@ function applyTheme(theme: Theme): Theme {
   const valid: Theme[] = ["system", "light", "dark"];
   const chosen = valid.includes(theme) ? theme : "system";
   nativeTheme.themeSource = chosen;
+
+  // The one part of the chrome that `prefers-color-scheme` cannot reach: on Windows 11
+  // both windows are frameless with `titleBarOverlay`, and the caption buttons Chromium
+  // draws into the header band are painted from colours handed over at construction. A
+  // light theme with dark caption buttons in the corner of the band is exactly the kind
+  // of half-switched window B90 exists to prevent, so they are pushed again here.
+  //
+  // `setTitleBarOverlay` throws on a window that has no overlay, which is every window on
+  // macOS and Linux — hence the platform guard rather than a try. Windows only.
+  if (process.platform === "win32") {
+    const colours = titleBarColours();
+    for (const target of [getCaptureWindow(), getLibraryWindow()]) {
+      if (target === null || target === undefined || target.isDestroyed()) continue;
+      target.setTitleBarOverlay({ ...colours, height: 40 });
+    }
+  }
+
   return chosen;
 }
 

@@ -3,6 +3,26 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 30 August 2026, **unreleased** — the pane-consistency pass (B92), on the
+`worktree-pane-consistency` branch. `DESIGN-CRITIQUE.md`'s Finding 7 is answered: all three
+panes wear one 40px header band and the two with a footer wear one 28px band, both from a
+single rule, and every button in either window's chrome is one component at one of three
+sizes. Both windows are frameless now, with the platform's own controls drawn into the band.
+
+**What is open on it.** Nothing involving a window frame has been seen — this sandbox is
+Linux, the one platform deliberately left framed — so `TEST-PROTOCOL.md` §45 is a first
+sighting from end to end. §45f is the row to walk first: on Windows the application menu can
+no longer be drawn in a frameless window, and its Edit accelerators used to be reachable
+through that bar. Chromium is expected to handle Ctrl+Z/X/C/V/A natively in a text field,
+but that is a claim about Chromium rather than something anyone here has watched happen; if
+it does not hold, the fallback is a Windows-only decision to keep the frame.
+
+Finding 6 is *mitigated* rather than closed — the tree's icon buttons name their folder in a
+tooltip, and Delete already confirmed with the name in it — and Findings 1, 4, 5 and 8 of
+`DESIGN-CRITIQUE.md` are untouched.
+
+---
+
 Last updated 30 August 2026, released as `v0.12.4` — **what `v0.12.3` broke on its way past
 the thing it fixed**, and the flake that had been hiding behind it. The claim that keeps a
 dragged rectangle alive past `mouseup` was released by a mouse press and by nothing else, so

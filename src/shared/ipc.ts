@@ -62,10 +62,6 @@ export const IPC = {
    * has unsaved edits; see `Capture.tsx`'s `dirtyRef`.
    */
   captureReload: "capture:reload",
-  /** renderer → main: window buttons in the title bar we draw ourselves. */
-  windowMinimise: "window:minimise",
-  windowToggleMaximise: "window:toggle-maximise",
-
   /** The library window: browsing and tidying the vault. */
   libraryOpen: "library:open",
   libraryTree: "library:tree",
@@ -761,8 +757,6 @@ export interface CaptureApi {
   close: () => void;
   /** Trashes the brand-new note being composed and puts the window away (B68). */
   discard: () => void;
-  minimise: () => void;
-  toggleMaximise: () => void;
   openLibrary: () => void;
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;

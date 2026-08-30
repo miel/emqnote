@@ -95,8 +95,6 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -164,7 +162,22 @@ function hints(container: HTMLDivElement): Element | null {
   return container.querySelector(".search-hints");
 }
 
+/**
+ * Unfolds the search field before reaching for it.
+ *
+ * The box lives in the note list's heading now and is only mounted while a search is
+ * open, so every test that reaches for it starts by pressing the magnifier — which is
+ * what a hand does too. Idempotent, so a test may call it twice without closing it again.
+ */
+async function openSearch(container: HTMLDivElement): Promise<void> {
+  if (container.querySelector(".notes-search input") !== null) return;
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+  });
+}
+
 async function focusBox(container: HTMLDivElement): Promise<void> {
+  await openSearch(container);
   await act(async () => {
     box(container).focus();
   });
@@ -296,10 +309,15 @@ describe("the search box's syntax panel", () => {
     await press(box(container), "Escape");
     await flush();
 
-    expect(box(container).value).toBe("");
+    // The field folds back into the heading rather than sitting there emptied, which is
+    // what leaving a search now looks like: the box is gone and the folder's own name is
+    // back in the seat it was borrowing.
+    expect(box(container)).toBeNull();
+    expect(container.querySelector(".notes .pane-title")?.textContent).toBe("00 Inbox");
   });
 
   it("keeps the placeholder to the word the box is for", async () => {
+    await openSearch(container);
     // The syntax lived here and could not be read. What is left has to stay short enough
     // to be, or this moved the problem rather than fixing it.
     expect(box(container).placeholder).toBe("Search…");
