@@ -20,7 +20,11 @@ build
 # `npm run ui:kit` and `npm run ui:deck`. Twelve megabytes of pictures that go stale the
 # moment the renderer changes, and are rebuilt in minutes from the two scripts — which are
 # checked in. `design/old/` holds earlier exports kept by hand.
-/design/
+#
+# `design/` is ignored by default, so a new export folder stays out without anyone
+# remembering to add it. Hand-written design work is named below to opt back in.
+/design/*
+!/design/design-handoff-pane-consistency/
 
 # The venv `scripts/build-ui-deck.py` asks for. python-pptx is deliberately not a project
 # dependency: it is needed to build a design asset, never to build or run the app.
