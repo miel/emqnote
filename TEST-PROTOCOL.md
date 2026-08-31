@@ -1617,6 +1617,34 @@ the one thing nobody has looked at.
 
 ---
 
+## §47 — A note that will not save (B93)
+
+The 31 August 2026 data loss: OneDrive held a just-created note in `00 Inbox` open,
+`rename()` answered `EPERM`, and the app then wrote nothing for the rest of the day without
+saying so. Two notes were lost outright and a third was frozen at the third of it that had
+already been written.
+
+**Every row here is a first sighting, and §47a–§47c are Windows-only.** The automated tests
+provoke the failure with a vault path that cannot be written to, which is a faithful stand-in
+for the *shape* of the failure and not for OneDrive's timing. Whether the retry rides out a
+real OneDrive lock — and whether it is `clearReadOnly` that clears it — has never been seen.
+§47d is the one row that can be walked on any platform, because it makes the failure by hand.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 47a | **On Windows**, with the vault on OneDrive, type a new note and Ctrl+Enter it while OneDrive is actively syncing (drop a few hundred MB into another synced folder first) | The note is written. If a `EPERM` was ridden out, nothing at all is visible — which is the point. Say if the save ever visibly stalls for the better part of a second |  |
+| 47b | **On Windows**, do that a dozen times over a busy sync | No note is ever silently missing from the library afterwards. Count them: this is the row the whole batch exists for |  |
+| 47c | **On Windows**, right-click a note's `.md` in the vault → Properties → tick Read-only, then edit that note in the library | It saves anyway — `clearReadOnly` runs between attempts — and the read-only tick is gone afterwards. If instead the footer says "Not saved (EPERM)", the retry is not reaching the attribute |  |
+| 47d | Make a note unsaveable by hand: quit emqnote, replace one note's `.md` with a **folder** of the same name, start emqnote and open that note in the library, then type into it | The foot of the note pane says **Not saved (EPERM)** — or another code — where it would say "Saved", **not** "Saved" and not "Saving…" for ever |  |
+| 47e | On that same failure, look for the "Text preserved — copy path" link beside it, click it, and paste the path somewhere | It names a real file under `%APPDATA%\emqnote\recovered\` (macOS: `~/Library/Application Support/emqnote/recovered/`) **whose contents are what you just typed**. This is the row that is the whole point of the fix |  |
+| 47f | Now remove the folder you put in the note's place, and type another character | The notice clears itself on the next write that lands, without being dismissed. The pane goes back to "Saved" |  |
+| 47g | Repeat §47d in the **capture window** (Ctrl+Enter a new note into a folder you have made unwriteable) | Its 28px footer says "Not saved ({code})" in place of "Saved as …", not beside it. "Saved as …" appearing at all while a save is failing is the defect this row exists for |  |
+| 47h | With that still failing, press Ctrl+Enter, type a second note into a folder that *does* work, and press Ctrl+Enter again | The second note is written. Before B93 it was not — one failure disabled every later save for the life of the process, and this is the regression that lost the notes |  |
+| 47i | Check the vault for stray `.tmp` files after all of the above | There are none: a temporary is removed once its recovery copy is safe. One left behind means no recovery copy could be written, which §47e would already have said |  |
+| 47j | While a save is failing, open the tray menu → "Check for updates…" | It reports about *updates* — up to date, an update, or a network failure. If it reports the note's `EPERM` under "Could not check for updates", the two error paths have been crossed again |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

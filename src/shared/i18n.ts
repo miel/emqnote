@@ -46,6 +46,11 @@ const DUTCH: Record<string, string> = {
   "capture.discardHint": "Deze notitie naar de prullenbak",
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
+  // De code staat erbij omdat die het enige is waarop een OneDrive-log en een zoekmachine
+  // allebei aanslaan. "Niet bewaard" en niet "bewaren mislukt": het gaat om de toestand
+  // waar de notitie nu in is, niet om de handeling die misging.
+  "capture.saveFailed": "Niet bewaard ({code})",
+  "capture.saveRecovered": "Tekst veiliggesteld — pad kopiëren",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
   "capture.noTime": "Datum instellen…",
 
@@ -472,6 +477,8 @@ const DUTCH: Record<string, string> = {
   "diskChange.close": "Sluiten",
   "diskChange.keepMine": "Mijn versie houden",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "library.saveFailed": "Niet bewaard ({code})",
+  "library.saveRecovered": "Tekst veiliggesteld — pad kopiëren",
   "diskChange.captureChanged": "Deze notitie is intussen buiten emqnote gewijzigd.",
   "diskChange.captureRemoved": "Deze notitie is intussen buiten emqnote verwijderd.",
 };
@@ -517,6 +524,11 @@ const ENGLISH: Record<string, string> = {
   "capture.discardHint": "Move this note to the trash",
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
+  // The code is shown because it is the one token a OneDrive log and a search engine
+  // both key on. "Not saved" rather than "save failed": what matters is the state the
+  // note is in now, not the operation that went wrong.
+  "capture.saveFailed": "Not saved ({code})",
+  "capture.saveRecovered": "Text preserved — copy path",
   "capture.changeTime": "Click to change the date and time",
   "capture.noTime": "Set a date…",
 
@@ -935,6 +947,8 @@ const ENGLISH: Record<string, string> = {
   "diskChange.close": "Close",
   "diskChange.keepMine": "Keep mine",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "library.saveFailed": "Not saved ({code})",
+  "library.saveRecovered": "Text preserved — copy path",
   "diskChange.captureChanged": "This note changed outside emqnote in the meantime.",
   "diskChange.captureRemoved": "This note was deleted outside emqnote in the meantime.",
 };

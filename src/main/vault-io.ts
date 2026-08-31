@@ -7,7 +7,6 @@ import {
   realpathSync,
   renameSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
@@ -37,6 +36,7 @@ import {
   type OpenedNote,
   type SaveNoteRequest,
 } from "../shared/vault-types.js";
+import { writeAtomicSync } from "./atomic-write.js";
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
 import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
@@ -331,13 +331,19 @@ export function openNote(vault: string, notePath: string): OpenedNote | null {
   };
 }
 
+/**
+ * The mechanism lives in `atomic-write.ts` now — `.tmp` + `rename()`, with the retry, the
+ * unique temporary name and the recovery copy that the incident of 31 August 2026 showed
+ * this path needs. What stays here is the one thing that is this module's own business:
+ * remembering the bytes, so the watcher's reindex of this exact write — which the rename
+ * will trigger — can tell its own echo apart from a real external change (`own-writes.ts`).
+ *
+ * Deliberately *after* the write rather than before it: a write that threw wrote nothing,
+ * and remembering bytes that are not on disk would teach the watcher to ignore the next
+ * real change to that file.
+ */
 function writeAtomic(file: string, contents: string): void {
-  mkdirSync(dirname(file), { recursive: true });
-  const temporary = `${file}.tmp`;
-  writeFileSync(temporary, contents, "utf8");
-  renameSync(temporary, file);
-  // So the watcher's reindex of this exact write — which the rename above will trigger —
-  // can tell its own echo apart from a real external change. See `own-writes.ts`.
+  writeAtomicSync(file, contents);
   rememberOwnWrite(file, contents);
 }
 

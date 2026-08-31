@@ -120,6 +120,8 @@ export interface CaptureSpies {
   painted: ReturnType<typeof vi.fn>;
   pickAttachment: ReturnType<typeof vi.fn>;
   reloadNote: ReturnType<typeof vi.fn>;
+  /** The footer's "copy path" beside a save that would not land (B93). */
+  copyText: ReturnType<typeof vi.fn>;
 }
 
 export interface MountedCapture {
@@ -205,6 +207,7 @@ export async function mountCapture(
     painted: vi.fn(),
     pickAttachment: vi.fn(async () => null),
     reloadNote: vi.fn(async () => {}),
+    copyText: vi.fn(async () => {}),
   };
 
   let showHandler: ((payload: ShowPayload) => void) | null = null;

@@ -26,6 +26,7 @@ import {
   type TaskCount,
   type VaultFileEvent,
 } from "../../shared/vault-types.js";
+import type { SaveError } from "../../shared/ipc.js";
 import { buildEditorMenu, insertMenuItems } from "../editor/editor-menu.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
@@ -409,6 +410,17 @@ export function Library(): React.ReactElement {
   const sortLoaded = useRef(false);
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
+  /**
+   * The last save that would not land, or null. Cleared by the next one that does, and
+   * by opening another note — a failure belongs to the note it happened to.
+   *
+   * The reader used to have no way to show one at all: `save()` did not catch, so main
+   * throwing meant an unhandled rejection in this window, `setDirty(false)` never
+   * running, and the foot of the pane reading "Saving…" for ever. Which is the *better*
+   * of the two ways it could go wrong — with the failure answered rather than thrown, the
+   * same code would say "Saved". See `atomic-write.ts`.
+   */
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
   /**
    * A note changed or disappeared on disk while it was open here, for a reason this app
    * did not cause itself — see `own-writes.ts` for how the app's own debounced autosave
@@ -1371,7 +1383,10 @@ export function Library(): React.ReactElement {
       doc: doc.toJSON(),
     });
 
-    setDirty(false);
+    // Not cleared when the write failed: the note still differs from the file, and
+    // saying otherwise is what put "Saved" under a note that was not.
+    if (result.error === undefined) setDirty(false);
+    setSaveError(result.error ?? null);
     // Editing the header — or an inline #tag in the body — changes what the list and the
     // filters show, so both reload.
     if (result.written) {
@@ -1409,8 +1424,10 @@ export function Library(): React.ReactElement {
       // Whatever the disk-change bar was showing belongs to the note being left, not
       // the one about to be loaded — cleared here rather than left to the effect keyed
       // on `open` transitioning to `null`, since a switch between two open notes never
-      // passes through `null` at all.
+      // passes through `null` at all. A failed save is the same kind of thing and is
+      // cleared beside it: it names a file this pane is about to stop showing.
       setDiskEvent(null);
+      setSaveError(null);
 
       // Where the caret was in the note being left, before anything replaces it (B70).
       // Beside the outgoing note's pending save, which is flushed a few lines down: the
@@ -2853,11 +2870,35 @@ export function Library(): React.ReactElement {
                 className="reader-footer"
                 status={
                   <>
-                    <span className="reader-state">
-                      {open.editable
-                        ? app.t(dirty ? "library.saving" : "library.saved")
-                        : app.t("library.openInCapture")}
-                    </span>
+                    {/* A failure takes this seat, for the reason the capture window's
+                        footer carries at length: "Saved" and "could not save" cannot share
+                        a line, and it is the reassuring one that gets believed. */}
+                    {saveError !== null ? (
+                      <span className="save-error" title={saveError.message}>
+                        {app.t("library.saveFailed").replace("{code}", saveError.code)}
+                        {saveError.recoveryPath !== null && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              className="save-error-copy"
+                              title={saveError.recoveryPath}
+                              onClick={() => {
+                                void window.emqnote.copyText(saveError.recoveryPath ?? "");
+                              }}
+                            >
+                              {app.t("library.saveRecovered")}
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="reader-state">
+                        {open.editable
+                          ? app.t(dirty ? "library.saving" : "library.saved")
+                          : app.t("library.openInCapture")}
+                      </span>
+                    )}
                     {backTo !== null && (
                       <button
                         type="button"

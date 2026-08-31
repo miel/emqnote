@@ -67,6 +67,7 @@ export function Capture(): React.ReactElement {
   const [status, setStatus] = useState<StatusPayload>({
     lastLatencyMs: null,
     savedAs: null,
+    saveError: null,
   });
   const [link, setLink] = useState<{ href: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -344,7 +345,7 @@ export function Capture(): React.ReactElement {
       setSession((n) => n + 1);
       setExisting(false);
       setLink(null);
-      setStatus((previous) => ({ ...previous, savedAs: null }));
+      setStatus((previous) => ({ ...previous, savedAs: null, saveError: null }));
       dirtyRef.current = false;
       setDiskNotice(null);
     });
@@ -373,7 +374,7 @@ export function Capture(): React.ReactElement {
       setSession((n) => n + 1);
       setExisting(true);
       setLink(null);
-      setStatus((previous) => ({ ...previous, savedAs: note.path }));
+      setStatus((previous) => ({ ...previous, savedAs: note.path, saveError: null }));
       dirtyRef.current = false;
       setDiskNotice(null);
     });
@@ -673,11 +674,40 @@ export function Capture(): React.ReactElement {
         className="statusbar"
         status={
           <>
-          <span className="filename">
-            {status.savedAs === null
-              ? app.t("capture.nothingSaved")
-              : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
-          </span>
+          {/* **A failure wins this seat outright.** "Saved as …" was on screen all day
+              on 31 August 2026 while nothing was being written, because it only ever
+              named the file the app *meant* to write to. So while a write is failing this
+              says so instead, rather than beside it: a 28px bar reads as one line, and
+              the reassuring half of a contradiction is the half that gets believed. */}
+          {status.saveError === null ? (
+            <span className="filename">
+              {status.savedAs === null
+                ? app.t("capture.nothingSaved")
+                : `${app.t("capture.savedAs")} ${status.savedAs.split(/[\\/]/).pop()}`}
+            </span>
+          ) : (
+            <span className="save-error" title={status.saveError.message}>
+              {app.t("capture.saveFailed").replace("{code}", status.saveError.code)}
+              {status.saveError.recoveryPath !== null && (
+                <>
+                  {" "}
+                  {/* The path is the message. A button that opened the folder would be
+                      better still, but this window must not grow a control that can steal
+                      focus from a caret someone is mid-sentence in. */}
+                  <button
+                    type="button"
+                    className="save-error-copy"
+                    title={status.saveError.recoveryPath}
+                    onClick={() => {
+                      void window.emqnote.copyText(status.saveError?.recoveryPath ?? "");
+                    }}
+                  >
+                    {app.t("capture.saveRecovered")}
+                  </button>
+                </>
+              )}
+            </span>
+          )}
           {/* The notice carries no buttons, deliberately — see the comment on
               `onVaultFileChanged` above. A window where the user may be mid-sentence must
               never offer a *choice* that could discard what is currently being typed.

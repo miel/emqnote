@@ -2180,6 +2180,35 @@ body {
   text-overflow: ellipsis;
 }
 
+/* A save that would not land, in either window's 28px footer — `styles.css` rather than
+   `library.css` because both windows load this file and both say it the same way.
+
+   `--warning` and not a red of its own: `--warning` is already the "something needs your
+   attention and nothing is broken beyond repair" colour in this app (the disk-change
+   notice above wears it), and that is exactly the register here — the text was preserved,
+   the vault refused it. A seventh colour role would be one more than B87 allows anyway. */
+.save-error {
+  color: var(--warning);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline, borderless, and the colour of the sentence it sits in: this is a word in a
+   status line, not a control in a toolbar. `ChromeButton` is the wrong component for the
+   same reason — it draws a button, and there is no room for one in a 28px band that is
+   already carrying a message. */
+.save-error-copy {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .latency {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

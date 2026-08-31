@@ -1868,3 +1868,57 @@ traffic lights, so the 92px is the one number in this batch nobody has looked at
 drag-region regressions *do* reproduce here, which is the useful half of the same fact:
 app-region is honoured whether or not the frame is hidden. `TEST-PROTOCOL.md` §46 carries the
 thirteen rows; §46a is that one. The suite is 1983 tests over 161 files.
+
+
+**A data-loss bug, reported from real use on 31 August 2026 and fixed the same day (B93).**
+The report was three symptoms that looked unrelated: two notes captured that morning were
+silently not saved after Ctrl+Enter, a third note came back cut off at about a third of its
+length, and an attempt to update from `v0.12.2` to `v0.12.4` failed with a dialog titled
+"Could not check for updates" whose detail was `EPERM: operation not permitted, rename
+'…\00 Inbox\2026-08-31 0914 …md.tmp' -> '…md'`.
+
+That dialog was the evidence rather than a fourth bug. The path in it is a note, not an
+update: `updater.ts`'s "Restart now" branch calls `beforeInstall()`, which is
+`writer.flush()`, and its `.catch(fail)` reported the result through `reportError`. And
+because `CaptureWriter.enqueue` chained every write onto one promise with no `catch`, the
+error in that evening dialog was the *morning's* — `then` on a rejected promise short-
+circuits and hands the same rejection on for ever, so the queue had been dead since 09:14
+and was still replaying the rejection that killed it. One `EPERM` from OneDrive holding a
+just-created file therefore explained all three symptoms: the two later notes were never
+written at all, and the third was frozen at its last successful write. OneDrive's version
+history held one version for exactly the same reason.
+
+The recovery avenue turned out to be narrower than it first looked, and that is worth
+recording. The failed write's `.tmp` was the only place the missing text ever existed —
+but the writes are debounced twice (300 ms in the renderer, 800 ms in main), so the gap
+between the last successful write and the failed one is a single typing burst, not the
+missing two thirds. Everything after that was typed into a document that never touched the
+disk in any form. The `.tmp` was gone by the time it was looked for, too, and the fixed
+`${file}.tmp` name is why: the next successful write of that note overwrote it and renamed
+it away, which is what happened when the app restarted after the update and the note was
+opened again.
+
+The fix is `src/main/atomic-write.ts` — one module where there were two private
+`writeAtomic` copies — plus the `catch` in `enqueue`, and a save-failure notice in both
+windows' footers where "Saved as …" and "Saved" used to sit unconditionally. `CaptureWriter`
+now *requires* a failure handler in its constructor, so a writer that can lose work silently
+is not a thing that can be built. Seventeen tests came with it, in three files:
+`test/atomic-write.test.ts` for the bytes (recovery copy, unique temporaries, the temporary
+kept when there is nowhere to recover to), a "a write that could not land" block in
+`test/capture-writer.test.ts` for the queue, and `test/capture-save-error.test.ts` for the
+window — where the assertion that matters is not that the failure appears but that
+"Saved as …" *disappears* while it does. The queue block's three cases were each checked to
+fail against the old `enqueue` before being kept. Suite: 2000 tests.
+
+One thing the unique temporary name settles as a side effect: the `ENOENT … rename
+'….md.tmp'` race that `test/CLAUDE.md` records as having failed the `v0.10.0` release, where
+two writes of one note shared the fixed temporary and the second renamed a file the first
+had already consumed. That was worked around in the test by waiting for each write's result
+before provoking the next — which is the right rule for a test regardless — and the cause is
+now gone from the code as well.
+
+**Not confirmed on real hardware.** Every test here provokes the failure with a vault path
+that cannot be written to, which is a faithful stand-in for the *shape* of the failure and
+not for OneDrive's own timing. Whether the retry actually rides out a real OneDrive lock on
+Windows — and whether `clearReadOnly` is the thing that clears it — is `TEST-PROTOCOL.md`
+material and has not been seen live.

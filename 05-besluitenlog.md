@@ -3531,3 +3531,57 @@ elders staat — wordt hier verzácht en niet gesloten: `✎` en `✕` noemen de
 en Verwijderen vroeg al door met de naam erin (B54). De echte oplossingen die de kritiek
 noemde (het voorwerp in de kop zetten, of de werkwoorden naar de rij verplaatsen) staan nog
 open. Bevindingen 1, 4, 5 en 8 zijn niet aangeraakt.
+
+
+## B93 — Een schrijffout is van één schrijfopdracht, en de tekst gaat nooit nergens heen
+
+**Genomen** op 31 augustus 2026, na verlies van echte notities.
+
+Op 31 augustus 2026 hield OneDrive een net aangemaakte notitie in `00 Inbox` open, gaf
+`rename()` `EPERM` terug, en schreef de app daarna een dag lang niets meer. Twee notities
+die met Ctrl+Enter werden afgesloten bestonden nooit; een derde bleef staan op het derde
+deel dat al bewaard was. Er stond nergens iets op het scherm — de statusbalk zei de hele
+dag "Bewaard als …", omdat dat alleen de naam was van het bestand waar de app *naartoe
+wilde* schrijven. Het werd pas zichtbaar toen 's avonds het bijwerkvenster de `EPERM` van
+09:14 liet zien: `CaptureWriter.enqueue` ketende elke schrijfopdracht aan één promise
+zonder `catch`, en `then` op een verworpen promise voert zijn callback niet uit en geeft
+dezelfde verwerping door — voor altijd. Die ene verwerping wás sindsdien de wachtrij, en
+`setBeforeInstall`'s `flush()` haalde hem er 's avonds weer uit.
+
+Vier regels, en ze staan in die volgorde omdat elke volgende het gat dekt dat de vorige
+laat vallen.
+
+**Een mislukte schrijfopdracht is van zichzelf, niet van de wachtrij.** `enqueue` vangt nu,
+en de fout reist mee op het `WriteResult` in plaats van als verwerping. Dat laatste is geen
+netheid: `setHideHandler` roept `writer.finish()` kaal aan en `setBlurHandler` doet
+`void writer.flush()`, dus een verwerping daar is een unhandled rejection en verder niets.
+Het is ook waarom het bijwerkvenster een schrijffout meldde onder "Could not check for
+updates" — die twee hoorden nooit door dezelfde `catch` te lopen.
+
+**`EPERM` op een OneDrive-map is meestal tijdelijk of een attribuut, en dus wordt er opnieuw
+geprobeerd.** `trash-delete.ts` wist dat al en deed het al; het pad dat *verwijdert* dus wel
+en het pad dat *schrijft* niet, wat de verkeerde kant op is — een verwijdering die mislukt
+is hinder, een schrijfopdracht die mislukt is werk dat weg is. Vijf pogingen, ~750 ms, en
+tussendoor `clearReadOnly` op Windows: tegen een attribuut helpt wachten niet.
+
+**De tijdelijke naam is uniek.** `${file}.tmp` was vast, dus overschreef de eerstvolgende
+schrijfopdracht van dezelfde notitie de kopie die de mislukte had achtergelaten — de enige
+kopie van de tekst die er nog was, opgeruimd door de app zelf zodra hij na de update weer
+opstartte. Dezelfde vaste naam liet twee schrijfopdrachten van één notitie ook al met elkaar
+racen; dat stond al beschreven in `test/capture-writer.test.ts` als een `ENOENT` die een
+release deed vallen, en het was het kleinste van de twee gevolgen.
+
+**En als het bestand echt niet weg kan, gaat de tekst ergens anders heen.** Naar
+`userData/recovered/`, nadrukkelijk niet naar de kluis — de kluis is juist wat weigert. Dit
+is de regel die deze notitie had gered: de volledige tekst zat de hele tijd in het document
+van de renderer, en de app had geen plek waar hij hem kwijt wilde. Wat *niet* mag is de
+tijdelijke kopie opruimen zonder dat die reddingskopie er staat; dan is opruimen precies
+dezelfde fout in een kleiner jasje.
+
+Beide vensters zeggen het nu ook. "Niet bewaard ({code})" neemt de plaats in van "Bewaard
+als …" en van "Bewaard", en niet de plaats ernaast: een balk van 28 px leest als één regel,
+en van een tegenspraak wordt de geruststellende helft geloofd.
+
+Verworpen: alleen de `catch` toevoegen. Dan wordt één schrijfopdracht overgeslagen in plaats
+van alle, wat beter is maar nog steeds stil verlies — en stil verlies is waar dit hele
+besluit over gaat.

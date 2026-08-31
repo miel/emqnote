@@ -15,7 +15,13 @@ import {
 } from "electron";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { IPC, type CapturePayload, type Theme, type WikiLinkOutcome } from "../shared/ipc.js";
+import {
+  IPC,
+  type CapturePayload,
+  type SaveError,
+  type Theme,
+  type WikiLinkOutcome,
+} from "../shared/ipc.js";
 import { knownVaults, rememberVault } from "./remembered.js";
 import { listVaults } from "./vaults.js";
 import { CaptureWriter } from "./capture-store.js";
@@ -44,6 +50,7 @@ import { applyLoginItem } from "./login-item.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { buildTrayMenu, createTray } from "./tray.js";
 import { checkForUpdates, setBeforeInstall } from "./updater.js";
+import { AtomicWriteError, setRecoveryDirectory } from "./atomic-write.js";
 import {
   checkFilesOnDemand,
   defaultVaultPath,
@@ -500,16 +507,67 @@ function beginStartupScan(vault: string, db: IndexDb): void {
   }).finally(() => sendScanProgress(null));
 }
 
+/**
+ * Whatever a write threw, in the shape both windows show. `AtomicWriteError` is the
+ * expected case and the only one carrying a recovery path; anything else is reported
+ * faithfully rather than dressed up as one.
+ */
+function asSaveError(error: unknown): SaveError {
+  if (error instanceof AtomicWriteError) {
+    return { code: error.code, message: error.message, recoveryPath: error.recoveryPath };
+  }
+  return {
+    code: (error as NodeJS.ErrnoException | null)?.code ?? "UNKNOWN",
+    message: error instanceof Error ? error.message : String(error),
+    recoveryPath: null,
+  };
+}
+
+/**
+ * The last write that would not land, or null. Cleared by the next write that does, so
+ * the notice in the capture window's footer disappears on its own once OneDrive lets go
+ * — which is the common case, since `atomic-write.ts` only gives up after retrying.
+ */
+let lastSaveError: SaveError | null = null;
+
 const writer = new CaptureWriter(
   () => loadSettings().vaultPath,
   (result) => {
     lastSavedAs = result.path;
+    // A write that landed is the only honest way to clear a previous failure: the file is
+    // demonstrably writable again.
+    lastSaveError = null;
     // A note still awaiting Ctrl+Enter/close has nothing worth telling the library about
     // yet: it stays filtered out of every listing (see `uncommittedNewPath`), so pushing a
     // refresh here would only make it rescan for no visible change, every 800ms while the
     // user keeps typing.
     if (writer.uncommittedNewPath() === null) notifyLibrary();
-    sendStatus({ lastLatencyMs: lastLatency, savedAs: lastSavedAs });
+    sendStatus({
+      lastLatencyMs: lastLatency,
+      savedAs: lastSavedAs,
+      saveError: lastSaveError,
+    });
+  },
+  (failure) => {
+    lastSaveError = {
+      code: failure.code,
+      message: failure.message,
+      recoveryPath: failure.recoveryPath,
+    };
+    // Logged as well as shown. The window says the short version; a `code` and a full
+    // path in the terminal are what a bug report needs, and this is the class of failure
+    // where the report arrives hours after the fact.
+    console.error(
+      `[save] ${failure.path ?? "(unnamed note)"} — ${failure.code}: ${failure.message}` +
+        (failure.recoveryPath === null
+          ? " — no recovery copy could be written"
+          : ` — text preserved at ${failure.recoveryPath}`),
+    );
+    sendStatus({
+      lastLatencyMs: lastLatency,
+      savedAs: lastSavedAs,
+      saveError: lastSaveError,
+    });
   },
 );
 
@@ -548,6 +606,12 @@ async function main(): Promise<void> {
   const indexPath = join(app.getPath("userData"), "index.sqlite");
   indexDb = openIndex(indexPath);
   setScanRunner(workerScanRunner(indexPath));
+
+  // Where a note goes when the vault will not take it. Under `userData` and never inside
+  // the vault, deliberately: the vault is the thing refusing the write, and OneDrive is
+  // usually why. Set before any window exists, because the capture window is created and
+  // rendered at startup and can be typed into the moment it is shown.
+  setRecoveryDirectory(join(app.getPath("userData"), "recovered"));
 
   // Menu bar app: no dock icon, no app switcher entry. The main window in phase 4 will
   // temporarily restore this when it opens.
@@ -1068,7 +1132,7 @@ function registerIpc(): void {
     if (elapsed === null) return;
 
     lastLatency = elapsed;
-    sendStatus({ lastLatencyMs: elapsed, savedAs: lastSavedAs });
+    sendStatus({ lastLatencyMs: elapsed, savedAs: lastSavedAs, saveError: lastSaveError });
     buildTrayMenu();
 
     if (elapsed > LATENCY_BUDGET_MS) {
@@ -1910,7 +1974,18 @@ function registerLibraryIpc(): void {
     // window's own note.
     if (writer.activePath() === request.path)
       return { written: false, path: request.path, locked: true };
-    return saveNote(vault, request);
+
+    // The reader's `save()` does not catch, so a throw crossing this boundary was an
+    // unhandled rejection in the renderer and nothing on screen — while the note went on
+    // reading "Saved". Answered instead, so the reader can say what happened and where
+    // the text went. See `atomic-write.ts`.
+    try {
+      return saveNote(vault, request);
+    } catch (error) {
+      const failure = asSaveError(error);
+      console.error(`[save] ${request.path} — ${failure.code}: ${failure.message}`);
+      return { written: false, path: request.path, error: failure };
+    }
   });
 
   // Refuses a note the capture window has claimed, the same way `librarySaveNote` does

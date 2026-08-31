@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import type { Node as PMNode } from "prosemirror-model";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../markdown/index.js";
 import type { CapturePayload } from "../shared/ipc.js";
 import { TRASH_FOLDER, type OpenedNote } from "../shared/vault-types.js";
+import { AtomicWriteError, writeAtomicAsync } from "./atomic-write.js";
 import { isoWithOffset, noteFileName, uniquePath } from "./filename.js";
 import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import { saveNote } from "./vault-io.js";
@@ -187,14 +188,18 @@ function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-/** Atomic: temporary file first, then rename. OneDrive never sees half a note. */
+/**
+ * Atomic: temporary file first, then rename. OneDrive never sees half a note.
+ *
+ * The mechanism — and the retry, the unique temporary name and the recovery copy that
+ * `atomic-write.ts` explains at length — is shared with `vault-io.ts`'s own `writeAtomic`,
+ * which used to be a second copy of the same five lines with none of that. What is left
+ * here is the same afterword `vault-io.ts` keeps, for the same reason: the watcher's
+ * reindex of this write needs to recognise it as this app's own rather than an external
+ * change, and only a write that actually landed should teach it that.
+ */
 async function writeAtomic(path: string, contents: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp`;
-  await writeFile(temporary, contents, "utf8");
-  await rename(temporary, path);
-  // Same reasoning as `vault-io.ts`'s own `writeAtomic`: the watcher's reindex of this
-  // write needs to recognise it as this app's own rather than an external change.
+  await writeAtomicAsync(path, contents);
   rememberOwnWrite(path, contents);
 }
 
@@ -205,6 +210,24 @@ export interface WriteResult {
   attendees: string[];
   /** Likewise for the tag field. */
   tags: string[];
+  /**
+   * Set when this write could not land. Present on the result rather than thrown,
+   * because every caller of `finish`/`flush`/`load` is a fire-and-forget event handler —
+   * `setHideHandler` calls `writer.finish()` bare — and a rejection there is an
+   * unhandled rejection nobody sees. See `enqueue`.
+   */
+  failure?: WriteFailure;
+}
+
+/** Why a note could not be written, in the shape the status bar needs to say so. */
+export interface WriteFailure {
+  /** The note that would not save, vault-relative where that can be worked out. */
+  path: string | null;
+  /** The operating system's own code — `EPERM`, `ENOSPC`, … */
+  code: string;
+  message: string;
+  /** Where the text was put instead, or null when even that failed. */
+  recoveryPath: string | null;
 }
 
 const NOTHING: WriteResult = { path: null, written: false, attendees: [], tags: [] };
@@ -380,6 +403,13 @@ export class CaptureWriter {
   constructor(
     private readonly vault: () => string | null,
     private readonly onWritten: (result: WriteResult) => void,
+    /**
+     * Required, not optional, and that is the whole lesson of the 31 August 2026
+     * incident: the app wrote nothing for a day and had no channel to say so. A
+     * `CaptureWriter` built without somewhere to report a failure would be able to lose
+     * work silently again, so there is no such constructor.
+     */
+    private readonly onFailed: (failure: WriteFailure) => void,
   ) {}
 
   update(payload: CapturePayload): void {
@@ -534,18 +564,59 @@ export class CaptureWriter {
 
     // Queue the writes so a quick Escape right after a keystroke cannot race the
     // deferred write.
-    this.queue = this.queue.then(async () => {
-      let result = await writeSession(session, vault);
+    //
+    // **The chain must never be left rejected, and that is not a tidiness point.**
+    // `this.queue.then(...)` on a rejected promise does not run its callback and hands
+    // the same rejection on, forever — so a single failed write used to disable every
+    // later write for the lifetime of the process. On 31 August 2026 one `EPERM` from
+    // OneDrive at 09:14 meant the app wrote nothing for the rest of the day: two notes
+    // typed and lost, a third frozen at the third of it that had already been saved, and
+    // no message anywhere. The tell was that the *update* dialog hours later reported
+    // that morning's `EPERM` — the chain had been replaying the same stored rejection
+    // ever since. `catch` here is what confines a failure to the one write it belongs to.
+    this.queue = this.queue
+      .then(async () => {
+        let result = await writeSession(session, vault);
 
-      let renamed: string | null = null;
-      if (commit) renamed = await renameSessionFile(session, vault);
-      if (renamed !== null) result = { ...result, path: renamed };
+        let renamed: string | null = null;
+        if (commit) renamed = await renameSessionFile(session, vault);
+        if (renamed !== null) result = { ...result, path: renamed };
 
-      if (result.written || renamed !== null) this.onWritten(result);
-      return result;
-    });
+        if (result.written || renamed !== null) this.onWritten(result);
+        return result;
+      })
+      .catch((error: unknown) => {
+        const failure = this.failureOf(session, error);
+        this.onFailed(failure);
+        // A `WriteResult` rather than a rethrow, so the callers that cannot await — the
+        // hide handler's bare `writer.finish()`, the blur handler's `void writer.flush()`
+        // — stop being a source of unhandled rejections, and so `updater.ts`'s
+        // `beforeInstall` no longer reports a note-write failure under "Could not check
+        // for updates". The failure travels on the result instead, and `onFailed` has
+        // already put it on screen.
+        return { ...NOTHING, path: session.path, failure };
+      });
 
     return this.queue;
+  }
+
+  /** Turns whatever the write threw into something the status bar can say. */
+  private failureOf(session: CaptureSession, error: unknown): WriteFailure {
+    const path = this.relativePath(session, session.path);
+    if (error instanceof AtomicWriteError) {
+      return {
+        path,
+        code: error.code,
+        message: error.message,
+        recoveryPath: error.recoveryPath,
+      };
+    }
+    return {
+      path,
+      code: (error as NodeJS.ErrnoException | null)?.code ?? "UNKNOWN",
+      message: error instanceof Error ? error.message : String(error),
+      recoveryPath: null,
+    };
   }
 
   private cancelTimer(): void {

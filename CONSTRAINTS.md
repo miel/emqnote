@@ -1999,3 +1999,38 @@ latter on blur took the caret out of whatever had just been clicked into, which
 now reads the folder's own name** (B83's control, restated): the heading it replaced was
 what used to say which folder you were standing in. Every test that types into the box opens
 it first, the way a hand does.
+
+
+**A note write that fails must fail loudly, once, and never take the text with it** (B93).
+`atomic-write.ts` is the only place a note is written, and it is one module rather than the
+two private `writeAtomic` copies `vault-io.ts` and `capture-store.ts` used to hold. Four
+things it does that neither of those did, each because 31 August 2026 showed what happens
+without it — OneDrive held a note open, `rename()` answered `EPERM`, and the app wrote
+nothing for the rest of the day while the footer went on saying "Saved as …":
+
+- **`CaptureWriter.enqueue` catches.** `this.queue.then(...)` on a rejected promise never
+  runs its callback and passes the same rejection on, so one failure *was* the queue from
+  then on. The give-away was the update dialog that evening reporting that morning's
+  `EPERM`: `setBeforeInstall`'s `flush()` pulling the stored rejection back out. A failure
+  now travels on the `WriteResult` instead of being thrown, because every caller
+  (`setHideHandler`'s bare `writer.finish()`, `setBlurHandler`'s `void writer.flush()`) is
+  a fire-and-forget handler where a rejection is an unhandled rejection and nothing more.
+- **It retries, and clears the read-only attribute between attempts on Windows.**
+  `trash-delete.ts` already knew `EPERM` from a synced folder is transient or an attribute;
+  the path that deletes retried and the path that writes did not, which is backwards.
+- **The temporary name is unique.** The old fixed `${file}.tmp` meant the next write of the
+  same note overwrote the failed write's copy — the app destroying the only surviving copy
+  of the text on its next start-up. The same fixed name had already made two writes of one
+  note race each other (`test/capture-writer.test.ts` carries that `ENOENT` story).
+- **It writes a recovery copy to `userData/recovered/` when every attempt fails,** and only
+  then removes the temporary. Never into the vault: the vault is the thing refusing the
+  write. With no recovery directory the temporary is the last copy of the text and is left
+  where it is. This is the rule that would have saved the note — the full text was in the
+  renderer's document throughout, and the app had nowhere it was willing to put it.
+
+Both windows show it: "Not saved ({code})" *replaces* "Saved as …" / "Saved" rather than
+sitting beside it, because a 28px band reads as one line and the reassuring half of a
+contradiction is the half that gets believed. `librarySaveNote` answers with an `error`
+rather than throwing, for the reason above — the reader's `save()` does not catch.
+`test/atomic-write.test.ts` and `test/capture-writer.test.ts`'s "a write that could not
+land" block pin all of it; the latter's three cases all fail against the old `enqueue`.
