@@ -93,6 +93,17 @@ describe("styles: the panes share one header and one footer geometry", () => {
     expect(rule(library, "\\.notes-search")).toMatch(/-webkit-app-region:\s*no-drag;/);
     expect(rule(library, "\\.pane-splitter")).toMatch(/-webkit-app-region:\s*no-drag;/);
 
+    // **The note's own title, in both of the states it has.** It is not a control that
+    // announces itself as one — an `<h1>` you click to rename, and the `<input>` it
+    // becomes — which is exactly how it was missed: B92 put both in the band without
+    // either, and the reader's title simply stopped being editable. Nothing in this suite
+    // could see it, jsdom having no app-region, and `library-title-edit.test.ts` drives
+    // that very click and stayed green. So both halves are counted here, by hand.
+    expect(rule(shared, "\\.pane-header \\.title-field")).toMatch(
+      /-webkit-app-region:\s*no-drag;/,
+    );
+    expect(rule(library, "\\.reader-header h1")).toMatch(/-webkit-app-region:\s*no-drag;/);
+
     // The footer is not a grab area: it holds controls at both ends, and a drag region
     // over them is a press that goes to the window manager instead of to the button.
     expect(rule(shared, "\\.pane-footer")).not.toMatch(/-webkit-app-region:\s*drag;/);

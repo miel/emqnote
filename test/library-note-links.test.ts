@@ -469,6 +469,55 @@ describe("internal note links in the library (B35)", () => {
       expect(backButton()).toBeNull();
     });
 
+    /** `Mod-[` — ⌘[ here, this fake reporting darwin. */
+    function pressBackChord(): void {
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "[",
+            metaKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+    }
+
+    /**
+     * The chord takes the same step the button does, because it calls the same function.
+     * Following a link is a two-way gesture and only one direction had a key.
+     */
+    it("goes back on the chord, not only on the button", async () => {
+      await openTheNote();
+      await followLinkTo(LINKED_PATH, "Doel");
+      expect(container.querySelector("h1")?.textContent).toBe("Doel");
+
+      pressBackChord();
+      await flush();
+
+      expect(fake.openNoteMock).toHaveBeenLastCalledWith(NOTE_PATH);
+      expect(container.querySelector("h1")?.textContent).toBe("Spelregels");
+      expect(backButton()).toBeNull();
+    });
+
+    /**
+     * Guarded on the same derivation the button is drawn under, rather than on the stack
+     * being non-empty: the trail counts only while the note it leads *to* is the one on
+     * screen, so a chord that asked the shorter question would fire on a trail belonging
+     * to a note nobody is standing on any more.
+     */
+    it("stays free when there is nowhere to go back to", async () => {
+      await openTheNote();
+      expect(backButton()).toBeNull();
+      const opens = fake.openNoteMock.mock.calls.length;
+
+      pressBackChord();
+      await flush();
+
+      expect(fake.openNoteMock.mock.calls.length).toBe(opens);
+      expect(container.querySelector("h1")?.textContent).toBe("Spelregels");
+    });
+
     /**
      * It used to live in `.reader-titles`, which meant the header grew by a line every
      * time a link was followed and shrank again on the way back — a strip changing height

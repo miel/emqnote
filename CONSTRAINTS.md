@@ -511,6 +511,25 @@ and `paneOf` are at component and module scope for this — they lived inside th
 effect until the exits needed them, and a second copy is how the two would come to disagree
 about what counts as being in a pane.
 
+**The ring has four stops, and the fourth is deliberately not a pane** (31 August 2026).
+The note's own header block — When / Tags / Where / Who — sits between the list and the
+note, entered at whichever end you arrive at: Who coming back out of the note, When coming
+forward out of the list. It is a stop in **both** directions on purpose; one added going one
+way only would mean `Ctrl+Tab` and `Ctrl+Shift+Tab` no longer undo each other, and a ring
+whose two directions disagree is one you have to think about. What it fixes is that from the
+editor — which is where a wrong date or a missing name is actually noticed — there was no way
+back up to those fields at all.
+
+**`paneOf` does not claim those fields, and must not**: the ring asks a separate
+`inHeaderBlock` instead. They are four inputs in DOM order, so plain Tab and Shift-Tab
+already walk them the way anyone expects — and the moment `paneOf` recognises one, the Tab
+branch stops seeing `null` for a header field and cycles the *pane* instead of moving to the
+next field. That is the same "deliberately narrower than anywhere inside the pane" rule the
+search box and the sort buttons are already covered by, and widening it is the one edit that
+breaks this quietly. `focusPane` answers `true`/`false` for the same family of reason: the
+header stop is the only one that can be *absent* — no note open, no block — so the ring steps
+past it rather than dead-ending on a press that went nowhere.
+
 **Leaving the Tasks view is claimed by the window listener, not by the task pane** — and
 that is a correction, found by driving it rather than by reading it. The first version put
 `onKeyDown` on `.task-list`, which is where the key seems to belong, and it did nothing at
@@ -1920,6 +1939,34 @@ the alignment — Tags/People/Tasks/Settings are destinations, not a status bar,
 section unfolds to 55% of the pane. **The acceptance check that actually matters cannot run
 under jsdom**: "all three headers report the same `offsetHeight`" needs layout, so it lives
 in `npm run ui:kit` and the packaged `--library --screenshot` pass.
+
+**The band is a drag region, and everything clickable in it has to say `no-drag`** (B92,
+and two regressions of it). Both windows are frameless, so `.pane-header` is the window's
+grab area — and Chromium hands a press inside a drag region to the *window move*, never to
+the element under the pointer. `.pane-actions` says it, `.notes-search` says it, and
+`.pane-splitter` says it although it is not inside the band at all (it crosses the top 40px
+on its way down the window). Two more were missed and shipped: **the note's own title, in
+both of the states it has** — the reader's `<h1>`, which you click to rename, and the
+`.title-field` `<input>` it trades places with in either window. The reader's title simply
+stopped being editable, and the capture window's could not be clicked into at all.
+Neither is a control that announces itself as one, which is how they were passed over.
+
+**Nothing in this suite could see it**, and that is the part to keep: jsdom implements no
+app-region, so `library-title-edit.test.ts` drives that very click end to end and stayed
+green throughout. `styles-pane-bands.test.ts` counts the `no-drag` rules by hand for that
+reason, the two title controls included; a jsdom test asserting the click works is not
+evidence that it does.
+
+**The same band broke a second rule the same way.** The shared `.title-field` styling was
+spelled `.header .title-field, .reader-header .title-field` — two classes deep, on purpose,
+to out-rank `.header input` — and B92 moved the capture window's title *out of* `.header`
+and into the band. The first half of that selector then matched nothing, and the field fell
+back to a bare UA `<input>` at 13px in a box: the rule went on reading exactly as correct as
+it always had. It is `.pane-header .title-field` now, one selector for both windows, because
+`.reader-header` **is** a `.pane-header` with a second class on it. A selector makes two
+claims — these declarations, on these elements — and `styles-title-field.test.ts` had only
+ever pinned the first; it now pins the container against the markup, which is the only way a
+text check of a stylesheet can catch this at all.
 
 **An icon-only button still has a name, and `--click-button` falls back to it** (B92).
 `ChromeButton` makes `label` mandatory and puts it on `aria-label` whenever `iconOnly` is

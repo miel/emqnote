@@ -1812,3 +1812,59 @@ unseen: this sandbox is Linux, which is the one platform deliberately left frame
 application menu can no longer be drawn in a frameless window, and its Edit accelerators
 used to be reachable through that bar. Chromium handles those natively in a text field, but
 that is a claim about Chromium rather than a thing anyone here has watched happen.
+
+**Six items from using that build landed on 31 August 2026**, and four of them are things no
+test in this suite could have seen. Two are regressions of B92 itself, and they are the same
+mistake from opposite sides.
+
+**Both windows went frameless, which made `.pane-header` a drag region — and Chromium hands
+a press inside one to the window move, never to the element under the pointer.** Two
+controls in the band were never given `no-drag`: the reader's `<h1>`, which you click to
+rename a note, and the `.title-field` `<input>` it trades places with in either window. So
+the library's note title stopped being editable and the capture window's could not be
+clicked into at all. `library-title-edit.test.ts` drives that very click, end to end, with a
+real `Library` and a real ProseMirror under it — and stayed green throughout, because jsdom
+implements no app-region. `styles-pane-bands.test.ts` counts the `no-drag` rules by hand now,
+the two title controls included; a jsdom test asserting that a click works is not evidence
+that it does.
+
+**And the shared title rule stopped matching anything, in the window it was mostly written
+for.** It was spelled `.header .title-field, .reader-header .title-field` — two classes deep
+on purpose, to out-rank `.header input` — and B92 moved that input *out of* `.header` and
+into the band. The rule went on reading exactly as correct as it always had while selecting
+nothing, and the capture window's title fell back to a bare UA `<input>`: a box, a border,
+13px, against the library's 15px/600 on nothing. It is `.pane-header .title-field` now, one
+selector for both windows, because `.reader-header` **is** a `.pane-header`. The lesson is
+the one `styles-title-field.test.ts` exists for, arriving a second time: a selector makes two
+claims — these declarations, on these elements — and that file had only ever pinned the
+first. It pins the container against the markup now.
+
+The other four are new work. **The traffic-light clearance is 92px**, up from the 78 that was
+the width of the controls and nothing more; a heading starting 14px after the last light
+reads as crowding it. **The pane ring has four stops**: the note's own When / Tags / Where /
+Who block sits between the list and the note, entered at whichever end you arrive at — Who
+coming back, When coming forward — because from the editor, which is where a wrong date is
+noticed, there was no way back up to those fields at all. It is a stop in *both* directions
+so the two chords go on undoing each other. `paneOf` deliberately does not claim those
+fields; the ring asks a separate `inHeaderBlock`, because the moment `paneOf` recognises one,
+a plain Shift-Tab inside the block cycles the pane instead of moving one field. **`Mod-[` is
+Back** after following a `[[…]]` link — ⌘[ is Back system-wide on macOS and Ctrl+[ is free on
+Windows, the same trade `settings` took with the comma — and the footer's ← button keeps a
+gap from the file path beside it.
+
+**Driven, not guessed.** Five of the six were run in the real app under `Xvfb` over CDP
+before this was written, with real XTEST keys and real pointer coordinates: the capture title
+measured `15px`/`600` on a transparent ground and took a real click, the reader's `<h1>`
+reported `no-drag` and opened its rename from a real click, the ring walked
+editor → Who → row → When → editor, Shift-Tab from Who reached Where, and `Ctrl+[` walked
+back from a followed link. Two things about the harness are worth keeping: `Ctrl+Tab` is
+claimed by main in `before-input-event`, so a CDP `Input.dispatchKeyEvent` never reaches it —
+only a real X press does; and `xdotool key --window` sends with `XSendEvent`, which Chromium
+drops as untrusted, so the whole run reads as "the chord does nothing" when nothing was ever
+delivered. `windowfocus` and then a global XTEST press is the form that works.
+
+**The sixth cannot be driven here at all.** Linux keeps its native frame and never insets the
+traffic lights, so the 92px is the one number in this batch nobody has looked at. Both
+drag-region regressions *do* reproduce here, which is the useful half of the same fact:
+app-region is honoured whether or not the frame is hidden. `TEST-PROTOCOL.md` §46 carries the
+thirteen rows; §46a is that one. The suite is 1983 tests over 161 files.

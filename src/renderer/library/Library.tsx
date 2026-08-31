@@ -112,6 +112,13 @@ function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSumma
  * tree/notes panes hold ordinary controls too — the search box, the sort buttons, a
  * folder's twisty — and those already have a sensible Tab order of their own that this
  * must not steamroll.
+ *
+ * **The note's header block is on that list too, and stayed off this function on purpose**
+ * when the pane cycle grew a stop for it. When / Tags / Where / Who are four inputs in DOM
+ * order, so a plain Tab and Shift-Tab already walk them the way anyone expects — and the
+ * moment this function claims them, the Tab branch below stops seeing `null` for a header
+ * field and cycles the *pane* instead of moving to the next field. `inHeaderBlock` is the
+ * separate question the ring asks, and only the ring asks it.
  */
 function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
   if (element === null) return null;
@@ -124,6 +131,20 @@ function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
   if (element.closest('.task-row[role="option"]') !== null) return "notes";
   if (element.closest(".editor-content") !== null) return "editor";
   return null;
+}
+
+/**
+ * Is focus inside the note's own header block — When, Tags, Where, Who?
+ *
+ * A separate question from `paneOf`, which deliberately answers `null` for these fields so
+ * that a plain Tab keeps walking them (see its own comment). Only the pane ring asks this,
+ * and only to decide which stop it is standing on.
+ *
+ * `.header-reader` rather than `.header`: the capture window wears the same block under
+ * `.header-capture` and has no pane cycle at all.
+ */
+function inHeaderBlock(element: Element | null): boolean {
+  return element !== null && element.closest(".header-reader") !== null;
 }
 
 /**
@@ -427,6 +448,12 @@ export function Library(): React.ReactElement {
    * remember to reset it.
    */
   const [backStack, setBackStack] = useState<{ from: NoteOrigin; to: string }[]>([]);
+  // Both read from the window's `keydown` listener, which is declared long before either
+  // `goBack` or this state's current value is in scope — the `openRef`/`notesRef` pattern
+  // this file already uses to keep that listener off the rebuild-every-render path.
+  const backStackRef = useRef(backStack);
+  backStackRef.current = backStack;
+  const goBackRef = useRef<() => void>(() => {});
   /**
    * The title being edited in place, or null when the `<h1>` is showing instead.
    *
@@ -510,7 +537,7 @@ export function Library(): React.ReactElement {
   const libraryRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Puts focus into a pane, at its roving row.
+   * Puts focus into a pane, at its roving row. `true` when something took it.
    *
    * Hoisted out of the pane-cycle effect below, where it lived until the two exits needed
    * it: leaving the Tasks view and leaving a search both end by handing focus back to the
@@ -520,18 +547,39 @@ export function Library(): React.ReactElement {
    * The notes selector covers both lists that can occupy that pane, and it looks for
    * `[tabindex="0"]` rather than for whatever is selected: that is the roving row each
    * list maintains, so this lands on the note that was last there.
+   *
+   * **`header` is the note's own When / Tags / Where / Who block**, and `atEnd` says which
+   * end of it to enter — `Who` coming backwards out of the note, `When` coming forwards
+   * out of the list, so the field you land on is the one nearest where you came from. The
+   * two are named fields rather than "the first and last focusable thing in the block":
+   * the Tags cell can carry a `+2 more` chip, which *is* a button, and a last-focusable
+   * query would land the caret on it instead of on Who.
+   *
+   * The answer matters for that stop in particular. With no note open there is no header
+   * block at all, so this returns `false` and the ring steps past it rather than
+   * swallowing the press.
    */
-  const focusPane = useCallback((pane: "tree" | "notes" | "editor"): void => {
-    const root = libraryRef.current;
-    if (pane === "editor") {
-      editor.current?.focus();
-      return;
-    }
-    if (root === null) return;
-    const selector =
-      pane === "tree" ? '.tree [tabindex="0"]' : '.notes [tabindex="0"], .task-list [tabindex="0"]';
-    root.querySelector<HTMLElement>(selector)?.focus();
-  }, []);
+  const focusPane = useCallback(
+    (pane: "tree" | "notes" | "editor" | "header", atEnd = false): boolean => {
+      const root = libraryRef.current;
+      if (pane === "editor") {
+        editor.current?.focus();
+        return true;
+      }
+      if (root === null) return false;
+      const selector =
+        pane === "tree"
+          ? '.tree [tabindex="0"]'
+          : pane === "header"
+            ? `.header-reader .${atEnd ? "attendees" : "created"}`
+            : '.notes [tabindex="0"], .task-list [tabindex="0"]';
+      const target = root.querySelector<HTMLElement>(selector);
+      if (target === null) return false;
+      target.focus();
+      return true;
+    },
+    [],
+  );
 
   /**
    * Set by an exit that has just asked for a different list, and consumed once that list
@@ -1079,6 +1127,20 @@ export function Library(): React.ReactElement {
         return;
       }
 
+      if (fires("goBack")) {
+        // Guarded on there actually being somewhere to go, and on it being where the ←
+        // button would take you: `backTo` is derived the same way in the render body —
+        // the top entry counts only while the note it leads *to* is the one on screen.
+        // Without that the chord would fire on a trail belonging to a note nobody is
+        // standing on any more, which is the state that derivation exists to answer.
+        const note = openRef.current;
+        const top = backStackRef.current.at(-1);
+        if (note === null || top === undefined || top.to !== note.path) return;
+        event.preventDefault();
+        goBackRef.current();
+        return;
+      }
+
       if (fires("focusTitle")) {
         // Only when there is a title to edit and this window is allowed to edit it: a note
         // the capture window has claimed must not be renamed from here, the same guard
@@ -1095,7 +1157,22 @@ export function Library(): React.ReactElement {
   }, [app.isMac]);
 
   /**
-   * The macro keyboard cycle between the three panes: tree → notes → editor → tree.
+   * The macro keyboard cycle around the window:
+   *
+   *     forward   tree → notes → [When … Who] → editor → tree
+   *     backward  tree → editor → [Who … When] → notes → tree
+   *
+   * Four stops, not three. The note's own header block was reachable by mouse and by a
+   * plain Tab out of the note list and by nothing else — from the editor, where you
+   * actually notice a wrong date or a missing name, there was no way back up to it at
+   * all. It is a stop in **both** directions because that is what makes this a ring: a
+   * stop added going one way only would mean Ctrl+Tab and Ctrl+Shift+Tab no longer undo
+   * each other, and a cycle whose two directions disagree is one you have to think about.
+   * Which field you land on depends on which way you came — see `focusPane`.
+   *
+   * Inside the block, plain Tab and Shift-Tab go on walking the four fields in DOM order,
+   * because `paneOf` deliberately does not claim them; the ring asks `inHeaderBlock`
+   * instead. That split is the whole of it, and widening `paneOf` is how it breaks.
    *
    * Tab already moves focus *within* a pane fine on its own — a dialog's own trap
    * handles a modal, and inside the editor `keymap.ts` binds Tab to list indent, always
@@ -1131,6 +1208,16 @@ export function Library(): React.ReactElement {
      * and a second copy of this ternary is how they would come to differ in more.
      */
     const cycle = (backward: boolean): boolean => {
+      const forward = !backward;
+
+      // Asked before `paneOf`, which answers `null` for a header field on purpose — so
+      // without this branch a press from inside the block would fall into the "focus is
+      // on nothing" case below and jump to the far end of the ring.
+      if (inHeaderBlock(document.activeElement)) {
+        focusPane(forward ? "editor" : "notes");
+        return true;
+      }
+
       const current = paneOf(document.activeElement);
 
       if (current === null) {
@@ -1142,7 +1229,14 @@ export function Library(): React.ReactElement {
         return true;
       }
 
-      const forward = !backward;
+      // The note's header block is the fourth stop, between the list and the note itself,
+      // and it is entered from whichever end you arrive at: Who coming back out of the
+      // note, When coming forward out of the list. It is the only stop that can be absent
+      // — no note open, no block — so it is the only one asked whether it took the focus,
+      // and the ring steps past it rather than dead-ending when it did not.
+      if (current === "notes" && forward && focusPane("header")) return true;
+      if (current === "editor" && backward && focusPane("header", true)) return true;
+
       const next: "tree" | "notes" | "editor" | null =
         current === "tree"
           ? forward
@@ -1430,6 +1524,23 @@ export function Library(): React.ReactElement {
       return [...chain, { from: origin, to }].slice(-BACK_STACK_LIMIT);
     });
   }, []);
+
+  /**
+   * The way back out of a followed `[[…]]` link: pop the trail, open what it names.
+   *
+   * A `useCallback` beside `rememberOrigin`, rather than a plain function in the render
+   * body where it began, because the footer's ← button is no longer its only caller — the
+   * `goBack` chord fires it from the window listener, which is declared above `openNote`
+   * and reaches this through `goBackRef`. One function, so a key and a button cannot come
+   * to mean two different steps back.
+   */
+  const goBack = useCallback(() => {
+    const top = backStackRef.current.at(-1);
+    if (top === undefined) return;
+    setBackStack((stack) => stack.slice(0, -1));
+    void openNote(top.from.path);
+  }, [openNote]);
+  goBackRef.current = goBack;
 
   /**
    * A `[[…]]` link was clicked, here or in the capture window, and names a note (B35).
@@ -2345,13 +2456,6 @@ export function Library(): React.ReactElement {
    */
   const backTo =
     open === null ? null : (backStack.at(-1)?.to === open.path ? backStack.at(-1)!.from : null);
-
-  const goBack = (): void => {
-    const top = backStack.at(-1);
-    if (top === undefined) return;
-    setBackStack((stack) => stack.slice(0, -1));
-    void openNote(top.from.path);
-  };
 
   return (
     <div className="library-shell">

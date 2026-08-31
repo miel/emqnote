@@ -108,7 +108,11 @@ undo by accident and expensive to rediscover:
   `styles-pane-bands.test.ts` counts that no third height exists. Both windows are frameless
   and the OS draws its own controls *into* the band — traffic lights on macOS,
   `titleBarOverlay` on Windows 11 — so anything clickable in a header needs `no-drag`, the
-  pane splitters included. An icon-only button keeps its name on `aria-label`, and
+  pane splitters and **the note's own title in both of its states** included: a press inside
+  a drag region goes to the window move, not to the element under it, and the two titles
+  were missed exactly because neither looks like a control. jsdom has no app-region, so no
+  test in this suite can see that class of bug; `styles-pane-bands.test.ts` counts the rules
+  by hand instead. An icon-only button keeps its name on `aria-label`, and
   `--click-button` falls back to it; chrome glyphs are drawn as inline SVG, never typed.
 - **The note's own text size is one token** (B88). `--editor-font-size`, declared in `:root`
   and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
@@ -124,7 +128,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 1975 tests in roughly thirty-five seconds of test time (about a minute and a
+The suite runs its 1983 tests in roughly thirty-five seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly

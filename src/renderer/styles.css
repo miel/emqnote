@@ -470,17 +470,29 @@ body {
  * `.reader-header h1` in `library.css` has to carry the same box for the same reason —
  * that `<h1>` and this input trade places, and any difference between them is a jump.
  *
- * **The two-part selector is what makes the rule apply at all, and a bare `.title-field`
- * silently does not.** In the capture window this input sits inside `.header`, where
- * `.header input` above is one class *and one element* — so it out-ranks a single class
- * and goes on setting the 13px, the padding and the tinted background this rule is
- * replacing. Written the obvious way, the field simply did not change and nothing said
- * so: correct-looking CSS, defeated by the cascade, which is B48's bug and the `.overlay`
- * bug, both of which shipped. Naming the container puts it two classes deep and settles
- * it outright rather than on source order, which a tie would decide and a later edit
- * would quietly flip. `styles-title-field.test.ts` holds the pair together. */
-.header .title-field,
-.reader-header .title-field {
+ * **The container this names has to be the one the markup actually uses, and that is a
+ * harder rule to keep than it sounds.** It was written `.header .title-field,
+ * .reader-header .title-field`, two classes deep so it would out-rank `.header input` —
+ * which is one class *and one element*, and had gone on setting the 13px, the padding and
+ * the tinted background this rule replaces. That reasoning was right and its selector
+ * stopped being: B92 moved the capture window's title **out of `.header`** and into the
+ * 40px band, so the first half matched nothing at all and the field fell back to a bare
+ * UA `<input>` — a box, a border, 13px — in the one window this rule was mostly written
+ * for. The same failure as the first version, one move along, and `.header input` is not
+ * even in the running any more: neither title is inside `.header`.
+ *
+ * `.pane-header` is what both of them *are* — `.reader-header` is a `.pane-header` with a
+ * second class on it, from `PaneHeader`'s `className` — so one selector now covers both
+ * windows, still at two classes, and it names the element the markup puts the field in
+ * rather than a neighbour it used to sit beside. `styles-title-field.test.ts` pins the
+ * container for that reason and not only the values: a rule that reads correctly and
+ * matches nothing is what shipped twice.
+ *
+ * `no-drag` because the band around it is the frameless window's grab area, and a press
+ * inside a drag region goes to the window move rather than to the control under the
+ * pointer. Without it this field cannot be clicked into at all. */
+.pane-header .title-field {
+  -webkit-app-region: no-drag;
   display: block;
   width: 100%;
   margin: 0;
@@ -502,10 +514,10 @@ body {
 /* The capture window's colour, in both windows now — item four of the consistency work.
    The library's title input had no `:focus` rule at all and fell through to Chromium's
    own ring, so the two windows lit the same field in two different colours. Same
-   two-part selector as above, and for the same reason: `.header input:focus` is one class
-   and one element plus a pseudo-class, and would out-rank a bare `.title-field:focus`. */
-.header .title-field:focus,
-.reader-header .title-field:focus {
+   container as the rule above, and it has to stay two classes deep for its own reason:
+   a bare `.title-field:focus` is (0,2,0) and any `input:focus` rule with a class on it
+   would out-rank it. */
+.pane-header .title-field:focus {
   outline: none;
   border-color: var(--accent);
   /* And `background` again, which is not redundant: `.header input:focus` above fills a
@@ -522,9 +534,11 @@ body {
    at 17px and bold. `--muted` at that size and weight carries as much ink as real text
    does at 13px, so an empty title read as a filled-in one — the same report "(optional)"
    in the string itself answers, from the other side. Two classes deep for the reason the
-   rule above it is: `.header input::placeholder` is one class and one element and would
-   otherwise win. */
-.header .title-field::placeholder {
+   rule above it is, and on `.pane-header` for the same reason again: spelled `.header`
+   this stopped matching when B92 moved the field, and an undimmed "Subject (optional)"
+   at 15px/600 is exactly the filled-in-looking empty title the wording was chosen to
+   answer. */
+.pane-header .title-field::placeholder {
   color: var(--muted);
   opacity: 0.55;
 }
@@ -2183,11 +2197,15 @@ body {
  * macOS's lights are about 28px, Windows 11's controls 32.
  *
  * The lights land on the left, over whichever band is leftmost — the folder tree in the
- * library, the note's own title in the capture window. 78px, which is what the old
- * `.titlebar-native` measured, applied from a flag the renderer passes rather than from
- * `env(titlebar-area-x)`: that variable exists only where there is a Window Controls
- * Overlay, which is Windows, so on macOS a CSS fallback could not tell an inset title bar
- * from Linux's ordinary frame. See `PaneHeader.tsx`.
+ * library, the note's own title in the capture window. 92px, and it is a **clearance
+ * rather than a measurement**: the lights are placed at `trafficLightPosition: { x: 12 }`
+ * in both windows and run about 52px, so they end near 64 and this leaves a good 28. It
+ * was 78 — what the old `.titlebar-native` measured, which is the width of the controls
+ * and nothing more — and a heading starting 14px after the last light reads as crowding
+ * it rather than as standing beside it. The number is applied from a flag the renderer
+ * passes rather than from `env(titlebar-area-x)`: that variable exists only where there
+ * is a Window Controls Overlay, which is Windows, so on macOS a CSS fallback could not
+ * tell an inset title bar from Linux's ordinary frame. See `PaneHeader.tsx`.
  *
  * The Windows controls land on the right, over the *last* band — the note pane in the
  * library. That header's right edge is empty by design (its `⋯` menu lives in the footer
@@ -2196,7 +2214,7 @@ body {
  * display scaling makes it; on macOS and Linux the variable is absent, the fallback makes
  * the expression 0, and the rule costs nothing. */
 .pane-header-lights {
-  padding-left: 78px;
+  padding-left: 92px;
 }
 
 /* Fullscreen takes the traffic lights away on macOS, and 78px of padding for controls that

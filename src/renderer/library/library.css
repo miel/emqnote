@@ -953,11 +953,16 @@
 }
 
 /* Quieter than the note it sits under: this names a note you are *leaving*, and it must
-   not compete with the one you are reading. The ellipsis stays for a long title. */
+   not compete with the one you are reading. The ellipsis stays for a long title.
+
+   The right margin is its own item rather than `.pane-footer`'s `gap`: this button is the
+   only thing in either footer that carries a whole note title, so it is the only one that
+   runs up against its neighbour — `.reader-path` — hard enough to read as one string. The
+   shared gap is what every other pane's footer is measured by and is left alone. */
 .reader-back {
   display: block;
   max-width: 100%;
-  margin: 0;
+  margin: 0 8px 0 0;
   padding: 0;
   border: 0;
   background: none;
@@ -988,8 +993,19 @@
    rules exists to prevent — but the box has to be spelled out, because an `<h1>` and an
    `<input>` agree about nothing else by default.
 
-   The two-part selector is deliberate for `.title-field`'s own reason: see `styles.css`. */
+   The two-part selector is deliberate for `.title-field`'s own reason: see `styles.css`.
+
+   **`no-drag`, and this is the half that was missing.** Clicking the title is what opens
+   the rename, and B92 made this band `-webkit-app-region: drag` — so every press on it
+   went to the window move instead of to the `<h1>`, and the title simply stopped being
+   editable. `test/library-title-edit.test.ts` exercises that click end to end and stayed
+   green throughout, because jsdom has no app-region: the whole class of bug is invisible
+   to this suite, which is why the rule is stated in `CONSTRAINTS.md` and counted in
+   `styles-pane-bands.test.ts` rather than trusted to be noticed. The input it trades
+   places with carries the same declaration, in `styles.css`, or the pair would be broken
+   in one of its two states. */
 .reader-header h1 {
+  -webkit-app-region: no-drag;
   margin: 0;
   padding: 2px 6px;
   border: 1px solid transparent;

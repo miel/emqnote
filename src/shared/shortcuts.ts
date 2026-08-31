@@ -287,7 +287,33 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "keymap.ts binds Tab there to list indent, and that binding always returns true. " +
       "F6 used to be the one key that reached every pane; dropped for the fn-key " +
       "reason (B32) and replaced with the browser's own 'switch tab' chord, which " +
-      "keymap.ts has no binding for and so still reaches out of the editor.",
+      "keymap.ts has no binding for and so still reaches out of the editor.\n\n" +
+      "The ring has four stops rather than three: the note's own header block — When, " +
+      "Tags, Where, Who — sits between the list and the note, and is entered at whichever " +
+      "end you arrive at. Reaching it was the reason the fourth stop exists: from the " +
+      "editor, which is where a wrong date is noticed, there was no way back up to those " +
+      "fields at all. Both directions stop there, because a stop added one way only " +
+      "means the two chords stop undoing each other. See `Library.tsx`'s `cycle`.",
+  },
+  {
+    id: "goBack",
+    keys: ["Mod-["],
+    where: "library",
+    group: "window",
+    why:
+      "Following a `[[…]]` link had a way back — the ← button in the note's footer — and " +
+      "no chord, which makes it the one half of a two-way gesture that needs the mouse. " +
+      "\n\n" +
+      "`Mod-[` is ⌘[ on macOS, which is Back system-wide there: Safari, Finder, Xcode, " +
+      "the App Store. On Windows Ctrl+[ is not the convention (Alt+Left is) but it is " +
+      "free, and that is the same trade `settings` took with the comma — this registry " +
+      "has no per-platform `keys`, so a chord that is conventional on one platform and " +
+      "unclaimed on the other is one entry rather than a compromise. Alt+Left itself is " +
+      "not takeable: this fires at the window while the caret may be in the note, and " +
+      "⌥← is 'move a word left' inside every macOS text field.\n\n" +
+      "Free in `outlookKeymap`, so nothing has to stop it at the editor the way B64's " +
+      "Mod-F does. Guarded on there being somewhere to go, so the key stays unclaimed " +
+      "when no link has been followed.",
   },
   {
     id: "newNoteHere",

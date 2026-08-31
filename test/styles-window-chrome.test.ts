@@ -197,9 +197,11 @@ describe("styles: the capture window's title placeholder", () => {
   it("is dimmer than every other placeholder in that window", () => {
     // It is the only one drawn at 17px and bold, where `--muted` carries as much ink as
     // real text does at the header's 13px — so an empty title read as a filled-in one.
-    // Two classes deep for `.title-field`'s own reason: `.header input::placeholder` is
-    // one class and one element, and would otherwise win.
-    const dimmed = rule(shared, "\\.header \\.title-field::placeholder");
+    // Two classes deep for `.title-field`'s own reason, and on `.pane-header` for that
+    // rule's other reason: spelled `.header` it stopped matching when B92 moved the field
+    // into the band, and an undimmed placeholder at 15px/600 is exactly the filled-in
+    // -looking empty title the dimming exists to answer.
+    const dimmed = rule(shared, "\\.pane-header \\.title-field::placeholder");
     expect(dimmed).toMatch(/opacity:\s*0\.\d+;/);
   });
 });
