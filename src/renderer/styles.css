@@ -1997,6 +1997,44 @@ body {
   font-size: 14px;
 }
 
+/* The sheet's own search (B94). It sits *in* the head band between the heading and the ×,
+   which is the one place in this panel that is not the thing being searched — the same
+   arrangement the note list's field has, where the field takes the heading's seat rather
+   than opening a row of its own above the list.
+
+   `flex: 1` with a `min-width`, so it takes what the heading and the × leave and no more:
+   the capture window's sheet is 240px of column at its narrowest, and a fixed width here
+   would push the × off the edge before it pushed anything else. */
+.help-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.help-search:focus {
+  border-color: var(--accent);
+}
+
+.help-search::placeholder {
+  color: var(--muted);
+}
+
+/* A search that found nothing says so. Without it the sheet simply empties, which reads
+   as the panel having broken rather than as an answer. */
+.help-empty {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .help-close {
   border: 0;
   background: transparent;

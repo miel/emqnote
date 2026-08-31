@@ -30,6 +30,17 @@ interface Props {
   disabled?: boolean;
   /** `aria-haspopup="menu"` plus the open state, for the three buttons that unfold one. */
   menu?: boolean;
+  /**
+   * Out of the Tab order, for a control that has a shortcut of its own instead.
+   *
+   * Two buttons ask for this, both in the note list's footer: the sort chooser and Tasks
+   * (B94). The window's Tab walk is the order the eye reads in — folders, notes, title,
+   * the note's four fields, the note — and a footer sitting between the list and the note
+   * put two presses of chrome in the middle of it. They keep their `label`, so
+   * `--click-button` and a screen reader still reach them by name, and each gained a chord
+   * in `shortcuts.ts` in the same change: this is a trade, not a removal.
+   */
+  offTabOrder?: boolean;
   className?: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
@@ -55,6 +66,7 @@ export const ChromeButton = forwardRef<HTMLButtonElement, Props>(function Chrome
     danger = false,
     disabled = false,
     menu = false,
+    offTabOrder = false,
     className,
     onClick,
   },
@@ -78,6 +90,7 @@ export const ChromeButton = forwardRef<HTMLButtonElement, Props>(function Chrome
       // second name for the same thing, and the two drift.
       aria-label={iconOnly ? label : undefined}
       title={title ?? label}
+      tabIndex={offTabOrder ? -1 : undefined}
       aria-haspopup={menu ? "menu" : undefined}
       aria-expanded={menu ? open : undefined}
       disabled={disabled}

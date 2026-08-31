@@ -885,6 +885,7 @@ export function NoteList({
                 icon={sortGlyph}
                 small
                 menu
+                offTabOrder
                 open={sortMenu !== null}
                 onClick={() => {
                   if (sortMenu !== null) {
@@ -908,6 +909,7 @@ export function NoteList({
                 label={t("library.tasks")}
                 icon={tasksGlyph}
                 small
+                offTabOrder
                 onClick={onOpenTasks}
               />
             </>
