@@ -1,16 +1,16 @@
 ---
 name: diagnostics
 description: >
-  The seven diagnostic helpers for questions this project has learned not to guess at —
+  The eight diagnostic helpers for questions this project has learned not to guess at —
   canonical serializer diff, clipboard dump, packaged selftest and latency measurement,
-  trash/key/thumbnail probes, and the real-renderer capture drive. Read this before shipping
-  a second fix for the same complaint, or when inspecting clipboard, latency, deletion,
-  keyboard or PDF-thumbnail behaviour.
+  trash/key/thumbnail probes, and the two real-renderer drives (capture and library). Read
+  this before shipping a second fix for the same complaint, or when inspecting clipboard,
+  latency, deletion, keyboard, focus-order or PDF-thumbnail behaviour.
 ---
 
 # Diagnostic helpers
 
-Seven diagnostic helpers exist for questions this project has learned not to guess at — a
+Eight diagnostic helpers exist for questions this project has learned not to guess at — a
 reported bug that survives its own fix is a recurring theme here (B57 → B59, B62's Ctrl+Tab,
 B71), and each helper below exists because guessing had already had its turn:
 
@@ -56,3 +56,22 @@ near the foot of the window, a **real PDF page rendered by pdf.js** into this wi
 and **▶ turning to a page that is genuinely a different picture** — counted as dark pixels
 off a canvas, because a changed `src` is not a changed page. Exits non-zero on the first failed step and names it. Needs a display,
 so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.
+
+```bash
+npm run drive:library
+npm run drive:library -- --screenshot=/tmp/library.png
+```
+
+Drives the **library window**, the same way and for the same kind of reason (B94). Fifteen
+steps over a scaffolded four-note vault, of which three cannot be asked anywhere under
+`test/` at all: **a real Tab** — jsdom implements no sequential focus navigation, so every
+jsdom test of a focus order checks the two steps the app performs itself and takes the
+browser's word for the rest — **the window's own position**, which is the only place the
+result of dragging the note's title shows up, and **`-webkit-app-region`**, which does not
+exist in jsdom and is the class of bug `TODO.md` records twice. The other twelve are cheap
+to keep honest: the empty checkbox that no longer counts as a task (a question about the
+index and the scan, so it is asked of the running app), the split sort chooser turning the
+list over, a Ctrl+click marking two rows and the menu that is then about the set, `Mod+T` /
+`Mod+S` / `Mod+Shift+W`, the shortcut sheet's `/` search and its two columns *measured*, and
+the settings panel scrolling inside a short window. Exits non-zero on the first failed step
+and names it. See `scripts/drive-library.ts`.

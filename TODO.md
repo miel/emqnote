@@ -3,6 +3,43 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 31 August 2026, **unreleased**, on the `batch-b94` branch — **twelve items
+from daily use** (B94): five bugs and seven features, and one trade running through all of
+them.
+
+The trade is in the note list's footer. The plain Tab order is now the order the eye reads —
+folders, notes, **the note's title**, When, Tags, Where, Who, the note — and for that to be
+true, four things had to leave the order: both pane splitters and the sort and Tasks buttons.
+Those two gained `Mod+S` and `Mod+T` in the same change, which is what makes it a trade
+rather than a removal; if either chord is ever dropped, the `offTabOrder` on its button has
+to go with it. The pane ring went back to three stops at the same time, and the note's four
+fields got `Mod+Shift+W` instead of being walked through on every Ctrl+Tab.
+
+The rest: an empty `- [ ]` stops counting as a task everywhere (and `SCHEMA_VERSION` goes to
+5 for it); a highlight applied to selected text is visible while it is still selected; the
+settings panel scrolls; "Check for updates…" is in Settings too; the sort chooser is two
+controls, arrows and a name; the note list can mark several notes for Move and Delete, by
+menu and by drag; the shortcut sheet has a `/` search and columns that pack rather than cut;
+and the note's title moves the window when a press travels and opens the rename when it does
+not.
+
+**Driven, not guessed — with a new harness.** `npm run drive:library` is
+`drive-capture.ts`'s counterpart, and it exists because three of these claims cannot be
+asked under `test/` at all: jsdom implements no sequential focus navigation (so every jsdom
+test of a Tab order takes the browser's word for five of its eight steps), the window's own
+position is where the title-drag's only observable result appears, and `-webkit-app-region`
+does not exist there — the class of bug the entry below records twice. Fifteen steps, green
+twice in a row.
+
+**What is open on it.** `TEST-PROTOCOL.md` §48 carries thirty rows; four of them are the
+ones this machine cannot answer. ⇧⌘W must not close the window on macOS (⌘W is close there),
+⌘T is Show Fonts in a Mac text view, Ctrl+T is Chromium's own "new tab" on Windows — three
+chords that have never run on the platform that might refuse them — and whether a dragged
+title keeps up with the pointer is a judgement for a machine with a window manager, which
+this sandbox does not have.
+
+---
+
 Last updated 31 August 2026, **unreleased**, on the `worktree-pane-consistency` branch —
 **six items from using the pane-consistency build**, on top of B92 below.
 

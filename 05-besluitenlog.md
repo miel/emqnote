@@ -3585,3 +3585,176 @@ en van een tegenspraak wordt de geruststellende helft geloofd.
 Verworpen: alleen de `catch` toevoegen. Dan wordt één schrijfopdracht overgeslagen in plaats
 van alle, wat beter is maar nog steeds stil verlies — en stil verlies is waar dit hele
 besluit over gaat.
+
+## B94 — De bibliotheek krijgt de volgorde die het oog leest, en vier dingen die daar bij horen
+
+**Genomen** op 31 augustus 2026, na een ronde van dagelijks gebruik. Eén nummer voor één
+ronde, en dat is hier uitzonderlijk: de code verwijst op ruim veertig plaatsen naar B94, en
+de vijf stukken hieronder hangen aan elkaar via de balk onderin de notitielijst. Twee
+knoppen verdwijnen uit de tabvolgorde omdat de tabvolgorde iets anders moet worden, en ze
+krijgen een sneltoets terug omdat ze eruit zijn — dat is één afweging, geen drie.
+
+### De ring is weer drie haltes, en Tab loopt de volgorde die je leest
+
+Het notitiekopblok — Wanneer, Tags, Waar, Wie — was één release lang de vierde halte van
+Ctrl+Tab (`shortcuts.ts`, `cyclePanes`). Het probleem dat dat oploste was echt: vanuit de
+notitie, waar je een verkeerde datum ziet staan, was er geen weg terug omhoog. De prijs
+werd betaald door elke druk die *niet* over die velden ging — van de lijst naar de notitie
+liep voortaan door vier invoervelden heen.
+
+**Dus: de velden gaan terug naar de gewone tabvolgorde, en krijgen een eigen akkoord.**
+Mod+Shift+W (`focusFields`) landt op Wanneer, vanuit beide vensters, en Tab loopt vanaf daar
+door de andere drie — vier velden, één toets, omdat het vier focusbare dingen in
+documentvolgorde zijn en de browser dat al kan.
+
+De volgorde is nu: mappen → notities → **de titel van de notitie** → Wanneer → Tags → Waar →
+Wie → de notitie zelf, en achteruit precies andersom. De titel is voor het eerst een
+tabhalte (Enter of spatie hernoemt, net als de klik); daarvoor was hij alleen met de muis en
+met Mod+Shift+R te bereiken, wat hem tot het enige besturingselement tussen de lijst en de
+velden maakte waar het toetsenbord langs liep.
+
+Wat eruit moest om dat te laten kloppen: **de twee sleepstroken tussen de panelen en de twee
+knoppen in de voet van de notitielijst** (sorteren, Taken). Vier drukken op niets, twee keer
+per ronde. De stroken houden hun pijltjesbediening zodra je ze aanklikt; de twee knoppen
+houden hun naam — `--click-button` en een schermlezer vinden ze nog steeds — en krijgen
+Mod+T en Mod+S. Dat laatste is de ruil, en zonder die ruil zou dit een verwijdering zijn.
+
+Van die acht stappen doet de app er zelf twee: mappen → notities, en notities → titel. De
+andere zes zijn de browser, en dat is opzettelijk — een tabel van acht haltes zou een tweede
+definitie zijn van een volgorde die het DOM al uitspreekt, en de eerste die ermee oneens
+raakt zodra een paneel verandert.
+
+**Verworpen:** Ctrl+Shift+Tab vanuit de notitie op Wie laten landen, zodat de omgekeerde
+volgorde letterlijk waar blijft. Dan is de ring in de ene richting drie haltes en in de
+andere vier, en twee richtingen die elkaar niet meer opheffen zijn een ring waar je over
+moet nadenken.
+
+**Verworpen:** Mod+Shift+T voor het Takenoverzicht, wat de voor de hand liggende letter is.
+Dat akkoord is het taakregeltje in de editor, en de bibliotheek bevat de editor: allebei
+zouden afgaan (B64's les over `preventDefault` die de bubbel niet stopt). Mod+T is vrij, is
+dezelfde letter, en het verschil tussen "maak er één" en "toon ze allemaal" is precies één
+Shift.
+
+### De sorteerknop is twee knoppen: welke kant op, en waarvan
+
+Eén knop bood drie velden aan en geen richting; de commentaarregel bij het pictogram zei
+met zoveel woorden dat het géén richting mocht suggereren, omdat die er niet was. Nu wel:
+de pijlen links keren de lijst om, de naam rechts kiest het veld.
+
+`sortNotes` draait de **vergelijker** om en niet de gesorteerde rij. Een `reverse()` achteraf
+keert ook de volgorde *binnen* elk gelijkspel om — twee notities in dezelfde seconde
+bewaard, wat een plakactie zomaar oplevert — en de pinronde erna leunt erop dat de sortering
+stabiel is.
+
+Een veld kiezen zet de richting terug op die van dat veld (`NATURAL_SORT_DIRECTION`), zoals
+de kolomkoppen van elke verkenner doen en zoals "Titel" A–Z blijft betekenen; hetzelfde veld
+nog eens kiezen laat de pijlen staan, want "Gemaakt" kiezen in een menu dat al Gemaakt zegt
+is geen verzoek om de vorige druk ongedaan te maken. Die drie standaarden zijn precies wat
+de lijst deed toen er nog niets te kiezen viel.
+
+**Verworpen:** één opgeslagen richting die over de velden heen blijft staan. Dan opent Titel
+op Z–A omdat de datums een uur eerder omgekeerd zijn, en dan spreekt de lijst zijn eigen
+label tegen.
+
+### Meerdere notities tegelijk, voor Verplaatsen en Verwijderen
+
+Een Inbox opruimen ging notitie voor notitie: slepen, wachten op de herlaadbeurt, de
+volgende slepen. De lijst draagt nu een gemarkeerde verzameling, en er zijn twee dingen mee
+te doen.
+
+**Gemarkeerd is niet geselecteerd, en dat uit elkaar houden is het hele ontwerp.** De
+notitie in de lezer is wat `selected` betekent, en daar is er precies één van; een gewone
+klik opent er een, en daar is deze app voor. Een gemarkeerde verzameling is een tweede,
+tijdelijk ding dat vrijwel altijd leeg is — een misklik met Ctrl kost dus niets en een
+gewone klik maakt hem ongedaan.
+
+Twee regels uit `multi-select.ts` zijn het noemen waard. De eerste Ctrl+klik neemt de
+notitie die *open* staat mee, omdat die zichtbaar geselecteerd is en een verzameling die hem
+stilletjes zou overslaan één notitie minder verwijdert dan het scherm zei. En een
+verzameling van één klapt terug naar geen: één markering is de gewone toestand van een lijst
+met één notitie open, en er één laten staan laat het paneel in een stand waarvan niemand kan
+zien dat hij erin staat.
+
+Een rechtsklik *binnen* de verzameling gaat over de verzameling en laat hem staan; elders
+gaat hij over die regel en de markeringen verdwijnen. Het menu dat dan opengaat biedt alleen
+wat meerdere notities kán betekenen: Hernoemen, Dupliceren, Vastprikken, Openen en Tonen
+gaan over één notitie en zouden op de eerste regel moeten werken of stilletjes op één van
+velen.
+
+De sleeplading is voortaan één pad per regel — geen ontsnapping nodig, een kluispad kan geen
+regelovergang bevatten — en één notitie reist nog steeds als een kaal pad, dus de indeling
+veranderde niet onder een lezer die hem al kende. `canDropNotes` is bewust `some`: een
+verzameling uit twee mappen die op één ervan valt heeft nog steeds iets te doen, en de drop
+filtert per notitie zodat er niets verhuist wat `canDropNote` geweigerd zou hebben.
+
+**Verworpen:** de verzameling in `NoteList` bewaren, naast de zwervende tabstop. Verplaatsen
+en Verwijderen zijn de dialogen en de IPC-aanroepen van `Library.tsx`; een verzameling hier
+zou op het moment van handelen omhoog gereikt moeten worden, wat één ding meer is om gelijk
+te houden dan hem gewoon laten staan waar hij gebruikt wordt.
+
+### Het venster verplaatsen aan de titel van de notitie
+
+De titel in de lezer is `no-drag` in een balk die de greep van het randloze venster *is* —
+wat hem klikbaar maakt, en wat de titelbalk wegnam bij het enige onderdeel dat eruitziet als
+een titelbalk. Er is geen CSS die "allebei" uitdrukt: Chromium geeft elke druk binnen een
+sleepgebied aan de vensterverplaatsing en nooit aan het element eronder.
+
+Dus wordt de druk in de renderer bekeken en verplaatst main het venster (`IPC.windowDrag`).
+Wat bepaalt welk gebaar het was, is afstand en niet tijd — een hand op een trackpad beweegt
+tijdens het klikken een pixel of twee, en een druk die verder is gekomen was ergens
+naartoe.
+
+Twee dingen zijn het onthouden waard. Main neemt de afstand tussen venster en aanwijzer één
+keer, bij `"start"`, en elk volgend bericht herstelt hem; het verschil optellen stapelt elke
+afrondingsfout en elk verloren bericht op tot een venster dat uit de greep glijdt. En na een
+sleep komt er wél een klik — het venster beweegt mee, dus druk en loslaten landen op
+dezelfde kop en Chromium vuurt er één alsof er niets gebeurd is — dus die wordt
+onderdrukt, anders opent het loslaten van een gesleepte titel elke keer de hernoeming.
+
+**Verworpen:** de kop `-webkit-app-region: drag` geven en de klik ergens anders vandaan
+halen. Dan is er geen klik: het element krijgt de druk niet te zien, wat precies de fout is
+die `TODO.md` twee keer op rij vastlegt.
+
+### Het sneltoetsenblad is doorzoekbaar, en de kolommen zijn gepakt in plaats van geknipt
+
+Het blad is vierentwintig regels in twee kolommen: precies de lengte waarop lezen beter gaat
+dan scannen, en precies de lengte waarop je geen van beide wilde — je kwam voor één toets.
+`/`, één aanslag verder dan de Mod+/ die het blad opende, zet de cursor in een veld dat
+filtert op de naam én op het akkoord *zoals het gedrukt staat*, zodat "ctrl alt t",
+"ctrl+alt+t" en "tabel" alle drie dezelfde regel vinden.
+
+De twee globale sneltoetsen waren opmaak op zichzelf, met een hardgecodeerde `+2` in de
+balans om ze mee te tellen. Ze zijn nu gewone registeritems, gebouwd uit wat er is
+ingesteld: een zoekopdracht die de toets waarmee je een notitie begint niet kan vinden, is
+een zoekopdracht die het belangrijkste akkoord van de app weigert.
+
+En `balanceColumns` knipt de groepenlijst niet meer op één plek door. Bij vijf groepen van
+11, 8, 12, 4 en 13 regels is de beste doorlopende knip 19 tegen 29 — tien regels wit langs
+één kant. Het weegt nu elke manier om de groepen over twee kolommen te verdelen en neemt de
+kortste hoge kolom: 24 om 24 in de bibliotheek, 22 om 20 in het opnamevenster, in het echt
+gemeten op 484 px om 484 px.
+
+**Verworpen:** de doorlopende knip houden. Dat argument stond er zelf, en het klopte toen:
+kolommen lees je naar beneden en dan naar rechts, dus een doorlopende knip laat de volgorde
+van het register staan, en de winst was destijds één regel. De groepen zijn blijven groeien;
+elke kolom leest nog steeds in registervolgorde, het blad als geheel niet meer.
+
+### En één ding dat niets met toetsen te maken heeft: een leeg vinkvakje is geen taak
+
+Het akkoord maakt het vakje vóórdat er staat waar het over gaat, dus droeg elke notitie die
+werd geschreven een openstaande taak die niets zei: een regel in het Takenoverzicht die geen
+taak noemt, en een getal op elk mapbadge erboven dat omhoogging zodra je begon te typen en
+weer omlaag als je klaar was.
+
+`isBlankTask` staat in het schema naast `taskItemsIn`, omdat drie wandelingen het vragen —
+de indexopbouw, de telling in de prullenbakvraag en, via `note_tasks`, het overzicht zelf.
+Een vakje dat in de ene wel en in de andere niet meetelt is erger dan één dat overal meetelt.
+
+Het volgnummer wordt toegekend vóór het filter en blijft staan: het is een index in
+`taskItemsIn`, waar `toggleTask` en `focusTaskAt` een item mee opzoeken in een document waar
+de lege vakjes nog wél in staan. Hernummeren zou het verkeerde vinkje aanzetten.
+`SCHEMA_VERSION` gaat naar 5 — de eerste keer op die lijst dat er rijen *weg* gaan, en
+`needsRefresh` zou zo'n bestand niet opnieuw lezen omdat er niets aan bewogen is.
+
+**Verworpen:** een leeg vakje mét een genest lijstje toch meetellen. Dat is een omhulsel: de
+vakjes eronder tellen op zichzelf al, en de ouder meetellen telt hetzelfde werk twee keer.

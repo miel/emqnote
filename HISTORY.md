@@ -1957,3 +1957,45 @@ one place: the save fix has never met real OneDrive (`TEST-PROTOCOL.md` §47), a
 work has never run anywhere but Linux — the one platform it deliberately does not change,
 since Linux keeps its native frame (§45, §46). A window that looks wrong after this update
 is §45/§46, not B93.
+
+
+**Twelve items from daily use landed on 31 August 2026, as B94** — five bugs and seven
+features, on top of `v0.12.5`. They are one decision number because they are one trade
+running through the library window's bottom-left corner: the plain Tab order becomes the
+order the eye reads, two footer buttons leave the tab order to make that true, and the two
+of them gain chords because they left it.
+
+What changed, in the order it was asked for. An empty `- [ ]` stopped counting as a task,
+everywhere: `isBlankTask` sits in the schema beside `taskItemsIn` because three walks ask it,
+the ordinal is still assigned before the filter (it is an index into `taskItemsIn`, which
+`toggleTask` and `focusTaskAt` use on a document where the blank boxes are still there), and
+`SCHEMA_VERSION` went to 5 — the first entry on that list that *removes* rows rather than
+adding a column. A highlight applied to selected text is visible while it is still selected
+(`mark::selection`, the highlight mixed with the accent). The settings panel scrolls inside
+a short window. "Check for updates…" is in Settings as well as in the tray, where nobody
+looks. The pane ring went back to three stops and the note's fields got `Mod+Shift+W`
+instead. The Tab order gained the note's title and lost both splitters and both footer
+buttons, which gained `Mod+T` and `Mod+S`. The sort chooser split into arrows and a name,
+with a direction that persists. The note list can mark several notes for Move and Delete, by
+menu and by drag. The shortcut sheet gained a `/` search and a column balance that packs
+rather than cuts — 24/24 in the library where the best contiguous cut was 19/29. And the
+note's title in the reader moves the window when a press travels and opens the rename when
+it does not.
+
+**It came with a second driving harness, and that is the part worth remembering.**
+`scripts/drive-library.ts` (`npm run drive:library`) is `drive-capture.ts`'s counterpart for
+the library window, and it exists because three of this batch's claims cannot be checked
+under `test/` at all: **jsdom implements no sequential focus navigation**, so every jsdom
+test of a Tab order checks the two steps the app performs itself and takes the browser's
+word for the other five; the window's own position, which is where `IPC.windowDrag`'s only
+observable result appears; and `-webkit-app-region`, the class of bug `TODO.md` and §46
+already record twice. Fifteen steps, green on two consecutive runs, and the Tab walk came
+back reading `div.branch → li.note → h1.pane-title → button.created → input.tags →
+input.location → input.attendees → div.editor-content` with Shift-Tab walking back down it.
+
+**What is left for a person is narrow and named** (`TEST-PROTOCOL.md` §48): the macOS and
+Windows forms of the three new chords, which have never run on either platform — ⇧⌘W must
+not close the window, ⌘T is Show Fonts in a Mac text view, and Ctrl+T is Chromium's own
+"new tab" — and two judgements no script can make, whether the sort arrow reads as something
+to press and whether the window keeps up with the pointer when the title is dragged on a
+machine that has a window manager.

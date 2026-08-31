@@ -10,9 +10,12 @@ A resident Electron note-taking app that replaces a "email a note to myself" rou
 
 Build, test, typecheck and packaging scripts live in `package.json`.
 
-Beyond those, seven diagnostic helpers exist for questions this project has learned not to
+Beyond those, eight diagnostic helpers exist for questions this project has learned not to
 guess at — a reported bug that survives its own fix is a recurring theme here (B57 → B59,
 B62's Ctrl+Tab, B71), and each helper exists because guessing had already had its turn.
+Two of them drive the real app under a display (`drive:capture`, `drive:library`), which is
+where anything about focus order, pointer aim, window position or `-webkit-app-region` has
+to be settled: jsdom implements none of them.
 They are documented in the `diagnostics` skill (`.claude/skills/diagnostics/SKILL.md`);
 reach for one before shipping a second fix for the same complaint.
 
@@ -126,6 +129,20 @@ undo by accident and expensive to rediscover:
   and written from `useBootstrap`; everything inside `.editor-content` is `em` against it, so
   a size change moves the whole note evenly and the window around it not at all.
   `styles-editor-font-size.test.ts` is what keeps that true.
+- **The library's Tab order is the order the eye reads, and it is a trade** (B94). Folders →
+  notes → the note's title → When → Tags → Where → Who → the note. Only two of those steps
+  are this app's; the other six are the browser walking focusable controls in DOM order, and
+  a table of eight stops would be a second definition of what the DOM already says. Four
+  things left the order to make it true — both pane splitters and the note list's sort and
+  Tasks buttons — and the two buttons gained `Mod+S` and `Mod+T` in the same change: **drop
+  either chord and the `offTabOrder` on its button has to go with it**, or the control is
+  unreachable without a mouse. `npm run drive:library` is the only place a real Tab can be
+  pressed; jsdom implements no focus navigation at all.
+- **Anything in a header band that must *also* move the window cannot get there with CSS**
+  (B94). A `-webkit-app-region: drag` region swallows the press; `no-drag` gives it back and
+  takes the window move away. The note's title needs both, so `window-drag.ts` watches the
+  press and main moves the window — and the click that Chromium fires *after* a drag has to
+  be suppressed, or letting go of a dragged title opens the rename.
 - **A diagnosis that survives its own bug report is incomplete, not wrong.** Reach for one of the diagnostic helpers above before shipping a second fix for the same complaint.
 
 ## Tests
@@ -136,7 +153,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 2000 tests in roughly thirty-five seconds of test time (about a minute and a
+The suite runs its 2075 tests in roughly thirty-five seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -179,7 +196,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B93, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B94, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |
