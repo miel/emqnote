@@ -28,10 +28,19 @@ const library = readFileSync(
   "utf8",
 );
 
-/** The declaration block for an exact selector, whitespace and all. */
+/**
+ * The declaration block for an exact selector, whitespace and all.
+ *
+ * It may share that block with other selectors — `.note-on, .note-marked { … }` since B94
+ * — so the selector is matched as one item of a comma-separated list. What may precede it
+ * on its own item is anything but a brace or a comma, so a descendant selector is still
+ * found by its last part while `.note` still does not match `.note-on`.
+ */
 const rule = (selector: string): string => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const found = library.match(new RegExp(`${escaped} \\{[^}]*\\}`));
+  const found = library.match(
+    new RegExp(`(?:^|,)[^{},]*${escaped}\\s*(?:,[^{}]+)?\\{[^}]*\\}`, "m"),
+  );
   expect(found, `no rule found for ${selector}`).not.toBeNull();
   return found![0];
 };

@@ -44,6 +44,8 @@ import { PaneFooter } from "../PaneFooter.js";
 import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
+import { canDropNote } from "./drag.js";
+import { sharedFolder } from "./multi-select.js";
 import { SIDEBAR_ROWS } from "./roving.js";
 import { FolderTree } from "./FolderTree.js";
 import { LinkPicker } from "./LinkPicker.js";
@@ -218,7 +220,7 @@ type Dialog =
    * which is why this question is a question and not a warning — but it should still say
    * what it is about to take off the list.
    */
-  | { kind: "delete"; title: string; path: string; openTasks: number }
+  | { kind: "delete"; title: string; paths: string[]; openTasks: number }
   /** A folder, to `_trash`, with what is inside it — notes, subfolders, and open tasks. */
   | { kind: "deleteFolder"; path: string; notes: number; folders: number; openTasks: number }
   // Five numbers, not one, and all five are counted when the dialog opens: this is
@@ -458,7 +460,15 @@ export function Library(): React.ReactElement {
    * is told apart from that. Null the rest of the time, which is the normal state.
    */
   const [diskEvent, setDiskEvent] = useState<VaultFileEvent | null>(null);
-  const [moving, setMoving] = useState(false);
+  /**
+   * The notes the "Move to…" dialog is open for, or null when it is not.
+   *
+   * A list rather than a flag since B94: it used to be `boolean` and the dialog read
+   * `open.path` when it was answered, which cannot say "these three". Holding the paths
+   * also fixes a smaller thing the flag had — the question is now about the notes it was
+   * *opened* for, not about whatever happens to be in the reader when it is answered.
+   */
+  const [moving, setMoving] = useState<string[] | null>(null);
   /**
    * The trashed note or folder waiting to be told where to go back to. A separate piece
    * of state from `moving` and not a fourth `Dialog`, because it opens `MoveDialog`
@@ -468,7 +478,24 @@ export function Library(): React.ReactElement {
   // The note being dragged over the tree. Held here rather than in either component,
   // because the row that knows which note it is and the branch that has to decide
   // whether it will take it are on opposite sides of the window.
-  const [dragging, setDragging] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string[] | null>(null);
+  /**
+   * The rows marked for a bulk Move or Delete (B94) — see `multi-select.ts`.
+   *
+   * Here rather than in `NoteList` because this is where both actions live: the Move
+   * dialog, the delete confirmation and the two IPC calls behind them. The list decides
+   * *which* rows are marked and hands the answer up; nothing else in the window reads it
+   * but the note list itself and the two menu items.
+   *
+   * Emptied whenever the list underneath it is replaced — a different folder, a search, a
+   * move that took some of the marked notes out of it — because a mark is about rows on
+   * screen. `selectionKey` is what says the list changed.
+   */
+  const [marked, setMarked] = useState<string[]>([]);
+  // Read from the window's `keydown` listener, which is installed once — the `openRef` /
+  // `notesRef` pattern this file already uses for exactly that.
+  const markedRef = useRef(marked);
+  markedRef.current = marked;
   const [dialog, setDialog] = useState<Dialog | null>(null);
   /** An ambiguous `[[…]]` link waiting for the user to say which note it meant (B35). */
   const [linkPick, setLinkPick] = useState<{
@@ -1110,6 +1137,10 @@ export function Library(): React.ReactElement {
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
+    // A mark is about rows on screen (B94), and these are about to be different rows.
+    // Left standing, a set marked in the Inbox would light up whichever notes happened to
+    // land in those positions in the next folder — and the next Delete would mean them.
+    setMarked([]);
   }, [key, loadNotes]);
 
   /**
@@ -1137,7 +1168,7 @@ export function Library(): React.ReactElement {
     settingsOpen ||
     helpOpen ||
     dialog !== null ||
-    moving ||
+    moving !== null ||
     restoring !== null ||
     linkPick !== null ||
     notePick !== null ||
@@ -1430,6 +1461,16 @@ export function Library(): React.ReactElement {
         if (pane === "editor") {
           event.preventDefault();
           focusPane("notes");
+          return;
+        }
+
+        // A press on a note row clears a marked set before it does anything else — one
+        // press undoes one thing, the rule the search box and the help sheet's own query
+        // both follow. Marking rows and then wanting out of the search is rare; marking
+        // rows and changing your mind is not.
+        if (pane === "notes" && markedRef.current.length > 0) {
+          event.preventDefault();
+          setMarked([]);
           return;
         }
 
@@ -2006,7 +2047,15 @@ export function Library(): React.ReactElement {
           open.openTasks === 0
             ? ""
             : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
-        return `"${open.title}"${tasks} — ${app.t("ask.confirmDelete")}`;
+        // A set says how many rather than naming them (B94). Two titles in quotes would
+        // read as the whole answer where there are six, and a list of six is a paragraph
+        // in a dialog whose job is one sentence — the rows are lit up on the list behind
+        // it, which is where a set is read.
+        const what =
+          open.paths.length === 1
+            ? `"${open.title}"`
+            : plural(open.paths.length, "library.note", "library.notes");
+        return `${what}${tasks} — ${app.t("ask.confirmDelete")}`;
       }
       case "deletePermanently": {
         // The open tasks in this one thing, counted when the dialog opens exactly as the
@@ -2264,6 +2313,27 @@ export function Library(): React.ReactElement {
     await askRelinkThen({ kind: "move", path: notePath, folder: target });
   };
 
+  /**
+   * The same, for several notes at once (B94) — a marked set dragged onto a folder, or
+   * "Move n notes…".
+   *
+   * **One after another, awaited, never in parallel.** Every move reloads the tree, the
+   * list and the facets and may raise the "should the links follow?" question; two of them
+   * in flight at once would interleave those reloads and could put two dialogs on screen.
+   * Filing is a handful of notes at a time, so the cost is a few round trips in a row.
+   *
+   * The marks go first, not last: they name rows in a list that is about to be rebuilt
+   * without them, and a set left standing would light up whatever moved into those
+   * positions.
+   */
+  const moveNotesTo = async (notePaths: string[], target: string): Promise<void> => {
+    setMarked([]);
+    for (const path of notePaths) {
+      // eslint-disable-next-line no-await-in-loop
+      await moveNoteTo(path, target);
+    }
+  };
+
   const performMove = async (
     notePath: string,
     target: string,
@@ -2341,10 +2411,27 @@ export function Library(): React.ReactElement {
    * without it the Trash row would not appear until something else refreshed the tree.
    */
   const trashNoteAt = async (notePath: string): Promise<void> => {
-    await window.emqnote.library.trashNote(notePath);
+    await trashNotesAt([notePath]);
+  };
+
+  /**
+   * Several at once (B94): a marked set dropped on the Trash row, or "Delete n notes".
+   *
+   * One reload for the whole batch rather than one per note, unlike `moveNotesTo` next
+   * door — and the difference is not an inconsistency. A move raises a question per note
+   * (should the links follow?) and has to finish answering one before it asks the next; a
+   * trash asks nothing, so the only reason to interleave reloads would be to watch the
+   * list shorten a row at a time.
+   */
+  const trashNotesAt = async (notePaths: string[]): Promise<void> => {
+    setMarked([]);
+    for (const path of notePaths) {
+      // eslint-disable-next-line no-await-in-loop
+      await window.emqnote.library.trashNote(path);
+    }
 
     const current = openRef.current;
-    if (current !== null && current.path === notePath) {
+    if (current !== null && notePaths.includes(current.path)) {
       setOpen(null);
       openRef.current = null;
     }
@@ -2675,15 +2762,22 @@ export function Library(): React.ReactElement {
           selected={selection}
           facets={facets}
           dragging={dragging}
-          onDropNote={(notePath, folder) => {
+          onDropNote={(notePaths, folder) => {
             setDragging(null);
+            setMarked([]);
             // A drop on the Trash row is Delete, not a move to a folder that happens to
             // be called `_trash`: it goes through the same `trashNoteAt` the menu item
             // calls, so the two cannot answer differently about the lock or about what
             // the reader does next. No confirmation, deliberately — trashing is a rename
             // (B24), and Restore is the named way back.
-            if (folder === TRASH_FOLDER) void trashNoteAt(notePath);
-            else void moveNoteTo(notePath, folder);
+            //
+            // Several notes since B94, and the *ones this folder will take*: a marked set
+            // can be dragged out of two folders at once and one of them may be this one,
+            // which `canDropNotes` lets through on the strength of the others. Filtering
+            // here rather than there keeps the highlight generous and the action exact.
+            const moving = notePaths.filter((path) => canDropNote(path, folder));
+            if (folder === TRASH_FOLDER) void trashNotesAt(moving);
+            else void moveNotesTo(moving, folder);
           }}
           onSelect={(target) => {
             setSelection(target);
@@ -2841,6 +2935,8 @@ export function Library(): React.ReactElement {
             scopeable={selection.kind === "folder"}
             onExitSearch={exitSearch}
             sort={sort}
+            marked={marked}
+            onMark={setMarked}
             onSort={onSort}
             sortDirection={sortDirection}
             onSortDirection={onSortDirection}
@@ -3175,19 +3271,24 @@ export function Library(): React.ReactElement {
         </section>
       </div>
 
-      {moving && open !== null && (
+      {moving !== null && moving.length > 0 && (
         <MoveDialog
           folders={folders}
-          // The folder the note is actually in, not the one selected on the left. With
+          // The folder the notes are actually in, not the one selected on the left. With
           // a tag selected there is no current folder at all, and even with a folder
           // selected the open note may live somewhere else entirely — in which case the
           // old code excluded the wrong one and offered the note its own folder.
-          current={folderOf(open.path)}
+          //
+          // Several notes out of two different folders exclude neither: the list is what
+          // this dialog can move them *to*, and with the set split across folders every
+          // one of them is a real destination for something in it (B94).
+          current={sharedFolder(moving)}
           t={app.t}
-          onCancel={() => setMoving(false)}
+          onCancel={() => setMoving(null)}
           onMove={(target) => {
-            setMoving(false);
-            void moveNoteTo(open.path, target);
+            const paths = moving;
+            setMoving(null);
+            void moveNotesTo(paths, target);
           }}
         />
       )}
@@ -3223,7 +3324,40 @@ export function Library(): React.ReactElement {
             // vault, offered on a row that is not in it any more. Read off the path, the
             // same way `FolderTree`'s own menu reads it, so no extra state travels with
             // the row to say so.
-            isInTrash(folderOf(noteMenu.note.path))
+            // **A marked set gets a menu about the set** (B94): the two actions that can
+            // mean several notes at once, and nothing else. Rename, Duplicate, Pin, Open
+            // and Reveal are all about one note — they would have to either act on the
+            // first row or silently act on one of several, and both are worse than not
+            // being offered. The count is in the label, so the menu says what it is about
+            // rather than leaving that to the highlight behind it.
+            marked.length > 1 && marked.includes(noteMenu.note.path)
+              ? [
+                  {
+                    label: `${app.t("library.move")} — ${marked.length} ${app.t("library.notes")}`,
+                    onSelect: () => setMoving([...marked]),
+                  },
+                  {
+                    label: `${app.t("library.delete")} — ${marked.length} ${app.t("library.notes")}`,
+                    danger: true,
+                    onSelect: () => {
+                      const paths = [...marked];
+                      // The same count the single-note question carries, summed over the
+                      // set: `openTasksAt` is asked once per note, and the sentence names
+                      // what is still to be done in all of them together.
+                      void Promise.all(
+                        paths.map((path) => window.emqnote.library.openTasksAt(path)),
+                      ).then((counts) => {
+                        setDialog({
+                          kind: "delete",
+                          title: noteMenu.note.title,
+                          paths,
+                          openTasks: counts.reduce((sum, count) => sum + count, 0),
+                        });
+                      });
+                    },
+                  },
+                ]
+              : isInTrash(folderOf(noteMenu.note.path))
               ? [
                   {
                     label: app.t("library.restore"),
@@ -3252,7 +3386,10 @@ export function Library(): React.ReactElement {
                     checked: noteMenu.note.pinned,
                     onSelect: () => void setPinned(noteMenu.note, !noteMenu.note.pinned),
                   },
-                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  {
+                    label: app.t("library.move"),
+                    onSelect: () => setMoving([noteMenu.note.path]),
+                  },
                   {
                     label: app.t("library.rename"),
                     onSelect: () => setEditingTitle(noteMenu.note.title),
@@ -3268,7 +3405,7 @@ export function Library(): React.ReactElement {
                     onSelect: () => {
                       const { path, title } = noteMenu.note;
                       void window.emqnote.library.openTasksAt(path).then((openTasks) => {
-                        setDialog({ kind: "delete", title, path, openTasks });
+                        setDialog({ kind: "delete", title, paths: [path], openTasks });
                       });
                     },
                   },
@@ -3362,7 +3499,7 @@ export function Library(): React.ReactElement {
                     label: app.t("library.rename"),
                     onSelect: () => setEditingTitle(open.title),
                   },
-                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  { label: app.t("library.move"), onSelect: () => setMoving([open.path]) },
                   { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
                   {
                     label: app.t("library.reveal"),
@@ -3374,7 +3511,7 @@ export function Library(): React.ReactElement {
                     onSelect: () => {
                       const { path, title } = open;
                       void window.emqnote.library.openTasksAt(path).then((openTasks) => {
-                        setDialog({ kind: "delete", title, path, openTasks });
+                        setDialog({ kind: "delete", title, paths: [path], openTasks });
                       });
                     },
                   },
@@ -3468,7 +3605,7 @@ export function Library(): React.ReactElement {
             // the sentence on screen promised. The count in that sentence is read off this
             // same path, so a mismatch would put a task count from one note in a question
             // about another.
-            if (current.kind === "delete") void trashNoteAt(current.path);
+            if (current.kind === "delete") void trashNotesAt(current.paths);
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();

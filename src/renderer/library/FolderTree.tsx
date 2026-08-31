@@ -14,7 +14,7 @@ import { ChromeButton } from "../ChromeButton.js";
 import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu, type MenuItem } from "./ContextMenu.js";
 import { FilterSection } from "./FilterSection.js";
-import { canDropNote, NOTE_DRAG_TYPE, SPRING_MS } from "./drag.js";
+import { canDropNotes, decodeDraggedNotes, NOTE_DRAG_TYPE, SPRING_MS } from "./drag.js";
 import { isContextMenuKey, roveArrowKey, sidebarRowProps, SIDEBAR_ROWS } from "./roving.js";
 
 interface Props {
@@ -23,9 +23,14 @@ interface Props {
   facets: Facets;
   onSelect: (selection: Selection) => void;
   /** The note being dragged over the tree, or null. See `NoteList`'s `onDragNote`. */
-  dragging: string | null;
+  /**
+   * The notes currently being dragged, or null when nothing is. A list since B94: the
+   * note list can hand over a whole marked set, and the highlight has to answer for all
+   * of them at once (`canDropNotes`).
+   */
+  dragging: string[] | null;
   /** Drops a dragged note into a folder — the direct form of "Move to…". */
-  onDropNote: (notePath: string, folder: string) => void;
+  onDropNote: (notePaths: string[], folder: string) => void;
   /** Fired when a filter list is unfolded, so the vault is only scanned on demand. */
   onExpandFilters: () => void;
   /** The context menu's "New folder": the new folder goes inside the given path. */
@@ -302,7 +307,7 @@ function Branch({
   onSelect: (selection: Selection) => void;
   onCreateFolder: (parent: string) => void;
   /** The note currently under the pointer, or null. See `NoteList`'s `onDragNote`. */
-  dragging: string | null;
+  dragging: string[] | null;
   /**
    * Files the dragged note here — or, on the trash branch, deletes it: `Library.tsx`
    * routes a drop whose target is `TRASH_FOLDER` through the same `trashNote` the Delete
@@ -312,7 +317,7 @@ function Branch({
    * destinations, and a branch that would refuse every drop should not be wired to try;
    * nothing leaves it off today.
    */
-  onDropNote?: (notePath: string, folder: string) => void;
+  onDropNote?: (notePaths: string[], folder: string) => void;
   /**
    * An icon in the slot Tags and People use, for the one branch that is a destination
    * rather than a folder.
@@ -374,7 +379,7 @@ function Branch({
   const hasChildren = node.children.length > 0;
 
   const accepts =
-    onDropNote !== undefined && dragging !== null && canDropNote(dragging, node.path);
+    onDropNote !== undefined && dragging !== null && canDropNotes(dragging, node.path);
 
   /** The spring-open countdown, while a dragged note is resting on this row. */
   const springTimer = useRef<number | null>(null);
@@ -504,10 +509,10 @@ function Branch({
           cancelSpring();
           setOver(false);
           if (onDropNote === undefined) return;
-          const notePath = event.dataTransfer.getData(NOTE_DRAG_TYPE);
-          if (notePath === "" || !canDropNote(notePath, node.path)) return;
+          const notePaths = decodeDraggedNotes(event.dataTransfer.getData(NOTE_DRAG_TYPE));
+          if (notePaths.length === 0 || !canDropNotes(notePaths, node.path)) return;
           event.preventDefault();
-          onDropNote(notePath, node.path);
+          onDropNote(notePaths, node.path);
         }}
       >
         <button

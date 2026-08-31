@@ -19,6 +19,28 @@ import { folderOf, isInTrash, TRASH_FOLDER } from "../../shared/vault-types.js";
 export const NOTE_DRAG_TYPE = "application/x-emqnote-path";
 
 /**
+ * The payload under that type: one path per line.
+ *
+ * It carried exactly one path until several notes could be marked at once (B94, see
+ * `multi-select.ts`). Newline-separated rather than JSON because a vault path cannot
+ * contain one — `filename.ts` decides what a note may be called, and every platform this
+ * app runs on forbids it in a file name — so the encoding needs no escaping and a reader
+ * that has not been updated still sees a path where it expected one.
+ *
+ * Both halves live here beside `canDropNotes`, because the writing end (`NoteList.tsx`)
+ * and the reading end (`FolderTree.tsx`) are in different components that never speak: a
+ * `split` on one side of that boundary and a `join` on the other is precisely the pair
+ * that comes to disagree.
+ */
+export function encodeDraggedNotes(paths: string[]): string {
+  return paths.join("\n");
+}
+
+export function decodeDraggedNotes(data: string): string[] {
+  return data.split("\n").filter((path) => path !== "");
+}
+
+/**
  * How long a dragged note has to rest on a collapsed folder before it springs open.
  *
  * Filing by drag only reaches what is on screen, so a destination two levels down used to
@@ -40,6 +62,16 @@ export const SPRING_MS = 600;
  * never light up as a destination and then refuse the drop — two separate answers to the
  * same question is exactly how that mismatch gets in.
  */
+export function canDropNotes(notePaths: string[], targetFolder: string): boolean {
+  // **Some, not every.** A marked set can be dragged out of two folders at once, and one
+  // of the two may be the folder being dropped on — in which case the notes already there
+  // simply stay where they are and the rest move. Requiring all of them would refuse the
+  // whole drag over one row that had nothing to do, which reads as the drag being broken.
+  // The drop itself applies `canDropNote` per note, so nothing moves that this would have
+  // refused on its own.
+  return notePaths.some((path) => canDropNote(path, targetFolder));
+}
+
 export function canDropNote(notePath: string, targetFolder: string): boolean {
   // Nothing drags *out* of the trash. Restore is the named action for that, and it has
   // to be: `trashNote` flattens everything into one folder, so a note in there has no

@@ -510,7 +510,14 @@
   background: var(--hover);
 }
 
-.note-on {
+.note-on,
+/* A row marked for a bulk Move or Delete (B94) wears the *same* fill as the row in the
+   reader, and that is a decision rather than a shortcut: "selected" is one of the six
+   roles (B87) and a set of marked rows is exactly that — the rows the next action is
+   about. A seventh colour invented for it would be a second word for the same state, and
+   the one place the two need telling apart is already handled by the keyboard ring (B91),
+   which follows focus and lands on one row at a time. */
+.note-marked {
   background: var(--selected);
 }
 
