@@ -423,6 +423,13 @@ const DUTCH: Record<string, string> = {
   "settings.themeSystem": "Systeem",
   "settings.themeLight": "Licht",
   "settings.themeDark": "Donker",
+  // Er stond al een "Controleren op updates…" in het menu van het systeemvakpictogram, en
+  // dat is precies de plek waar niemand hem zoekt — op Windows kan dat pictogram
+  // bovendien onder het pijltje zijn opgeborgen.
+  "settings.updates": "Updates",
+  "settings.updatesCheck": "Controleren op updates…",
+  "settings.updatesWhy":
+    "Kijkt op GitHub of er een nieuwere versie is. Je krijgt altijd antwoord, ook als er niets nieuws is.",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -893,6 +900,13 @@ const ENGLISH: Record<string, string> = {
   "settings.themeSystem": "System",
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
+  // There was already a "Check for updates…" in the tray icon's menu, which is exactly
+  // where nobody looks for it — and on Windows that icon may be folded away under the
+  // overflow chevron.
+  "settings.updates": "Updates",
+  "settings.updatesCheck": "Check for updates…",
+  "settings.updatesWhy":
+    "Looks on GitHub for a newer release. You get an answer either way, including when there is nothing new.",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

@@ -461,3 +461,27 @@ export function taskItemText(item: PMNode): string {
   const first = item.firstChild;
   return first !== null && first.type === schema.nodes.paragraph ? first.textContent : "";
 }
+
+/**
+ * A task item with nothing written on its own line — `- [ ]` and no more.
+ *
+ * Every count of tasks in this app skips these, and the rule lives here beside
+ * `taskItemsIn` for that function's own reason: three separate walks ask it — the index
+ * build (`extractTasks`), the trash confirmation's count (`openTasksIn` in `vault-io.ts`)
+ * and, through `note_tasks`, the Tasks view itself. A box that counted in one of them and
+ * not in another is worse than one that counts everywhere.
+ *
+ * They exist because pressing the task chord makes one: the box is typed before the thing
+ * it is about is, so a note being written always carries an open task that says nothing.
+ * That is one row of the Tasks view naming no task, and one on every badge that counts
+ * up the folder it lives in — a count that goes up when you start typing and back down
+ * when you finish.
+ *
+ * **The item's own text, not the subtree's.** A box with a nested list under it and
+ * nothing beside it is a container: it says nothing about what is owed, and the boxes
+ * beneath it are counted on their own — counting the parent as well would count the same
+ * work twice.
+ */
+export function isBlankTask(item: PMNode): boolean {
+  return taskItemText(item).trim() === "";
+}

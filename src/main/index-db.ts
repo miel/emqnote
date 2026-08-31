@@ -88,8 +88,15 @@ export type IndexDb = Database.Database;
  * `mtime` or `size` has moved — neither of which this column existing does to anything. An
  * index built before today would report every note in the vault as unpinned, for good, and
  * the limit of three would be counted against nothing.
+ *
+ * Version 5 is the day an empty `- [ ]` stopped being a task (`isBlankTask`). It is the
+ * first entry on this list that removes rows rather than adding a column: every index
+ * built before it holds a `note_tasks` row for every blank box in the vault, and
+ * `needsRefresh` will not re-read a single one of those files, because nothing about them
+ * moved. The badges and the Tasks view would go on counting exactly what this change is
+ * about until each note was next edited.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * One search-only virtual table rather than the `content=''` "contentless" table

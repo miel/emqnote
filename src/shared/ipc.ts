@@ -230,6 +230,18 @@ export const IPC = {
    */
   setTheme: "app:set-theme",
   /**
+   * renderer → main: the user asked whether there is a new version (B22's check, from the
+   * Settings panel as well as from the tray).
+   *
+   * Carries nothing and answers nothing. Every outcome of a check — up to date, an update
+   * to download, a network that would not answer — is a native dialog raised by
+   * `updater.ts`, on the same "you asked, so you get an answer" rule the tray item has
+   * always followed; there is no result for the panel to draw and nothing for it to
+   * decide. It resolves once the check has been *started*, not once it has finished, so a
+   * slow GitHub cannot leave a button in the panel waiting on it.
+   */
+  checkForUpdates: "app:check-for-updates",
+  /**
    * main → both windows: something in `settings.json` that a window *draws with* has
    * changed, so re-read the bootstrap.
    *
@@ -802,6 +814,11 @@ export interface CaptureApi {
   setEditorFontSize: (px: number) => Promise<void>;
   /** B90's theme. Awaited for the same reason `setEditorFontSize` is. */
   setTheme: (theme: Theme) => Promise<void>;
+  /**
+   * Asks main to check GitHub for a newer release, the same check the tray item runs.
+   * Resolves when the check has been started; what it found is a native dialog.
+   */
+  checkForUpdates: () => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */

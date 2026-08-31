@@ -40,11 +40,32 @@ describe("extracting tasks from a parsed document", () => {
     expect(extractTasks(doc)).toEqual([{ ordinal: 0, checked: false, text: "Taak" }]);
   });
 
-  it("reads \"\" for a task item whose first child is not a paragraph", () => {
-    // The schema's `listItem` content (`paragraph block*`) guarantees this in practice,
-    // but `Node.create` does not itself enforce a content expression — see
+  it("drops a box with nothing written on it", () => {
+    // The one the task chord makes: the box is typed before the thing it is about is.
+    const doc = docFromMarkdown("- [ ]\n- [ ] Taak\n");
+
+    expect(extractTasks(doc)).toEqual([{ ordinal: 1, checked: false, text: "Taak" }]);
+  });
+
+  it("keeps the ordinal of the items that survive", () => {
+    // The ordinal is an index into `taskItemsIn`, which still sees the blank ones — it is
+    // what `toggleTask` and `focusTaskAt` look an item up by in a freshly parsed
+    // document. Renumbering after the filter would tick the wrong box.
+    const doc = docFromMarkdown("- [ ] Een\n- [ ]\n- [x] Drie\n");
+
+    expect(extractTasks(doc)).toEqual([
+      { ordinal: 0, checked: false, text: "Een" },
+      { ordinal: 2, checked: true, text: "Drie" },
+    ]);
+  });
+
+  it("drops a box whose first child is not a paragraph", () => {
+    // The schema's `listItem` content (`paragraph block*`) guarantees this cannot happen
+    // in practice, but `Node.create` does not itself enforce a content expression — see
     // `taskItemText`'s own comment in `schema.ts`. Built by hand rather than parsed, since
-    // nothing that goes through `parseNote` can actually produce this shape.
+    // nothing that goes through `parseNote` can produce this shape. It reads as a box with
+    // no text of its own, which is exactly what `isBlankTask` drops: the nested item under
+    // it is a task in its own right and is counted as one.
     const malformed = schema.nodes.listItem!.create(
       { checked: false },
       schema.nodes.bulletList!.create(null, [
@@ -58,7 +79,7 @@ describe("extracting tasks from a parsed document", () => {
       schema.nodes.bulletList!.create(null, [malformed]),
     ]);
 
-    expect(extractTasks(doc)).toEqual([{ ordinal: 0, checked: false, text: "" }]);
+    expect(extractTasks(doc)).toEqual([]);
   });
 });
 

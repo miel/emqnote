@@ -149,6 +149,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    checkForUpdates: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

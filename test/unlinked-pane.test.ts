@@ -145,6 +145,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    checkForUpdates: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

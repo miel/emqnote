@@ -1132,6 +1132,24 @@ body {
   border-radius: 2px;
 }
 
+/* **A highlight applied to selected text has to be visible while it is still selected.**
+   Mod+Alt+H is pressed on a selection, and the selection is painted over the top of
+   whatever it covers — so the mark went on, the note changed, and the screen did not.
+   The only way to see the highlight had landed was to click somewhere else first, which
+   is the app answering "did that work?" with "try it and find out".
+
+   So the selection over a mark is drawn in its own colour: the highlight mixed with the
+   accent the ordinary selection already reads as. Both halves are tokens, one per theme,
+   because a literal here would be a colour that is right in one theme and wrong in the
+   other — and `styles-surfaces.test.ts` counts the literals that are left.
+
+   `::selection` rather than a class from the editor: nothing has to track what is
+   selected, there is no decoration to add and remove on every cursor move, and it is
+   correct for a selection made with the mouse, the keyboard or Mod+A alike. */
+.editor-content mark::selection {
+  background: color-mix(in srgb, var(--highlight) 55%, var(--accent) 45%);
+}
+
 .editor-content a {
   color: var(--accent);
 }

@@ -112,6 +112,7 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    checkForUpdates: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

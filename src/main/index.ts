@@ -1330,6 +1330,23 @@ function registerAppIpc(): void {
     saveSettings({ theme: applyTheme(theme) });
   });
 
+  /**
+   * The same check the tray's "Check for updates…" runs, from the Settings panel — which
+   * is where anyone looks for it, and on Windows the tray icon can be folded away into the
+   * overflow chevron where nobody would find it at all.
+   *
+   * `"manual"` because it is: the trigger decides how quiet a "nothing to report" stays,
+   * and a check somebody pressed a button for owes an answer either way (`updater.ts`).
+   *
+   * `void`, not awaited, and the handler resolves at once. `checkForUpdates` on Windows
+   * only settles when the user has answered a dialog — possibly after a download — and
+   * this promise's other end is a button in a renderer that has nothing to do with the
+   * answer. It catches everything itself, so nothing is dropped by letting it run on.
+   */
+  ipcMain.handle(IPC.checkForUpdates, () => {
+    void checkForUpdates("manual");
+  });
+
   ipcMain.handle(IPC.setLocale, (_event, locale: Locale) => {
     saveSettings({ locale });
     buildTrayMenu();

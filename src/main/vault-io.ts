@@ -14,6 +14,7 @@ import {
   bodyTagsOf,
   cleanTagInput,
   extractTags,
+  isBlankTask,
   manualTags,
   mergeTags,
   parseFrontmatter,
@@ -950,7 +951,12 @@ export function openTasksAt(vault: string, path: string): number {
 function openTasksIn(file: string): number {
   try {
     const { doc } = parseNote(readFileSync(file, "utf8"));
-    return taskItemsIn(doc).filter(({ node }) => node.attrs.checked === false).length;
+    // `isBlankTask` for the reason the comment above gives: this number sits in a sentence
+    // beside the ones the index answers (`extractTasks`), and a box with nothing written
+    // on it is not counted by either.
+    return taskItemsIn(doc).filter(
+      ({ node }) => node.attrs.checked === false && !isBlankTask(node),
+    ).length;
   } catch {
     return 0;
   }

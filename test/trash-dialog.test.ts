@@ -120,6 +120,7 @@ function buildFake(contents: Contents): CaptureApi {
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    checkForUpdates: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
