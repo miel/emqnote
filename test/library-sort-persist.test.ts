@@ -94,8 +94,6 @@ function buildFake(): Fake {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -189,7 +187,7 @@ describe("the note list's sort order persists across a relaunch", () => {
 
   /** The chooser itself — the one control the header draws for the sort. */
   function trigger(): HTMLButtonElement {
-    const button = container.querySelector<HTMLButtonElement>(".notes-sort .sort-choose");
+    const button = container.querySelector<HTMLButtonElement>(".notes .sort-choose");
     expect(button).not.toBeNull();
     return button!;
   }

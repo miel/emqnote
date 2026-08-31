@@ -47,8 +47,6 @@ contextBridge.exposeInMainWorld("emqnote", {
   change: (payload: CapturePayload) => ipcRenderer.send(IPC.captureChange, payload),
   close: () => ipcRenderer.send(IPC.captureClose),
   discard: () => ipcRenderer.send(IPC.captureDiscard),
-  minimise: () => ipcRenderer.send(IPC.windowMinimise),
-  toggleMaximise: () => ipcRenderer.send(IPC.windowToggleMaximise),
   openLibrary: () => ipcRenderer.send(IPC.libraryOpen),
   bootstrap: () => ipcRenderer.invoke(IPC.bootstrap),
   setLocale: (locale: string) => ipcRenderer.invoke(IPC.setLocale, locale),

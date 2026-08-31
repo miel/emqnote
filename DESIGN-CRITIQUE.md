@@ -1,6 +1,8 @@
 # Design critique — the library window's three panes
 
 A UI critique of the library window as it stands at `v0.11.2`, written on 24 August 2026.
+Finding 2 became B87 and Finding 3 B91; **Finding 7 became B92 on 30 August 2026**, which
+also mitigated Finding 6. Findings 1, 4, 5 and 8 are open, and each carries its own note.
 English rather than Dutch, following the same rule `CONSTRAINTS.md` and `HISTORY.md`
 follow: this is a working document aimed at whoever is next in the code, not one of the
 design documents `00`–`07`.
@@ -226,6 +228,13 @@ Settings/Help from the destinations — a divider, or move them out of the list 
 
 ## Finding 6 — The tree toolbar's verbs have no visible object
 
+> **Mitigated, not closed, 30 August 2026 — B92.** The three buttons moved into the header
+> band and became icons, and each names the folder it would act on in its `title`
+> (`Rename "01 Projecten"`); Delete already confirmed with a dialog naming what goes (B54),
+> and Rename — the one with no confirmation — is the one the tooltip earns its place on.
+> Neither of the fixes this finding actually asked for was taken: the object is still not
+> *on screen* beside the verb, and the verbs are still not on the row. Both remain open.
+
 `+ New`, `Rename`, `Delete` sit at the very top of the sidebar, above the `Vault` root
 row. They act on `lastFolder`, which may be several rows below them, and with a tag or the
 Tasks view selected is not the row that *looks* selected at all.
@@ -248,6 +257,13 @@ half of a duplicated pair.
 ---
 
 ## Finding 7 — Three panes, three different chrome heights, no shared datum
+
+> **Answered, 30 August 2026 — B92.** All three panes wear one 40px `PaneHeader`; the note
+> list and the reader wear one 28px `PaneFooter`; the tree's bottom menu stays deliberately
+> outside that alignment for the reason given at the end of this finding's own section. The
+> note list's two chrome rows became one band and one footer, with the search field taking
+> the folder name's seat while it is open. `styles-pane-bands.test.ts` pins the two heights
+> and, more usefully, pins that no third one exists.
 
 Measured from the top edge:
 

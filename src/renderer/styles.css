@@ -50,15 +50,31 @@
    colour, divided by one pixel at 1.28 : 1 — and it is why a code block, a wiki-link chip
    and a tag chip were all white on off-white. The page is white here and everything that
    frames it is grey; the dark theme above already fell that way round and is unchanged. */
+/* The values below are the pane-consistency design's own palette, moved onto the six roles
+   rather than spread through the rules as literals (B87 again — the design named eleven
+   colours where this app has six jobs, and the extra five are the ones that drift):
+
+   - its pane ground `#f5f6f7` and its header band `#eef0f2` are one `--surface` here. The
+     tree pane's body was already `--surface`, so the pane and the band at the top of it are
+     now one continuous grey — which is what `DESIGN-CRITIQUE.md`'s Finding 7 asked for,
+     the tree's buttons having read as floating in white space above it.
+   - its four text shades (`#1e2226` / `#3c4349` / `#6b7280` / `#8b9299`) are two. The
+     middle pair do the same job as `--muted`, and a heading that is its own shade of
+     near-black is a distinction nobody can hold.
+   - its two hover tints (`#e7eaed` in the tree, `#eceff1` in the list) do not appear at
+     all: those are one *state* drawn twice because they land on two different grounds,
+     which is exactly what `--hover` being translucent already solves, and exactly the
+     seven-alpha drift B87 removed. Same for its softer list-row divider `#e4e7ea`, which
+     is `--border`. */
 @media (prefers-color-scheme: light) {
   :root {
     --background: #ffffff;
-    --surface: #f4f5f7;
-    --field: #ebedf1;
-    --border: #d7dbe1;
-    --text: #1b1c1f;
-    --muted: #6b7079;
-    --accent: #1a63d8;
+    --surface: #eef0f2;
+    --field: #e9ecef;
+    --border: #dcdfe3;
+    --text: #1e2226;
+    --muted: #6b7280;
+    --accent: #2563c9;
     --warning: #9a6200;
     --highlight: #fff2a8;
     --task-highlight: #f5c518;
@@ -99,52 +115,113 @@ body {
   background: var(--background);
 }
 
-/* ---- title bar ---- */
+/* ---- the pane bands ---- */
 
-/* The window is frameless, so this is both the grab area and the window buttons. */
-.titlebar {
+/* **One header height and one footer height, everywhere, in both windows.**
+ *
+ * `DESIGN-CRITIQUE.md`'s Finding 7 measured what there was before this: the folder tree
+ * wore three buttons on no band at all (~40px), the note list stacked a search row on a
+ * count/sort row (78px), and the note itself ran to 127px before the first word of it.
+ * Nothing lined up across the columns, so there was no horizontal line anywhere across
+ * the top of the window and no top edge to the content — three unrelated stacks that
+ * happened to be side by side.
+ *
+ * These two rules are the fix, and the reason they are *rules* rather than a number
+ * copied into each pane is that the geometry is the whole point: a fourth pane, or a
+ * header that grows a control, must not be able to break the line. `PaneHeader.tsx` and
+ * `PaneFooter.tsx` are the only things that draw them, `flex: none` so only the scroll
+ * region between them ever flexes, and `styles-pane-bands.test.ts` pins the heights.
+ *
+ * They live in `styles.css` rather than `library.css` because both windows wear them —
+ * the capture window's 30px title bar and its status bar are these two — which is the
+ * same argument `.title-field` and `.reader-actions` already made from this file.
+ *
+ * `-webkit-app-region: drag`: both windows are frameless now, so the header band is also
+ * the grab area and (on Windows) the strip the native caption buttons are drawn into.
+ * Everything inside it that can be clicked or typed into has to say `no-drag` or the
+ * press is eaten by the window move — see `.pane-actions` below, and `.splitter`, which
+ * is the one that is easy to forget because it is not inside the band at all. */
+.pane-header {
   -webkit-app-region: drag;
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 30px;
-  padding-left: 12px;
+  gap: 6px;
+  height: 40px;
+  padding: 0 6px 0 10px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
 
-.titlebar-name {
+/* The one elastic child, so a long note title ellipses rather than pushing the buttons
+   off the right edge — `.reader-header`'s old `nowrap` lesson, kept. */
+.pane-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-actions {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 28px against the header's 40, and the pair is deliberate: the footer carries controls
+   that are *about* the pane rather than controls you reach for while writing, so it is
+   the quieter of the two bands — 12px, `--muted`, and buttons a size down.
+
+   Not draggable. It holds controls at both ends and a drag region over them is a press
+   that goes to the window manager instead of to the button under the pointer. */
+.pane-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--muted);
 }
 
-.titlebar-buttons {
-  -webkit-app-region: no-drag;
+/* The elastic half of the footer, so a long file name or a long "← note you came from"
+   ellipses inside this group rather than pushing the buttons off the right edge — the
+   group beside it is `flex: 0 0 auto` and would not give way. This was `.reader-status`
+   and `.capture-status`, which were already one rule under two names. */
+.pane-status {
+  flex: 1 1 auto;
   display: flex;
-  height: 100%;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.titlebar-button {
+/* A fixed 14px box, so the label beside a glyph is what decides the button's width and
+   the glyph never is. The same argument `.sort-glyph` and `.note-pin` already make one
+   pane over. */
+.chrome-glyph {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: default;
+  font-size: 14px;
+  line-height: 1;
 }
 
-.titlebar-button:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.titlebar-close:hover {
-  background: #c42b1c;
-  color: #ffffff;
+.chrome-glyph svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* ---- header block ---- */
@@ -175,7 +252,7 @@ body {
 }
 
 .header-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   padding-left: 2px;
@@ -393,17 +470,29 @@ body {
  * `.reader-header h1` in `library.css` has to carry the same box for the same reason —
  * that `<h1>` and this input trade places, and any difference between them is a jump.
  *
- * **The two-part selector is what makes the rule apply at all, and a bare `.title-field`
- * silently does not.** In the capture window this input sits inside `.header`, where
- * `.header input` above is one class *and one element* — so it out-ranks a single class
- * and goes on setting the 13px, the padding and the tinted background this rule is
- * replacing. Written the obvious way, the field simply did not change and nothing said
- * so: correct-looking CSS, defeated by the cascade, which is B48's bug and the `.overlay`
- * bug, both of which shipped. Naming the container puts it two classes deep and settles
- * it outright rather than on source order, which a tie would decide and a later edit
- * would quietly flip. `styles-title-field.test.ts` holds the pair together. */
-.header .title-field,
-.reader-header .title-field {
+ * **The container this names has to be the one the markup actually uses, and that is a
+ * harder rule to keep than it sounds.** It was written `.header .title-field,
+ * .reader-header .title-field`, two classes deep so it would out-rank `.header input` —
+ * which is one class *and one element*, and had gone on setting the 13px, the padding and
+ * the tinted background this rule replaces. That reasoning was right and its selector
+ * stopped being: B92 moved the capture window's title **out of `.header`** and into the
+ * 40px band, so the first half matched nothing at all and the field fell back to a bare
+ * UA `<input>` — a box, a border, 13px — in the one window this rule was mostly written
+ * for. The same failure as the first version, one move along, and `.header input` is not
+ * even in the running any more: neither title is inside `.header`.
+ *
+ * `.pane-header` is what both of them *are* — `.reader-header` is a `.pane-header` with a
+ * second class on it, from `PaneHeader`'s `className` — so one selector now covers both
+ * windows, still at two classes, and it names the element the markup puts the field in
+ * rather than a neighbour it used to sit beside. `styles-title-field.test.ts` pins the
+ * container for that reason and not only the values: a rule that reads correctly and
+ * matches nothing is what shipped twice.
+ *
+ * `no-drag` because the band around it is the frameless window's grab area, and a press
+ * inside a drag region goes to the window move rather than to the control under the
+ * pointer. Without it this field cannot be clicked into at all. */
+.pane-header .title-field {
+  -webkit-app-region: no-drag;
   display: block;
   width: 100%;
   margin: 0;
@@ -413,17 +502,22 @@ body {
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 17px;
-  font-weight: bold;
+  /* 15px/600, which is the pane-heading size — the note's title is the heading of the pane
+     it is in, in both windows, and this app has one size for that. It was 17px/bold, from
+     before the three panes agreed about anything; `.reader-header h1` copied the number
+     and `.pane-title` would now be a third opinion. The weight is a number rather than
+     `bold` for the same reason: the scale has three weights and 700 is not one of them. */
+  font-size: 15px;
+  font-weight: 600;
 }
 
 /* The capture window's colour, in both windows now — item four of the consistency work.
    The library's title input had no `:focus` rule at all and fell through to Chromium's
    own ring, so the two windows lit the same field in two different colours. Same
-   two-part selector as above, and for the same reason: `.header input:focus` is one class
-   and one element plus a pseudo-class, and would out-rank a bare `.title-field:focus`. */
-.header .title-field:focus,
-.reader-header .title-field:focus {
+   container as the rule above, and it has to stay two classes deep for its own reason:
+   a bare `.title-field:focus` is (0,2,0) and any `input:focus` rule with a class on it
+   would out-rank it. */
+.pane-header .title-field:focus {
   outline: none;
   border-color: var(--accent);
   /* And `background` again, which is not redundant: `.header input:focus` above fills a
@@ -440,15 +534,23 @@ body {
    at 17px and bold. `--muted` at that size and weight carries as much ink as real text
    does at 13px, so an empty title read as a filled-in one — the same report "(optional)"
    in the string itself answers, from the other side. Two classes deep for the reason the
-   rule above it is: `.header input::placeholder` is one class and one element and would
-   otherwise win. */
-.header .title-field::placeholder {
+   rule above it is, and on `.pane-header` for the same reason again: spelled `.header`
+   this stopped matching when B92 moved the field, and an undimmed "Subject (optional)"
+   at 15px/600 is exactly the filled-in-looking empty title the wording was chosen to
+   answer. */
+.pane-header .title-field::placeholder {
   color: var(--muted);
   opacity: 0.55;
 }
 
+/* The note's title, in the 40px band rather than at the top of the header block. The
+   6px of margin under it went with the move: the band's own border is what separates it
+   from the fields now, and a margin inside a fixed-height band only pushes the field off
+   centre. `flex: 1; min-width: 0` is what `.pane-title` gives the other three panes'
+   headings — this is an `<input>` and needs it said. */
 .subject {
-  margin-bottom: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 /* The date button in the When cell. `nowrap` is right — a date broken over two lines
@@ -470,7 +572,6 @@ body {
 
 .dismiss-hint {
   color: var(--muted);
-  font-size: 11px;
   white-space: nowrap;
   padding-right: 2px;
 }
@@ -1963,96 +2064,108 @@ body {
 
 /* ---- status bar ---- */
 
+/* Everything this rule used to say is `.pane-footer`'s now — the height, the shading, the
+   border, the two groups it distributes. What is left is the one number that is about the
+   capture window: 14px of inset, matching `.header` and `.editor-content` above it, where
+   the library's panes sit at 10 and 12. */
 .statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 14px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--muted);
+  padding: 0 12px 0 14px;
 }
 
 .filename {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* **[Insert] [Actions] [Help], defined once for both windows.**
+/* `.reader-actions`/`.capture-actions` and `.reader-status`/`.capture-status` stood here:
+   two rules under four names, each pair already saying the same thing about the same bar
+   in the two windows. They are `.pane-actions` and `.pane-status` now, which `PaneFooter`
+   and `PaneHeader` draw, so the four names have become none and the two windows cannot
+   drift apart again by editing one of them.
 
-   The library's note editor and the capture window carry the same three controls at the
-   foot of the same editor, and they had drifted: 11px against 12px, a 4px radius against
-   5px, `--muted` text against the body colour, and a Help button with no border at rest
-   beside two that had one. Three buttons in a row in one window, and in the other a row
-   of two buttons and a piece of status text that happened to be clickable.
+   The argument they carried is unchanged and still applies. The three controls under the
+   editor had gone 11px against 12px, a 4px radius against 5px, `--muted` text against the
+   body colour, and a Help button with no border at rest beside two that had one; and the
+   capture window's foot had no left-hand group at all, so four loose children under a
+   `space-between` put its buttons in the middle of the bar where the library's stood at
+   the end of it. */
 
-   So this rule is the library's — `.reader-actions button`, moved here rather than
-   copied, because a copy is what produced the drift. `styles.css` is loaded by both
-   windows and `library.css` only by one, which is why the shared definition lives on this
-   side; `.title-field` and `.palette` are already here for the same reason. Both selectors
-   are named so neither window's markup has to change to borrow the other's chrome.
-
-   `cursor: default` and not `pointer`: these open menus in place rather than going
-   anywhere, which is the convention the rest of this app's chrome follows. */
-.reader-actions,
-.capture-actions {
+/* **One button, three sizes, one hover rule** — `ChromeButton.tsx`.
+ *
+ * This began as `.reader-actions button`, moved here from `library.css` so the two
+ * windows' footer buttons could not drift apart again. It is now every button in the
+ * chrome of either window: the tree's three icons, the note list's search and New note,
+ * the sort chooser, Insert and Actions. They were seven ad-hoc rules with four radii,
+ * three font sizes and two ideas about what hover means.
+ *
+ * `color: var(--text)` rather than `inherit`, and it has to be: `.pane-footer` sets
+ * `--muted` for the status text in it, so an inherited colour would draw these grey.
+ * Naming it is also what lets the `:hover` rule below win — a `.pane-footer .chrome-button`
+ * override would outrank a plain `:hover` on one class, which is the cascade defeating
+ * correct-looking CSS in the way this file keeps a list of.
+ *
+ * **The border is 1px transparent at rest**, not absent: hover gives it a colour rather
+ * than a width, so nothing moves under the pointer. That is the whole reason the rest
+ * state names a border at all. */
+.chrome-button {
   display: flex;
   align-items: center;
+  gap: 5px;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
-  gap: 6px;
-}
-
-/* **The other half of the same bar: what the note is doing, on the left.**
-
-   `min-width: 0` so a long "← note you came from" — or a long file name in the capture
-   window — ellipses inside this group rather than pushing the buttons off the right edge;
-   the group beside it is `flex: 0 0 auto` and would not give way.
-
-   The capture window's foot had no group at all: four loose children under
-   `.statusbar`'s `space-between`, which distributes however many it is given, so the
-   three buttons were spread across the middle of the bar rather than standing against its
-   right edge like the library's. One wrapper makes it the two children that rule is for.
-   Moved here from `library.css` rather than copied, for `.reader-actions`' reason
-   directly above: a copy is what produced the drift being fixed. */
-.reader-status,
-.capture-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.reader-actions button,
-.capture-actions button {
+  height: 26px;
+  padding: 0 9px;
   font: inherit;
-  font-size: 12px;
-  /* `var(--text)` where the library's own rule said `inherit`, and it has to be: in the
-     library `.reader-footer` sets no colour so the two are the same, while the capture
-     window's `.statusbar` sets `--muted` for the status text in it, so `inherit` there
-     would draw these three grey. Naming the colour is also what keeps the `:hover` rule
-     below able to win — a `.statusbar .capture-actions button` override would outrank a
-     plain `:hover` on two classes, which is the cascade defeating correct-looking CSS in
-     the way this file keeps a list of. */
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text);
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  white-space: nowrap;
   cursor: default;
 }
 
-.reader-actions button:hover,
-.capture-actions button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+/* The square one: a 26px box with a 13–14px glyph or a 14px inline SVG centred in it. */
+.chrome-button-icon {
+  justify-content: center;
+  width: 26px;
+  padding: 0;
 }
 
-.reader-actions .danger:hover,
-.capture-actions .danger:hover {
+/* The footer's size. Same button, one step down, because the bar it sits in is 28px. */
+.chrome-button-small {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+/* `--hover` and `--border`, which is to say: the same tint every other hovered thing in
+   this app wears, and not a grey of its own (B87). The design handed over `#dfe3e7` on
+   `#c9ced4`, which is this pair in the light theme and nothing at all in the dark one. */
+.chrome-button:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border);
+}
+
+.chrome-button:active:not(:disabled) {
+  background: var(--selected);
+}
+
+.chrome-button:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+/* Open reads like hover on purpose, and not like a tint of its own (B78): a chooser is
+   not *chosen*, it is unfolded. */
+.chrome-button-open {
+  background: var(--selected);
+}
+
+.chrome-button.danger:hover:not(:disabled) {
   border-color: #c42b1c;
   color: #c42b1c;
 }
@@ -2067,6 +2180,35 @@ body {
   text-overflow: ellipsis;
 }
 
+/* A save that would not land, in either window's 28px footer — `styles.css` rather than
+   `library.css` because both windows load this file and both say it the same way.
+
+   `--warning` and not a red of its own: `--warning` is already the "something needs your
+   attention and nothing is broken beyond repair" colour in this app (the disk-change
+   notice above wears it), and that is exactly the register here — the text was preserved,
+   the vault refused it. A seventh colour role would be one more than B87 allows anyway. */
+.save-error {
+  color: var(--warning);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline, borderless, and the colour of the sentence it sits in: this is a word in a
+   status line, not a control in a toolbar. `ChromeButton` is the wrong component for the
+   same reason — it draws a button, and there is no room for one in a 28px band that is
+   already carrying a message. */
+.save-error-copy {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .latency {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2076,10 +2218,50 @@ body {
   color: var(--warning);
 }
 
-/* macOS draws its own traffic lights in the inset title bar; leave room for them. */
-.titlebar-native {
-  padding-left: 78px;
-  justify-content: flex-start;
+/* **Where the OS draws its own window controls, and how the band gets out of their way.**
+ *
+ * Both windows are frameless, so the platform's controls are drawn *into* the 40px header
+ * band rather than above it — traffic lights inset on macOS, `titleBarOverlay` on
+ * Windows 11 (`capture-window.ts` and `library-window.ts`). 40px is what covers both:
+ * macOS's lights are about 28px, Windows 11's controls 32.
+ *
+ * The lights land on the left, over whichever band is leftmost — the folder tree in the
+ * library, the note's own title in the capture window. 92px, and it is a **clearance
+ * rather than a measurement**: the lights are placed at `trafficLightPosition: { x: 12 }`
+ * in both windows and run about 52px, so they end near 64 and this leaves a good 28. It
+ * was 78 — what the old `.titlebar-native` measured, which is the width of the controls
+ * and nothing more — and a heading starting 14px after the last light reads as crowding
+ * it rather than as standing beside it. The number is applied from a flag the renderer
+ * passes rather than from `env(titlebar-area-x)`: that variable exists only where there
+ * is a Window Controls Overlay, which is Windows, so on macOS a CSS fallback could not
+ * tell an inset title bar from Linux's ordinary frame. See `PaneHeader.tsx`.
+ *
+ * The Windows controls land on the right, over the *last* band — the note pane in the
+ * library. That header's right edge is empty by design (its `⋯` menu lives in the footer
+ * with Insert and Actions), so this only has to keep the title itself from running under
+ * Close. `100vw - env(titlebar-area-width)` is the width of the controls, whatever the
+ * display scaling makes it; on macOS and Linux the variable is absent, the fallback makes
+ * the expression 0, and the rule costs nothing. */
+.pane-header-lights {
+  padding-left: 92px;
+}
+
+/* Fullscreen takes the traffic lights away on macOS, and 78px of padding for controls that
+   are not there is a gap where a heading should be. `display-mode` is the standard question
+   and needs no plumbing through main — but it is **unverified on real hardware**: this
+   sandbox is Linux, which keeps its native frame and never has the inset in the first
+   place. `TEST-PROTOCOL.md` §45j is the row that looks at it. If Chromium turns out not to
+   answer this for a `BrowserWindow`, the fallback is main listening for `enter-full-screen`
+   / `leave-full-screen` and setting a class — the cost of being wrong here is a gap, not a
+   broken window. */
+@media (display-mode: fullscreen) {
+  .pane-header-lights {
+    padding-left: 10px;
+  }
+}
+
+.pane-header-caption {
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 6px);
 }
 
 /* Placeholder for an empty editor, since contenteditable has none of its own.

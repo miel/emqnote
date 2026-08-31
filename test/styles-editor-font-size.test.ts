@@ -67,7 +67,7 @@ describe("the note's own text size", () => {
   it("does not scale the window around the note", () => {
     // Chrome is chrome at any note size. The title field is the nearest thing to the note
     // that is still not part of it, and it stays where it is.
-    const title = shared.match(/\.header \.title-field,[^{]*\{[^}]*\}/)?.[0] ?? "";
-    expect(title).toContain("font-size: 17px;");
+    const title = shared.match(/\.pane-header \.title-field \{[^}]*\}/)?.[0] ?? "";
+    expect(title).toContain("font-size: 15px;");
   });
 });

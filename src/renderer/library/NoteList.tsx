@@ -9,7 +9,11 @@ import {
   type TaskCount,
 } from "../../shared/vault-types.js";
 import { formatListTime, type Locale } from "../../shared/i18n.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneFooter } from "../PaneFooter.js";
+import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
+import { tasksGlyph } from "./FolderTree.js";
 import { NOTE_DRAG_TYPE } from "./drag.js";
 import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
@@ -57,6 +61,27 @@ interface Props {
    * that question — there is exactly one search box and this is it.
    */
   searchRef?: RefObject<HTMLInputElement | null>;
+  /**
+   * Whether the field is unfolded in the pane's heading, taking the folder name's seat.
+   *
+   * State in `Library.tsx` rather than here, and that is not tidiness: `Mod-F` is one of
+   * that component's own shortcuts and it has to be able to *mount* the field before it
+   * can put the caret in `searchRef`. Held locally, the shortcut would focus a box that
+   * does not exist yet.
+   */
+  searchOpen: boolean;
+  /** Unfolds the field and focuses it — the magnifier's click, and `Mod-F`'s other half. */
+  onSearchOpen: () => void;
+  /**
+   * Folds the field away again, and *only* that.
+   *
+   * Deliberately not `onExitSearch`, which this used to call: leaving a search reloads the
+   * folder's list and hands focus to a row in it, which is right when you press Escape and
+   * wrong when you merely clicked somewhere else — the caret would be taken out of
+   * whatever you clicked *into*. `keyboard-nav.test.ts` caught exactly that, on the
+   * Ctrl-Shift-Tab out of the box and into the editor.
+   */
+  onCloseSearch: () => void;
   onSearchChange: (query: string) => void;
   /**
    * Whether the search box is looking at the whole vault rather than the folder in the
@@ -201,6 +226,37 @@ const sortGlyph = (
 );
 
 /**
+ * The plus on + New note, drawn rather than typed for `FolderTree`'s reason: the design's
+ * `＋` is a fullwidth character that arrives from a different font from the label beside
+ * it, at a different weight, and lines up with nothing.
+ */
+const newNoteGlyph = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M8 3.4v9.2M3.4 8h9.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+/**
+ * The magnifier on the button that unfolds the search field.
+ *
+ * A circle and a handle, in the same drawn-not-typed house style as `pinGlyph` and
+ * `sortGlyph` above: 🔍 is a colour-emoji glyph on macOS whatever the variation selector
+ * says, and this one sits in a 26px button beside a `＋` drawn in the text font.
+ */
+const searchIcon = (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M10.1 10.1 13.4 13.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+/**
  * The query language, as rows.
  *
  * It used to be the search box's placeholder — the whole of
@@ -234,6 +290,9 @@ export function NoteList({
   searching,
   searchQuery,
   searchRef,
+  searchOpen,
+  onSearchOpen,
+  onCloseSearch,
   onSearchChange,
   searchAll,
   onSearchAllChange,
@@ -265,6 +324,40 @@ export function NoteList({
   // same way Rename/New folder are refused on it in the tree (`Library.tsx`'s
   // `canRenameFolder`/`canCreateFolder`).
   const inTrash = showing.kind === "folder" && showing.path === TRASH_FOLDER;
+  /**
+   * The pane's heading: what this list is of.
+   *
+   * The folder's own name and not its path, so a folder five levels down still reads at a
+   * 210px pane width — the tree beside it is where a folder's place in the vault is said,
+   * and saying it twice costs the width the note titles need. The other four selections
+   * name themselves the way the sidebar rows that opened them do.
+   *
+   * The trash is the one that is not its own folder name: `_trash` is a real directory
+   * with a leading underscore, and the sidebar has always called it Trash.
+   */
+  const paneName =
+    showing.kind === "folder"
+      ? inTrash
+        ? t("library.trash")
+        : (showing.path.split("/").pop() ?? "") || t("library.allFolders")
+      : showing.kind === "tag"
+        ? `#${showing.name}`
+        : showing.kind === "person"
+          ? showing.name
+          : showing.kind === "tasks"
+            ? t("library.tasks")
+            : t("unlinked.title");
+
+  /**
+   * The scope switch's narrowed label — the folder, by name.
+   *
+   * It used to read "This folder", which was enough when the heading above it said which
+   * folder that was. The field takes the heading's seat now, so the switch is where the
+   * answer has to be. Still a word rather than a glyph, which is what keeps
+   * `--click-button` able to press it.
+   */
+  const scopeName = paneName;
+
   // Which row a drag started from, so it can fade while the drag is in the air. Held here
   // rather than lifted alongside `Library`'s own `dragging`: nothing outside this list
   // needs it, and the tree already gets the path it needs through `onDragNote`.
@@ -459,165 +552,179 @@ export function NoteList({
 
   return (
     <div className="notes">
-      <div className="notes-search">
-        <input
-          ref={searchRef}
-          type="text"
-          value={searchQuery}
-          placeholder={t("library.search")}
-          // The syntax panel opens on focus, which is one mechanism serving both ways in
-          // (B84): clicking the box focuses it, and `Mod-F` already focuses and selects
-          // it. Nothing about the shortcut had to change, and nothing takes the caret out
-          // of the box to show you what to type into it.
-          onFocus={() => setHintsOpen(true)}
-          // Closing on blur is safe here only because the panel holds nothing to click:
-          // clicking a row would blur the box, close the panel and lose the press, which
-          // is the bug every completion list in this app has to design around. These are
-          // examples to copy, so the worst a click on one does is dismiss the panel.
-          onBlur={() => setHintsOpen(false)}
-          onChange={(event) => {
-            // Typing is the answer to "what do I type", so the panel gets out of the way
-            // on the first keystroke rather than sitting over the results it is about.
-            setHintsOpen(false);
-            onSearchChange(event.target.value);
-          }}
-          // `stopPropagation` for the 18 August 2026 reason: `preventDefault` does not end
-          // an event, and the window's Escape branch is behind this one. It would decline
-          // this press anyway — the box is not a `.note[role="option"]`, so `paneOf` reads
-          // `null` for it — but a handler that relies on another one's classifier agreeing
-          // with it is one refactor away from firing twice.
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.preventDefault();
-            event.stopPropagation();
-            // Panel first, search second. Escape closes what is on top of the box before
-            // it closes the box, which is the two-press rule leaving a search from a hit
-            // already follows — one press should undo one thing.
-            if (hintsOpen) {
-              setHintsOpen(false);
-              return;
-            }
-            onExitSearch();
-          }}
-        />
+      {/* **Two stacked chrome rows became one band and one footer.**
 
-        {/* Where the search is looking (B83). A word rather than a glyph, so
-            `--click-button="All notes"` can reach it — the same argument the sort chooser
-            and "Exit tasks" make. Only for a folder: a tag, a person and the unlinked
-            pane are drawn from the whole vault already, and a switch offering to narrow
-            them to a folder they do not have would be a lie. */}
-        {scopeable && (
-          <button
-            type="button"
-            className={`search-scope${searchAll ? " search-scope-all" : ""}`}
-            aria-pressed={searchAll}
-            title={t(searchAll ? "library.searchAllHint" : "library.searchFolderHint")}
-            onClick={() => onSearchAllChange(!searchAll)}
-          >
-            {t(searchAll ? "library.searchAll" : "library.searchFolder")}
-          </button>
-        )}
-        {/* The syntax, under the box that takes it, with the caret still in the box
-            (B84). Deliberately not a modal — B51's argument for the `/` menu, one field
-            over: a picker with its own focus takes away the thing you opened it to do.
+          The search row and the count/sort row together stood 78px tall above a list that
+          was the point of the pane — `DESIGN-CRITIQUE.md`'s Finding 7, the middle column
+          of its table. What was in them has not been cut: the count, the sort chooser and
+          Tasks moved down to the footer, and the search field moved *into* the heading,
+          where it takes the folder name's seat while it is open.
 
-            `.tag-suggest` verbatim, which is the header's three completion panels'
-            surface. One floating list in this app, not a fourth that looks nearly like
-            the others.
+          That is why the scope switch is drawn inside the field now and reads the folder's
+          own name (B83): the heading it replaces is what used to say which folder you were
+          standing in, so the field has to say it instead. */}
+      <PaneHeader
+        title={
+          searchOpen ? (
+            <div className="notes-search">
+              {/* Where the search is looking, and — while the heading is gone — which
+                  folder that is. A word rather than a glyph, so `--click-button` can
+                  reach it: the same argument the sort chooser and "Exit tasks" make.
+                  Only for a folder; a tag, a person and the unlinked pane are drawn from
+                  the whole vault already, and a switch offering to narrow them to a
+                  folder they do not have would be a lie. */}
+              {scopeable && (
+                <button
+                  type="button"
+                  className={`search-scope${searchAll ? " search-scope-all" : ""}`}
+                  aria-pressed={searchAll}
+                  title={t(searchAll ? "library.searchAllHint" : "library.searchFolderHint")}
+                  onClick={() => onSearchAllChange(!searchAll)}
+                >
+                  {searchAll ? t("library.searchAll") : scopeName}
+                </button>
+              )}
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchQuery}
+                placeholder={t("library.search")}
+                // The syntax panel opens on focus, which is one mechanism serving both
+                // ways in (B84): clicking the box focuses it, and `Mod-F` already focuses
+                // and selects it. Nothing about the shortcut had to change, and nothing
+                // takes the caret out of the box to show you what to type into it.
+                onFocus={() => setHintsOpen(true)}
+                // Closing on blur is safe here only because the panel holds nothing to
+                // click: clicking a row would blur the box, close the panel and lose the
+                // press, which is the bug every completion list in this app has to design
+                // around. These are examples to copy, so the worst a click on one does is
+                // dismiss the panel.
+                //
+                // Leaving an *empty* box also puts the heading back, which is the mouse's
+                // half of the same gesture Escape is the keyboard's half of. Guarded on
+                // where the focus went: the scope switch and the × sit inside this
+                // wrapper, and a click on either would otherwise close the field out from
+                // under the press.
+                onBlur={(event) => {
+                  setHintsOpen(false);
+                  const going = event.relatedTarget as Node | null;
+                  if (going !== null && event.currentTarget.parentElement?.contains(going))
+                    return;
+                  if (searchQuery === "") onCloseSearch();
+                }}
+                onChange={(event) => {
+                  // Typing is the answer to "what do I type", so the panel gets out of the
+                  // way on the first keystroke rather than sitting over the results it is
+                  // about.
+                  setHintsOpen(false);
+                  onSearchChange(event.target.value);
+                }}
+                // `stopPropagation` for the 18 August 2026 reason: `preventDefault` does
+                // not end an event, and the window's Escape branch is behind this one. It
+                // would decline this press anyway — the box is not a `.note[role="option"]`,
+                // so `paneOf` reads `null` for it — but a handler that relies on another
+                // one's classifier agreeing with it is one refactor away from firing twice.
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  // Panel first, search second. Escape closes what is on top of the box
+                  // before it closes the box, which is the two-press rule leaving a search
+                  // from a hit already follows — one press should undo one thing.
+                  if (hintsOpen) {
+                    setHintsOpen(false);
+                    return;
+                  }
+                  onExitSearch();
+                }}
+              />
 
-            Nothing in it is a control: no `tabIndex`, no click handler, no roving keys.
-            These are examples to copy, and a row that could be *chosen* would owe the
-            caret an insertion at a position this panel does not track. */}
-        {hintsOpen && (
-          <dl className="tag-suggest search-hints">
-            {SEARCH_HINTS.map((hint) => (
-              <div key={hint.token} className="search-hint">
-                <dt>{hint.token}</dt>
-                <dd>{t(hint.key)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+              {/* Only while there is something to clear: a permanent × beside an empty box
+                  is a control that does nothing most of the time. `tabIndex={-1}` keeps it
+                  out of the walk from the box to the first note row — it is the mouse's
+                  way out, Escape is the keyboard's. */}
+              {searchQuery !== "" && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  tabIndex={-1}
+                  title={t("library.clearSearch")}
+                  aria-label={t("library.clearSearch")}
+                  onClick={onExitSearch}
+                >
+                  ×
+                </button>
+              )}
 
-        {/* Only while there is something to clear: a permanent × beside an empty box is a
-            control that does nothing most of the time. `tabIndex={-1}` keeps it out of the
-            walk from the box to the first note row — it is the mouse's way out, Escape is
-            the keyboard's. */}
-        {searchQuery !== "" && (
-          <button
-            type="button"
-            className="search-clear"
-            tabIndex={-1}
-            title={t("library.clearSearch")}
-            aria-label={t("library.clearSearch")}
-            onClick={onExitSearch}
-          >
-            ×
-          </button>
-        )}
-      </div>
+              {/* The syntax, under the box that takes it, with the caret still in the box
+                  (B84). Deliberately not a modal — B51's argument for the `/` menu, one
+                  field over: a picker with its own focus takes away the thing you opened
+                  it to do.
 
-      {!unlinked && (
-        <div className="notes-header">
-          <span className="notes-count">
-            {notes.length === 0
-              ? t("library.noNotes")
-              : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
-          </span>
-          {/* One control rather than the three labels this used to be. The three were a
-              row of words with one of them tinted, which is a state you have to already
-              know how to read: nothing said they were a group, nothing said the tinted
-              one was the answer rather than a link, and the two that were *not* in force
-              took the same width as the one that was. A chooser says its own name — the
-              glyph says "order", the text says what the order is — and the alternatives
-              are somewhere you go and look rather than something permanently on screen.
+                  `.tag-suggest` verbatim, which is the header's three completion panels'
+                  surface. One floating list in this app, not a fourth that looks nearly
+                  like the others. It hangs off this wrapper rather than off the band, so
+                  it lines up with the field at any pane width — `.pane-header` has no
+                  `overflow` of its own, which is what lets it escape the 40px.
 
-              The menu is `ContextMenu`, not a list drawn here: it already carries the
-              arrow/Home/End walk, Escape, focus handed back to whatever opened it, the
-              clamp against the window edge, and the tick that marks the current entry.
-              A second implementation of any of those is a second one to get wrong. */}
-          <div className="notes-sort">
-            <button
-              type="button"
-              ref={sortButton}
-              className={`sort-choose${sortMenu !== null ? " sort-choose-open" : ""}`}
-              aria-haspopup="menu"
-              aria-expanded={sortMenu !== null}
-              title={t("library.sortBy")}
-              onClick={() => {
-                if (sortMenu !== null) {
-                  setSortMenu(null);
-                  return;
-                }
-                const rect = sortButton.current?.getBoundingClientRect();
-                if (rect === undefined) return;
-                setSortMenu({ x: rect.left, y: rect.bottom + 2 });
-              }}
-            >
-              <span className="sort-glyph">{sortGlyph}</span>
-              {t(`library.sort.${sort}`)}
-            </button>
-          </div>
-          <div className="notes-actions">
-            {/* The same view the sidebar's own Tasks row opens, from the same handler —
-                not a second route that could come to mean something else. It sits here
-                because this is the bar you are already looking at when you want it, and
-                the sidebar row is three panes away. */}
-            <button type="button" className="new-note" onClick={onOpenTasks}>
-              {t("library.tasks")}
-            </button>
-            {inTrash ? (
-              <button type="button" className="new-note danger" onClick={onClearTrash}>
-                {t("library.clearTrash")}
-              </button>
-            ) : (
-              <button type="button" className="new-note" onClick={onNewNote}>
-                + {t("library.newNote")}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+                  Nothing in it is a control: no `tabIndex`, no click handler, no roving
+                  keys. These are examples to copy, and a row that could be *chosen* would
+                  owe the caret an insertion at a position this panel does not track. */}
+              {hintsOpen && (
+                <dl className="tag-suggest search-hints">
+                  {SEARCH_HINTS.map((hint) => (
+                    <div key={hint.token} className="search-hint">
+                      <dt>{hint.token}</dt>
+                      <dd>{t(hint.key)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+          ) : (
+            paneName
+          )
+        }
+        actions={
+          <>
+            <ChromeButton
+              label={t("library.searchTitle")}
+              className="search-toggle"
+              icon={searchIcon}
+              iconOnly
+              open={searchOpen}
+              onClick={() => (searchOpen ? onExitSearch() : onSearchOpen())}
+            />
+            {/* The unlinked pane is a file list: there are no notes in it to add one
+                beside, and + New note would file one into whatever folder the tree last
+                stood on — a button doing something unrelated to what it sits next to. */}
+            {!unlinked &&
+              (inTrash ? (
+                <ChromeButton
+                  label={t("library.clearTrash")}
+                  className="new-note"
+                  danger
+                  onClick={onClearTrash}
+                />
+              ) : (
+                <ChromeButton
+                  label={t("library.newNote")}
+                  className="new-note"
+                  icon={newNoteGlyph}
+                  // Its label folds away while the field is open, and this is measured
+                  // rather than tidy: at the pane's default 300px, "+ New note" and the
+                  // magnifier leave the field about 190px, which the scope switch and the
+                  // × then halve again — photographed as a scope reading "All n…" beside
+                  // a box four characters wide. The button is still there, still in the
+                  // same place, still called New note by its accessible name; it is the
+                  // word that yields, and only while something else needs the width.
+                  iconOnly={searchOpen}
+                  onClick={onNewNote}
+                />
+              ))}
+          </>
+        }
+      />
 
       {sortMenu !== null && (
         <ContextMenu
@@ -735,6 +842,77 @@ export function NoteList({
             ))}
           </ul>
         </>
+      )}
+
+      {/* **The pane's own status bar**, 28px, matched to the note's below it.
+
+          The count, the sort chooser and Tasks all lived in a second chrome row above the
+          list. Down here they are out of the way of the thing you came to read, and the
+          two panes that have a footer now agree about how tall it is — which is the other
+          half of what `PaneHeader` guarantees at the top.
+
+          Not drawn for the unlinked pane: there are no notes in it to count or sort, and
+          the file section below draws its own count. */}
+      {!unlinked && (
+        <PaneFooter
+          status={
+            <span className="notes-count">
+              {notes.length === 0
+                ? t("library.noNotes")
+                : `${notes.length} ${t(notes.length === 1 ? "library.note" : "library.notes")}`}
+            </span>
+          }
+          actions={
+            <>
+              {/* One control rather than the three labels this used to be. The three were
+                  a row of words with one of them tinted, which is a state you have to
+                  already know how to read: nothing said they were a group, nothing said
+                  the tinted one was the answer rather than a link, and the two that were
+                  *not* in force took the same width as the one that was. A chooser says
+                  its own name — the glyph says "order", the text says what the order is —
+                  and the alternatives are somewhere you go and look rather than something
+                  permanently on screen.
+
+                  The menu is `ContextMenu`, not a list drawn here: it already carries the
+                  arrow/Home/End walk, Escape, focus handed back to whatever opened it, the
+                  clamp against the window edge, and the tick that marks the current entry.
+                  A second implementation of any of those is a second one to get wrong. */}
+              <ChromeButton
+                ref={sortButton}
+                className="sort-choose"
+                label={t(`library.sort.${sort}`)}
+                title={t("library.sortBy")}
+                icon={sortGlyph}
+                small
+                menu
+                open={sortMenu !== null}
+                onClick={() => {
+                  if (sortMenu !== null) {
+                    setSortMenu(null);
+                    return;
+                  }
+                  const rect = sortButton.current?.getBoundingClientRect();
+                  if (rect === undefined) return;
+                  // `rect.top`, not `rect.bottom`: this bar is at the foot of the pane
+                  // now, so a menu opening downwards would be clamped straight back over
+                  // the button it came from. The reader's own footer menus have always
+                  // handed `ContextMenu` this point for the same reason.
+                  setSortMenu({ x: rect.left, y: rect.top });
+                }}
+              />
+              {/* The same view the sidebar's own Tasks row opens, from the same handler —
+                  not a second route that could come to mean something else. It sits here
+                  because this is the bar you are already looking at when you want it, and
+                  the sidebar row is three panes away. */}
+              <ChromeButton
+                label={t("library.tasks")}
+                icon={tasksGlyph}
+                small
+                onClick={onOpenTasks}
+              />
+            </>
+          }
+        />
       )}
     </div>
   );

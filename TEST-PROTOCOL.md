@@ -1545,6 +1545,106 @@ tried from.
 
 ---
 
+## 45. Pane consistency, and both windows going frameless (30 August 2026)
+
+B92. The three panes now share one 40px header band and the two that have a footer share one
+28px band; every button in either window's chrome is one component; and both windows are
+frameless with the operating system's own controls drawn *into* the header band.
+
+**What has been seen here and what has not.** The layout was photographed in the running
+library window under `Xvfb` (`npm run ui:kit`, 71 parts) and corrected twice from what those
+photographs showed — the pencil glyph came out of a fallback font as a paperclip, and the
+scope switch was ellipsising its own label at the pane's default width. So the *light* theme
+at 1200 and 1440px is confirmed. Nothing below that involves a window frame has been seen at
+all: this sandbox is Linux, which deliberately keeps its native frame, so **every macOS and
+Windows row here is a first sighting**. §45f is the sharpest of them — it is the one thing in
+this batch that could take functionality away rather than move it.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 45a | Open the library and look across the top of the window | One unbroken horizontal line: the tree's heading, the folder name and the note's title all sit in a band of the same height, with the dividers running through it. Three chrome heights with no shared line is the original complaint |  |
+| 45b | Drag both pane dividers to their extremes and back | The bands stay the same height at every width, and the count/sort footer stays level with the note's own footer. Only the middle of each pane scrolls |  |
+| 45c | Press ⌘F / Ctrl-F in the library | The folder's name is replaced *in place* by a search box, with a switch at its left naming the folder being searched. Escape puts the name back. The old separate search row is gone, so a second row appearing anywhere is wrong |  |
+| 45d | With the search open, click the switch | It reads "All notes" in the accent colour and the search widens to the vault (B83 unchanged). Click again to narrow. The label must never be cut short to "All …" — that was a real defect, caught in a photograph |  |
+| 45e | Narrow the note list pane to its minimum with the search open | The box stays wide enough to read a query in, "+ New note" folds down to its plus, and nothing overflows the band |  |
+| 45f | **On Windows**, in the library: put the caret in a folder-rename field or the search box and press Ctrl+Z, Ctrl+X, Ctrl+C, Ctrl+V, Ctrl+A | All five still work. The window is frameless now, so the application menu can no longer be drawn in it, and its Edit accelerators used to be reachable through that bar. If any of these has stopped working, say so — the fallback is a Windows-only decision to bring the frame back, not something to guess at |  |
+| 45g | **On Windows 11**, hover the maximise button in the top-right of the note pane's band | The snap-layouts flyout opens. These are the system's own caption buttons drawn inside our band, not buttons the app draws — that is why they get the flyout, and it is the reason `titleBarOverlay` was chosen over a frameless window with our own three |  |
+| 45h | **On Windows 11**, switch the theme (Settings → system / light / dark) | The caption buttons change colour with the rest of the window. They are painted from colours handed over at construction, so this is the one part of the chrome `prefers-color-scheme` cannot reach on its own |  |
+| 45i | **On macOS**, look at the traffic lights | They sit inside the tree's heading band, vertically centred, with "Vault" clear of them — see §46a, which asks how *much* clear. In the capture window they sit in the note's title band the same way |  |
+| 45j | **On macOS**, take the library fullscreen and come back | The heading stays legible throughout. The inset the lights need disappears in fullscreen, so this is where a fixed 92px of padding would show as a gap |  |
+| 45k | On either platform, drag the window by an empty part of a header band, then double-click it | It moves, and the double-click zooms. Then drag a pane divider starting near the *top* of the window: it must resize the pane and not move the window |  |
+| 45l | Open the capture window on a brand-new note, then on an existing note from the library | New: the title field is in the band, and the caret starts there. Existing: the note's *title* is in the band, read-only, and the file name is at the foot ("Saved as …"). The window's own title bar with its three drawn buttons is gone; closing is still save-and-put-away |  |
+| 45m | Compare the two windows' footers side by side | Same height, same buttons, same order — Insert, Actions, Help. The library adds the file path on the left when the note is editable, in the slot the read-only notice takes when it is not |  |
+| 45n | Open a note with a long path in the library and narrow the reader pane | The path shortens from the *left*, so the file name stays readable. The full path is on its tooltip |  |
+| 45o | In Settings, look at the note text size | The default is now the first entry and it is called "Normal" (13 px). A machine that had already chosen a size keeps it — the five values are unchanged, only their names moved — so if yours has jumped, that is worth reporting |  |
+| 45p | Check the tree's three header icons at your display scaling | Plus, pencil, cross — drawn, all the same weight. Hover each: the tooltip names the folder it would act on. A glyph that looks like a paperclip is the defect this row exists for |  |
+
+---
+
+## 46. Six items from using the pane-consistency build (31 August 2026)
+
+Four of the six are things a test could not see, and two of those are regressions of §45's
+own batch: both windows became frameless, and a `-webkit-app-region: drag` band hands every
+press to the window move — so the reader's title stopped opening its rename and the capture
+window's title could not be clicked into. Neither showed anywhere in the suite, because jsdom
+implements no app-region and `library-title-edit.test.ts` drives that very click.
+
+**What has been seen here and what has not.** Everything except §46a was driven in the
+running app under `Xvfb` over CDP before this was written, in both windows, with real XTEST
+keys and real pointer coordinates: the capture title measured `15px`/`600` on a transparent
+ground and took a real click; the reader's `<h1>` reported `no-drag` and opened its rename
+from a real click; the ring walked editor → Who → note row → When → editor on real
+`Ctrl+Tab`/`Ctrl+Shift+Tab`; Shift-Tab from Who reached Where; and `Ctrl+[` walked back from
+a followed link. **§46a is the exception and cannot be answered here at all**: Linux keeps
+its native frame and never insets the traffic lights, so the one number this batch changed is
+the one thing nobody has looked at.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 46a | **On macOS**, look at the gap between the traffic lights and the heading, in *both* windows | Clear air — about 28px from the last light to "Vault", and the same to the note's title in the capture window. It was 14 and read as crowding. Too much space is as much a defect here as too little, so say which way it is wrong if it is |  |
+| 46b | In the capture window, start a new note and look at the title field *without* clicking in it | It reads as a heading, not as a form field: the same size and weight as the note's title in the library, no box, no border, on the band's own colour. A visible input box is the defect this row exists for |  |
+| 46c | Click into that title, then click away | The border lights in the accent colour on focus and goes again, with the text not moving by a pixel either way |  |
+| 46d | In the capture window, click straight into the title field from cold | The caret lands in it. If the window moves instead, or nothing happens, that is the drag-region bug — the same one as §46e, one window over |  |
+| 46e | In the library, open a note and click its title | It becomes an editable field with the text selected. Enter renames the file, Escape cancels. This is the regression the batch was reported for |  |
+| 46f | With the caret in a note, press Ctrl+Shift+Tab | The caret goes to **Who**, the last of the four header fields — not to the note list |  |
+| 46g | Press Ctrl+Shift+Tab again | *Now* the note list, on the row you came from |  |
+| 46h | From a note row, press Ctrl+Tab twice | First **When**, the first header field; then the note's text. The two chords have to undo each other — walk four steps each way and end where you started |  |
+| 46i | With the caret in Who, press Shift-Tab, then Shift-Tab again | Where, then Tags. Plain Tab and Shift-Tab walk the four fields; only the Ctrl form leaves the block |  |
+| 46j | With no note open, press Ctrl+Tab from a note row | Nothing lands in a header block, because there is none, and the press is not swallowed either |  |
+| 46k | Follow a `[[…]]` link, then press ⌘[ / Ctrl+[ | Back to the note the link was in — the same step the ← button in the footer takes. Press it again on a note you did not arrive at by a link: nothing happens, and the key stays free |  |
+| 46l | Look at the ← button in the note's footer after following a link | It keeps a clear gap from the file path to its right, rather than running into it |  |
+| 46m | Open the shortcut sheet in the library (⌘/ / Ctrl+/) | "Back to the previous note" is listed against ⌘[ / Ctrl+[, and the pane-cycle row names four things rather than three. Neither column should need scrolling |  |
+
+---
+
+## §47 — A note that will not save (B93)
+
+The 31 August 2026 data loss: OneDrive held a just-created note in `00 Inbox` open,
+`rename()` answered `EPERM`, and the app then wrote nothing for the rest of the day without
+saying so. Two notes were lost outright and a third was frozen at the third of it that had
+already been written.
+
+**Every row here is a first sighting, and §47a–§47c are Windows-only.** The automated tests
+provoke the failure with a vault path that cannot be written to, which is a faithful stand-in
+for the *shape* of the failure and not for OneDrive's timing. Whether the retry rides out a
+real OneDrive lock — and whether it is `clearReadOnly` that clears it — has never been seen.
+§47d is the one row that can be walked on any platform, because it makes the failure by hand.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 47a | **On Windows**, with the vault on OneDrive, type a new note and Ctrl+Enter it while OneDrive is actively syncing (drop a few hundred MB into another synced folder first) | The note is written. If a `EPERM` was ridden out, nothing at all is visible — which is the point. Say if the save ever visibly stalls for the better part of a second |  |
+| 47b | **On Windows**, do that a dozen times over a busy sync | No note is ever silently missing from the library afterwards. Count them: this is the row the whole batch exists for |  |
+| 47c | **On Windows**, right-click a note's `.md` in the vault → Properties → tick Read-only, then edit that note in the library | It saves anyway — `clearReadOnly` runs between attempts — and the read-only tick is gone afterwards. If instead the footer says "Not saved (EPERM)", the retry is not reaching the attribute |  |
+| 47d | Make a note unsaveable by hand: quit emqnote, replace one note's `.md` with a **folder** of the same name, start emqnote and open that note in the library, then type into it | The foot of the note pane says **Not saved (EPERM)** — or another code — where it would say "Saved", **not** "Saved" and not "Saving…" for ever |  |
+| 47e | On that same failure, look for the "Text preserved — copy path" link beside it, click it, and paste the path somewhere | It names a real file under `%APPDATA%\emqnote\recovered\` (macOS: `~/Library/Application Support/emqnote/recovered/`) **whose contents are what you just typed**. This is the row that is the whole point of the fix |  |
+| 47f | Now remove the folder you put in the note's place, and type another character | The notice clears itself on the next write that lands, without being dismissed. The pane goes back to "Saved" |  |
+| 47g | Repeat §47d in the **capture window** (Ctrl+Enter a new note into a folder you have made unwriteable) | Its 28px footer says "Not saved ({code})" in place of "Saved as …", not beside it. "Saved as …" appearing at all while a save is failing is the defect this row exists for |  |
+| 47h | With that still failing, press Ctrl+Enter, type a second note into a folder that *does* work, and press Ctrl+Enter again | The second note is written. Before B93 it was not — one failure disabled every later save for the life of the process, and this is the regression that lost the notes |  |
+| 47i | Check the vault for stray `.tmp` files after all of the above | There are none: a temporary is removed once its recovery copy is safe. One left behind means no recovery copy could be written, which §47e would already have said |  |
+| 47j | While a save is failing, open the tray menu → "Check for updates…" | It reports about *updates* — up to date, an update, or a network failure. If it reports the note's `EPERM` under "Could not check for updates", the two error paths have been crossed again |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -1589,6 +1689,13 @@ a defect (level one falls back to a different face on a Mac, deliberately, again
 that was too heavy at two depths), and §38q names the one decision in the batch that could
 reasonably go the other way. §38c–§38g are judgements about colour and weight that no
 screenshot from this sandbox could have settled.
+
+**§46a is the sharpest single instance of the fourth kind below**: everything else in that
+batch was driven in the running app first, and it is the one row that could not be, because
+Linux keeps its native frame and never insets the traffic lights at all. The rest of §46 is
+confirmed — including both drag-region regressions, which *do* reproduce here: app-region is
+honoured whether or not the frame is hidden, which is why the fixes could be watched working
+on this machine and the clearance they sit beside could not.
 
 **§22a, §22b, §22c, §23a–§23d, §24a–§24d, §25a–§25f and §26a–§26c
 are a fourth kind: a whole platform.** They are the items that have never run on the machine

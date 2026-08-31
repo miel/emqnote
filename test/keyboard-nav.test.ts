@@ -143,8 +143,6 @@ function buildFake(): CaptureApi {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -276,7 +274,7 @@ describe("keyboard navigation across the library's panes", () => {
     await mount();
     const rows = treeRows();
     const names = rows.map((node) => node.querySelector(".branch-name")?.textContent);
-    expect(names).toEqual(expect.arrayContaining(["Vault", "00 Inbox", "01 Projects"]));
+    expect(names).toEqual(expect.arrayContaining(["All folders", "00 Inbox", "01 Projects"]));
 
     const first = rows.find((node) => node.tabIndex === 0)!;
     first.focus();
@@ -383,15 +381,21 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement).toBe(activeNote);
   });
 
-  it("Tab moves focus from the note list's active row into the editor", async () => {
-    await mount();
-    // The editor is only mounted once a note is open (`Library.tsx` renders it inside
-    // the `open !== null` branch) — the same as clicking the row would, or Enter on it.
+  /** Opens the note the list is standing on, which is what mounts the editor. */
+  async function openTheNote(): Promise<HTMLElement> {
     const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
     await act(async () => {
       noteRow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
+    return noteRow;
+  }
+
+  it("Tab moves focus from the note list's active row into the header block", async () => {
+    await mount();
+    // The editor is only mounted once a note is open (`Library.tsx` renders it inside
+    // the `open !== null` branch) — the same as clicking the row would, or Enter on it.
+    const noteRow = await openTheNote();
 
     act(() => {
       noteRow.focus();
@@ -399,7 +403,89 @@ describe("keyboard navigation across the library's panes", () => {
     keydown(noteRow, "Tab");
     await flush();
 
+    // Not the editor: the header block is the fourth stop and sits between the two, and
+    // going forward you arrive at its first field. The note's own text is one more step.
+    expect(document.activeElement?.className).toContain("created");
+  });
+
+  it("Ctrl-Tab out of the header block reaches the note's text", async () => {
+    await mount();
+    await openTheNote();
+
+    const when = container.querySelector<HTMLElement>(".header-reader .created")!;
+    when.focus();
+
+    // The chord and not a plain Tab, deliberately: inside the block a plain Tab belongs
+    // to the browser, walking When → Tags → Where → Who, and only the fourth of those
+    // leaves for the note. The chord is how you get out from any of them.
+    cycle(false);
+    await flush();
+
     expect(document.activeElement?.className).toContain("editor-content");
+  });
+
+  it("Ctrl-Shift-Tab out of the editor lands on Who, the field nearest it", async () => {
+    await mount();
+    await openTheNote();
+
+    const editorContent = container.querySelector<HTMLElement>(".editor-content")!;
+    editorContent.focus();
+
+    cycle(true);
+    await flush();
+
+    // The *last* field, not the first: you enter the block at the end you arrived from,
+    // so the step is one field back from the note rather than four.
+    expect(document.activeElement?.className).toContain("attendees");
+  });
+
+  it("Ctrl-Shift-Tab again leaves the header block for the note list", async () => {
+    await mount();
+    await openTheNote();
+
+    const editorContent = container.querySelector<HTMLElement>(".editor-content")!;
+    editorContent.focus();
+
+    cycle(true);
+    await flush();
+    cycle(true);
+    await flush();
+
+    const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
+    expect(document.activeElement).toBe(activeNote);
+  });
+
+  it("keeps plain Shift-Tab walking the header's own fields", async () => {
+    await mount();
+    await openTheNote();
+
+    const who = container.querySelector<HTMLElement>(".header-reader .attendees")!;
+    who.focus();
+    keydown(who, "Tab", { shiftKey: true });
+    await flush();
+
+    // The whole reason `paneOf` stays blind to these fields: claim them there and this
+    // press cycles the pane instead of moving one field. Nothing of ours handles it, so
+    // the browser's own order is what runs — which jsdom does not implement, so what is
+    // asserted is that focus was *not* thrown out of the block.
+    expect(document.activeElement).toBe(who);
+  });
+
+  it("steps past the header stop when there is no note open to have one", async () => {
+    await mount();
+    // Nothing opened, so there is no header block and no editor either. The stop answers
+    // "I did not take it" rather than swallowing the press — the one stop in the ring
+    // that can be absent, and the reason `focusPane` reports back at all.
+    expect(container.querySelector(".header-reader")).toBeNull();
+
+    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
+    act(() => {
+      noteRow.focus();
+    });
+    keydown(noteRow, "Tab");
+    await flush();
+
+    expect(document.activeElement?.closest(".header-reader") ?? null).toBeNull();
   });
 
   it("Ctrl-Tab completes the cycle back to the tree from inside the editor", async () => {
@@ -450,6 +536,7 @@ describe("keyboard navigation across the library's panes", () => {
     // not recognise as belonging to it (only `.note[role="option"]` counts), so this is
     // another "cold" spot exactly like the one above, but with a note already open — the
     // reverse chord has an editor to land in this time.
+    openSearch();
     const searchInput = container.querySelector<HTMLInputElement>(".notes-search input")!;
     searchInput.focus();
     expect(document.activeElement).toBe(searchInput);
@@ -679,7 +766,20 @@ describe("keyboard navigation across the library's panes", () => {
    * reload is a round trip, so the rows under `focusPane` at that moment are the ones about
    * to be unmounted — which is why `focusNotesOnNextList` waits for the new list instead.
    */
+  /**
+   * Unfolds the search field. It is only mounted while a search is open now — it lives in
+   * the note list's heading rather than in a strip of its own — so reaching for the box
+   * starts with the magnifier, which is what a hand does too.
+   */
+  function openSearch(): void {
+    if (container.querySelector(".notes-search input") !== null) return;
+    act(() => {
+      container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+    });
+  }
+
   function setSearch(value: string): void {
+    openSearch();
     const input = container.querySelector<HTMLInputElement>(".notes-search input")!;
     const setter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -703,7 +803,9 @@ describe("keyboard navigation across the library's panes", () => {
     keydown(searchBox(), "Escape");
     await flush();
 
-    expect(searchBox().value).toBe("");
+    // The field folds back into the heading rather than sitting there emptied — leaving
+    // a search puts the folder's own name back in the seat the box was borrowing.
+    expect(container.querySelector(".notes-search input")).toBeNull();
     expect(document.activeElement).toBe(noteRows().find((node) => node.tabIndex === 0));
   });
 
@@ -727,7 +829,7 @@ describe("keyboard navigation across the library's panes", () => {
     // already on the roving row here, so asserting it lands there proves nothing — it
     // would hold just as well if this branch did not exist at all. The row above it is
     // where the focus hand-off is actually pinned.
-    expect(searchBox().value).toBe("");
+    expect(container.querySelector(".notes-search input")).toBeNull();
     expect(event.defaultPrevented).toBe(true);
   });
 

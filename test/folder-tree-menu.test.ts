@@ -88,6 +88,7 @@ function mount(
         newLabel: "New",
         renameLabel: "Rename",
         deleteLabel: "Delete",
+        allFoldersLabel: "All folders",
         newNoteLabel: "New note",
         helpLabel: "Help",
         settingsLabel: "Settings",
@@ -162,7 +163,7 @@ describe("FolderTree's right-click menu", () => {
     mount();
     // `shell.showItemInFolder` on a joined path assumes nothing about what is at the end
     // of it, and opening a file manager is the one entry here that changes nothing.
-    rightClick(branchByName("Vault"));
+    rightClick(branchByName("All folders"));
     expect(menuItemDisabled("Reveal")).toBe(false);
 
     rightClick(branchByName("Trash"));
@@ -180,7 +181,7 @@ describe("FolderTree's right-click menu", () => {
 
   it("disables Rename folder and Delete folder on the vault root", () => {
     mount();
-    rightClick(branchByName("Vault"));
+    rightClick(branchByName("All folders"));
     expect(menuItemDisabled("Rename folder")).toBe(true);
     expect(menuItemDisabled("Delete folder")).toBe(true);
     // The root is still a legitimate place to create a folder or file a note.

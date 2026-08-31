@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from "electron";
-import { windowBackground } from "./window-background.js";
+import { titleBarColours, windowBackground } from "./window-background.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,13 +42,38 @@ export function showLibraryWindow(): void {
     show: false,
     title: "emqnote",
     backgroundColor: windowBackground(),
-    // This window is natively framed, and on Windows that means the application menu
-    // `installMinimalMenu` sets is drawn as a real strip inside it — an "Edit" bar above
-    // the folder tree, which is what was reported. Hiding it rather than dropping the
-    // menu keeps the Edit roles and their accelerators alive (Alt still reveals the bar),
-    // and `installMinimalMenu`'s own comment says why the menu itself has to stay. A
-    // no-op on macOS, where the menu belongs to the app and not to the window.
-    autoHideMenuBar: true,
+    // **Frameless, with the platform's own controls inside the three panes' header band.**
+    //
+    // The three headers are one 40px line across the top of this window now, and an OS
+    // title bar above them would be a fourth strip saying nothing — 28 to 32px spent on
+    // the word "emqnote". Hidden, the controls move down into the band: traffic lights
+    // inset on macOS, `titleBarOverlay` on Windows 11. `.pane-header-lights` and
+    // `.pane-header-caption` are what keep the tree's and the note pane's contents clear
+    // of them.
+    //
+    // `titleBarOverlay` rather than `frame: false` on Windows, deliberately: the caption
+    // buttons stay the system's, which keeps the snap-layouts flyout that opens on
+    // hovering maximise, and the window keeps its system menu. Its colours are pushed
+    // again by `applyTheme` when the theme changes (B90).
+    //
+    // `autoHideMenuBar` is gone with the frame. It was here because on Windows the
+    // application menu `installMinimalMenu` sets is drawn as a real strip inside the
+    // frame — an "Edit" bar above the folder tree, which is what was reported — and a
+    // frameless window draws no menu bar at all. The menu itself stays: on macOS it is
+    // the app's, not the window's, and `installMinimalMenu`'s own comment says why it has
+    // to exist. Its Edit accelerators are Chromium's own on Windows, which is the one
+    // thing here that wants a look on real hardware (`TEST-PROTOCOL.md`).
+    //
+    // Linux keeps its native frame: `titleBarOverlay` is a no-op there and hiding the
+    // frame would lose the window manager's controls for nothing.
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 12 } }
+      : process.platform === "win32"
+        ? {
+            titleBarStyle: "hidden" as const,
+            titleBarOverlay: { ...titleBarColours(), height: 40 },
+          }
+        : { autoHideMenuBar: true }),
     webPreferences: {
       preload: join(here, "../preload/index.cjs"),
       contextIsolation: true,
@@ -191,9 +216,18 @@ export async function captureWindowTo(
         // (No backticks in this comment: it lives inside the template literal below.)
         const menu = document.querySelector('.context-menu');
         const targets = [...(menu ?? document).querySelectorAll('button, .branch')];
-        const name = (node) =>
-          (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
-            .textContent.trim();
+        // An icon-only button carries its name on aria-label instead of in its text —
+        // the folder tree's three and the note list's magnifier, since the header bands
+        // took over from the toolbars. Text first regardless, so nothing about the
+        // buttons that do have words changes; the fallbacks only answer for an element
+        // whose own text is empty. ChromeButton is what guarantees there is always a
+        // name to find: see its label prop.
+        const name = (node) => {
+          const own =
+            (node.querySelector('.branch-name') ?? node.querySelector('.context-menu-label') ?? node)
+              .textContent.trim();
+          return own !== '' ? own : (node.getAttribute('aria-label') ?? node.title ?? '').trim();
+        };
         const match = targets.find((node) => name(node) === ${JSON.stringify(label.trim())});
         match?.click();
         return match !== undefined;

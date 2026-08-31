@@ -91,6 +91,7 @@ beforeEach(() => {
         newLabel: "New",
         renameLabel: "Rename",
         deleteLabel: "Delete",
+        allFoldersLabel: "All folders",
         newNoteLabel: "New note",
         helpLabel: "Help",
         settingsLabel: "Settings",
@@ -134,11 +135,11 @@ describe("double-clicking a folder row", () => {
   it("folds a folder that is open, and its children go with it", () => {
     // The vault root is rendered at depth 0, the one depth `Branch` unfolds by default.
     expect(rowNamed("01 Projecten")).not.toBeNull();
-    expect(rowNamed("Vault")!.getAttribute("aria-expanded")).toBe("true");
+    expect(rowNamed("All folders")!.getAttribute("aria-expanded")).toBe("true");
 
-    doubleClick(rowNamed("Vault")!);
+    doubleClick(rowNamed("All folders")!);
 
-    expect(rowNamed("Vault")!.getAttribute("aria-expanded")).toBe("false");
+    expect(rowNamed("All folders")!.getAttribute("aria-expanded")).toBe("false");
     expect(rowNamed("01 Projecten")).toBeNull();
   });
 

@@ -3,6 +3,58 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 31 August 2026, **unreleased**, on the `worktree-pane-consistency` branch —
+**six items from using the pane-consistency build**, on top of B92 below.
+
+Two are regressions of B92 and are the same mistake twice, from opposite sides. Both windows
+went frameless, which made `.pane-header` a `-webkit-app-region: drag` band — and Chromium
+hands a press inside one to the window move, never to the element under it. So the reader's
+title stopped opening its rename and the capture window's title could not be clicked into at
+all. And the shared `.title-field` rule was spelled `.header .title-field`, which is where
+that input *used* to live: B92 moved it into the band, the selector matched nothing, and the
+capture window's title fell back to a bare UA `<input>` at 13px in a box. **Both survived a
+full green suite**, and `library-title-edit.test.ts` drives the very click that had stopped
+working — jsdom implements no app-region, and a text check of a stylesheet reads the
+declarations without asking whether anything matches them. `styles-title-field.test.ts` pins
+the container against the markup now, and `styles-pane-bands.test.ts` counts the two title
+controls' `no-drag` by hand.
+
+The other four: the traffic-light clearance goes 78px → 92px (it read as crowding);
+**the pane ring gains a fourth stop** — the note's own When / Tags / Where / Who block, in
+both directions, because from the editor there was no way back up to those fields at all;
+**`Mod-[` is Back** after following a `[[…]]` link, which had a button and no chord; and the
+← button keeps a gap from the file path beside it.
+
+**Driven, not guessed.** Five of the six were run in the real app under `Xvfb` over CDP
+before this was written, with real XTEST keys and real pointer coordinates — the capture
+title measured 15px/600 transparent and took a click, the reader's `<h1>` opened its rename
+from a click, the ring walked editor → Who → row → When → editor, Shift-Tab from Who reached
+Where, and `Ctrl+[` walked back. **The sixth cannot be**: this box keeps its native frame, so
+the 92px is the one number nobody has looked at. `TEST-PROTOCOL.md` §46 carries all thirteen
+rows; §46a is that one.
+
+---
+
+Last updated 30 August 2026, **unreleased** — the pane-consistency pass (B92), on the
+`worktree-pane-consistency` branch. `DESIGN-CRITIQUE.md`'s Finding 7 is answered: all three
+panes wear one 40px header band and the two with a footer wear one 28px band, both from a
+single rule, and every button in either window's chrome is one component at one of three
+sizes. Both windows are frameless now, with the platform's own controls drawn into the band.
+
+**What is open on it.** Nothing involving a window frame has been seen — this sandbox is
+Linux, the one platform deliberately left framed — so `TEST-PROTOCOL.md` §45 is a first
+sighting from end to end. §45f is the row to walk first: on Windows the application menu can
+no longer be drawn in a frameless window, and its Edit accelerators used to be reachable
+through that bar. Chromium is expected to handle Ctrl+Z/X/C/V/A natively in a text field,
+but that is a claim about Chromium rather than something anyone here has watched happen; if
+it does not hold, the fallback is a Windows-only decision to keep the frame.
+
+Finding 6 is *mitigated* rather than closed — the tree's icon buttons name their folder in a
+tooltip, and Delete already confirmed with the name in it — and Findings 1, 4, 5 and 8 of
+`DESIGN-CRITIQUE.md` are untouched.
+
+---
+
 Last updated 30 August 2026, released as `v0.12.4` — **what `v0.12.3` broke on its way past
 the thing it fixed**, and the flake that had been hiding behind it. The claim that keeps a
 dragged rectangle alive past `mouseup` was released by a mouse press and by nothing else, so

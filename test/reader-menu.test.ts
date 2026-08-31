@@ -137,8 +137,6 @@ function buildFake(): Fake {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -237,7 +235,7 @@ describe("the reader toolbar's overflow menu", () => {
 
   function openOverflowMenu(): void {
     const button = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+      container.querySelectorAll<HTMLButtonElement>(".reader-footer .pane-actions button"),
     ).find((node) => node.textContent === "Actions");
     expect(button).not.toBeUndefined();
     act(() => {
@@ -262,7 +260,7 @@ describe("the reader toolbar's overflow menu", () => {
     await mountWithNoteOpen(fake);
 
     const labels = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+      container.querySelectorAll<HTMLButtonElement>(".reader-footer .pane-actions button"),
     ).map((node) => node.textContent);
     expect(labels).toEqual(["Insert", "Actions", "Help"]);
   });
@@ -272,7 +270,7 @@ describe("the reader toolbar's overflow menu", () => {
     await mountWithNoteOpen(fake);
 
     const help = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+      container.querySelectorAll<HTMLButtonElement>(".reader-footer .pane-actions button"),
     ).find((node) => node.textContent === "Help");
     await act(async () => {
       help!.click();
@@ -396,7 +394,7 @@ describe("the reader toolbar's overflow menu", () => {
   describe("the Insert menu", () => {
     function openInsertMenu(): void {
       const button = Array.from(
-        container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+        container.querySelectorAll<HTMLButtonElement>(".reader-footer .pane-actions button"),
       ).find((node) => node.textContent === "Insert");
       expect(button).not.toBeUndefined();
       act(() => {

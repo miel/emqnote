@@ -10,7 +10,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CaptureWriter, type WriteResult } from "../src/main/capture-store.js";
+import {
+  CaptureWriter,
+  type WriteFailure,
+  type WriteResult,
+} from "../src/main/capture-store.js";
 import { parseNote } from "../src/markdown/index.js";
 import { INBOX } from "../src/main/vault.js";
 import { openNote } from "../src/main/vault-io.js";
@@ -18,8 +22,16 @@ import { paragraphs, payload } from "./helpers/doc.js";
 
 let vault: string;
 
+/**
+ * What `makeWriter`'s vault getter answers. Normally `vault`; a test that needs a write to
+ * fail points it somewhere a write cannot land and puts it back afterwards. The writer
+ * asks on every `enqueue`, which is what makes that possible without mocking `fs`.
+ */
+let activeVault: string;
+
 beforeEach(() => {
   vault = mkdtempSync(join(tmpdir(), "emqnote-writer-"));
+  activeVault = vault;
 });
 
 afterEach(() => {
@@ -69,13 +81,19 @@ function notesIn(): string[] {
     .sort();
 }
 
-function makeWriter(): { writer: CaptureWriter; written: WriteResult[] } {
+function makeWriter(): {
+  writer: CaptureWriter;
+  written: WriteResult[];
+  failed: WriteFailure[];
+} {
   const written: WriteResult[] = [];
+  const failed: WriteFailure[] = [];
   const writer = new CaptureWriter(
-    () => vault,
+    () => activeVault,
     (result) => written.push(result),
+    (failure) => failed.push(failure),
   );
-  return { writer, written };
+  return { writer, written, failed };
 }
 
 describe("closing and immediately reopening", () => {
@@ -526,5 +544,85 @@ describe("renaming on a changed subject", () => {
 
     expect(result.path!.startsWith(join(vault, "01 Projecten", "Alpha"))).toBe(true);
     expect(basenameOf(result.path!)).toContain("Tweede titel");
+  });
+});
+
+/**
+ * The 31 August 2026 data loss, pinned.
+ *
+ * OneDrive held a just-created note open, `rename()` came back `EPERM`, and because
+ * `CaptureWriter` chained every write onto one promise with no `catch`, that rejection
+ * became the queue: `this.queue.then(...)` on a rejected promise never runs its callback
+ * and hands the same rejection on. The app wrote nothing for the rest of the day and said
+ * nothing about it — the give-away being that the *update* dialog hours later reported
+ * that morning's `EPERM`, the stored rejection surfacing through `beforeInstall`'s flush.
+ *
+ * A failing vault rather than a mocked `fs`: the getter is asked on every `enqueue`, so
+ * pointing it at a file and back is a real failure through the real code, on every
+ * platform, with no module-level mock to keep in step with the module it stands in for.
+ */
+describe("a write that could not land", () => {
+  /** A path that is a file, so `mkdir` inside it cannot succeed on any platform. */
+  function brokenVault(): string {
+    const path = join(vault, "this-is-a-file");
+    writeFileSync(path, "");
+    return path;
+  }
+
+  it("does not disable the writes that come after it", async () => {
+    const { writer, failed } = makeWriter();
+
+    activeVault = brokenVault();
+    writer.update(payload(paragraphs("Lost note")));
+    const first = await writer.finish();
+
+    expect(first.failure).toBeDefined();
+    expect(failed).toHaveLength(1);
+
+    // The whole point. Before the `catch` in `enqueue`, this second write never ran at
+    // all — `writeSession` was not called, and the note simply never existed.
+    activeVault = vault;
+    writer.update(payload(paragraphs("Note that must still be written")));
+    const second = await writer.finish();
+
+    expect(second.failure).toBeUndefined();
+    expect(notesIn()).toHaveLength(1);
+    expect(readFileSync(join(vault, INBOX, notesIn()[0]!), "utf8")).toContain(
+      "Note that must still be written",
+    );
+  });
+
+  it("reports the failure instead of rejecting", async () => {
+    const { writer, failed } = makeWriter();
+    activeVault = brokenVault();
+
+    writer.update(payload(paragraphs("Lost note")));
+
+    // Resolves, deliberately: `setHideHandler` calls `writer.finish()` bare and
+    // `setBlurHandler` does `void writer.flush()`, so a rejection here is an unhandled
+    // rejection and nothing on screen. The failure travels on the result instead.
+    const result = await writer.finish();
+
+    expect(result.written).toBe(false);
+    expect(result.failure?.code).not.toBe("");
+    expect(failed[0]?.message).toBeTruthy();
+  });
+
+  it("still reports a failure on the flush before an update installs", async () => {
+    const { writer, failed } = makeWriter();
+    activeVault = brokenVault();
+
+    writer.update(payload(paragraphs("Lost note")));
+    await writer.flush();
+
+    expect(failed).toHaveLength(1);
+
+    // And the *next* flush — `setBeforeInstall` runs `flush()` then `finish()` — must not
+    // replay the first one's error. Replaying it is precisely how a note-write failure
+    // came to be shown under "Could not check for updates".
+    activeVault = vault;
+    const again = await writer.flush();
+    expect(again.failure).toBeUndefined();
+    expect(failed).toHaveLength(1);
   });
 });

@@ -126,8 +126,6 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -283,8 +281,13 @@ describe("the unlinked-attachments pane", () => {
     ]);
     // The whole pane, since there is no note list above to protect (B47's `files-only`).
     expect(container.querySelector(".files-list")!.className).toContain("files-only");
-    // And no note half at all — nothing to count, sort or file a new note into.
-    expect(container.querySelector(".notes-header")).toBeNull();
+    // And no note half at all — nothing to count, sort or file a new note into. The pane
+    // keeps its heading, because it is still a pane and the band across the top of the
+    // window has to reach it (B92); what it does not have is the footer that counts notes,
+    // or a + New note that would file one into whichever folder the tree last stood on.
+    expect(container.querySelector(".notes .pane-header")).not.toBeNull();
+    expect(container.querySelector(".notes .pane-footer")).toBeNull();
+    expect(container.querySelector(".new-note")).toBeNull();
     expect(container.querySelector(".notes-list")).toBeNull();
   });
 

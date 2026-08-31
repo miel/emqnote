@@ -156,8 +156,6 @@ function buildFake(): Fake {
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -267,7 +265,7 @@ describe("moving a note out of the list it was selected in", () => {
   /** Actions → Move → the named folder in the palette. */
   async function moveTo(folder: string): Promise<void> {
     const actions = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".reader-actions button"),
+      container.querySelectorAll<HTMLButtonElement>(".reader-footer .pane-actions button"),
     ).find((node) => node.textContent === "Actions");
     await act(async () => {
       actions!.click();

@@ -21,3 +21,21 @@ import { nativeTheme } from "electron";
  */
 export const windowBackground = (): string =>
   nativeTheme.shouldUseDarkColors ? "#1e1f22" : "#ffffff";
+
+/**
+ * The colours Windows 11 draws its own caption buttons in, so they sit inside the 40px
+ * header band instead of on a strip of their own (`titleBarOverlay`).
+ *
+ * `--surface` and `--text` from `styles.css`, restated here for `windowBackground`'s
+ * reason and pinned by the same test: a main-process file cannot read a stylesheet, so
+ * this is the one duplication the token system cannot remove.
+ *
+ * Unlike the background above, this one *is* re-read: it is on screen for as long as the
+ * window is, so `applyTheme` in `index.ts` pushes it to both windows whenever the theme
+ * source changes (B90). Nothing here is on the hotkey's path — the capture window is
+ * already built and hidden by then.
+ */
+export const titleBarColours = (): { color: string; symbolColor: string } =>
+  nativeTheme.shouldUseDarkColors
+    ? { color: "#26282c", symbolColor: "#e8e9ec" }
+    : { color: "#eef0f2", symbolColor: "#1e2226" };

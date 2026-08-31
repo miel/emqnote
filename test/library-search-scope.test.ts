@@ -93,8 +93,6 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     change: () => {},
     close: () => {},
     discard: () => {},
-    minimise: () => {},
-    toggleMaximise: () => {},
     openLibrary: () => {},
     bootstrap: async () => ({
       locale: "en-US",
@@ -160,7 +158,20 @@ function lastScope(search: ReturnType<typeof vi.fn>): string | undefined {
   return call?.[1] as string | undefined;
 }
 
+/**
+ * Unfolds the search field. It lives in the note list's heading now and is only mounted
+ * while a search is open, so reaching for the box starts with the magnifier — which is
+ * what a hand does too.
+ */
+async function openSearch(container: HTMLDivElement): Promise<void> {
+  if (container.querySelector(".notes-search input") !== null) return;
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>(".search-toggle")!.click();
+  });
+}
+
 async function type(container: HTMLDivElement, query: string): Promise<void> {
+  await openSearch(container);
   const box = container.querySelector<HTMLInputElement>(".notes-search input")!;
   await act(async () => {
     box.focus();
@@ -277,11 +288,25 @@ describe("what the search box is looking at", () => {
     expect(search.mock.calls.length).toBeGreaterThan(before);
   });
 
-  it("names the scope in force rather than the one it would switch to", () => {
+  it("names the folder it is confined to, not the one it would switch to", async () => {
+    await openSearch(container);
+
     // A button reading "All notes" while the search is confined to one folder reads as a
     // state, not as an offer — which is the wrong way round for a control you glance at.
-    expect(scopeButton(container)!.textContent).toBe("This folder");
+    //
+    // It says the folder's own name rather than "This folder" because the field it sits
+    // in has taken the heading's seat: the heading is what used to say which folder you
+    // were standing in, so while it is gone the switch is the only thing that can.
+    expect(scopeButton(container)!.textContent).toBe("00 Inbox");
     expect(scopeButton(container)!.getAttribute("aria-pressed")).toBe("false");
+
+    // Widened, it goes back to naming the scope rather than a folder — there is no one
+    // folder to name any more, which is the whole of what the widened state means.
+    await act(async () => {
+      scopeButton(container)!.click();
+    });
+    expect(scopeButton(container)!.textContent).toBe("All notes");
+    expect(scopeButton(container)!.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("puts the scope back to the folder when the search is left", async () => {

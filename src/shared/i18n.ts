@@ -46,6 +46,11 @@ const DUTCH: Record<string, string> = {
   "capture.discardHint": "Deze notitie naar de prullenbak",
   "capture.nothingSaved": "Nog niets bewaard",
   "capture.savedAs": "Bewaard als",
+  // De code staat erbij omdat die het enige is waarop een OneDrive-log en een zoekmachine
+  // allebei aanslaan. "Niet bewaard" en niet "bewaren mislukt": het gaat om de toestand
+  // waar de notitie nu in is, niet om de handeling die misging.
+  "capture.saveFailed": "Niet bewaard ({code})",
+  "capture.saveRecovered": "Tekst veiliggesteld — pad kopiëren",
   "capture.changeTime": "Klik om datum en tijd te wijzigen",
   "capture.noTime": "Datum instellen…",
 
@@ -98,7 +103,8 @@ const DUTCH: Record<string, string> = {
   "shortcut.newNote": "Nieuwe notitie (overal)",
   "shortcut.openLibraryGlobal": "Bibliotheek openen (overal)",
   "shortcut.contextMenu": "Menu bij de gefocuste rij",
-  "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
+  "shortcut.cyclePanes": "Wissel tussen mappen, lijst, kopvelden en notitie",
+  "shortcut.goBack": "Terug naar de vorige notitie",
   "shortcut.newNoteHere": "Nieuwe notitie in deze map",
   "shortcut.pinNote": "Notitie bovenaan vastprikken",
   "shortcut.searchVault": "Zoeken in alle notities",
@@ -281,6 +287,8 @@ const DUTCH: Record<string, string> = {
    *  "folders", so "+ Nieuwe map" shrank to "+ Nieuw". The context menu keeps the long
    *  form, where nothing else on screen says what "Nieuw" would otherwise mean. */
   "library.new": "Nieuw",
+  /** De rij van de vault zelf, bovenaan de boom. Zie de Engelse versie hieronder. */
+  "library.allFolders": "Alle mappen",
   "library.newFolder": "Nieuwe map",
   "library.renameFolder": "Map hernoemen",
   "library.deleteFolder": "Map verwijderen",
@@ -305,6 +313,8 @@ const DUTCH: Record<string, string> = {
   // centimeter — onleesbaar op die breedte en weg zodra je typte. Die staat nu in het
   // paneel eronder (B84).
   "library.search": "Zoeken…",
+  /** De knop die het zoekveld uitklapt. Zie de Engelse versie hieronder. */
+  "library.searchTitle": "Zoeken",
   // Het bereik van het zoekvak (B83). De knop draagt het bereik dat *nu geldt* als naam,
   // niet het bereik waar hij heen schakelt: een knop die "Alle notities" heet terwijl hij
   // in één map zoekt, leest als een stand en niet als een aanbod.
@@ -399,11 +409,11 @@ const DUTCH: Record<string, string> = {
   "settings.textSize": "Tekstgrootte in de notitie",
   "settings.textSizeWhy":
     "Geldt voor de notitie zelf — koppen, opsommingen en code schalen evenredig mee. De rest van het venster blijft even groot, en in de notitiebestanden verandert er niets. Deze keuze geldt op deze computer.",
-  "settings.textSmallest": "Kleinst",
-  "settings.textSmall": "Klein",
   "settings.textNormal": "Normaal",
   "settings.textLarge": "Groot",
   "settings.textLarger": "Groter",
+  "settings.textLargest": "Grootst",
+  "settings.textHuge": "Enorm",
   // B90. "Systeem" en niet "automatisch": het is geen gok van de app, het is de vraag
   // doorgeven aan de computer — en die blijft hem beantwoorden, ook als hij bij
   // zonsondergang van kleur wisselt.
@@ -467,6 +477,8 @@ const DUTCH: Record<string, string> = {
   "diskChange.close": "Sluiten",
   "diskChange.keepMine": "Mijn versie houden",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "library.saveFailed": "Niet bewaard ({code})",
+  "library.saveRecovered": "Tekst veiliggesteld — pad kopiëren",
   "diskChange.captureChanged": "Deze notitie is intussen buiten emqnote gewijzigd.",
   "diskChange.captureRemoved": "Deze notitie is intussen buiten emqnote verwijderd.",
 };
@@ -512,6 +524,11 @@ const ENGLISH: Record<string, string> = {
   "capture.discardHint": "Move this note to the trash",
   "capture.nothingSaved": "Nothing saved yet",
   "capture.savedAs": "Saved as",
+  // The code is shown because it is the one token a OneDrive log and a search engine
+  // both key on. "Not saved" rather than "save failed": what matters is the state the
+  // note is in now, not the operation that went wrong.
+  "capture.saveFailed": "Not saved ({code})",
+  "capture.saveRecovered": "Text preserved — copy path",
   "capture.changeTime": "Click to change the date and time",
   "capture.noTime": "Set a date…",
 
@@ -564,7 +581,8 @@ const ENGLISH: Record<string, string> = {
   "shortcut.newNote": "New note (from anywhere)",
   "shortcut.openLibraryGlobal": "Open the library (from anywhere)",
   "shortcut.contextMenu": "Menu for the focused row",
-  "shortcut.cyclePanes": "Switch between folders, list and note",
+  "shortcut.cyclePanes": "Switch between folders, list, header fields and note",
+  "shortcut.goBack": "Back to the previous note",
   "shortcut.newNoteHere": "New note in this folder",
   "shortcut.pinNote": "Pin note to top",
   "shortcut.searchVault": "Search every note",
@@ -740,6 +758,10 @@ const ENGLISH: Record<string, string> = {
   // behaviour, and `emptyTrash` is already taken twice on the main side.
   "library.clearTrash": "Empty trash",
   "library.new": "New",
+  /** The vault's own row at the top of the tree. It used to repeat the vault name, which
+   *  is the pane's heading now — two labels for one thing, the lower one dressed as a
+   *  folder you could file into. It still selects the vault root and collapses the tree. */
+  "library.allFolders": "All folders",
   "library.newFolder": "New folder",
   "library.renameFolder": "Rename folder",
   "library.deleteFolder": "Delete folder",
@@ -764,6 +786,9 @@ const ENGLISH: Record<string, string> = {
   // centimetres wide — unreadable at that width and gone the moment you typed. It is in
   // the panel below the box instead (B84).
   "library.search": "Search…",
+  /** The button that unfolds the search field in the note list's heading. The name is
+   *  what `--click-button` presses, so it is a word rather than only a magnifier. */
+  "library.searchTitle": "Search",
   // The search box's scope (B83). The button is named for the scope in force rather than
   // the one it switches to: a button reading "All notes" while the search is confined to
   // one folder reads as a state, not as an offer.
@@ -854,11 +879,11 @@ const ENGLISH: Record<string, string> = {
   "settings.textSize": "Text size in the note",
   "settings.textSizeWhy":
     "Applies to the note itself — headings, lists and code scale with it in proportion. The rest of the window stays the size it is, and nothing changes in the note files. This choice is for this computer.",
-  "settings.textSmallest": "Smallest",
-  "settings.textSmall": "Small",
   "settings.textNormal": "Normal",
   "settings.textLarge": "Large",
   "settings.textLarger": "Larger",
+  "settings.textLargest": "Largest",
+  "settings.textHuge": "Huge",
   // B90. "System" rather than "automatic": the app is not guessing, it is handing the
   // question to the computer — which goes on answering it, including on a machine that
   // switches at sunset.
@@ -922,6 +947,8 @@ const ENGLISH: Record<string, string> = {
   "diskChange.close": "Close",
   "diskChange.keepMine": "Keep mine",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
+  "library.saveFailed": "Not saved ({code})",
+  "library.saveRecovered": "Text preserved — copy path",
   "diskChange.captureChanged": "This note changed outside emqnote in the meantime.",
   "diskChange.captureRemoved": "This note was deleted outside emqnote in the meantime.",
 };

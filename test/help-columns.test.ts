@@ -89,7 +89,11 @@ describe("the shortcut sheet's two columns", () => {
       // The two halves must be within a group of each other. Row-major flow gave 28 and
       // 32; anything near those numbers means the split is not doing its job.
       expect(tallest).toBeLessThan(rows[0]! + rows[1]! - tallest + 12);
-      expect(tallest).toBeLessThanOrEqual(25);
+      // A ceiling on the sheet as a whole rather than on the split: 25 until the library
+      // gained the `goBack` row. It is meant to move when a shortcut is added and to be
+      // *looked at* when it does — a sheet that has to be scrolled has stopped being a
+      // sheet, and this number is the only thing that would say so.
+      expect(tallest).toBeLessThanOrEqual(26);
     });
 
     it(`draws every group exactly once, in order, in ${which}`, () => {

@@ -62,10 +62,6 @@ export const IPC = {
    * has unsaved edits; see `Capture.tsx`'s `dirtyRef`.
    */
   captureReload: "capture:reload",
-  /** renderer → main: window buttons in the title bar we draw ourselves. */
-  windowMinimise: "window:minimise",
-  windowToggleMaximise: "window:toggle-maximise",
-
   /** The library window: browsing and tidying the vault. */
   libraryOpen: "library:open",
   libraryTree: "library:tree",
@@ -464,6 +460,32 @@ export interface StatusPayload {
   lastLatencyMs: number | null;
   /** Path of the file holding this note, once it is decided. */
   savedAs: string | null;
+  /**
+   * Set while the last write could not land, cleared by the next one that does.
+   *
+   * This exists because it did not: on 31 August 2026 the app failed to write for a
+   * whole day and the status bar went on saying "Saved as …" throughout, because
+   * "saved as" was only ever the name of the file it *intended* to write. A window whose
+   * only job is to not lose what you type has to be able to say when it is losing it.
+   */
+  saveError: SaveError | null;
+}
+
+/**
+ * A write that would not land, in the shape both windows need to say so — the capture
+ * window in its 28px footer, the library in the reader's own.
+ *
+ * `recoveryPath` is the point of the whole thing: `atomic-write.ts` puts the text
+ * somewhere outside the vault when the vault refuses it, and a message that says a save
+ * failed without saying where the words went is the message this app already had.
+ */
+export interface SaveError {
+  /** The operating system's own code — `EPERM`, `ENOSPC`, … Shown, because it is what a
+   *  search engine and a sync-client log both key on. */
+  code: string;
+  message: string;
+  /** Absolute path of the recovery copy, or null when even that could not be written. */
+  recoveryPath: string | null;
 }
 
 /**
@@ -520,9 +542,14 @@ export interface LibraryApi {
   search: (query: string, scope?: string) => Promise<NoteSummary[]>;
   facets: () => Promise<Facets>;
   openNote: (path: string) => Promise<OpenedNote | null>;
+  /**
+   * `error` rather than a rejected `invoke`: the reader's own `save()` does not catch,
+   * so a throw here was an unhandled rejection in the renderer and nothing on screen —
+   * the library window's half of the 31 August 2026 silence.
+   */
   saveNote: (
     request: SaveNoteRequest,
-  ) => Promise<{ written: boolean; path: string; locked?: boolean }>;
+  ) => Promise<{ written: boolean; path: string; locked?: boolean; error?: SaveError }>;
   /**
    * Answers the note's path after the move — unchanged, with `locked`, when the capture
    * window has it claimed. Silently answering the old path would look like a move that
@@ -761,8 +788,6 @@ export interface CaptureApi {
   close: () => void;
   /** Trashes the brand-new note being composed and puts the window away (B68). */
   discard: () => void;
-  minimise: () => void;
-  toggleMaximise: () => void;
   openLibrary: () => void;
   bootstrap: () => Promise<Bootstrap>;
   setLocale: (locale: Locale) => Promise<void>;

@@ -1753,3 +1753,172 @@ checks rather than assumes. **A step that measures owes the steps before it a se
 and a step that types owes itself a known selection** — the same lesson as the PDF ordering
 one, in the other half of the state. Five runs green under six busy loops on two cores, where
 it had been failing about half. Released as `v0.12.4`.
+
+## Pane consistency: one header line across the window, both windows frameless (30 August 2026)
+
+B92, and the answer to `DESIGN-CRITIQUE.md`'s Finding 7 — the last of the three that the
+26 August photographs produced and the only one about the shape of the window itself. It
+began from a worked-up design bundle (`design/design-handoff-pane-consistency/`, variant
+1a). About a third of that bundle was already shipped — it had been written from screenshots
+rather than from the code, so it proposed moving Insert into the footer (B82 had), removing a
+duplicate sort control (B78 had) and shading the reader's strips (B87 had). **What is worth
+recording is the third that was translated rather than taken.**
+
+**The palette was kept and put on the roles.** Eleven named colours became six: the design's
+pane ground and its header band are one `--surface`, its four text shades are `--text` and
+`--muted`, and its two hover tints do not appear at all — that is one *state* landing on two
+different grounds, which a translucent `--hover` already solves and which is exactly the
+seven-alpha drift B87 cleared. Only the light theme's values move; the dark theme already
+stepped the same way.
+
+**The heights are rules, not numbers.** `PaneHeader` (40px) and `PaneFooter` (28px) draw all
+four bands across both windows, and `ChromeButton` draws every button in either window's
+chrome at one of three sizes. That is the whole mechanism: the failure mode Finding 7
+measured was not a wrong height but *three* heights, so `styles-pane-bands.test.ts` counts
+that no third one is written down anywhere in either sheet. The note list gave up two chrome
+rows (78px) for one band and one footer; the search field moved into the heading, which had a
+consequence the design had not seen — the heading was what said which folder you were
+standing in, so the scope switch (B83) now reads the folder's own name.
+
+**Icon-only buttons, without breaking the self-test.** `ChromeButton` makes `label`
+mandatory and puts it on `aria-label` when the button draws only a glyph, and
+`--click-button` falls back from `textContent` to `aria-label`. So the tree's three verbs
+could become 26px icons without anything moving out of the packaged self-test's reach —
+CLAUDE.md's rule met in one place instead of five. The footer buttons keep their words.
+
+**And the glyphs are drawn, which only looking could have told us.** The design specified
+`＋ ✎ ✕` as text. In the running window U+270E came out of a fallback font as something most
+people would call a paperclip — beside a real paperclip six rows down, in the same column.
+`npm run ui:kit` is what saw it; nothing under `test/` can see which font a character
+resolves to. The same pass caught the scope switch ellipsising its own label to "All …" at
+the note list's default width, which was fixed by folding "+ New note" down to its plus while
+the field is open. **Two defects, both found by photographing the app**, which is the
+recurring lesson of the last three batches rather than a new one.
+
+**Both windows went frameless, with the platform's own controls inside the band.**
+`titleBarStyle: "hidden"` on macOS and Windows, plus `titleBarOverlay` on Windows 11 so the
+caption buttons stay the system's — which keeps the snap-layouts flyout and the system menu,
+and is why that was chosen over `frame: false` with three buttons of our own. `TitleBar.tsx`
+is gone, and with it the `window:minimise` / `window:toggle-maximise` IPC: the real Close
+already meant save-and-put-away, because `capture-window.ts` has always intercepted it.
+40px covers both platforms' controls, so the chrome costs no vertical space and the three
+headings stay on one line. Linux keeps its native frame — `titleBarOverlay` is a no-op there
+and hiding the frame would only lose the window manager's controls.
+
+**What is confirmed and what is not.** The light theme was photographed at two widths and
+corrected twice from what the photographs showed. Everything involving a window frame is
+unseen: this sandbox is Linux, which is the one platform deliberately left framed.
+`TEST-PROTOCOL.md` §45 walks it, and §45f is the row that matters most — on Windows the
+application menu can no longer be drawn in a frameless window, and its Edit accelerators
+used to be reachable through that bar. Chromium handles those natively in a text field, but
+that is a claim about Chromium rather than a thing anyone here has watched happen.
+
+**Six items from using that build landed on 31 August 2026**, and four of them are things no
+test in this suite could have seen. Two are regressions of B92 itself, and they are the same
+mistake from opposite sides.
+
+**Both windows went frameless, which made `.pane-header` a drag region — and Chromium hands
+a press inside one to the window move, never to the element under the pointer.** Two
+controls in the band were never given `no-drag`: the reader's `<h1>`, which you click to
+rename a note, and the `.title-field` `<input>` it trades places with in either window. So
+the library's note title stopped being editable and the capture window's could not be
+clicked into at all. `library-title-edit.test.ts` drives that very click, end to end, with a
+real `Library` and a real ProseMirror under it — and stayed green throughout, because jsdom
+implements no app-region. `styles-pane-bands.test.ts` counts the `no-drag` rules by hand now,
+the two title controls included; a jsdom test asserting that a click works is not evidence
+that it does.
+
+**And the shared title rule stopped matching anything, in the window it was mostly written
+for.** It was spelled `.header .title-field, .reader-header .title-field` — two classes deep
+on purpose, to out-rank `.header input` — and B92 moved that input *out of* `.header` and
+into the band. The rule went on reading exactly as correct as it always had while selecting
+nothing, and the capture window's title fell back to a bare UA `<input>`: a box, a border,
+13px, against the library's 15px/600 on nothing. It is `.pane-header .title-field` now, one
+selector for both windows, because `.reader-header` **is** a `.pane-header`. The lesson is
+the one `styles-title-field.test.ts` exists for, arriving a second time: a selector makes two
+claims — these declarations, on these elements — and that file had only ever pinned the
+first. It pins the container against the markup now.
+
+The other four are new work. **The traffic-light clearance is 92px**, up from the 78 that was
+the width of the controls and nothing more; a heading starting 14px after the last light
+reads as crowding it. **The pane ring has four stops**: the note's own When / Tags / Where /
+Who block sits between the list and the note, entered at whichever end you arrive at — Who
+coming back, When coming forward — because from the editor, which is where a wrong date is
+noticed, there was no way back up to those fields at all. It is a stop in *both* directions
+so the two chords go on undoing each other. `paneOf` deliberately does not claim those
+fields; the ring asks a separate `inHeaderBlock`, because the moment `paneOf` recognises one,
+a plain Shift-Tab inside the block cycles the pane instead of moving one field. **`Mod-[` is
+Back** after following a `[[…]]` link — ⌘[ is Back system-wide on macOS and Ctrl+[ is free on
+Windows, the same trade `settings` took with the comma — and the footer's ← button keeps a
+gap from the file path beside it.
+
+**Driven, not guessed.** Five of the six were run in the real app under `Xvfb` over CDP
+before this was written, with real XTEST keys and real pointer coordinates: the capture title
+measured `15px`/`600` on a transparent ground and took a real click, the reader's `<h1>`
+reported `no-drag` and opened its rename from a real click, the ring walked
+editor → Who → row → When → editor, Shift-Tab from Who reached Where, and `Ctrl+[` walked
+back from a followed link. Two things about the harness are worth keeping: `Ctrl+Tab` is
+claimed by main in `before-input-event`, so a CDP `Input.dispatchKeyEvent` never reaches it —
+only a real X press does; and `xdotool key --window` sends with `XSendEvent`, which Chromium
+drops as untrusted, so the whole run reads as "the chord does nothing" when nothing was ever
+delivered. `windowfocus` and then a global XTEST press is the form that works.
+
+**The sixth cannot be driven here at all.** Linux keeps its native frame and never insets the
+traffic lights, so the 92px is the one number in this batch nobody has looked at. Both
+drag-region regressions *do* reproduce here, which is the useful half of the same fact:
+app-region is honoured whether or not the frame is hidden. `TEST-PROTOCOL.md` §46 carries the
+thirteen rows; §46a is that one. The suite is 1983 tests over 161 files.
+
+
+**A data-loss bug, reported from real use on 31 August 2026 and fixed the same day (B93).**
+The report was three symptoms that looked unrelated: two notes captured that morning were
+silently not saved after Ctrl+Enter, a third note came back cut off at about a third of its
+length, and an attempt to update from `v0.12.2` to `v0.12.4` failed with a dialog titled
+"Could not check for updates" whose detail was `EPERM: operation not permitted, rename
+'…\00 Inbox\2026-08-31 0914 …md.tmp' -> '…md'`.
+
+That dialog was the evidence rather than a fourth bug. The path in it is a note, not an
+update: `updater.ts`'s "Restart now" branch calls `beforeInstall()`, which is
+`writer.flush()`, and its `.catch(fail)` reported the result through `reportError`. And
+because `CaptureWriter.enqueue` chained every write onto one promise with no `catch`, the
+error in that evening dialog was the *morning's* — `then` on a rejected promise short-
+circuits and hands the same rejection on for ever, so the queue had been dead since 09:14
+and was still replaying the rejection that killed it. One `EPERM` from OneDrive holding a
+just-created file therefore explained all three symptoms: the two later notes were never
+written at all, and the third was frozen at its last successful write. OneDrive's version
+history held one version for exactly the same reason.
+
+The recovery avenue turned out to be narrower than it first looked, and that is worth
+recording. The failed write's `.tmp` was the only place the missing text ever existed —
+but the writes are debounced twice (300 ms in the renderer, 800 ms in main), so the gap
+between the last successful write and the failed one is a single typing burst, not the
+missing two thirds. Everything after that was typed into a document that never touched the
+disk in any form. The `.tmp` was gone by the time it was looked for, too, and the fixed
+`${file}.tmp` name is why: the next successful write of that note overwrote it and renamed
+it away, which is what happened when the app restarted after the update and the note was
+opened again.
+
+The fix is `src/main/atomic-write.ts` — one module where there were two private
+`writeAtomic` copies — plus the `catch` in `enqueue`, and a save-failure notice in both
+windows' footers where "Saved as …" and "Saved" used to sit unconditionally. `CaptureWriter`
+now *requires* a failure handler in its constructor, so a writer that can lose work silently
+is not a thing that can be built. Seventeen tests came with it, in three files:
+`test/atomic-write.test.ts` for the bytes (recovery copy, unique temporaries, the temporary
+kept when there is nowhere to recover to), a "a write that could not land" block in
+`test/capture-writer.test.ts` for the queue, and `test/capture-save-error.test.ts` for the
+window — where the assertion that matters is not that the failure appears but that
+"Saved as …" *disappears* while it does. The queue block's three cases were each checked to
+fail against the old `enqueue` before being kept. Suite: 2000 tests.
+
+One thing the unique temporary name settles as a side effect: the `ENOENT … rename
+'….md.tmp'` race that `test/CLAUDE.md` records as having failed the `v0.10.0` release, where
+two writes of one note shared the fixed temporary and the second renamed a file the first
+had already consumed. That was worked around in the test by waiting for each write's result
+before provoking the next — which is the right rule for a test regardless — and the cause is
+now gone from the code as well.
+
+**Not confirmed on real hardware.** Every test here provokes the failure with a vault path
+that cannot be written to, which is a faithful stand-in for the *shape* of the failure and
+not for OneDrive's own timing. Whether the retry actually rides out a real OneDrive lock on
+Windows — and whether `clearReadOnly` is the thing that clears it — is `TEST-PROTOCOL.md`
+material and has not been seen live.

@@ -26,6 +26,7 @@ import {
   type TaskCount,
   type VaultFileEvent,
 } from "../../shared/vault-types.js";
+import type { SaveError } from "../../shared/ipc.js";
 import { buildEditorMenu, insertMenuItems } from "../editor/editor-menu.js";
 import { Editor, type EditorHandle } from "../editor/Editor.js";
 import { HeaderBlock, type HeaderValues } from "../HeaderBlock.js";
@@ -36,6 +37,9 @@ import { matches, shortcut } from "../../shared/shortcuts.js";
 import { useBootstrap } from "../useBootstrap.js";
 import { Ask } from "./Ask.js";
 import { ConflictBanner } from "./ConflictBanner.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneFooter } from "../PaneFooter.js";
+import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
 import { SIDEBAR_ROWS } from "./roving.js";
@@ -109,6 +113,13 @@ function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSumma
  * tree/notes panes hold ordinary controls too — the search box, the sort buttons, a
  * folder's twisty — and those already have a sensible Tab order of their own that this
  * must not steamroll.
+ *
+ * **The note's header block is on that list too, and stayed off this function on purpose**
+ * when the pane cycle grew a stop for it. When / Tags / Where / Who are four inputs in DOM
+ * order, so a plain Tab and Shift-Tab already walk them the way anyone expects — and the
+ * moment this function claims them, the Tab branch below stops seeing `null` for a header
+ * field and cycles the *pane* instead of moving to the next field. `inHeaderBlock` is the
+ * separate question the ring asks, and only the ring asks it.
  */
 function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
   if (element === null) return null;
@@ -121,6 +132,20 @@ function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
   if (element.closest('.task-row[role="option"]') !== null) return "notes";
   if (element.closest(".editor-content") !== null) return "editor";
   return null;
+}
+
+/**
+ * Is focus inside the note's own header block — When, Tags, Where, Who?
+ *
+ * A separate question from `paneOf`, which deliberately answers `null` for these fields so
+ * that a plain Tab keeps walking them (see its own comment). Only the pane ring asks this,
+ * and only to decide which stop it is standing on.
+ *
+ * `.header-reader` rather than `.header`: the capture window wears the same block under
+ * `.header-capture` and has no pane cycle at all.
+ */
+function inHeaderBlock(element: Element | null): boolean {
+  return element !== null && element.closest(".header-reader") !== null;
 }
 
 /**
@@ -307,6 +332,23 @@ export function Library(): React.ReactElement {
   searchQueryRef.current = searchQuery;
 
   /**
+   * Whether the note list's search field is unfolded in its heading.
+   *
+   * Here rather than in `NoteList`, because `Mod-F` is this component's shortcut and it
+   * has to mount the field before it can put the caret in `searchInput` — held one level
+   * down, the shortcut would focus a box that does not exist yet. `openSearch` below is
+   * the pair of steps that has to happen in that order.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  /**
+   * Set when the field is being opened *in order to type in it*, so the effect below
+   * knows the difference between "unfold this" and "unfold this and take the caret".
+   * A ref rather than state: it is read once, in the render the flip causes, and a second
+   * piece of state would re-render for something nothing draws.
+   */
+  const focusSearchOnOpen = useRef(false);
+
+  /**
    * Whether the search box is looking at the whole vault rather than the folder you are
    * standing in (B83).
    *
@@ -369,6 +411,17 @@ export function Library(): React.ReactElement {
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
   /**
+   * The last save that would not land, or null. Cleared by the next one that does, and
+   * by opening another note — a failure belongs to the note it happened to.
+   *
+   * The reader used to have no way to show one at all: `save()` did not catch, so main
+   * throwing meant an unhandled rejection in this window, `setDirty(false)` never
+   * running, and the foot of the pane reading "Saving…" for ever. Which is the *better*
+   * of the two ways it could go wrong — with the failure answered rather than thrown, the
+   * same code would say "Saved". See `atomic-write.ts`.
+   */
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
+  /**
    * A note changed or disappeared on disk while it was open here, for a reason this app
    * did not cause itself — see `own-writes.ts` for how the app's own debounced autosave
    * is told apart from that. Null the rest of the time, which is the normal state.
@@ -407,6 +460,12 @@ export function Library(): React.ReactElement {
    * remember to reset it.
    */
   const [backStack, setBackStack] = useState<{ from: NoteOrigin; to: string }[]>([]);
+  // Both read from the window's `keydown` listener, which is declared long before either
+  // `goBack` or this state's current value is in scope — the `openRef`/`notesRef` pattern
+  // this file already uses to keep that listener off the rebuild-every-render path.
+  const backStackRef = useRef(backStack);
+  backStackRef.current = backStack;
+  const goBackRef = useRef<() => void>(() => {});
   /**
    * The title being edited in place, or null when the `<h1>` is showing instead.
    *
@@ -490,7 +549,7 @@ export function Library(): React.ReactElement {
   const libraryRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Puts focus into a pane, at its roving row.
+   * Puts focus into a pane, at its roving row. `true` when something took it.
    *
    * Hoisted out of the pane-cycle effect below, where it lived until the two exits needed
    * it: leaving the Tasks view and leaving a search both end by handing focus back to the
@@ -500,18 +559,39 @@ export function Library(): React.ReactElement {
    * The notes selector covers both lists that can occupy that pane, and it looks for
    * `[tabindex="0"]` rather than for whatever is selected: that is the roving row each
    * list maintains, so this lands on the note that was last there.
+   *
+   * **`header` is the note's own When / Tags / Where / Who block**, and `atEnd` says which
+   * end of it to enter — `Who` coming backwards out of the note, `When` coming forwards
+   * out of the list, so the field you land on is the one nearest where you came from. The
+   * two are named fields rather than "the first and last focusable thing in the block":
+   * the Tags cell can carry a `+2 more` chip, which *is* a button, and a last-focusable
+   * query would land the caret on it instead of on Who.
+   *
+   * The answer matters for that stop in particular. With no note open there is no header
+   * block at all, so this returns `false` and the ring steps past it rather than
+   * swallowing the press.
    */
-  const focusPane = useCallback((pane: "tree" | "notes" | "editor"): void => {
-    const root = libraryRef.current;
-    if (pane === "editor") {
-      editor.current?.focus();
-      return;
-    }
-    if (root === null) return;
-    const selector =
-      pane === "tree" ? '.tree [tabindex="0"]' : '.notes [tabindex="0"], .task-list [tabindex="0"]';
-    root.querySelector<HTMLElement>(selector)?.focus();
-  }, []);
+  const focusPane = useCallback(
+    (pane: "tree" | "notes" | "editor" | "header", atEnd = false): boolean => {
+      const root = libraryRef.current;
+      if (pane === "editor") {
+        editor.current?.focus();
+        return true;
+      }
+      if (root === null) return false;
+      const selector =
+        pane === "tree"
+          ? '.tree [tabindex="0"]'
+          : pane === "header"
+            ? `.header-reader .${atEnd ? "attendees" : "created"}`
+            : '.notes [tabindex="0"], .task-list [tabindex="0"]';
+      const target = root.querySelector<HTMLElement>(selector);
+      if (target === null) return false;
+      target.focus();
+      return true;
+    },
+    [],
+  );
 
   /**
    * Set by an exit that has just asked for a different list, and consumed once that list
@@ -806,6 +886,10 @@ export function Library(): React.ReactElement {
     if (searchTimer.current !== null) clearTimeout(searchTimer.current);
     searchQueryRef.current = "";
     setSearchQuery("");
+    // The field folds away with the query, and the folder's name comes back into the
+    // heading it was sitting in. Leaving it open and empty would leave the pane unable to
+    // say what it is showing.
+    setSearchOpen(false);
     // Back to the folder, so the next search starts where the default says it does. Same
     // hand-written ref as the query above, for the same reason.
     searchAllRef.current = false;
@@ -813,6 +897,39 @@ export function Library(): React.ReactElement {
     focusNotesOnNextList.current = true;
     void loadNotes(selectionRef.current);
   }, [loadNotes]);
+
+  /**
+   * Into the search: unfolds the field in the note list's heading and takes the caret.
+   *
+   * Two steps that cannot happen in one tick — the field has to be mounted before it can
+   * be focused — so this either focuses a box that is already there or asks for one and
+   * lets the effect below finish the job. `searchInput.current` is exactly the question
+   * "is it mounted": React nulls a ref when the element it points at goes away, so there
+   * is no second flag to keep in step with the first.
+   *
+   * `Mod-F` and the magnifier both come through here, which is what keeps the keyboard
+   * route and the mouse route landing in the same state (B64's rule, one control over).
+   */
+  const openSearch = useCallback(() => {
+    if (searchInput.current !== null) {
+      searchInput.current.focus();
+      searchInput.current.select();
+      return;
+    }
+    focusSearchOnOpen.current = true;
+    setSearchOpen(true);
+  }, []);
+
+  // The other half of `openSearch`: the field exists by now. Deliberately not "focus
+  // whenever the field opens" — clicking the magnifier does that, but so would any future
+  // route that merely wants the field visible, and a caret that moves on its own is the
+  // thing `focusNotesOnNextList` exists to keep deliberate elsewhere in this file.
+  useEffect(() => {
+    if (!searchOpen || !focusSearchOnOpen.current) return;
+    focusSearchOnOpen.current = false;
+    searchInput.current?.focus();
+    searchInput.current?.select();
+  }, [searchOpen]);
 
   /**
    * And out of the Tasks view, back to the folder list.
@@ -988,8 +1105,7 @@ export function Library(): React.ReactElement {
 
       if (fires("searchVault")) {
         event.preventDefault();
-        searchInput.current?.focus();
-        searchInput.current?.select();
+        openSearch();
         return;
       }
 
@@ -1023,6 +1139,20 @@ export function Library(): React.ReactElement {
         return;
       }
 
+      if (fires("goBack")) {
+        // Guarded on there actually being somewhere to go, and on it being where the ←
+        // button would take you: `backTo` is derived the same way in the render body —
+        // the top entry counts only while the note it leads *to* is the one on screen.
+        // Without that the chord would fire on a trail belonging to a note nobody is
+        // standing on any more, which is the state that derivation exists to answer.
+        const note = openRef.current;
+        const top = backStackRef.current.at(-1);
+        if (note === null || top === undefined || top.to !== note.path) return;
+        event.preventDefault();
+        goBackRef.current();
+        return;
+      }
+
       if (fires("focusTitle")) {
         // Only when there is a title to edit and this window is allowed to edit it: a note
         // the capture window has claimed must not be renamed from here, the same guard
@@ -1039,7 +1169,22 @@ export function Library(): React.ReactElement {
   }, [app.isMac]);
 
   /**
-   * The macro keyboard cycle between the three panes: tree → notes → editor → tree.
+   * The macro keyboard cycle around the window:
+   *
+   *     forward   tree → notes → [When … Who] → editor → tree
+   *     backward  tree → editor → [Who … When] → notes → tree
+   *
+   * Four stops, not three. The note's own header block was reachable by mouse and by a
+   * plain Tab out of the note list and by nothing else — from the editor, where you
+   * actually notice a wrong date or a missing name, there was no way back up to it at
+   * all. It is a stop in **both** directions because that is what makes this a ring: a
+   * stop added going one way only would mean Ctrl+Tab and Ctrl+Shift+Tab no longer undo
+   * each other, and a cycle whose two directions disagree is one you have to think about.
+   * Which field you land on depends on which way you came — see `focusPane`.
+   *
+   * Inside the block, plain Tab and Shift-Tab go on walking the four fields in DOM order,
+   * because `paneOf` deliberately does not claim them; the ring asks `inHeaderBlock`
+   * instead. That split is the whole of it, and widening `paneOf` is how it breaks.
    *
    * Tab already moves focus *within* a pane fine on its own — a dialog's own trap
    * handles a modal, and inside the editor `keymap.ts` binds Tab to list indent, always
@@ -1075,6 +1220,16 @@ export function Library(): React.ReactElement {
      * and a second copy of this ternary is how they would come to differ in more.
      */
     const cycle = (backward: boolean): boolean => {
+      const forward = !backward;
+
+      // Asked before `paneOf`, which answers `null` for a header field on purpose — so
+      // without this branch a press from inside the block would fall into the "focus is
+      // on nothing" case below and jump to the far end of the ring.
+      if (inHeaderBlock(document.activeElement)) {
+        focusPane(forward ? "editor" : "notes");
+        return true;
+      }
+
       const current = paneOf(document.activeElement);
 
       if (current === null) {
@@ -1086,7 +1241,14 @@ export function Library(): React.ReactElement {
         return true;
       }
 
-      const forward = !backward;
+      // The note's header block is the fourth stop, between the list and the note itself,
+      // and it is entered from whichever end you arrive at: Who coming back out of the
+      // note, When coming forward out of the list. It is the only stop that can be absent
+      // — no note open, no block — so it is the only one asked whether it took the focus,
+      // and the ring steps past it rather than dead-ending when it did not.
+      if (current === "notes" && forward && focusPane("header")) return true;
+      if (current === "editor" && backward && focusPane("header", true)) return true;
+
       const next: "tree" | "notes" | "editor" | null =
         current === "tree"
           ? forward
@@ -1221,7 +1383,10 @@ export function Library(): React.ReactElement {
       doc: doc.toJSON(),
     });
 
-    setDirty(false);
+    // Not cleared when the write failed: the note still differs from the file, and
+    // saying otherwise is what put "Saved" under a note that was not.
+    if (result.error === undefined) setDirty(false);
+    setSaveError(result.error ?? null);
     // Editing the header — or an inline #tag in the body — changes what the list and the
     // filters show, so both reload.
     if (result.written) {
@@ -1259,8 +1424,10 @@ export function Library(): React.ReactElement {
       // Whatever the disk-change bar was showing belongs to the note being left, not
       // the one about to be loaded — cleared here rather than left to the effect keyed
       // on `open` transitioning to `null`, since a switch between two open notes never
-      // passes through `null` at all.
+      // passes through `null` at all. A failed save is the same kind of thing and is
+      // cleared beside it: it names a file this pane is about to stop showing.
       setDiskEvent(null);
+      setSaveError(null);
 
       // Where the caret was in the note being left, before anything replaces it (B70).
       // Beside the outgoing note's pending save, which is flushed a few lines down: the
@@ -1374,6 +1541,23 @@ export function Library(): React.ReactElement {
       return [...chain, { from: origin, to }].slice(-BACK_STACK_LIMIT);
     });
   }, []);
+
+  /**
+   * The way back out of a followed `[[…]]` link: pop the trail, open what it names.
+   *
+   * A `useCallback` beside `rememberOrigin`, rather than a plain function in the render
+   * body where it began, because the footer's ← button is no longer its only caller — the
+   * `goBack` chord fires it from the window listener, which is declared above `openNote`
+   * and reaches this through `goBackRef`. One function, so a key and a button cannot come
+   * to mean two different steps back.
+   */
+  const goBack = useCallback(() => {
+    const top = backStackRef.current.at(-1);
+    if (top === undefined) return;
+    setBackStack((stack) => stack.slice(0, -1));
+    void openNote(top.from.path);
+  }, [openNote]);
+  goBackRef.current = goBack;
 
   /**
    * A `[[…]]` link was clicked, here or in the capture window, and names a note (B35).
@@ -2290,13 +2474,6 @@ export function Library(): React.ReactElement {
   const backTo =
     open === null ? null : (backStack.at(-1)?.to === open.path ? backStack.at(-1)!.from : null);
 
-  const goBack = (): void => {
-    const top = backStack.at(-1);
-    if (top === undefined) return;
-    setBackStack((stack) => stack.slice(0, -1));
-    void openNote(top.from.path);
-  };
-
   return (
     <div className="library-shell">
       {/* Above the conflict banner, and thinner: this one says "not everything is here
@@ -2442,6 +2619,7 @@ export function Library(): React.ReactElement {
           newLabel={app.t("library.new")}
           renameLabel={app.t("library.rename")}
           deleteLabel={app.t("library.delete")}
+          allFoldersLabel={app.t("library.allFolders")}
           newNoteLabel={app.t("library.newNote")}
           helpLabel={app.t("help.title")}
           settingsLabel={app.t("settings.title")}
@@ -2528,6 +2706,9 @@ export function Library(): React.ReactElement {
             // uses it: a tag or the Tasks view is not a place to put a note.
             onNewNote={() => window.emqnote.library.newNote(lastFolder)}
             searchRef={searchInput}
+            searchOpen={searchOpen}
+            onSearchOpen={openSearch}
+            onCloseSearch={() => setSearchOpen(false)}
             // Counted now rather than read off the rows on screen. Those come from one
             // non-recursive `readdir` of `.md` files, so a folder dragged in here with
             // forty notes in it counted as nothing — in the sentence that asks whether to
@@ -2570,9 +2751,18 @@ export function Library(): React.ReactElement {
             </div>
           ) : (
             <>
-              <header className="reader-header">
-                <div className="reader-titles">
-                  {editingTitle !== null ? (
+              {/* Title and nothing else. The path moved to the footer — a note's location
+                  is a fact about the file, not the heading of the pane — and with it gone
+                  this band is the same 40px the two panes beside it wear, which is the
+                  line across the top of the window Finding 7 was asking for.
+
+                  It is also where Windows draws its caption buttons, over on the right;
+                  `.pane-header-reader` is what keeps the title clear of them. */}
+              <PaneHeader
+                captionButtons
+                className="reader-header"
+                title={
+                  editingTitle !== null ? (
                     <input
                       ref={titleInput}
                       className="title-field reader-title-input"
@@ -2606,16 +2796,16 @@ export function Library(): React.ReactElement {
                     />
                   ) : (
                     <h1
+                      className="pane-title"
                       onClick={() => {
                         if (open.editable) setEditingTitle(open.title);
                       }}
                     >
                       {open.title}
                     </h1>
-                  )}
-                  <span className="reader-path">{open.path}</span>
-                </div>
-              </header>
+                  )
+                }
+              />
   
               {/* `pointer-events: none` when a note is claimed by the capture window: the
                   content stays visible — reading it while it is being typed into
@@ -2676,47 +2866,89 @@ export function Library(): React.ReactElement {
                   leaving the note you are reading is exactly the thing that must keep
                   working while somebody else is typing into it. Insert carries its own
                   `disabled` for that case, as it always has. */}
-              <div className="reader-footer">
-                <div className="reader-status">
-                  <span className="reader-state">
-                    {open.editable
-                      ? app.t(dirty ? "library.saving" : "library.saved")
-                      : app.t("library.openInCapture")}
-                  </span>
-                  {backTo !== null && (
-                    <button
-                      type="button"
-                      className="reader-back"
-                      title={app.t("library.backTo").replace("{title}", backTo.title)}
-                      onClick={goBack}
-                    >
-                      ← {backTo.title}
-                    </button>
-                  )}
-                </div>
-
-                <div className="reader-actions">
+              <PaneFooter
+                className="reader-footer"
+                status={
+                  <>
+                    {/* A failure takes this seat, for the reason the capture window's
+                        footer carries at length: "Saved" and "could not save" cannot share
+                        a line, and it is the reassuring one that gets believed. */}
+                    {saveError !== null ? (
+                      <span className="save-error" title={saveError.message}>
+                        {app.t("library.saveFailed").replace("{code}", saveError.code)}
+                        {saveError.recoveryPath !== null && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              className="save-error-copy"
+                              title={saveError.recoveryPath}
+                              onClick={() => {
+                                void window.emqnote.copyText(saveError.recoveryPath ?? "");
+                              }}
+                            >
+                              {app.t("library.saveRecovered")}
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="reader-state">
+                        {open.editable
+                          ? app.t(dirty ? "library.saving" : "library.saved")
+                          : app.t("library.openInCapture")}
+                      </span>
+                    )}
+                    {backTo !== null && (
+                      <button
+                        type="button"
+                        className="reader-back"
+                        title={app.t("library.backTo").replace("{title}", backTo.title)}
+                        onClick={goBack}
+                      >
+                        ← {backTo.title}
+                      </button>
+                    )}
+                    {/* Where the file is, in the seat the read-only notice takes when
+                        there is one. The path came down from the header — a note's
+                        location is a fact about the file rather than the heading of the
+                        pane — and it yields rather than sharing the line, because a 28px
+                        bar can hold one long ellipsised string and not two. The notice is
+                        the one that wins: it is the answer to "why can I not type here",
+                        and the path is one hover on the title away regardless. */}
+                    {open.editable && (
+                      <span className="reader-path" title={open.path}>
+                        {/* `<bdi>` because the span is `direction: rtl` — that is how the
+                            ellipsis is moved to the *head* of the path so the file name
+                            at the end survives (see `library.css`), and without an
+                            isolate the run's trailing punctuation is reordered with it. */}
+                        <bdi>{open.path}</bdi>
+                      </span>
+                    )}
+                  </>
+                }
+                actions={
+                  <>
                   {/* 🖼 🔗 ▦ 📎 used to be four always-on icon buttons here, and four
                       glyphs nobody can read at a glance is exactly the clutter the ⋯
                       menu below was made to end for the five actions before them. One
                       named menu instead, built from `insertMenuItems` so the toolbar and
                       the note panel's right-click menu cannot come to disagree. */}
-                  <button
-                    type="button"
-                    disabled={!open.editable}
-                    title={app.t("library.insert")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      // `rect.top`, not `rect.bottom`: this bar is at the foot of the
-                      // window now, so a menu opening downwards is clamped straight back
-                      // over the button it came from. `ContextMenu` clamps to the
-                      // viewport, and this hands it a point it can honour — the same
-                      // line, for the same reason, that `Capture.tsx` has always used.
-                      setInsertMenu({ x: rect.left, y: rect.top });
-                    }}
-                  >
-                    {app.t("library.insert")}
-                  </button>
+                    <ChromeButton
+                      label={app.t("library.insert")}
+                      small
+                      menu
+                      disabled={!open.editable}
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        // `rect.top`, not `rect.bottom`: this bar is at the foot of the
+                        // window now, so a menu opening downwards is clamped straight back
+                        // over the button it came from. `ContextMenu` clamps to the
+                        // viewport, and this hands it a point it can honour — the same
+                        // line, for the same reason, that `Capture.tsx` has always used.
+                        setInsertMenu({ x: rect.left, y: rect.top });
+                      }}
+                    />
                   {/* Rename/Move/Duplicate/Reveal/Delete used to be five always-on
                       buttons here, squeezing the title in the `nowrap` header next to
                       them — collapsed into one menu button, opened at its own rect the
@@ -2726,16 +2958,16 @@ export function Library(): React.ReactElement {
                       the CLAUDE.md context-menu constraint's note on why that keeps
                       `--click-button` working here. The label was "⋯" until a glyph
                       beside a second glyph-labelled menu stopped saying anything. */}
-                  <button
-                    type="button"
-                    title={app.t("library.moreActions")}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setReaderMenu({ x: rect.left, y: rect.top });
-                    }}
-                  >
-                    {app.t("library.actions")}
-                  </button>
+                    <ChromeButton
+                      label={app.t("library.actions")}
+                      title={app.t("library.moreActions")}
+                      small
+                      menu
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setReaderMenu({ x: rect.left, y: rect.top });
+                      }}
+                    />
                   {/* Third, after Insert and Actions, because that is the order the
                       capture window's footer has always carried and this window's editor
                       is the same editor. The sheet was reachable only from the sidebar's
@@ -2743,15 +2975,15 @@ export function Library(): React.ReactElement {
                       for it while writing — the row of controls under the note is where
                       the question comes up. Same `Help` component, told which window it
                       is in, so the shortcuts it lists are this window's. */}
-                  <button
-                    type="button"
-                    title={app.t("help.title")}
-                    onClick={() => setHelpOpen(true)}
-                  >
-                    {app.t("help.button")}
-                  </button>
-                </div>
-              </div>
+                    <ChromeButton
+                      label={app.t("help.button")}
+                      title={app.t("help.title")}
+                      small
+                      onClick={() => setHelpOpen(true)}
+                    />
+                  </>
+                }
+              />
 
               {link !== null && (
                 <LinkPrompt

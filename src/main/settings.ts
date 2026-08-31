@@ -123,7 +123,7 @@ function defaults(): Settings {
     librarySort: "modified",
     loadRemoteImages: true,
     keepPinnedInView: false,
-    editorFontSize: 16,
+    editorFontSize: 13,
     theme: "system",
   };
 }
