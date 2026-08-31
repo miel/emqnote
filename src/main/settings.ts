@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locale } from "../shared/i18n.js";
 import { DEFAULT_HOTKEY, DEFAULT_LIBRARY_HOTKEY, type Theme } from "../shared/ipc.js";
-import type { SortKey } from "../shared/vault-types.js";
+import type { SortDirection, SortKey } from "../shared/vault-types.js";
 import { readLaunchOptions } from "./launch-options.js";
 
 export interface Settings {
@@ -50,6 +50,16 @@ export interface Settings {
    * `Library.tsx`'s own `useState` used to hardcode.
    */
   librarySort: SortKey;
+  /**
+   * Which way round that sort runs (B94) — the arrows beside the key's name in the note
+   * list's footer.
+   *
+   * Stored beside the key rather than derived from it, because it is a choice now: the
+   * key's own `NATURAL_SORT_DIRECTION` is where it starts and what picking a key resets it
+   * to, and this is where it stays once it has been reversed by hand. Per machine, of a
+   * piece with `librarySort` itself.
+   */
+  librarySortDirection: SortDirection;
   /**
    * Whether a picture a note names by its web address is fetched and drawn (B50).
    *
@@ -121,6 +131,7 @@ function defaults(): Settings {
     updateLastCheckedAt: null,
     libraryPaneWidths: null,
     librarySort: "modified",
+    librarySortDirection: "desc",
     loadRemoteImages: true,
     keepPinnedInView: false,
     editorFontSize: 13,

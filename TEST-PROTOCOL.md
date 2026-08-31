@@ -1645,6 +1645,56 @@ real OneDrive lock — and whether it is `clearReadOnly` that clears it — has 
 
 ---
 
+## §48 — The keyboard order, a split sort chooser and several notes at once (B94)
+
+A round from daily use, and **most of it has been driven here**: `npm run drive:library`
+walks fifteen steps in the running app under `Xvfb` over CDP, and its three hardest are the
+ones no suite can ask — a real Tab (jsdom implements no sequential focus navigation at all),
+the window actually moving when the note's title is dragged (main moves it, and
+`window.screenX` is the only place that shows), and `-webkit-app-region`, which does not
+exist in jsdom and is the class of bug §46 records twice.
+
+**What is left for a person** is what a script cannot judge and what this sandbox is the
+wrong machine for. §48a and §48b are macOS's ⌘ forms of two new chords, which have never
+run on a Mac; §48c is a Windows question about a chord Chromium may claim; §48h and §48i are
+judgements about whether a control reads as what it is. The rest of the batch is confirmed
+green on this machine and is here for a second pair of eyes on real hardware.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 48a | **On macOS**, in the library, press ⇧⌘W with a note open | The caret lands in **When**, the first of the four header fields. It must *not* close the window — ⌘W is close and ⇧⌘W is "close all windows" in most Mac apps, which this one has no menu item for. If the window closes, the chord has to move |  |
+| 48b | **On macOS**, press ⌘T and then ⌘S in the library | The Tasks view, and the sort chooser's menu. ⌘T is "Show Fonts" in a Mac text view and ⌘S is Save everywhere; neither should reach past this app |  |
+| 48c | **On Windows**, press Ctrl+T in the library | The Tasks view. If nothing happens, Chromium has claimed it for "new tab" in a window with no tabs, and the chord has to move |  |
+| 48d | From the folder tree, press Tab repeatedly and watch where the focus ring goes | Folder row → note row → the note's **title** → When → Tags → Where → Who → the note's text. Eight stops, and **nothing else**: no pane splitter, no sort chooser, no Tasks button on the way |  |
+| 48e | From Who, press Shift-Tab four times | Where, Tags, When, the title. The order runs both ways |  |
+| 48f | With the caret in the note, press Ctrl+Tab, and then Ctrl+Shift+Tab | The folder tree, then back to the note. Three stops, and the header fields are not among them any more — §46f–§46h describe the behaviour this replaces |  |
+| 48g | Press Enter on the note's title while it has the focus ring | The rename opens, exactly as a click does |  |
+| 48h | Look at the two controls at the right of the note list's footer | An arrow and a field name — "↓ Modified". Say if the arrow reads as decoration rather than as something to press, which is the one judgement here a script cannot make |  |
+| 48i | Click the arrow | The list turns over, top to bottom, and the arrow flips. Hover it: the tooltip names the order in words ("Newest first") |  |
+| 48j | Pick "Title" from the field chooser | A–Z, not Z–A — picking a field puts the direction back to that field's own, whatever the arrow was doing before |  |
+| 48k | Turn the arrow round, then pick the *same* field again | The arrow stays where you put it. Choosing "Title" in a menu that already says Title is not a request to undo the press before it |  |
+| 48l | Quit and reopen the library | The field *and* the arrow are as you left them |  |
+| 48m | Ctrl/⌘-click a second note in the list | Both rows are filled — the one you had open, and the one you clicked. The reader does not change |  |
+| 48n | Ctrl/⌘-click that second row again | Neither row is filled any more. One mark left behind is the defect this row exists for |  |
+| 48o | Click a note, then Shift-click three rows down | Four rows filled. Shift+↓ from the keyboard does the same thing |  |
+| 48p | With two rows marked, right-click one of them | A two-item menu: "Move — 2 notes" and "Delete — 2 notes", and nothing else. The marks stay |  |
+| 48q | Right-click a row that is *not* marked | The ordinary one-note menu, and the marks are gone |  |
+| 48r | Mark two notes and drag one of them onto a folder | Both move. Watch the folder counts either side |  |
+| 48s | Mark two notes out of *two different folders* (search for something they share), then "Move — 2 notes…" | The destination list leaves no folder out — with the set split, every folder is a real destination for something in it |  |
+| 48t | Mark three notes and delete them | One question naming "3 notes", one press, three notes in the trash |  |
+| 48u | Press Escape on a note row with rows marked | The marks go and nothing else does — not the search you are in, not the Tasks view |  |
+| 48v | **Drag the note's title** sideways and let go | The window moves with it, and the rename does **not** open. This is the row this feature exists for, and the one thing about it a sandbox with no window manager cannot really judge — say if the window lags behind the pointer or slides away from the grip |  |
+| 48w | Now click that title without moving | The rename opens. A press that travels moves the window; a press that does not renames |  |
+| 48x | Drag the title while the window is maximised | It comes out of maximised under the pointer, as a title bar does |  |
+| 48y | Open the shortcut sheet (⌘/ / Ctrl+/) and read it without scrolling | Two columns of roughly equal height, and no scrollbar. Both new chords are listed, and so are both global hotkeys |  |
+| 48z | Press `/`, type `ctrl alt t` | One row: "Insert a table". Now type `/` into the box — it should type a slash, not re-trigger the search |  |
+| 48aa | Press Escape once, then again | The query clears; the sheet stays. The second press closes it |  |
+| 48ab | Open Settings on a short window (drag the window's bottom edge up first) | The panel scrolls inside the window: the Close button is reachable without the panel running off the bottom edge |  |
+| 48ac | Press "Check for updates…" in Settings | The same answer the tray item gives — a dialog either way, including "you are up to date" |  |
+| 48ad | Type `- [ ]` in a note, leave it empty, and save | The note's task badge does not count it, the folder badge above does not count it, and the Tasks view does not list it. Write something after the box: all three count it now |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

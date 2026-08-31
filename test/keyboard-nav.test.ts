@@ -152,6 +152,7 @@ function buildFake(): CaptureApi {
       vaultPath: "/vault",
       libraryPaneWidths: null,
       librarySort: "modified",
+      librarySortDirection: "desc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,
@@ -162,9 +163,11 @@ function buildFake(): CaptureApi {
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    checkForUpdates: async () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
+    dragWindow: () => {},
     setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,
@@ -391,7 +394,7 @@ describe("keyboard navigation across the library's panes", () => {
     return noteRow;
   }
 
-  it("Tab moves focus from the note list's active row into the header block", async () => {
+  it("Tab moves focus from the note list's active row onto the note's title", async () => {
     await mount();
     // The editor is only mounted once a note is open (`Library.tsx` renders it inside
     // the `open !== null` branch) — the same as clicking the row would, or Enter on it.
@@ -403,9 +406,54 @@ describe("keyboard navigation across the library's panes", () => {
     keydown(noteRow, "Tab");
     await flush();
 
-    // Not the editor: the header block is the fourth stop and sits between the two, and
-    // going forward you arrive at its first field. The note's own text is one more step.
-    expect(document.activeElement?.className).toContain("created");
+    // The third stop of the reading order (B94): folders, notes, *title*, then When, Tags,
+    // Where, Who and the note itself — the last five of which are the browser's own walk
+    // through five focusable controls in DOM order, which is why only this step is here.
+    expect(document.activeElement?.className).toContain("pane-title");
+  });
+
+  it("leaves Tab alone in the note list when there is no note open to have a title", async () => {
+    await mount();
+    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
+    act(() => {
+      noteRow.focus();
+    });
+
+    act(() => {
+      const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      noteRow.dispatchEvent(event);
+      // Nothing to move to, so the press stays the browser's — the walk does not swallow
+      // it and leave focus sitting on the row.
+      expect(event.defaultPrevented).toBe(false);
+    });
+  });
+
+  it("Enter on the title starts the rename, so it is a control and not just a heading", async () => {
+    await mount();
+    await openTheNote();
+
+    const title = container.querySelector<HTMLElement>(".reader-header .pane-title")!;
+    expect(title.tabIndex).toBe(0);
+    act(() => title.focus());
+    keydown(title, "Enter");
+    await flush();
+
+    expect(container.querySelector(".reader-title-input")).not.toBeNull();
+  });
+
+  it("keeps the note list's footer and the splitters out of the tab order", async () => {
+    // The other half of B94's trade: both footer buttons gained a chord in the same
+    // change, and a Tab walk that reads folders → notes → title → fields → note cannot
+    // also stop on two grab strips and a sort chooser on the way. They keep their names,
+    // so `--click-button` and a screen reader still reach them.
+    await mount();
+    for (const node of container.querySelectorAll<HTMLElement>(
+      ".notes .pane-footer button, .pane-splitter",
+    )) {
+      expect(node.tabIndex).toBe(-1);
+    }
+    expect(container.querySelectorAll(".pane-splitter").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".notes .pane-footer button").length).toBeGreaterThan(0);
   });
 
   it("Ctrl-Tab out of the header block reaches the note's text", async () => {
@@ -424,7 +472,7 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement?.className).toContain("editor-content");
   });
 
-  it("Ctrl-Shift-Tab out of the editor lands on Who, the field nearest it", async () => {
+  it("Ctrl-Shift-Tab out of the editor lands on the note list, one stop back", async () => {
     await mount();
     await openTheNote();
 
@@ -434,25 +482,40 @@ describe("keyboard navigation across the library's panes", () => {
     cycle(true);
     await flush();
 
-    // The *last* field, not the first: you enter the block at the end you arrived from,
-    // so the step is one field back from the note rather than four.
-    expect(document.activeElement?.className).toContain("attendees");
+    // Three stops again (B94). The header block was the fourth for one release, and every
+    // press that had nothing to do with those fields paid for it; `focusFields` reaches
+    // them in one chord instead.
+    const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
+    expect(document.activeElement).toBe(activeNote);
   });
 
-  it("Ctrl-Shift-Tab again leaves the header block for the note list", async () => {
+  it("still passes through the header block rather than jumping across the window", async () => {
     await mount();
     await openTheNote();
 
-    const editorContent = container.querySelector<HTMLElement>(".editor-content")!;
-    editorContent.focus();
-
-    cycle(true);
-    await flush();
+    // Not a stop is not the same as not recognised: a press made from inside the block
+    // goes where the ring would have put you had you been in the pane on either side of
+    // it. Without that it falls into the "focus is on nothing" branch and lands at the far
+    // end of the window.
+    const who = container.querySelector<HTMLElement>(".header-reader .attendees")!;
+    who.focus();
     cycle(true);
     await flush();
 
     const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeNote);
+  });
+
+  it("passes through the title the same way", async () => {
+    await mount();
+    await openTheNote();
+
+    const title = container.querySelector<HTMLElement>(".reader-header .pane-title")!;
+    act(() => title.focus());
+    cycle(false);
+    await flush();
+
+    expect(document.activeElement?.className).toContain("editor-content");
   });
 
   it("keeps plain Shift-Tab walking the header's own fields", async () => {
@@ -471,21 +534,36 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement).toBe(who);
   });
 
-  it("steps past the header stop when there is no note open to have one", async () => {
+  it("Mod-Shift-W puts the caret in When, from inside the note", async () => {
     await mount();
-    // Nothing opened, so there is no header block and no editor either. The stop answers
-    // "I did not take it" rather than swallowing the press — the one stop in the ring
-    // that can be absent, and the reason `focusPane` reports back at all.
-    expect(container.querySelector(".header-reader")).toBeNull();
+    await openTheNote();
 
-    const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
-    act(() => {
-      noteRow.focus();
-    });
-    keydown(noteRow, "Tab");
+    const editorContent = container.querySelector<HTMLElement>(".editor-content")!;
+    editorContent.focus();
+    keydown(editorContent, "w", { metaKey: true, shiftKey: true });
     await flush();
 
-    expect(document.activeElement?.closest(".header-reader") ?? null).toBeNull();
+    // The chord that replaced the ring's fourth stop (B94). It lands on the *first* field
+    // and Tab walks on to the other three, which is what makes one chord enough.
+    expect(document.activeElement?.className).toContain("created");
+  });
+
+  it("Mod-Shift-W stays unclaimed when there is no note open to have fields", async () => {
+    await mount();
+    expect(container.querySelector(".header-reader")).toBeNull();
+
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it("Ctrl-Tab completes the cycle back to the tree from inside the editor", async () => {
@@ -848,6 +926,36 @@ describe("keyboard navigation across the library's panes", () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(document.activeElement).toBe(row);
+  });
+
+  it("Mod-T opens the Tasks view, which had two routes and both were the mouse", async () => {
+    await mount();
+    expect(container.querySelector(".task-list")).toBeNull();
+
+    const row = noteRows().find((node) => node.tabIndex === 0)!;
+    row.focus();
+    keydown(row, "t", { metaKey: true });
+    await flush();
+
+    expect(container.querySelector(".task-list")).not.toBeNull();
+  });
+
+  it("Mod-S opens the sort chooser, by pressing the button rather than copying it", async () => {
+    // The menu is the note list's own state, positioned against that button's rectangle.
+    // The chord finds the control and clicks it, which is what `--click-button` does from
+    // main — so the key and the mouse cannot come to open two different menus.
+    await mount();
+    expect(container.querySelector(".context-menu")).toBeNull();
+
+    const row = noteRows().find((node) => node.tabIndex === 0)!;
+    row.focus();
+    keydown(row, "s", { metaKey: true });
+    await flush();
+
+    const items = [...container.querySelectorAll(".context-menu-item")].map(
+      (item) => item.textContent,
+    );
+    expect(items.length).toBeGreaterThan(0);
   });
 
   it("the Tasks view has a way out, by button and by Escape", async () => {

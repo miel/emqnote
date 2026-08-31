@@ -31,6 +31,7 @@ const FALLBACK: Bootstrap = {
   vaultPath: null,
   libraryPaneWidths: null,
   librarySort: "modified",
+  librarySortDirection: "desc",
   loadRemoteImages: true,
   keepPinnedInView: false,
   editorFontSize: 13,

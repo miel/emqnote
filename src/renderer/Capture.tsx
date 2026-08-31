@@ -477,6 +477,25 @@ export function Capture(): React.ReactElement {
         subjectInput.current.select();
         return;
       }
+
+      if (fires("focusFields")) {
+        // The other half of `focusTitle`, and the library window has the same pair (B94).
+        // It lands on When, and Tab walks on to Tags, Where and Who — four fields, one
+        // chord, because they are four inputs in DOM order and the browser already knows
+        // how to walk them.
+        //
+        // Found by selector rather than by a ref handed down through `HeaderBlock`: that
+        // component owns four fields and the props to reach each of them would be four
+        // props, where the block already carries a class per cell for the stylesheet.
+        // `.header-capture` and not `.header`, so this can only ever be *this* window's
+        // block — the reader's wears `.header-reader`, and both spellings exist for
+        // exactly this kind of question.
+        const when = document.querySelector<HTMLElement>(".header-capture .created");
+        if (when === null) return;
+        event.preventDefault();
+        when.focus();
+        return;
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);

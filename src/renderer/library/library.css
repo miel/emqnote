@@ -510,7 +510,14 @@
   background: var(--hover);
 }
 
-.note-on {
+.note-on,
+/* A row marked for a bulk Move or Delete (B94) wears the *same* fill as the row in the
+   reader, and that is a decision rather than a shortcut: "selected" is one of the six
+   roles (B87) and a set of marked rows is exactly that — the rows the next action is
+   about. A seventh colour invented for it would be a second word for the same state, and
+   the one place the two need telling apart is already handled by the keyboard ring (B91),
+   which follows focus and lands on one row at a time. */
+.note-marked {
   background: var(--selected);
 }
 
@@ -1070,6 +1077,22 @@
    that window does not load. */
 .settings {
   width: min(420px, 80vw);
+  /* **The panel scrolls rather than running off the bottom of the screen.** It has grown
+     a row at a time — two hotkeys, pictures, pinned rows, text size, theme, the vault
+     list, and now the update check — and on a laptop panel in a window that is not full
+     height the vault list and the Close button were simply below the edge, with no way to
+     reach them: an `.overlay` child is centred by flex, not laid out in the page, so the
+     window's own scrollbar never appears for it.
+
+     `100%` and not a `vh` figure copied from `.overlay`: this is a flex item in a
+     container that is `inset: 0` with `padding-top: 12vh`, so a percentage resolves
+     against exactly the height that padding leaves — the one number that cannot fall out
+     of step with it. The 12px is the gap kept at the bottom, so a panel at its full height
+     still reads as a panel rather than as something cut off. */
+  max-height: calc(100% - 12px);
+  overflow-y: auto;
+  /* The library behind this must not scroll when the panel reaches its end. */
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;

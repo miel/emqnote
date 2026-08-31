@@ -5,7 +5,15 @@ import { useActiveRowVisible, useHoverGuard } from "./palette-scroll.js";
 
 interface Props {
   folders: string[];
-  current: string;
+  /**
+   * The folder the thing being moved is already in, left out of the list — there is
+   * nothing to ask for there.
+   *
+   * `null` leaves every folder in, which is what several notes out of *different* folders
+   * mean (B94): with the set split, every folder in the vault is a real destination for
+   * something in it.
+   */
+  current: string | null;
   /**
    * One folder to offer first while nothing has been typed — Restore's Inbox, which is
    * where a note coming back out of the trash nearly always belongs.

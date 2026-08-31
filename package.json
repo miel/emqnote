@@ -1,6 +1,6 @@
 {
   "name": "emqnote",
-  "version": "0.12.5",
+  "version": "0.12.6",
   "private": true,
   "type": "module",
   "description": "Snelle notitie-app voor werk, met markdown-bestanden op OneDrive",
@@ -18,6 +18,7 @@
     "check:bundle": "tsx scripts/check-bundle.ts",
     "canonical": "tsx scripts/canonical.ts",
     "drive:capture": "tsx scripts/drive-capture.ts",
+    "drive:library": "tsx scripts/drive-library.ts",
     "ui:kit": "tsx scripts/export-ui-kit.ts",
     "ui:deck": "python3 scripts/build-ui-deck.py",
     "icons": "tsx scripts/make-icons.ts"

@@ -110,6 +110,16 @@ describe("the capture window's window-level chords", () => {
     expect(capture.spies.close).not.toHaveBeenCalled();
   });
 
+  it("puts the caret in When on Mod+Shift+W (B94)", async () => {
+    await capture.pressKey({ key: "w", ctrlKey: true, shiftKey: true });
+
+    // The first of the four fields, and Tab walks on to the other three: they are four
+    // inputs in DOM order, so one chord is enough for all of them. The library window has
+    // the same chord over the same block, which is why the entry is `where: "global"`.
+    const when = capture.container.querySelector<HTMLElement>(".header-capture .created")!;
+    expect(document.activeElement).toBe(when);
+  });
+
   it("hands the keyboard to an open overlay rather than acting on the window", async () => {
     // While the note picker or the table grid is up it owns the keyboard: a window-level
     // chord would otherwise throw focus back into the note and leave the overlay hanging

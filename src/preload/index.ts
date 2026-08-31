@@ -13,6 +13,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortDirection,
   SortKey,
   VaultFileEvent,
   WikiLinkOpen,
@@ -54,11 +55,15 @@ contextBridge.exposeInMainWorld("emqnote", {
   setKeepPinnedInView: (keep: boolean) => ipcRenderer.invoke(IPC.setKeepPinnedInView, keep),
   setEditorFontSize: (px: number) => ipcRenderer.invoke(IPC.setEditorFontSize, px),
   setTheme: (theme: string) => ipcRenderer.invoke(IPC.setTheme, theme),
+  checkForUpdates: () => ipcRenderer.invoke(IPC.checkForUpdates),
   setHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setHotkey, hotkey),
   setLibraryHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setLibraryHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),
-  setSort: (sort: SortKey) => ipcRenderer.send(IPC.setSort, sort),
+  dragWindow: (phase: "start" | "move", screenX: number, screenY: number) =>
+    ipcRenderer.send(IPC.windowDrag, phase, screenX, screenY),
+  setSort: (sort: SortKey, direction: SortDirection) =>
+    ipcRenderer.send(IPC.setSort, sort, direction),
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),

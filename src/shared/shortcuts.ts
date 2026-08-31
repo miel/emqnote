@@ -212,6 +212,27 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "it rather than sharing a control neither of them has.",
   },
 
+  {
+    id: "focusFields",
+    keys: ["Mod-Shift-w"],
+    where: "global",
+    group: "note",
+    why:
+      "The note's own When / Tags / Where / Who block, from anywhere, landing on When. " +
+      "It replaces the fourth stop the pane ring grew for exactly this problem — from " +
+      "the editor, which is where a wrong date is noticed, there was no way back up to " +
+      "those fields — and it replaces it because a stop in the ring made every Ctrl+Tab " +
+      "walk through four fields to get past them. A chord that goes straight there costs " +
+      "nothing to the gesture that was not about the fields at all.\n\n" +
+      "'W' for When, the field it lands on, and the ring's own rule holds inside the " +
+      "block once you are in it: plain Tab and Shift-Tab walk the four fields in DOM " +
+      "order, which is what makes one chord enough for all of them.\n\n" +
+      "`where: \"global\"` for `focusTitle`'s reason — both windows draw this block. " +
+      "Mod-Shift-W is free in every scope here; it is not Chromium's 'close window', " +
+      "which is Ctrl+W and which `keyMatches` tells apart because it compares Shift as " +
+      "carefully as it compares Control.",
+  },
+
   // ---- the capture window itself ----
   {
     id: "close",
@@ -288,12 +309,15 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "F6 used to be the one key that reached every pane; dropped for the fn-key " +
       "reason (B32) and replaced with the browser's own 'switch tab' chord, which " +
       "keymap.ts has no binding for and so still reaches out of the editor.\n\n" +
-      "The ring has four stops rather than three: the note's own header block — When, " +
-      "Tags, Where, Who — sits between the list and the note, and is entered at whichever " +
-      "end you arrive at. Reaching it was the reason the fourth stop exists: from the " +
-      "editor, which is where a wrong date is noticed, there was no way back up to those " +
-      "fields at all. Both directions stop there, because a stop added one way only " +
-      "means the two chords stop undoing each other. See `Library.tsx`'s `cycle`.",
+      "**Three stops, and it went back to three.** The note's own header block was the " +
+      "fourth for one release: the problem it answered was real — from the editor there " +
+      "was no way back up to When — but the price was paid by every press that was not " +
+      "about the fields, since cycling from the list to the note then walked through the " +
+      "block on the way. `focusFields` (Mod-Shift-W) answers the same question in one " +
+      "chord and takes nothing from this one. The block is still *passed through*: a " +
+      "press from inside it moves to the note going forward and to the list going back, " +
+      "which is where the ring would have put you. It is simply not somewhere the ring " +
+      "ever lands. See `Library.tsx`'s `cycle`.",
   },
   {
     id: "goBack",
@@ -369,6 +393,39 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "`Library.tsx`, unlike `help`: while a `HotkeyRow` is armed the panel owns every " +
       "key so the chord can be recorded into a global accelerator, and a toggle placed " +
       "before the guard would close the panel out from under it instead.",
+  },
+  {
+    id: "tasksView",
+    keys: ["Mod-t"],
+    where: "library",
+    group: "window",
+    why:
+      "The Tasks view had two ways in, the sidebar's Tasks row and the note list's footer " +
+      "button, and both are the mouse. It is now also the pane the note list's Tab stop " +
+      "*cannot* reach: that footer is out of the tab order (B94), which is the trade this " +
+      "chord is the other half of.\n\n" +
+      "'T' for tasks, and plain Mod rather than Mod-Shift because Mod-Shift-T is the task " +
+      "*item* in the editor — one binding, one owner (B32), and the two are a keystroke " +
+      "apart on purpose: the same letter for the same subject, shifted for the thing you " +
+      "make and unshifted for the list of them. Free in every scope here, and free in " +
+      "`outlookKeymap`, so nothing has to stop it at the editor the way B64's Mod-F does.",
+  },
+  {
+    id: "sortNotes",
+    keys: ["Mod-s"],
+    where: "library",
+    group: "window",
+    why:
+      "The sort chooser, for `tasksView`'s reason exactly — the same footer, the same " +
+      "trade. It opens the menu under the button rather than cycling the order blind: " +
+      "the chooser already says which key is in force and hands its arrow walk, its " +
+      "Escape and its focus restoration to `ContextMenu`, and a chord that stepped " +
+      "through the keys would be a second way to change the sort that shows you nothing.\n\n" +
+      "'S' for sort. Mod-S is free for the reason `star` gives for Mod-Shift-S being " +
+      "free: this app has no Save — a note is written 800 ms after the last keystroke — " +
+      "so the one chord that letter is normally spoken for by is not spoken for. Somebody " +
+      "reflexively pressing Ctrl+S gets a menu naming the order the list is in, which is " +
+      "a harmless answer to a question this app never asks.",
   },
   {
     id: "searchVault",
@@ -547,16 +604,27 @@ export function formatFirstKey(id: string, isMac: boolean): string {
 }
 
 /**
+ * An Electron accelerator — `CommandOrControl+Alt+N` — as a binding this module can read.
+ *
+ * Its own function because the help sheet needs the *binding* and not only the printed
+ * form: both global hotkeys are rows on that sheet, and they are rendered as ordinary
+ * entries so the sheet's search can match them like any other. It was inline in
+ * `formatAccelerator` until then, and a second copy of this substitution is exactly the
+ * kind of thing that ends up disagreeing about `CmdOrCtrl`.
+ */
+export function acceleratorBinding(accelerator: string): string {
+  return accelerator
+    .split("+")
+    .map((part) => (part === "CommandOrControl" || part === "CmdOrCtrl" ? "Mod" : part))
+    .join("-");
+}
+
+/**
  * The global hotkey, which is a setting rather than a constant.
  *
  * It is stored as the accelerator Electron wants — `CommandOrControl+Alt+N` — so it is
  * translated here rather than being spelled twice.
  */
 export function formatAccelerator(accelerator: string, isMac: boolean): string {
-  const binding = accelerator
-    .split("+")
-    .map((part) => (part === "CommandOrControl" || part === "CmdOrCtrl" ? "Mod" : part))
-    .join("-");
-
-  return formatBinding(binding, isMac);
+  return formatBinding(acceleratorBinding(accelerator), isMac);
 }

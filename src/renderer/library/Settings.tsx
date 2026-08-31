@@ -372,6 +372,24 @@ export function Settings({
 
         <p className="settings-note">{t("settings.themeWhy")}</p>
 
+        {/* The same check the tray menu runs (B22), where anyone would actually look for
+            it. Laid out like the vault row below rather than like the rows above: this is
+            a button that goes and does something, not a value being shown, so the fixed
+            200px a `.settings-row button` wears would be width spent on nothing.
+
+            Nothing is drawn from the result and nothing is awaited. Every outcome is a
+            native dialog raised in main — up to date, an update to download, a network
+            that would not answer — which is the tray item's contract unchanged, and the
+            panel has no state that depends on any of them. */}
+        <div className="settings-row settings-row-block">
+          <span>{t("settings.updates")}</span>
+          <button type="button" onClick={() => void window.emqnote.checkForUpdates()}>
+            {t("settings.updatesCheck")}
+          </button>
+        </div>
+
+        <p className="settings-note">{t("settings.updatesWhy")}</p>
+
         {/* Where the notes live. The list is asked for fresh every time it opens, so a
             vault that has just become reachable — or has just stopped being — is
             described as it is now rather than as it was when it was first chosen. */}

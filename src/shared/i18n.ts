@@ -66,6 +66,8 @@ const DUTCH: Record<string, string> = {
   "help.group.structure": "Structuur",
   "help.group.note": "Notitie",
   "help.group.window": "Venster",
+  "help.search": "Zoeken in dit overzicht",
+  "help.noMatch": "Geen sneltoets gevonden.",
   "shortcut.strong": "Vet",
   "shortcut.em": "Cursief",
   "shortcut.underline": "Onderstreept",
@@ -96,6 +98,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.redo": "Opnieuw",
   "shortcut.find": "Zoeken in deze notitie",
   "shortcut.focusTitle": "De titel bewerken",
+  "shortcut.focusFields": "Wanneer, tags, waar en wie bewerken",
   "shortcut.close": "Bewaren en sluiten",
   "shortcut.discard": "Deze notitie weggooien",
   "shortcut.openLibrary": "Bibliotheek openen",
@@ -103,11 +106,13 @@ const DUTCH: Record<string, string> = {
   "shortcut.newNote": "Nieuwe notitie (overal)",
   "shortcut.openLibraryGlobal": "Bibliotheek openen (overal)",
   "shortcut.contextMenu": "Menu bij de gefocuste rij",
-  "shortcut.cyclePanes": "Wissel tussen mappen, lijst, kopvelden en notitie",
+  "shortcut.cyclePanes": "Wissel tussen mappen, lijst en notitie",
   "shortcut.goBack": "Terug naar de vorige notitie",
   "shortcut.newNoteHere": "Nieuwe notitie in deze map",
   "shortcut.pinNote": "Notitie bovenaan vastprikken",
   "shortcut.searchVault": "Zoeken in alle notities",
+  "shortcut.tasksView": "Taken tonen",
+  "shortcut.sortNotes": "Volgorde van de lijst kiezen",
   "shortcut.settings": "Instellingen openen",
 
   // Rechtermuisknop-menu's. De namen komen uit editor-menu.ts en de menu's op mappen/
@@ -209,6 +214,15 @@ const DUTCH: Record<string, string> = {
   // hierboven; deze zin zegt waar dat veld over gaat, want "Gewijzigd" alleen zegt dat
   // niet aan wie de lijst voor het eerst ziet.
   "library.sortBy": "Sorteren op",
+  // B94. De pijl-knop ernaast. Het label zegt wat de knop *doet* en niet welke kant de
+  // lijst nu op staat — dat zegt de pijl zelf, en een naam die met de stand meebeweegt is
+  // een naam waar `--click-button` niet op kan mikken. De vier zinnen hieronder staan in
+  // de tooltip, want "omkeren" zegt niet waarnaar.
+  "library.sortDirection": "Volgorde omkeren",
+  "library.sortNewest": "Nieuwste eerst",
+  "library.sortOldest": "Oudste eerst",
+  "library.sortAZ": "A–Z",
+  "library.sortZA": "Z–A",
   "library.pick": "Kies links een notitie.",
   "library.pickHint": "Klik met rechts op een map voor nieuwe map, hernoemen, verwijderen of een nieuwe notitie.",
   "library.saved": "Bewaard",
@@ -423,6 +437,13 @@ const DUTCH: Record<string, string> = {
   "settings.themeSystem": "Systeem",
   "settings.themeLight": "Licht",
   "settings.themeDark": "Donker",
+  // Er stond al een "Controleren op updates…" in het menu van het systeemvakpictogram, en
+  // dat is precies de plek waar niemand hem zoekt — op Windows kan dat pictogram
+  // bovendien onder het pijltje zijn opgeborgen.
+  "settings.updates": "Updates",
+  "settings.updatesCheck": "Controleren op updates…",
+  "settings.updatesWhy":
+    "Kijkt op GitHub of er een nieuwere versie is. Je krijgt altijd antwoord, ook als er niets nieuws is.",
   "settings.vault": "Waar je notities staan",
   "settings.vaultChoose": "Andere map kiezen…",
   "settings.vaultSynced": "Gesynchroniseerd",
@@ -544,6 +565,8 @@ const ENGLISH: Record<string, string> = {
   "help.group.structure": "Structure",
   "help.group.note": "Note",
   "help.group.window": "Window",
+  "help.search": "Search this sheet",
+  "help.noMatch": "No shortcut found.",
   "shortcut.strong": "Bold",
   "shortcut.em": "Italic",
   "shortcut.underline": "Underline",
@@ -574,6 +597,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.redo": "Redo",
   "shortcut.find": "Find in this note",
   "shortcut.focusTitle": "Edit the title",
+  "shortcut.focusFields": "Edit when, tags, where and who",
   "shortcut.close": "Save and close",
   "shortcut.discard": "Discard this note",
   "shortcut.openLibrary": "Open the library",
@@ -581,11 +605,13 @@ const ENGLISH: Record<string, string> = {
   "shortcut.newNote": "New note (from anywhere)",
   "shortcut.openLibraryGlobal": "Open the library (from anywhere)",
   "shortcut.contextMenu": "Menu for the focused row",
-  "shortcut.cyclePanes": "Switch between folders, list, header fields and note",
+  "shortcut.cyclePanes": "Switch between folders, list and note",
   "shortcut.goBack": "Back to the previous note",
   "shortcut.newNoteHere": "New note in this folder",
   "shortcut.pinNote": "Pin note to top",
   "shortcut.searchVault": "Search every note",
+  "shortcut.tasksView": "Show tasks",
+  "shortcut.sortNotes": "Choose how the list is ordered",
   "shortcut.settings": "Open settings",
 
   // Right-click menus. The command names come from `editor-menu.ts` and the folder/
@@ -686,6 +712,15 @@ const ENGLISH: Record<string, string> = {
   // says what that field is *for*, which "Modified" on its own does not tell anyone
   // seeing the list for the first time.
   "library.sortBy": "Sort by",
+  // B94. The arrow button beside it. The label says what the button *does* rather than
+  // which way the list currently runs — the arrow itself says that, and a name that moved
+  // with the state is a name `--click-button` cannot aim at. The four below name the
+  // order, in the tooltip, because "reverse" does not say reverse of what.
+  "library.sortDirection": "Reverse the order",
+  "library.sortNewest": "Newest first",
+  "library.sortOldest": "Oldest first",
+  "library.sortAZ": "A–Z",
+  "library.sortZA": "Z–A",
   "library.pick": "Pick a note on the left.",
   "library.pickHint":
     "Right-click a folder for new folder, rename, delete or a new note.",
@@ -893,6 +928,13 @@ const ENGLISH: Record<string, string> = {
   "settings.themeSystem": "System",
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
+  // There was already a "Check for updates…" in the tray icon's menu, which is exactly
+  // where nobody looks for it — and on Windows that icon may be folded away under the
+  // overflow chevron.
+  "settings.updates": "Updates",
+  "settings.updatesCheck": "Check for updates…",
+  "settings.updatesWhy":
+    "Looks on GitHub for a newer release. You get an answer either way, including when there is nothing new.",
   "settings.vault": "Where your notes live",
   "settings.vaultChoose": "Choose another folder…",
   "settings.vaultSynced": "Synced",

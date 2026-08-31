@@ -104,3 +104,24 @@ describe("the stylesheets: the undimmed overlays out-rank the dimmed one", () =>
     });
   }
 });
+
+/**
+ * A panel taller than the window it opens in.
+ *
+ * The settings sheet is a flex child of `.overlay`, which is `position: fixed` — so it is
+ * not in the page's own flow and the window's scrollbar has nothing to do with it. On a
+ * short screen the vault list and the Close button below it were off the bottom edge with
+ * no way to reach either, which is a dialog you cannot dismiss with the mouse.
+ *
+ * Both halves are checked because either alone is useless: a `max-height` with no
+ * `overflow-y` clips the rows instead of scrolling to them.
+ */
+describe("the stylesheets: the settings panel fits the screen", () => {
+  it("caps .settings against the height the overlay leaves it", () => {
+    expect(rule(".settings")).toMatch(/max-height:\s*calc\(100% - \d+px\);/);
+  });
+
+  it("scrolls what does not fit rather than clipping it", () => {
+    expect(rule(".settings")).toMatch(/overflow-y:\s*auto;/);
+  });
+});

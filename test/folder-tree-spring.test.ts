@@ -47,14 +47,14 @@ const ROOT: FolderNode = {
 const SELECTION: Selection = { kind: "folder", path: "00 Inbox" };
 
 /** A note in the Inbox: every folder in the tree is a legal destination for it. */
-const FROM_INBOX = "00 Inbox/Vergadering.md";
+const FROM_INBOX = ["00 Inbox/Vergadering.md"];
 /** A note that already lives in `01 Projecten`, which `canDropNote` therefore refuses. */
-const FROM_PROJECTS = "01 Projecten/Offerte.md";
+const FROM_PROJECTS = ["01 Projecten/Offerte.md"];
 
 let container: HTMLDivElement;
 let root: Root;
 
-function render(dragging: string | null): void {
+function render(dragging: string[] | null): void {
   act(() => {
     root.render(
       createElement(FolderTree, {

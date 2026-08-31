@@ -15,6 +15,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortDirection,
   SortKey,
   TaskCount,
   TaskItem,
@@ -230,6 +231,18 @@ export const IPC = {
    */
   setTheme: "app:set-theme",
   /**
+   * renderer → main: the user asked whether there is a new version (B22's check, from the
+   * Settings panel as well as from the tray).
+   *
+   * Carries nothing and answers nothing. Every outcome of a check — up to date, an update
+   * to download, a network that would not answer — is a native dialog raised by
+   * `updater.ts`, on the same "you asked, so you get an answer" rule the tray item has
+   * always followed; there is no result for the panel to draw and nothing for it to
+   * decide. It resolves once the check has been *started*, not once it has finished, so a
+   * slow GitHub cannot leave a button in the panel waiting on it.
+   */
+  checkForUpdates: "app:check-for-updates",
+  /**
    * main → both windows: something in `settings.json` that a window *draws with* has
    * changed, so re-read the bootstrap.
    *
@@ -243,7 +256,34 @@ export const IPC = {
   settingsChanged: "app:settings-changed",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
-  /** renderer → main, fire-and-forget: the note list's sort order changed. */
+  /**
+   * renderer → main, fire-and-forget: move this window, because something is being dragged
+   * by a control that is *also* a control (B94 — the note's title in the reader).
+   *
+   * Both windows are frameless and their header bands are `-webkit-app-region: drag`, which
+   * is what moves them — but Chromium hands every press inside a drag region to the window
+   * move and never to the element under it, so anything clickable in a band has to be
+   * `no-drag`, and then it cannot move the window at all. The note's title has to be both:
+   * a press that travels moves the window, a press that does not opens the rename. The
+   * only way to have both is to leave the element `no-drag` and do the move here.
+   *
+   * `"start"` records where the window and the pointer were; every `"move"` puts the
+   * window back at that offset from where the pointer is now. There is no "end" message
+   * and none is needed — the renderer simply stops sending, and a fresh `"start"` replaces
+   * whatever the last drag left behind. Screen coordinates, not client ones: the window is
+   * moving under the pointer while this runs, so client coordinates would be measured
+   * against a moving origin.
+   */
+  windowDrag: "app:window-drag",
+  /**
+   * renderer → main, fire-and-forget: the note list's sort changed — the key, the
+   * direction, or both.
+   *
+   * One message for the two halves rather than one each, because they are one choice made
+   * in one place: picking a key resets the direction to that key's own
+   * (`NATURAL_SORT_DIRECTION`), so a message that carried only the key would leave the
+   * stored direction describing the sort before last.
+   */
   setSort: "app:set-sort",
 
   /**
@@ -407,6 +447,8 @@ export interface Bootstrap {
   libraryPaneWidths: { tree: number; notes: number } | null;
   /** The note list's last sort order — see `setPaneWidths`'s comment for the precedent this follows. */
   librarySort: SortKey;
+  /** Which way round it runs (B94), stored beside it for the reason `settings.ts` gives. */
+  librarySortDirection: SortDirection;
   /** Whether a `![…](https://…)` picture is fetched and drawn (B50) — for the Settings row. */
   loadRemoteImages: boolean;
   /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
@@ -802,10 +844,20 @@ export interface CaptureApi {
   setEditorFontSize: (px: number) => Promise<void>;
   /** B90's theme. Awaited for the same reason `setEditorFontSize` is. */
   setTheme: (theme: Theme) => Promise<void>;
+  /**
+   * Asks main to check GitHub for a newer release, the same check the tray item runs.
+   * Resolves when the check has been started; what it found is a native dialog.
+   */
+  checkForUpdates: () => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
+  /**
+   * Moves this window while something in a header band is dragged (B94). `screenX`/
+   * `screenY` are the pointer's, in screen coordinates; see `IPC.windowDrag`.
+   */
+  dragWindow: (phase: "start" | "move", screenX: number, screenY: number) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */
-  setSort: (sort: SortKey) => void;
+  setSort: (sort: SortKey, direction: SortDirection) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */
   listVaults: () => Promise<VaultLocation[]>;
   /** Opens the folder picker and answers with the chosen path, or null. */

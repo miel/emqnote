@@ -3,6 +3,7 @@ export {
   MARK_NESTING_ORDER,
   taskItemsIn,
   taskItemText,
+  isBlankTask,
   type TaskItemAt,
 } from "./schema.js";
 export { plainText } from "./plain-text.js";

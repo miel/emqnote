@@ -11,6 +11,7 @@ import {
   folderOf,
   INBOX,
   isInTrash,
+  NATURAL_SORT_DIRECTION,
   selectionKey,
   TRASH_FOLDER,
   type ConflictPair,
@@ -22,6 +23,7 @@ import {
   type OpenedNote,
   type ScanProgress,
   type Selection,
+  type SortDirection,
   type SortKey,
   type TaskCount,
   type VaultFileEvent,
@@ -42,6 +44,9 @@ import { PaneFooter } from "../PaneFooter.js";
 import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
+import { canDropNote } from "./drag.js";
+import { dragWindowFrom } from "../window-drag.js";
+import { sharedFolder } from "./multi-select.js";
 import { SIDEBAR_ROWS } from "./roving.js";
 import { FolderTree } from "./FolderTree.js";
 import { LinkPicker } from "./LinkPicker.js";
@@ -74,8 +79,8 @@ function flatten(node: FolderNode): string[] {
  * One comparator, wrapped rather than replaced, so all three sort keys inherit the pin for
  * free and a fourth would too. Pinned notes keep the sort *among themselves* rather than a
  * pin order of their own: three rows is few enough that a hand-kept order would be more to
- * maintain than to read, and it means the top of the list still answers "most recent
- * first" the way the rest of it does.
+ * maintain than to read, and it means the top of the list still answers the same question
+ * the rest of it does — including when that question has been turned round.
  *
  * **`pins` says whether the pin means anything to this list at all** (B77). It used to
  * mean something to every list — the comment here said in so many words that a pinned note
@@ -86,12 +91,25 @@ function flatten(node: FolderNode): string[] {
  * folder, so it is honoured where the list *is* a folder and disregarded where the rows
  * come from everywhere.
  */
-function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSummary[] {
+function sortNotes(
+  notes: NoteSummary[],
+  key: SortKey,
+  direction: SortDirection,
+  pins: boolean,
+): NoteSummary[] {
   const sorted = [...notes];
+  // **The direction is applied to the comparator, not to the sorted array** (B94). A
+  // `reverse()` afterwards would also reverse the order *within* every tie — two notes
+  // saved in the same second, which is not rare when a paste writes several — and the pin
+  // pass below leans on this sort being stable. Flipping the sign leaves ties exactly
+  // where they were.
+  const flip = direction === "asc" ? -1 : 1;
   if (key === "title") {
-    sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+    sorted.sort(
+      (a, b) => -flip * a.title.localeCompare(b.title, undefined, { numeric: true }),
+    );
   } else {
-    sorted.sort((a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
+    sorted.sort((a, b) => flip * (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
   }
   // A stable sort, so this keeps the order above within each of the two groups — which is
   // why it is a second pass rather than a first clause in the comparators.
@@ -114,12 +132,12 @@ function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSumma
  * folder's twisty — and those already have a sensible Tab order of their own that this
  * must not steamroll.
  *
- * **The note's header block is on that list too, and stayed off this function on purpose**
- * when the pane cycle grew a stop for it. When / Tags / Where / Who are four inputs in DOM
- * order, so a plain Tab and Shift-Tab already walk them the way anyone expects — and the
- * moment this function claims them, the Tab branch below stops seeing `null` for a header
- * field and cycles the *pane* instead of moving to the next field. `inHeaderBlock` is the
- * separate question the ring asks, and only the ring asks it.
+ * **The note's own fields are on that list too, and stay off this function on purpose.**
+ * The title, then When / Tags / Where / Who: five controls in DOM order, so a plain Tab
+ * and Shift-Tab already walk them the way anyone expects — and the moment this function
+ * claims them, the Tab branch below stops seeing `null` for one of them and cycles the
+ * *pane* instead of moving to the next field. `inNoteFields` is the separate question the
+ * ring asks, and only the ring asks it.
  */
 function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
   if (element === null) return null;
@@ -135,17 +153,23 @@ function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
 }
 
 /**
- * Is focus inside the note's own header block — When, Tags, Where, Who?
+ * Is focus on one of the note's own fields — its title, or When / Tags / Where / Who?
  *
- * A separate question from `paneOf`, which deliberately answers `null` for these fields so
+ * A separate question from `paneOf`, which deliberately answers `null` for all of them so
  * that a plain Tab keeps walking them (see its own comment). Only the pane ring asks this,
- * and only to decide which stop it is standing on.
+ * and only to know that it is standing *between* two panes rather than in none: the ring
+ * never lands here, but a press made from here has to go somewhere sensible — on to the
+ * note going forward, back to the list going back — rather than falling into the "focus is
+ * on nothing" branch and jumping to the far end of the window.
  *
  * `.header-reader` rather than `.header`: the capture window wears the same block under
- * `.header-capture` and has no pane cycle at all.
+ * `.header-capture` and has no pane cycle at all. `.reader-header` beside it is the 40px
+ * band above it, which holds the note's title in both of its states — the `<h1>` and the
+ * rename input — and which is a Tab stop of its own since B94 put the title in the order.
  */
-function inHeaderBlock(element: Element | null): boolean {
-  return element !== null && element.closest(".header-reader") !== null;
+function inNoteFields(element: Element | null): boolean {
+  if (element === null) return false;
+  return element.closest(".header-reader") !== null || element.closest(".reader-header") !== null;
 }
 
 /**
@@ -197,7 +221,7 @@ type Dialog =
    * which is why this question is a question and not a warning — but it should still say
    * what it is about to take off the list.
    */
-  | { kind: "delete"; title: string; path: string; openTasks: number }
+  | { kind: "delete"; title: string; paths: string[]; openTasks: number }
   /** A folder, to `_trash`, with what is inside it — notes, subfolders, and open tasks. */
   | { kind: "deleteFolder"; path: string; notes: number; folders: number; openTasks: number }
   // Five numbers, not one, and all five are counted when the dialog opens: this is
@@ -407,6 +431,16 @@ export function Library(): React.ReactElement {
    * from clobbering a drag in progress — here, from clobbering a sort the user just picked.
    */
   const [sort, setSort] = useState<SortKey>("modified");
+  /**
+   * Which way round that sort runs (B94) — the arrows in the note list's footer, beside
+   * the key's own name.
+   *
+   * Seeded from the bootstrap alongside `sort` and by the same guard, and reset to the
+   * key's own `NATURAL_SORT_DIRECTION` whenever the key changes: "newest first" and "A–Z"
+   * are what those words mean, and a Title sort opening at Z–A because the dates were
+   * reversed an hour ago is a list disagreeing with its own label.
+   */
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const sortLoaded = useRef(false);
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -427,7 +461,15 @@ export function Library(): React.ReactElement {
    * is told apart from that. Null the rest of the time, which is the normal state.
    */
   const [diskEvent, setDiskEvent] = useState<VaultFileEvent | null>(null);
-  const [moving, setMoving] = useState(false);
+  /**
+   * The notes the "Move to…" dialog is open for, or null when it is not.
+   *
+   * A list rather than a flag since B94: it used to be `boolean` and the dialog read
+   * `open.path` when it was answered, which cannot say "these three". Holding the paths
+   * also fixes a smaller thing the flag had — the question is now about the notes it was
+   * *opened* for, not about whatever happens to be in the reader when it is answered.
+   */
+  const [moving, setMoving] = useState<string[] | null>(null);
   /**
    * The trashed note or folder waiting to be told where to go back to. A separate piece
    * of state from `moving` and not a fourth `Dialog`, because it opens `MoveDialog`
@@ -437,7 +479,24 @@ export function Library(): React.ReactElement {
   // The note being dragged over the tree. Held here rather than in either component,
   // because the row that knows which note it is and the branch that has to decide
   // whether it will take it are on opposite sides of the window.
-  const [dragging, setDragging] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string[] | null>(null);
+  /**
+   * The rows marked for a bulk Move or Delete (B94) — see `multi-select.ts`.
+   *
+   * Here rather than in `NoteList` because this is where both actions live: the Move
+   * dialog, the delete confirmation and the two IPC calls behind them. The list decides
+   * *which* rows are marked and hands the answer up; nothing else in the window reads it
+   * but the note list itself and the two menu items.
+   *
+   * Emptied whenever the list underneath it is replaced — a different folder, a search, a
+   * move that took some of the marked notes out of it — because a mark is about rows on
+   * screen. `selectionKey` is what says the list changed.
+   */
+  const [marked, setMarked] = useState<string[]>([]);
+  // Read from the window's `keydown` listener, which is installed once — the `openRef` /
+  // `notesRef` pattern this file already uses for exactly that.
+  const markedRef = useRef(marked);
+  markedRef.current = marked;
   const [dialog, setDialog] = useState<Dialog | null>(null);
   /** An ambiguous `[[…]]` link waiting for the user to say which note it meant (B35). */
   const [linkPick, setLinkPick] = useState<{
@@ -466,6 +525,9 @@ export function Library(): React.ReactElement {
   const backStackRef = useRef(backStack);
   backStackRef.current = backStack;
   const goBackRef = useRef<() => void>(() => {});
+  // The Tasks view's chord, for `goBackRef`'s reason exactly: `openTasks` is written far
+  // below the window's `keydown` listener and reads state the listener cannot close over.
+  const openTasksRef = useRef<() => void>(() => {});
   /**
    * The title being edited in place, or null when the `<h1>` is showing instead.
    *
@@ -476,6 +538,11 @@ export function Library(): React.ReactElement {
    */
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  /**
+   * Set when a press on the title turned out to be a window drag, and read by the click
+   * that follows it — see the `<h1>`'s own two handlers, and `window-drag.ts`.
+   */
+  const dragged = useRef(false);
   // Set by Escape just before it blurs the input on purpose, so the blur handler can
   // tell "cancelled" apart from "committed" — see the input's own `onBlur` below.
   const cancelingTitle = useRef(false);
@@ -561,18 +628,23 @@ export function Library(): React.ReactElement {
    * list maintains, so this lands on the note that was last there.
    *
    * **`header` is the note's own When / Tags / Where / Who block**, and `atEnd` says which
-   * end of it to enter — `Who` coming backwards out of the note, `When` coming forwards
-   * out of the list, so the field you land on is the one nearest where you came from. The
-   * two are named fields rather than "the first and last focusable thing in the block":
-   * the Tags cell can carry a `+2 more` chip, which *is* a button, and a last-focusable
-   * query would land the caret on it instead of on Who.
+   * end of it to enter — `Who` at the end, `When` at the start. The two are named fields
+   * rather than "the first and last focusable thing in the block": the Tags cell can carry
+   * a `+2 more` chip, which *is* a button, and a last-focusable query would land the caret
+   * on it instead of on Who. `focusFields` (Mod-Shift-W) is what asks for it now; the pane
+   * ring stopped here for one release and does not any more (B94).
    *
-   * The answer matters for that stop in particular. With no note open there is no header
-   * block at all, so this returns `false` and the ring steps past it rather than
-   * swallowing the press.
+   * **`title` is the note's own title in the band above that block**, in whichever of its
+   * two states it is in: the `<h1>` most of the time, the rename input while it is being
+   * edited. One selector for both, because a Tab landing on the title should not care
+   * which, and the `<h1>` is a tab stop in its own right since B94 put it in the order.
+   *
+   * The answer matters for both of those. With no note open there is no title and no
+   * header block, so this returns `false` and the caller — the Tab walk, or the chord —
+   * leaves the press alone rather than swallowing it.
    */
   const focusPane = useCallback(
-    (pane: "tree" | "notes" | "editor" | "header", atEnd = false): boolean => {
+    (pane: "tree" | "notes" | "editor" | "header" | "title", atEnd = false): boolean => {
       const root = libraryRef.current;
       if (pane === "editor") {
         editor.current?.focus();
@@ -584,7 +656,9 @@ export function Library(): React.ReactElement {
           ? '.tree [tabindex="0"]'
           : pane === "header"
             ? `.header-reader .${atEnd ? "attendees" : "created"}`
-            : '.notes [tabindex="0"], .task-list [tabindex="0"]';
+            : pane === "title"
+              ? ".reader-header .pane-title, .reader-header .reader-title-input"
+              : '.notes [tabindex="0"], .task-list [tabindex="0"]';
       const target = root.querySelector<HTMLElement>(selector);
       if (target === null) return false;
       target.focus();
@@ -623,13 +697,35 @@ export function Library(): React.ReactElement {
     if (sortLoaded.current || !app.bootstrapped) return;
     sortLoaded.current = true;
     setSort(app.librarySort);
-  }, [app.bootstrapped, app.librarySort]);
+    setSortDirection(app.librarySortDirection);
+  }, [app.bootstrapped, app.librarySort, app.librarySortDirection]);
 
-  /** Changes the sort order and persists it — the note list's `onSort` prop. */
-  const onSort = useCallback((next: SortKey) => {
-    setSort(next);
-    window.emqnote.setSort(next);
-  }, []);
+  /**
+   * Changes which key the list is sorted on and persists it — the note list's `onSort`.
+   *
+   * Picking a key puts the direction back to that key's own, which is what every file
+   * manager's column headings do and what keeps "Title" meaning A–Z. Picking the key that
+   * is already in force leaves the direction alone: choosing "Created" from a menu that
+   * already says Created is not a request to undo the arrows you just pressed.
+   */
+  const onSort = useCallback(
+    (next: SortKey) => {
+      const direction = next === sort ? sortDirection : NATURAL_SORT_DIRECTION[next];
+      setSort(next);
+      setSortDirection(direction);
+      window.emqnote.setSort(next, direction);
+    },
+    [sort, sortDirection],
+  );
+
+  /** Turns the current sort round — the arrows beside the key's name (B94). */
+  const onSortDirection = useCallback(
+    (next: SortDirection) => {
+      setSortDirection(next);
+      window.emqnote.setSort(sort, next);
+    },
+    [sort],
+  );
 
   /**
    * Applies one splitter's pointer/keyboard movement, clamped so the reader can never be
@@ -1047,6 +1143,10 @@ export function Library(): React.ReactElement {
 
   useEffect(() => {
     void loadNotes(selectionRef.current);
+    // A mark is about rows on screen (B94), and these are about to be different rows.
+    // Left standing, a set marked in the Inbox would light up whichever notes happened to
+    // land in those positions in the next folder — and the next Delete would mean them.
+    setMarked([]);
   }, [key, loadNotes]);
 
   /**
@@ -1074,7 +1174,7 @@ export function Library(): React.ReactElement {
     settingsOpen ||
     helpOpen ||
     dialog !== null ||
-    moving ||
+    moving !== null ||
     restoring !== null ||
     linkPick !== null ||
     notePick !== null ||
@@ -1153,6 +1253,41 @@ export function Library(): React.ReactElement {
         return;
       }
 
+      if (fires("focusFields")) {
+        // The note's own When / Tags / Where / Who, landing on When — and Tab walks on
+        // from there, which is what makes one chord enough for four fields. This is what
+        // the pane ring's fourth stop was for (B94): the ring paid for it on every press
+        // that was not about the fields, and a chord does not.
+        //
+        // Guarded by `focusPane` answering for itself: with no note open there is no block
+        // and the key stays unclaimed, the same rule `goBack` above follows.
+        if (focusPane("header")) event.preventDefault();
+        return;
+      }
+
+      if (fires("tasksView")) {
+        // The same handler the sidebar's Tasks row and the note list's footer button call
+        // — never a second route that could come to mean something else. The footer button
+        // is out of the tab order now, and this is the other half of that trade.
+        event.preventDefault();
+        openTasksRef.current();
+        return;
+      }
+
+      if (fires("sortNotes")) {
+        // **The chord presses the button**, rather than owning a copy of what the button
+        // does. The sort chooser's menu is the note list's own state and it is positioned
+        // against that button's rectangle; reaching it from here would mean lifting both
+        // into this component, or opening a second menu somewhere near it. Finding the
+        // control and clicking it is what `--click-button` already does from main, and it
+        // cannot come to disagree with the button because it *is* the button.
+        const button = libraryRef.current?.querySelector<HTMLElement>(".sort-choose");
+        if (button === null || button === undefined) return;
+        event.preventDefault();
+        button.click();
+        return;
+      }
+
       if (fires("focusTitle")) {
         // Only when there is a title to edit and this window is allowed to edit it: a note
         // the capture window has claimed must not be renamed from here, the same guard
@@ -1166,33 +1301,42 @@ export function Library(): React.ReactElement {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [app.isMac]);
+    // `focusPane` is a `useCallback` over two refs, so it is stable and naming it here
+    // does not put this listener on the rebuild-every-render path the comment above warns
+    // about — the same argument the pane-cycle effect below makes for the same function.
+  }, [app.isMac, focusPane]);
 
   /**
    * The macro keyboard cycle around the window:
    *
-   *     forward   tree → notes → [When … Who] → editor → tree
-   *     backward  tree → editor → [Who … When] → notes → tree
+   *     forward   tree → notes → editor → tree
+   *     backward  tree → editor → notes → tree
    *
-   * Four stops, not three. The note's own header block was reachable by mouse and by a
-   * plain Tab out of the note list and by nothing else — from the editor, where you
-   * actually notice a wrong date or a missing name, there was no way back up to it at
-   * all. It is a stop in **both** directions because that is what makes this a ring: a
-   * stop added going one way only would mean Ctrl+Tab and Ctrl+Shift+Tab no longer undo
-   * each other, and a cycle whose two directions disagree is one you have to think about.
-   * Which field you land on depends on which way you came — see `focusPane`.
+   * **Three stops, and it is three again.** The note's own header block was a fourth for
+   * one release, entered at whichever end you arrived at. The problem it answered was
+   * real — from the editor, which is where a wrong date is noticed, there was no way back
+   * up to When — but every press that had nothing to do with those fields paid for it:
+   * getting from the list to the note went through four inputs on the way. B94 puts the
+   * fields back where they belong, in the plain Tab order beside the title, and gives them
+   * a chord of their own (`focusFields`, Mod-Shift-W) that reaches them from anywhere in
+   * one press. The ring is for the three regions of the window again.
    *
-   * Inside the block, plain Tab and Shift-Tab go on walking the four fields in DOM order,
-   * because `paneOf` deliberately does not claim them; the ring asks `inHeaderBlock`
-   * instead. That split is the whole of it, and widening `paneOf` is how it breaks.
+   * The block and the title are still *passed through*: a press from inside either goes on
+   * to the note going forward and back to the list going back, which is where the ring
+   * would have put you. They are simply not somewhere it ever lands, which is why
+   * `inNoteFields` answers a different question from `paneOf` — see both.
    *
-   * Tab already moves focus *within* a pane fine on its own — a dialog's own trap
-   * handles a modal, and inside the editor `keymap.ts` binds Tab to list indent, always
-   * returning `true`, so it never reaches here at all (nothing to special-case: the
-   * event simply never bubbles up to `window`). That leaves Tab genuinely only able to
-   * move tree → notes and notes → editor, never back out of the editor — which is why
-   * `cyclePanes` (Ctrl-Tab/Ctrl-Shift-Tab, `shortcuts.ts`) exists as well: `keymap.ts`
-   * has no binding for it, so it is the one key that can always complete the loop.
+   * **Plain Tab is a different walk from this one, and `tabStep` is where it lives.** It
+   * is the linear order the eye reads in — tree → notes → title → When → Tags → Where →
+   * Who → note — of which the browser already does everything but the two ends: a dialog's
+   * own trap handles a modal, the five fields are five focusable controls in DOM order,
+   * and inside the editor `keymap.ts` binds Tab to list indent and always returns `true`,
+   * so it never reaches here at all (nothing to special-case: the event simply never
+   * bubbles up to `window`). What the browser cannot do is skip the two panes' own
+   * chrome — the sort chooser, Tasks, the splitters, all of which B94 took out of the tab
+   * order for exactly this reason — and it cannot get back out of the editor, which is why
+   * `cyclePanes` (Ctrl-Tab/Ctrl-Shift-Tab, `shortcuts.ts`) exists as well: `keymap.ts` has
+   * no binding for it, so it is the one key that can always complete the loop.
    *
    * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
    * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
@@ -1222,10 +1366,12 @@ export function Library(): React.ReactElement {
     const cycle = (backward: boolean): boolean => {
       const forward = !backward;
 
-      // Asked before `paneOf`, which answers `null` for a header field on purpose — so
-      // without this branch a press from inside the block would fall into the "focus is
-      // on nothing" case below and jump to the far end of the ring.
-      if (inHeaderBlock(document.activeElement)) {
+      // Asked before `paneOf`, which answers `null` for the title and the four fields on
+      // purpose — so without this branch a press made from one of them would fall into the
+      // "focus is on nothing" case below and jump to the far end of the ring. They are not
+      // a stop; this is where the ring would have put you had you been in the pane on
+      // either side of them.
+      if (inNoteFields(document.activeElement)) {
         focusPane(forward ? "editor" : "notes");
         return true;
       }
@@ -1240,14 +1386,6 @@ export function Library(): React.ReactElement {
         focusPane(backward ? "editor" : "tree");
         return true;
       }
-
-      // The note's header block is the fourth stop, between the list and the note itself,
-      // and it is entered from whichever end you arrive at: Who coming back out of the
-      // note, When coming forward out of the list. It is the only stop that can be absent
-      // — no note open, no block — so it is the only one asked whether it took the focus,
-      // and the ring steps past it rather than dead-ending when it did not.
-      if (current === "notes" && forward && focusPane("header")) return true;
-      if (current === "editor" && backward && focusPane("header", true)) return true;
 
       const next: "tree" | "notes" | "editor" | null =
         current === "tree"
@@ -1265,6 +1403,45 @@ export function Library(): React.ReactElement {
       if (next === null) return false;
       focusPane(next);
       return true;
+    };
+
+    /**
+     * One step of the *plain* Tab order — tree → notes → title → When → Tags → Where →
+     * Who → note, and back — from wherever focus is now. `true` when this handler moved
+     * it, which is also when the press is taken off the browser.
+     *
+     * Only the steps the browser cannot make on its own are here, and there are two of
+     * them. Between the tree and the note list sit the note pane's own search button and
+     * "+ New note", which are controls in that pane rather than the pane itself; and
+     * between the list and the title there is nothing left to skip since B94 took the sort
+     * chooser, Tasks and the splitters out of the tab order — but the *title* has to be
+     * asked for by name, because with no note open there is nothing there at all and the
+     * press belongs to the browser again.
+     *
+     * Everything past the title is the browser's: the title, When, Tags, Where, Who and
+     * the note are six focusable things in DOM order, and Shift-Tab walks them backwards
+     * for free. That is why this is not a table of eight stops — a table would be a second
+     * definition of an order the DOM already states, and the first thing to disagree with
+     * it after a pane is reordered.
+     */
+    const tabStep = (backward: boolean): boolean => {
+      const current = paneOf(document.activeElement);
+
+      if (current === "tree") {
+        if (backward) return false;
+        focusPane("notes");
+        return true;
+      }
+
+      if (current === "notes") {
+        if (backward) {
+          focusPane("tree");
+          return true;
+        }
+        return focusPane("title");
+      }
+
+      return false;
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -1290,6 +1467,16 @@ export function Library(): React.ReactElement {
         if (pane === "editor") {
           event.preventDefault();
           focusPane("notes");
+          return;
+        }
+
+        // A press on a note row clears a marked set before it does anything else — one
+        // press undoes one thing, the rule the search box and the help sheet's own query
+        // both follow. Marking rows and then wanting out of the search is rare; marking
+        // rows and changing your mind is not.
+        if (pane === "notes" && markedRef.current.length > 0) {
+          event.preventDefault();
+          setMarked([]);
           return;
         }
 
@@ -1336,7 +1523,11 @@ export function Library(): React.ReactElement {
       // pane from nowhere, because it has no default worth preserving.
       if (current === null) return;
 
-      if (cycle(event.shiftKey)) event.preventDefault();
+      // `tabStep`, not `cycle`: the two used to be one function and they are two orders.
+      // The ring has three stops and skips the note's own fields; the Tab order walks
+      // every one of them, which is what makes the title and When reachable without a
+      // chord at all.
+      if (tabStep(event.shiftKey)) event.preventDefault();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -1757,8 +1948,8 @@ export function Library(): React.ReactElement {
   );
   const pinsApply = pinsApplyTo(selection, searchQuery);
   const sorted = useMemo(
-    () => sortNotes(notes, sort, pinsApply),
-    [notes, sort, pinsApply],
+    () => sortNotes(notes, sort, sortDirection, pinsApply),
+    [notes, sort, sortDirection, pinsApply],
   );
   notesRef.current = notes;
 
@@ -1862,7 +2053,15 @@ export function Library(): React.ReactElement {
           open.openTasks === 0
             ? ""
             : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
-        return `"${open.title}"${tasks} — ${app.t("ask.confirmDelete")}`;
+        // A set says how many rather than naming them (B94). Two titles in quotes would
+        // read as the whole answer where there are six, and a list of six is a paragraph
+        // in a dialog whose job is one sentence — the rows are lit up on the list behind
+        // it, which is where a set is read.
+        const what =
+          open.paths.length === 1
+            ? `"${open.title}"`
+            : plural(open.paths.length, "library.note", "library.notes");
+        return `${what}${tasks} — ${app.t("ask.confirmDelete")}`;
       }
       case "deletePermanently": {
         // The open tasks in this one thing, counted when the dialog opens exactly as the
@@ -2120,6 +2319,27 @@ export function Library(): React.ReactElement {
     await askRelinkThen({ kind: "move", path: notePath, folder: target });
   };
 
+  /**
+   * The same, for several notes at once (B94) — a marked set dragged onto a folder, or
+   * "Move n notes…".
+   *
+   * **One after another, awaited, never in parallel.** Every move reloads the tree, the
+   * list and the facets and may raise the "should the links follow?" question; two of them
+   * in flight at once would interleave those reloads and could put two dialogs on screen.
+   * Filing is a handful of notes at a time, so the cost is a few round trips in a row.
+   *
+   * The marks go first, not last: they name rows in a list that is about to be rebuilt
+   * without them, and a set left standing would light up whatever moved into those
+   * positions.
+   */
+  const moveNotesTo = async (notePaths: string[], target: string): Promise<void> => {
+    setMarked([]);
+    for (const path of notePaths) {
+      // eslint-disable-next-line no-await-in-loop
+      await moveNoteTo(path, target);
+    }
+  };
+
   const performMove = async (
     notePath: string,
     target: string,
@@ -2197,10 +2417,27 @@ export function Library(): React.ReactElement {
    * without it the Trash row would not appear until something else refreshed the tree.
    */
   const trashNoteAt = async (notePath: string): Promise<void> => {
-    await window.emqnote.library.trashNote(notePath);
+    await trashNotesAt([notePath]);
+  };
+
+  /**
+   * Several at once (B94): a marked set dropped on the Trash row, or "Delete n notes".
+   *
+   * One reload for the whole batch rather than one per note, unlike `moveNotesTo` next
+   * door — and the difference is not an inconsistency. A move raises a question per note
+   * (should the links follow?) and has to finish answering one before it asks the next; a
+   * trash asks nothing, so the only reason to interleave reloads would be to watch the
+   * list shorten a row at a time.
+   */
+  const trashNotesAt = async (notePaths: string[]): Promise<void> => {
+    setMarked([]);
+    for (const path of notePaths) {
+      // eslint-disable-next-line no-await-in-loop
+      await window.emqnote.library.trashNote(path);
+    }
 
     const current = openRef.current;
-    if (current !== null && current.path === notePath) {
+    if (current !== null && notePaths.includes(current.path)) {
       setOpen(null);
       openRef.current = null;
     }
@@ -2394,6 +2631,9 @@ export function Library(): React.ReactElement {
       setSearchQuery("");
     }
   };
+  // Three routes in now — the sidebar row, the note list's footer button and B94's chord —
+  // and one function behind all of them.
+  openTasksRef.current = openTasks;
 
   /**
    * The unlinked-attachment pane. Clears the search box for exactly `openTasks`' reason:
@@ -2528,15 +2768,22 @@ export function Library(): React.ReactElement {
           selected={selection}
           facets={facets}
           dragging={dragging}
-          onDropNote={(notePath, folder) => {
+          onDropNote={(notePaths, folder) => {
             setDragging(null);
+            setMarked([]);
             // A drop on the Trash row is Delete, not a move to a folder that happens to
             // be called `_trash`: it goes through the same `trashNoteAt` the menu item
             // calls, so the two cannot answer differently about the lock or about what
             // the reader does next. No confirmation, deliberately — trashing is a rename
             // (B24), and Restore is the named way back.
-            if (folder === TRASH_FOLDER) void trashNoteAt(notePath);
-            else void moveNoteTo(notePath, folder);
+            //
+            // Several notes since B94, and the *ones this folder will take*: a marked set
+            // can be dragged out of two folders at once and one of them may be this one,
+            // which `canDropNotes` lets through on the strength of the others. Filtering
+            // here rather than there keeps the highlight generous and the action exact.
+            const moving = notePaths.filter((path) => canDropNote(path, folder));
+            if (folder === TRASH_FOLDER) void trashNotesAt(moving);
+            else void moveNotesTo(moving, folder);
           }}
           onSelect={(target) => {
             setSelection(target);
@@ -2694,7 +2941,11 @@ export function Library(): React.ReactElement {
             scopeable={selection.kind === "folder"}
             onExitSearch={exitSearch}
             sort={sort}
+            marked={marked}
+            onMark={setMarked}
             onSort={onSort}
+            sortDirection={sortDirection}
+            onSortDirection={onSortDirection}
             onSelect={(path) => {
               setOpenFile(null);
               void openNote(path);
@@ -2797,7 +3048,45 @@ export function Library(): React.ReactElement {
                   ) : (
                     <h1
                       className="pane-title"
+                      // **Press and travel moves the window; press and release renames**
+                      // (B94). The band this sits in is the frameless window's grab area,
+                      // and this heading is `no-drag` inside it — which is what lets it be
+                      // clicked at all, and what took the window's own title bar away from
+                      // the one part of it that looks like a title bar. `window-drag.ts`
+                      // carries the whole of why that cannot be expressed in CSS.
+                      onMouseDown={(event) => {
+                        dragWindowFrom(event.nativeEvent, (moved) => {
+                          dragged.current = moved;
+                        });
+                      }}
+                      // **A Tab stop, and the third one in the window's order** (B94):
+                      // folders, notes, *this*, then the four fields and the note itself.
+                      // It was reachable by click and by Mod-Shift-R and by nothing else,
+                      // which made the one control between the list and the fields the one
+                      // the keyboard walked straight past.
+                      //
+                      // `tabIndex` whether or not the note is editable, so the order does
+                      // not change shape depending on whether the capture window happens
+                      // to have claimed the note — the key does nothing there, exactly as
+                      // the click does nothing there.
+                      tabIndex={0}
+                      title={app.t("library.rename")}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        // Space would otherwise scroll the reader under it.
+                        event.preventDefault();
+                        if (open.editable) setEditingTitle(open.title);
+                      }}
                       onClick={() => {
+                        // A click *does* arrive after a drag: the window moved with the
+                        // pointer, so the press and the release landed on this same
+                        // heading and Chromium fires one exactly as if nothing had
+                        // happened. Without this, letting go of a dragged title would open
+                        // the rename every time.
+                        if (dragged.current) {
+                          dragged.current = false;
+                          return;
+                        }
                         if (open.editable) setEditingTitle(open.title);
                       }}
                     >
@@ -3008,19 +3297,24 @@ export function Library(): React.ReactElement {
         </section>
       </div>
 
-      {moving && open !== null && (
+      {moving !== null && moving.length > 0 && (
         <MoveDialog
           folders={folders}
-          // The folder the note is actually in, not the one selected on the left. With
+          // The folder the notes are actually in, not the one selected on the left. With
           // a tag selected there is no current folder at all, and even with a folder
           // selected the open note may live somewhere else entirely — in which case the
           // old code excluded the wrong one and offered the note its own folder.
-          current={folderOf(open.path)}
+          //
+          // Several notes out of two different folders exclude neither: the list is what
+          // this dialog can move them *to*, and with the set split across folders every
+          // one of them is a real destination for something in it (B94).
+          current={sharedFolder(moving)}
           t={app.t}
-          onCancel={() => setMoving(false)}
+          onCancel={() => setMoving(null)}
           onMove={(target) => {
-            setMoving(false);
-            void moveNoteTo(open.path, target);
+            const paths = moving;
+            setMoving(null);
+            void moveNotesTo(paths, target);
           }}
         />
       )}
@@ -3056,7 +3350,40 @@ export function Library(): React.ReactElement {
             // vault, offered on a row that is not in it any more. Read off the path, the
             // same way `FolderTree`'s own menu reads it, so no extra state travels with
             // the row to say so.
-            isInTrash(folderOf(noteMenu.note.path))
+            // **A marked set gets a menu about the set** (B94): the two actions that can
+            // mean several notes at once, and nothing else. Rename, Duplicate, Pin, Open
+            // and Reveal are all about one note — they would have to either act on the
+            // first row or silently act on one of several, and both are worse than not
+            // being offered. The count is in the label, so the menu says what it is about
+            // rather than leaving that to the highlight behind it.
+            marked.length > 1 && marked.includes(noteMenu.note.path)
+              ? [
+                  {
+                    label: `${app.t("library.move")} — ${marked.length} ${app.t("library.notes")}`,
+                    onSelect: () => setMoving([...marked]),
+                  },
+                  {
+                    label: `${app.t("library.delete")} — ${marked.length} ${app.t("library.notes")}`,
+                    danger: true,
+                    onSelect: () => {
+                      const paths = [...marked];
+                      // The same count the single-note question carries, summed over the
+                      // set: `openTasksAt` is asked once per note, and the sentence names
+                      // what is still to be done in all of them together.
+                      void Promise.all(
+                        paths.map((path) => window.emqnote.library.openTasksAt(path)),
+                      ).then((counts) => {
+                        setDialog({
+                          kind: "delete",
+                          title: noteMenu.note.title,
+                          paths,
+                          openTasks: counts.reduce((sum, count) => sum + count, 0),
+                        });
+                      });
+                    },
+                  },
+                ]
+              : isInTrash(folderOf(noteMenu.note.path))
               ? [
                   {
                     label: app.t("library.restore"),
@@ -3085,7 +3412,10 @@ export function Library(): React.ReactElement {
                     checked: noteMenu.note.pinned,
                     onSelect: () => void setPinned(noteMenu.note, !noteMenu.note.pinned),
                   },
-                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  {
+                    label: app.t("library.move"),
+                    onSelect: () => setMoving([noteMenu.note.path]),
+                  },
                   {
                     label: app.t("library.rename"),
                     onSelect: () => setEditingTitle(noteMenu.note.title),
@@ -3101,7 +3431,7 @@ export function Library(): React.ReactElement {
                     onSelect: () => {
                       const { path, title } = noteMenu.note;
                       void window.emqnote.library.openTasksAt(path).then((openTasks) => {
-                        setDialog({ kind: "delete", title, path, openTasks });
+                        setDialog({ kind: "delete", title, paths: [path], openTasks });
                       });
                     },
                   },
@@ -3195,7 +3525,7 @@ export function Library(): React.ReactElement {
                     label: app.t("library.rename"),
                     onSelect: () => setEditingTitle(open.title),
                   },
-                  { label: app.t("library.move"), onSelect: () => setMoving(true) },
+                  { label: app.t("library.move"), onSelect: () => setMoving([open.path]) },
                   { label: app.t("library.duplicate"), onSelect: () => void duplicate() },
                   {
                     label: app.t("library.reveal"),
@@ -3207,7 +3537,7 @@ export function Library(): React.ReactElement {
                     onSelect: () => {
                       const { path, title } = open;
                       void window.emqnote.library.openTasksAt(path).then((openTasks) => {
-                        setDialog({ kind: "delete", title, path, openTasks });
+                        setDialog({ kind: "delete", title, paths: [path], openTasks });
                       });
                     },
                   },
@@ -3301,7 +3631,7 @@ export function Library(): React.ReactElement {
             // the sentence on screen promised. The count in that sentence is read off this
             // same path, so a mismatch would put a task count from one note in a question
             // about another.
-            if (current.kind === "delete") void trashNoteAt(current.path);
+            if (current.kind === "delete") void trashNotesAt(current.paths);
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();

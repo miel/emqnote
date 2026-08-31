@@ -55,8 +55,17 @@ const lightBlock = shared.slice(shared.indexOf(LIGHT));
  * heads more than one rule. `.header input, .header button` heads two, a box and a fill,
  * and taking the first match silently checks the wrong one.
  */
+/**
+ * `selector` may share its block with others — `.note-on, .note-marked { … }` since B94 —
+ * so it is matched as one item of a comma-separated list rather than as the only thing in
+ * front of the brace. What may precede it on its own item is anything but a brace or a
+ * comma, which is how `.editor-content .wiki-link-thumb` is still found by its last part;
+ * what may not is another selector, so `.note` still does not match `.note-on`.
+ */
 const rule = (css: string, selector: string): string => {
-  const found = [...css.matchAll(new RegExp(`${selector} \\{[^}]*\\}`, "g"))].map((m) => m[0]);
+  const found = [
+    ...css.matchAll(new RegExp(`(?:^|,)[^{},]*${selector}\\s*(?:,[^{}]+)?\\{[^}]*\\}`, "gm")),
+  ].map((m) => m[0]);
   const block = found.find((one) => one.includes("background:")) ?? found[0];
   expect(block, `no rule found for ${selector}`).toBeDefined();
   return block!;

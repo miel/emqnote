@@ -5,6 +5,7 @@ import {
   type FileSummary,
   type NoteSummary,
   type Selection,
+  type SortDirection,
   type SortKey,
   type TaskCount,
 } from "../../shared/vault-types.js";
@@ -14,7 +15,8 @@ import { PaneFooter } from "../PaneFooter.js";
 import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { tasksGlyph } from "./FolderTree.js";
-import { NOTE_DRAG_TYPE } from "./drag.js";
+import { encodeDraggedNotes, NOTE_DRAG_TYPE } from "./drag.js";
+import { actOn, rangeBetween, toggleMarked } from "./multi-select.js";
 import { isContextMenuKey, roveArrowKey } from "./roving.js";
 
 interface Props {
@@ -44,6 +46,20 @@ interface Props {
    */
   filesState: "ready" | "loading" | "failed";
   selected: string | null;
+  /**
+   * The rows marked for a bulk Move or Delete (B94), in the order the list reads them.
+   *
+   * Empty almost always, and empty is not "nothing selected": the note in the reader is
+   * what `selected` means and there is always one of those. This is the second, temporary
+   * thing — see `multi-select.ts` for why the two are kept apart.
+   *
+   * Held in `Library.tsx` rather than here, unlike the roving `activePath` beside it,
+   * because Move and Delete are that component's dialogs and its IPC calls: a set held
+   * here would have to be handed up at the moment of acting, which is one more thing to
+   * keep in step than simply keeping it where it is used.
+   */
+  marked: string[];
+  onMark: (paths: string[]) => void;
   /** The file row that is selected, if the selection is a file rather than a note. */
   selectedFile: string | null;
   onSelectFile: (path: string) => void;
@@ -101,6 +117,15 @@ interface Props {
   onExitSearch: () => void;
   sort: SortKey;
   onSort: (key: SortKey) => void;
+  /**
+   * Which way round that key runs (B94) — the arrow button beside the chooser.
+   *
+   * Two controls and not one, because they are two questions: the arrows say which end of
+   * the list you are looking at, the name says which end of *what*. They were one button
+   * whose menu offered three keys and no direction at all.
+   */
+  sortDirection: SortDirection;
+  onSortDirection: (direction: SortDirection) => void;
   onSelect: (path: string) => void;
   /** Double-click: hand the note to the capture window for quick editing. */
   onOpenInCapture: (path: string) => void;
@@ -116,12 +141,12 @@ interface Props {
    */
   onOpenTasks: () => void;
   /**
-   * Which note is being dragged, or null when none is. The tree needs the path to decide
-   * whether a folder is a legal destination *while the drag is still in the air*, and
+   * Which notes are being dragged, or null when none are. The tree needs the paths to
+   * decide whether a folder is a legal destination *while the drag is still in the air*, and
    * `dataTransfer.getData` deliberately answers "" during `dragover` — a page may see
    * what types are on offer, never their contents, until the drop actually happens.
    */
-  onDragNote: (path: string | null) => void;
+  onDragNote: (paths: string[] | null) => void;
   /**
    * A right-click (or the `ContextMenu` key/Mod-Shift-M) on a row — Open, Move, Rename,
    * Reveal, Delete. The row is handed over whole rather than just its path, so the
@@ -200,30 +225,44 @@ const pinGlyph = (
 );
 
 /**
- * The mark on the sort chooser — an arrow up beside an arrow down, the sign every file
- * manager and mail client uses for "this is what the list is ordered by".
+ * The mark on the direction button: one arrow, pointing the way the list currently runs.
+ *
+ * It used to be two arrows on one button — the file-manager sign for "this is what the
+ * list is ordered by" — and the comment beside it said, correctly at the time, that it must
+ * not imply a direction because there was no direction to choose: the date keys were always
+ * newest first and the title always A–Z. B94 splits that button in two and the direction
+ * *is* a choice now, so the glyph says which way round it is and clicking it turns the
+ * list over.
  *
  * Same house style as `pinGlyph` above and `FolderTree.tsx`'s three: an inline SVG in
- * `currentColor` at the 12px slot this window's icon column uses, never an emoji. The two
- * arrows sit on whole pixel columns (x = 5 and x = 11 of 16) and their shafts are vertical,
- * so nothing in the drawing depends on a subpixel landing the right way at that size.
- *
- * It does *not* say which direction the sort runs: there is no direction to choose in this
- * app — the date keys are always newest first and the title always A–Z — and a glyph
- * implying a toggle that does not exist would be an invitation to click it.
+ * `currentColor` at the 12px slot this window's icon column uses, never an emoji. The
+ * shaft sits on a whole pixel column (x = 8 of 16) and is vertical, so nothing in the
+ * drawing depends on a subpixel landing the right way at that size.
  */
-const sortGlyph = (
+const arrowGlyph = (down: boolean): React.ReactElement => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
-      d="M5 13V3M2.6 5.4 5 3l2.4 2.4M11 3v10M8.6 10.6 11 13l2.4-2.4"
+      d={down ? "M8 2.8v10.4M4.4 9.8 8 13.2l3.6-3.4" : "M8 13.2V2.8M4.4 6.2 8 2.8l3.6 3.4"}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.2"
+      strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
+
+/**
+ * What the current key and direction are *called* — "Newest first", "A–Z".
+ *
+ * The direction button's tooltip, and the one place the four names are chosen between.
+ * Composed rather than interpolated, like `taskCount` below and `FolderTree`'s
+ * `badgeTitle`: the i18n tables are plain `Record<string, string>` with no placeholders.
+ */
+function orderName(key: SortKey, direction: SortDirection, t: (key: string) => string): string {
+  if (key === "title") return t(direction === "asc" ? "library.sortAZ" : "library.sortZA");
+  return t(direction === "asc" ? "library.sortOldest" : "library.sortNewest");
+}
 
 /**
  * The plus on + New note, drawn rather than typed for `FolderTree`'s reason: the design's
@@ -284,6 +323,8 @@ export function NoteList({
   files,
   filesState,
   selected,
+  marked,
+  onMark,
   selectedFile,
   onSelectFile,
   showing,
@@ -300,6 +341,8 @@ export function NoteList({
   onExitSearch,
   sort,
   onSort,
+  sortDirection,
+  onSortDirection,
   onSelect,
   onOpenInCapture,
   onNewNote,
@@ -358,10 +401,21 @@ export function NoteList({
    */
   const scopeName = paneName;
 
-  // Which row a drag started from, so it can fade while the drag is in the air. Held here
+  // Which rows a drag is carrying, so they can fade while it is in the air. Held here
   // rather than lifted alongside `Library`'s own `dragging`: nothing outside this list
-  // needs it, and the tree already gets the path it needs through `onDragNote`.
-  const [dragging, setDragging] = useState<string | null>(null);
+  // needs it, and the tree already gets the paths it needs through `onDragNote`. A list
+  // since B94, because a drag can carry the whole marked set.
+  const [dragging, setDragging] = useState<string[]>([]);
+
+  /**
+   * Where a Shift-click or Shift-arrow measures its range from.
+   *
+   * The last row picked *plainly* — by a click or by Enter — which is also the note in the
+   * reader in every case but one: a range extended by Shift does not open anything, so the
+   * anchor outlives several presses. `null` falls back to whatever is open, which is the
+   * right answer the first time anyone shift-clicks in a freshly opened folder.
+   */
+  const anchor = useRef<string | null>(null);
 
   // The sort chooser's menu, and the button it hangs under. Held here rather than in
   // `Library.tsx` beside the row and file menus, exactly as `FolderTree.tsx` holds its
@@ -412,6 +466,27 @@ export function NoteList({
   const pinned =
     !keepPinnedInView || !pinsApply ? 0 : firstUnpinned === -1 ? notes.length : firstUnpinned;
 
+  /** The list as it reads on screen, which is what every range is measured against. */
+  const pathsInOrder = notes.map((note) => note.path);
+
+  /**
+   * Marks everything between the anchor and `path`.
+   *
+   * Shared by the Shift-click and the Shift-arrow, which are one gesture with two inputs.
+   * A range of one is no range: it clears the marks and opens that note, so shift-clicking
+   * back onto the row you started from puts the pane exactly where a plain click would.
+   */
+  const markRange = (path: string): void => {
+    const from = anchor.current ?? selected ?? path;
+    const range = rangeBetween(pathsInOrder, from, path);
+    if (range.length < 2) {
+      if (marked.length > 0) onMark([]);
+      onSelect(path);
+      return;
+    }
+    onMark(range);
+  };
+
   /**
    * One note row.
    *
@@ -425,17 +500,48 @@ export function NoteList({
       key={note.path}
       className={
         `note${selected === note.path ? " note-on" : ""}` +
-        `${dragging === note.path ? " note-dragging" : ""}`
+        `${marked.includes(note.path) ? " note-marked" : ""}` +
+        `${dragging.includes(note.path) ? " note-dragging" : ""}`
       }
       role="option"
-      aria-selected={selected === note.path}
+      // Both states are "selected" to a screen reader, and they are: the marked rows are
+      // what the next Move or Delete is about, and a listbox has no second word for it.
+      aria-selected={selected === note.path || marked.includes(note.path)}
+      // Read back out of the DOM by the Shift-arrow walk below, which asks `roveArrowKey`
+      // for the *element* it is moving to and needs the path that element stands for. The
+      // alternative is an index into `notes` threaded through a function whose whole point
+      // is that it does not keep a parallel copy of the list.
+      data-path={note.path}
       tabIndex={active === note.path ? 0 : -1}
       onFocus={() => setActivePath(note.path)}
-      onClick={() => onSelect(note.path)}
+      onClick={(event) => {
+        // Ctrl/Cmd adds one row to the set, Shift takes everything back to the anchor, and
+        // a plain click clears it and opens the note — which is what a click here has
+        // always done and what this app is for (B94, `multi-select.ts`).
+        if (event.metaKey || event.ctrlKey) {
+          onMark(toggleMarked(pathsInOrder, marked, selected, note.path));
+          return;
+        }
+        if (event.shiftKey) {
+          markRange(note.path);
+          return;
+        }
+        anchor.current = note.path;
+        if (marked.length > 0) onMark([]);
+        onSelect(note.path);
+      }}
       onDoubleClick={() => onOpenInCapture(note.path)}
       onContextMenu={(event) => {
         event.preventDefault();
-        onSelect(note.path);
+        // A right-click *inside* the marked set is a gesture about the set, so it leaves
+        // it alone; anywhere else it means that row, and the marks go. Without the guard
+        // the selecting half of this handler would clear the very set the menu is about to
+        // offer to move.
+        if (!marked.includes(note.path)) {
+          if (marked.length > 0) onMark([]);
+          anchor.current = note.path;
+          onSelect(note.path);
+        }
         onContextMenu(note, event.clientX, event.clientY);
       }}
       onKeyDown={(event) => {
@@ -443,17 +549,23 @@ export function NoteList({
         const next = roveArrowKey(event, container, ".note", event.currentTarget);
         if (next !== null) {
           event.preventDefault();
+          // Shift held: the keyboard's half of the same range a Shift-click makes, and it
+          // has to measure from the same anchor or the two gestures would disagree about
+          // where a range starts halfway through building one.
+          if (event.shiftKey) markRange(next.dataset.path ?? note.path);
           next.focus();
           return;
         }
         if (event.key === "Enter") {
           event.preventDefault();
+          anchor.current = note.path;
+          if (marked.length > 0) onMark([]);
           onSelect(note.path);
           return;
         }
         if (isContextMenuKey(event, isMac)) {
           event.preventDefault();
-          onSelect(note.path);
+          if (!marked.includes(note.path)) onSelect(note.path);
           const rect = event.currentTarget.getBoundingClientRect();
           onContextMenu(note, rect.left, rect.bottom);
         }
@@ -463,14 +575,18 @@ export function NoteList({
       // for it; this is the one for a folder already in front of you.
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.setData(NOTE_DRAG_TYPE, note.path);
+        // The marked set when this row is part of it, this row alone otherwise — the same
+        // question the context menu asks, answered by the same function, because a drag
+        // and a menu item that meant different notes would be the worst possible pair.
+        const carried = actOn(marked, note.path);
+        event.dataTransfer.setData(NOTE_DRAG_TYPE, encodeDraggedNotes(carried));
         event.dataTransfer.effectAllowed = "move";
-        onDragNote(note.path);
-        setDragging(note.path);
+        onDragNote(carried);
+        setDragging(carried);
       }}
       onDragEnd={() => {
         onDragNote(null);
-        setDragging(null);
+        setDragging([]);
       }}
     >
       <div className="note-top">
@@ -877,14 +993,38 @@ export function NoteList({
                   arrow/Home/End walk, Escape, focus handed back to whatever opened it, the
                   clamp against the window edge, and the tick that marks the current entry.
                   A second implementation of any of those is a second one to get wrong. */}
+              {/* The direction, as its own control. It is the half you press most — "show
+                  me the other end of this list" — and it was not on offer at all: the
+                  chooser's menu named three keys and the order each ran in was decided for
+                  you. Left of the name because that is the order the pair reads in: which
+                  way, then of what.
+
+                  Its label is what it *does* rather than what the list currently is: a
+                  name that moved with the state would be a name `--click-button` cannot
+                  aim at, and the arrow already says which way round we are. The state is
+                  in the tooltip, in words, because an arrow does not say "newest". */}
+              <ChromeButton
+                className="sort-direction"
+                label={t("library.sortDirection")}
+                title={`${t("library.sortBy")}: ${t(`library.sort.${sort}`)} — ${orderName(
+                  sort,
+                  sortDirection,
+                  t,
+                )}`}
+                icon={arrowGlyph(sortDirection === "desc")}
+                iconOnly
+                small
+                offTabOrder
+                onClick={() => onSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+              />
               <ChromeButton
                 ref={sortButton}
                 className="sort-choose"
                 label={t(`library.sort.${sort}`)}
                 title={t("library.sortBy")}
-                icon={sortGlyph}
                 small
                 menu
+                offTabOrder
                 open={sortMenu !== null}
                 onClick={() => {
                   if (sortMenu !== null) {
@@ -908,6 +1048,7 @@ export function NoteList({
                 label={t("library.tasks")}
                 icon={tasksGlyph}
                 small
+                offTabOrder
                 onClick={onOpenTasks}
               />
             </>

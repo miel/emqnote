@@ -100,19 +100,32 @@ function toPosix(path: string): string {
 }
 
 /**
- * Every task item in a parsed document, in document order — what fills `note_tasks`.
+ * Every task item in a parsed document that says something, in document order — what
+ * fills `note_tasks`.
  *
  * `taskItemsIn` is the one place that decides what counts as a task item and in what
  * order; `toggleTask` in `vault-io.ts` walks the same way when it re-parses a file to
  * flip one, so "ordinal 3" names the same `listItem` on both sides of the index/file
  * boundary without the two ever having to coordinate directly.
+ *
+ * **The ordinal is assigned before the blank ones are dropped, and that is the whole of
+ * why this is a `map` and then a `filter` rather than one pass.** It is an index into
+ * `taskItemsIn`, not a row number: `toggleTask` and `focusTaskAt` both look an item up by
+ * it in a freshly parsed document, where the blank boxes are still there. Renumbering
+ * here would leave every row of the Tasks view in a note with an empty box pointing one
+ * item too far up, and the report would be "the wrong checkbox ticked".
+ *
+ * Which boxes count is `isBlankTask`, in the schema beside `taskItemsIn`; see its own
+ * comment for why an empty one is not a task.
  */
 export function extractTasks(doc: PMNode): TaskExtract[] {
-  return taskItemsIn(doc).map(({ node }, ordinal) => ({
-    ordinal,
-    checked: node.attrs.checked === true,
-    text: taskItemText(node),
-  }));
+  return taskItemsIn(doc)
+    .map(({ node }, ordinal) => ({
+      ordinal,
+      checked: node.attrs.checked === true,
+      text: taskItemText(node),
+    }))
+    .filter((task) => task.text.trim() !== "");
 }
 
 /** Shared with `index-watch.ts`, so an incremental reindex builds a note the same way a full scan does. */

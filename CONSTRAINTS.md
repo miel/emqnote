@@ -2034,3 +2034,83 @@ contradiction is the half that gets believed. `librarySaveNote` answers with an 
 rather than throwing, for the reason above — the reader's `save()` does not catch.
 `test/atomic-write.test.ts` and `test/capture-writer.test.ts`'s "a write that could not
 land" block pin all of it; the latter's three cases all fail against the old `enqueue`.
+
+**The library's plain Tab order is the order the eye reads, and only two of its steps are
+this app's** (B94). Folders → notes → the note's title → When → Tags → Where → Who → the
+note itself, and backwards the same. `tabStep` in `Library.tsx` performs the two steps a
+browser cannot — tree → notes, which skips that pane's own search and "+ New note" buttons,
+and notes → title, which has to be asked for by name because with no note open there is
+nothing there. The other six are the browser walking six focusable controls in DOM order.
+**A table of eight stops is the thing to avoid here**: it would be a second definition of an
+order the DOM already states, and the first to disagree with it the day a pane is reordered.
+Three things were taken *out* of the order to make it true — both pane splitters and the
+note list's footer buttons (the sort chooser and Tasks) — and the two buttons gained chords
+in the same change (Mod+T, Mod+S). That is the trade: **if either chord is ever removed,
+the `offTabOrder` on its button has to go with it**, or the control becomes unreachable
+without a mouse, which is the rule `pinNote` and `settings` exist for. `paneOf` deliberately
+answers `null` for the title and the four fields so a plain Tab keeps walking them;
+`inNoteFields` is the separate question, and only the pane ring asks it. jsdom implements no
+sequential focus navigation at all, so no test under `test/` can see more than the two steps
+this app performs — `npm run drive:library` presses a real Tab and reads back
+`document.activeElement`.
+
+**The pane ring is three stops, and adding a fourth costs every press that was not about
+it** (B94). Ctrl+Tab / Ctrl+Shift+Tab go tree → notes → editor and back. The note's header
+block was a fourth stop for one release, on the sound argument that from the editor there
+was no way back up to When; the cost was that getting from the list to the note then walked
+through four inputs. `focusFields` (Mod+Shift+W) answers the same question in one press,
+from either window, and lands on When with Tab walking on to the other three. The block and
+the title are still *passed through* — a press from inside either goes where the ring would
+have put you — which is `inNoteFields`, not `paneOf`.
+
+**Marked is not selected** (B94, `multi-select.ts`). The note in the reader is what
+`selected` means and there is exactly one of it; the marked set is a second, temporary thing
+that is empty almost always and that only Move and Delete read. Two rules inside it are
+load-bearing and both look like details: the first Ctrl+click folds in the note that is
+*open* as well as the row clicked, because it is visibly selected and a set that quietly
+left it out would act on one note fewer than the screen said; and a set of one collapses to
+none, because a lone mark is the ordinary state of a list with one note open. Marks are
+dropped whenever the list underneath them is replaced (`selectionKey`), since a mark is
+about rows on screen. A right-click *inside* the set leaves it alone and offers only what
+can mean several notes; anywhere else it means that row and clears the marks. The drag
+payload is one path per line (`drag.ts` owns both halves — a `split` on one side of a
+component boundary and a `join` on the other is the pair that comes to disagree), and
+`canDropNotes` is `some` rather than `every` so a set out of two folders dropped on one of
+them still has something to do.
+
+**A sort direction flips the comparator, never the sorted array** (B94). `reverse()` after
+the fact also reverses the order *within* every tie — two notes saved in the same second,
+which a paste produces — and the pin pass in `sortNotes` runs afterwards and leans on the
+sort being stable. Choosing a key resets the direction to that key's own
+(`NATURAL_SORT_DIRECTION`: dates newest first, titles A–Z), which is what those three words
+mean and is exactly what the list did before there was a direction to choose; choosing the
+key already in force leaves the arrows alone. Both halves travel in one `IPC.setSort`
+message, because a message carrying only the key would leave the stored direction describing
+the sort before last.
+
+**An empty `- [ ]` is not a task, and the ordinal is assigned before the blank ones are
+dropped** (B94). The chord makes the box before the thing it is about is typed, so a note
+being written carried an open task that said nothing — a Tasks-view row naming no task, and
+a folder badge that went up when you started typing. `isBlankTask` lives in the schema
+beside `taskItemsIn` because three walks ask it (the index build, the trash confirmation's
+count, and the view itself through `note_tasks`), and a box that counted in one and not
+another would be worse than one that counts everywhere. **The ordinal is an index into
+`taskItemsIn`, not a row number**: `toggleTask` and `focusTaskAt` look an item up by it in a
+freshly parsed document where the blank boxes are still present, so renumbering after the
+filter ticks the wrong checkbox. `SCHEMA_VERSION` had to move for it — the first entry on
+that list that removes rows rather than adding a column, and `needsRefresh` re-reads nothing
+whose `mtime` or `size` has not moved.
+
+**Anything clickable in a header band needs `no-drag`, and anything that must *also* move
+the window cannot get there with CSS** (B92, B94). Chromium hands every press inside a
+`-webkit-app-region: drag` region to the window move and never to the element under it, so
+the two are mutually exclusive by construction. The note's title in the reader has to be
+both: it stays `no-drag`, `window-drag.ts` watches the press, and main moves the window over
+`IPC.windowDrag`. Distance decides which gesture it was, not time — a hand on a trackpad
+moves a pixel or two while clicking. Two details are not optional. Main records the
+window/pointer offset once, on `"start"`, and every later message restores it; following the
+pointer's delta accumulates every rounding error and every dropped message into a window
+that slides out of the grip. And **a click does arrive after a drag** — the window moved
+with the pointer, so press and release land on the same element — so it is suppressed, or
+letting go of a dragged title opens the rename every time. jsdom has no app-region and no
+window position, so `npm run drive:library` is the only place either half is visible.

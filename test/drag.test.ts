@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canDropNote, NOTE_DRAG_TYPE } from "../src/renderer/library/drag.js";
+import {
+  canDropNote,
+  canDropNotes,
+  decodeDraggedNotes,
+  encodeDraggedNotes,
+  NOTE_DRAG_TYPE,
+} from "../src/renderer/library/drag.js";
 
 /**
  * The rules behind dragging a note onto a folder — `04-bouwplan.md`'s phase-3 "slepen in
@@ -57,5 +63,35 @@ describe("canDropNote", () => {
   it("uses a private drag type", () => {
     expect(NOTE_DRAG_TYPE).not.toBe("text/plain");
     expect(NOTE_DRAG_TYPE.startsWith("application/")).toBe(true);
+  });
+});
+
+describe("carrying several notes in one drag (B94)", () => {
+  it("encodes and decodes a set, one path per line", () => {
+    const paths = ["00 Inbox/Een.md", "01 Projecten/Twee.md"];
+    expect(decodeDraggedNotes(encodeDraggedNotes(paths))).toEqual(paths);
+  });
+
+  it("reads a bare path, which is what one note has always been", () => {
+    // The wire format did not change for a single note: a reader that has not been
+    // updated still sees a path where it expected one.
+    expect(decodeDraggedNotes("00 Inbox/Een.md")).toEqual(["00 Inbox/Een.md"]);
+  });
+
+  it("reads an empty payload as no notes rather than as one nameless one", () => {
+    expect(decodeDraggedNotes("")).toEqual([]);
+  });
+
+  it("accepts a drop the folder can take *something* from", () => {
+    // Some, not every: a set dragged out of two folders onto one of them still has
+    // something to do, and refusing the whole drag over one row with nothing to do reads
+    // as the drag being broken. The drop itself filters per note.
+    expect(canDropNotes(["00 Inbox/Een.md", "01 Projecten/Twee.md"], "01 Projecten")).toBe(true);
+  });
+
+  it("refuses one the folder can take nothing from", () => {
+    expect(canDropNotes(["01 Projecten/Een.md", "01 Projecten/Twee.md"], "01 Projecten")).toBe(
+      false,
+    );
   });
 });

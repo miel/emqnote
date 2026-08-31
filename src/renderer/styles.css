@@ -1132,6 +1132,24 @@ body {
   border-radius: 2px;
 }
 
+/* **A highlight applied to selected text has to be visible while it is still selected.**
+   Mod+Alt+H is pressed on a selection, and the selection is painted over the top of
+   whatever it covers — so the mark went on, the note changed, and the screen did not.
+   The only way to see the highlight had landed was to click somewhere else first, which
+   is the app answering "did that work?" with "try it and find out".
+
+   So the selection over a mark is drawn in its own colour: the highlight mixed with the
+   accent the ordinary selection already reads as. Both halves are tokens, one per theme,
+   because a literal here would be a colour that is right in one theme and wrong in the
+   other — and `styles-surfaces.test.ts` counts the literals that are left.
+
+   `::selection` rather than a class from the editor: nothing has to track what is
+   selected, there is no decoration to add and remove on every cursor move, and it is
+   correct for a selection made with the mouse, the keyboard or Mod+A alike. */
+.editor-content mark::selection {
+  background: color-mix(in srgb, var(--highlight) 55%, var(--accent) 45%);
+}
+
 .editor-content a {
   color: var(--accent);
 }
@@ -1979,6 +1997,44 @@ body {
   font-size: 14px;
 }
 
+/* The sheet's own search (B94). It sits *in* the head band between the heading and the ×,
+   which is the one place in this panel that is not the thing being searched — the same
+   arrangement the note list's field has, where the field takes the heading's seat rather
+   than opening a row of its own above the list.
+
+   `flex: 1` with a `min-width`, so it takes what the heading and the × leave and no more:
+   the capture window's sheet is 240px of column at its narrowest, and a fixed width here
+   would push the × off the edge before it pushed anything else. */
+.help-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.help-search:focus {
+  border-color: var(--accent);
+}
+
+.help-search::placeholder {
+  color: var(--muted);
+}
+
+/* A search that found nothing says so. Without it the sheet simply empties, which reads
+   as the panel having broken rather than as an answer. */
+.help-empty {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .help-close {
   border: 0;
   background: transparent;
@@ -2140,6 +2196,17 @@ body {
   height: 20px;
   padding: 0 6px;
   font-size: 12px;
+}
+
+/* Both at once — an icon-only button in a footer, which is the sort direction's arrow
+   (B94) and the first control to ask for the combination. It is a square at the footer's
+   own size: `.chrome-button-icon`'s 26px is the *header's* slot, and the two rules
+   otherwise land on each other, `-small`'s 6px of padding squeezing a 12px glyph into a
+   26px box that is taller than the band it sits in. Two classes deep so it out-ranks both
+   halves whatever the source order, which is `.overlay.overlay-bare`'s lesson. */
+.chrome-button-icon.chrome-button-small {
+  width: 20px;
+  padding: 0;
 }
 
 /* `--hover` and `--border`, which is to say: the same tint every other hovered thing in
