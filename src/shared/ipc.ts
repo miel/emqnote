@@ -257,6 +257,25 @@ export const IPC = {
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
   /**
+   * renderer → main, fire-and-forget: move this window, because something is being dragged
+   * by a control that is *also* a control (B94 — the note's title in the reader).
+   *
+   * Both windows are frameless and their header bands are `-webkit-app-region: drag`, which
+   * is what moves them — but Chromium hands every press inside a drag region to the window
+   * move and never to the element under it, so anything clickable in a band has to be
+   * `no-drag`, and then it cannot move the window at all. The note's title has to be both:
+   * a press that travels moves the window, a press that does not opens the rename. The
+   * only way to have both is to leave the element `no-drag` and do the move here.
+   *
+   * `"start"` records where the window and the pointer were; every `"move"` puts the
+   * window back at that offset from where the pointer is now. There is no "end" message
+   * and none is needed — the renderer simply stops sending, and a fresh `"start"` replaces
+   * whatever the last drag left behind. Screen coordinates, not client ones: the window is
+   * moving under the pointer while this runs, so client coordinates would be measured
+   * against a moving origin.
+   */
+  windowDrag: "app:window-drag",
+  /**
    * renderer → main, fire-and-forget: the note list's sort changed — the key, the
    * direction, or both.
    *
@@ -832,6 +851,11 @@ export interface CaptureApi {
   checkForUpdates: () => Promise<void>;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
+  /**
+   * Moves this window while something in a header band is dragged (B94). `screenX`/
+   * `screenY` are the pointer's, in screen coordinates; see `IPC.windowDrag`.
+   */
+  dragWindow: (phase: "start" | "move", screenX: number, screenY: number) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */
   setSort: (sort: SortKey, direction: SortDirection) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */

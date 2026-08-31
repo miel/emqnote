@@ -123,6 +123,7 @@ function buildFake(contents: Contents): CaptureApi {
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
+    dragWindow: () => {},
     setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,

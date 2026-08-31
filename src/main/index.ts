@@ -12,6 +12,7 @@ import {
   shell,
   type MenuItemConstructorOptions,
   type OpenDialogOptions,
+  type WebContents,
 } from "electron";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -1709,6 +1710,62 @@ function registerAppIpc(): void {
   // shows the new order the moment it is clicked, this only has to survive a relaunch.
   ipcMain.on(IPC.setSort, (_event, sort: SortKey, direction: SortDirection) => {
     saveSettings({ librarySort: sort, librarySortDirection: direction });
+  });
+
+  /**
+   * Moving a window by something that is also a control (B94) — see `IPC.windowDrag` for
+   * why this cannot be `-webkit-app-region: drag`.
+   *
+   * The offset is taken once, on `"start"`, and every `"move"` restores it. Following the
+   * pointer's *delta* instead would accumulate every rounding error and every dropped
+   * message into a window that slides away from the grip; asking "where should the window
+   * be for the pointer to be where it is" cannot drift, because it is not a sum.
+   *
+   * One drag at a time, and it is checked against the sender: the two windows can both be
+   * open, and a stale `"move"` from the other one would move the wrong window. It is not
+   * cleared on mouse-up — there is no such message — so what makes it safe is that every
+   * `"move"` re-derives from the recorded pair, and a renderer that is not dragging sends
+   * nothing.
+   */
+  let windowDrag: {
+    contents: WebContents;
+    window: BrowserWindow;
+    windowX: number;
+    windowY: number;
+    pointerX: number;
+    pointerY: number;
+  } | null = null;
+
+  ipcMain.on(IPC.windowDrag, (event, phase: "start" | "move", x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+    if (phase === "start") {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (window === null) return;
+      // `getPosition` is typed as a bare `number[]`, so both halves read as possibly
+      // undefined; a window always has a position, and `?? 0` is the shape the rest of
+      // this file uses for that same lie in Electron's types.
+      const [windowX = 0, windowY = 0] = window.getPosition();
+      windowDrag = {
+        contents: event.sender,
+        window,
+        windowX,
+        windowY,
+        pointerX: x,
+        pointerY: y,
+      };
+      return;
+    }
+
+    const drag = windowDrag;
+    if (drag === null || drag.contents !== event.sender || drag.window.isDestroyed()) return;
+    // A maximised window cannot be moved, and trying reads as the drag doing nothing;
+    // restoring it under the pointer is what every title bar does.
+    if (drag.window.isMaximized()) drag.window.unmaximize();
+    drag.window.setPosition(
+      Math.round(drag.windowX + (x - drag.pointerX)),
+      Math.round(drag.windowY + (y - drag.pointerY)),
+    );
   });
 }
 

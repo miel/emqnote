@@ -161,6 +161,7 @@ function buildFake(): Fake {
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
+    dragWindow: () => {},
     setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,

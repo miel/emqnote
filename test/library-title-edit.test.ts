@@ -62,10 +62,12 @@ interface Fake {
   emqnote: CaptureApi;
   renameNote: ReturnType<typeof vi.fn>;
   openNoteMock: ReturnType<typeof vi.fn>;
+  dragWindow: ReturnType<typeof vi.fn>;
 }
 
 /** A `CaptureApi` with just enough behind each method to get `Library` painted. */
 function buildFake(initial: OpenedNote): Fake {
+  const dragWindow = vi.fn();
   const tree: FolderNode = {
     path: "",
     name: "Vault",
@@ -163,6 +165,7 @@ function buildFake(initial: OpenedNote): Fake {
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
+    dragWindow,
     setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,
@@ -191,7 +194,7 @@ function buildFake(initial: OpenedNote): Fake {
   // follow-up `openNote(RENAMED_PATH)` needs to find a note there.
   notesByPath.set(RENAMED_PATH, openedNote(RENAMED_PATH, "Renamed note", true));
 
-  return { emqnote, renameNote, openNoteMock };
+  return { emqnote, renameNote, openNoteMock, dragWindow };
 }
 
 /** Flushes the microtask queue a generous number of times, each inside `act`, so chains
@@ -282,6 +285,59 @@ describe("clicking the reader title edits it in place (bug 2)", () => {
     expect(document.activeElement).toBe(input);
     expect(input!.selectionStart).toBe(0);
     expect(input!.selectionEnd).toBe("Test note".length);
+  });
+
+  it("moves the window when the press travels, and does not open the rename (B94)", async () => {
+    // The title is `no-drag` inside a band that is the frameless window's grab area, so
+    // Chromium's own window move cannot have it — the press is watched here instead
+    // (`window-drag.ts`), and the *click that follows a drag* is what has to be
+    // suppressed: the window moves with the pointer, so press and release land on this
+    // same heading and a click fires exactly as if nothing had happened.
+    const fake = buildFake(openedNote(NOTE_PATH, "Test note", true));
+    await mount(fake);
+    await openTheNote();
+
+    const h1 = container.querySelector(".reader-header h1")!;
+    await act(async () => {
+      h1.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, button: 0, screenX: 400, screenY: 200 }),
+      );
+      window.dispatchEvent(new MouseEvent("mousemove", { screenX: 460, screenY: 240 }));
+      window.dispatchEvent(new MouseEvent("mouseup", {}));
+      h1.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    // Main is asked to move the window from where the press was, not from where the
+    // threshold was crossed: the window has to keep the grip it was picked up by.
+    expect(fake.dragWindow.mock.calls).toEqual([
+      ["start", 400, 200],
+      ["move", 460, 240],
+    ]);
+    expect(container.querySelector(".reader-title-input")).toBeNull();
+    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
+  });
+
+  it("opens the rename when the press barely moves, as a hand on a trackpad does", async () => {
+    const fake = buildFake(openedNote(NOTE_PATH, "Test note", true));
+    await mount(fake);
+    await openTheNote();
+
+    const h1 = container.querySelector(".reader-header h1")!;
+    await act(async () => {
+      h1.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, button: 0, screenX: 400, screenY: 200 }),
+      );
+      // Two pixels: under the threshold, which is what tells a click apart from a drag —
+      // a hand on a trackpad moves while it clicks.
+      window.dispatchEvent(new MouseEvent("mousemove", { screenX: 402, screenY: 201 }));
+      window.dispatchEvent(new MouseEvent("mouseup", {}));
+      h1.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    expect(fake.dragWindow).not.toHaveBeenCalled();
+    expect(container.querySelector(".reader-title-input")).not.toBeNull();
   });
 
   it("does not enter edit mode when the note is not editable", async () => {

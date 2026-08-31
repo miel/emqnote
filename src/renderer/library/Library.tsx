@@ -45,6 +45,7 @@ import { PaneHeader } from "../PaneHeader.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { DiskChangeBar } from "./DiskChangeBar.js";
 import { canDropNote } from "./drag.js";
+import { dragWindowFrom } from "../window-drag.js";
 import { sharedFolder } from "./multi-select.js";
 import { SIDEBAR_ROWS } from "./roving.js";
 import { FolderTree } from "./FolderTree.js";
@@ -537,6 +538,11 @@ export function Library(): React.ReactElement {
    */
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  /**
+   * Set when a press on the title turned out to be a window drag, and read by the click
+   * that follows it — see the `<h1>`'s own two handlers, and `window-drag.ts`.
+   */
+  const dragged = useRef(false);
   // Set by Escape just before it blurs the input on purpose, so the blur handler can
   // tell "cancelled" apart from "committed" — see the input's own `onBlur` below.
   const cancelingTitle = useRef(false);
@@ -3042,6 +3048,17 @@ export function Library(): React.ReactElement {
                   ) : (
                     <h1
                       className="pane-title"
+                      // **Press and travel moves the window; press and release renames**
+                      // (B94). The band this sits in is the frameless window's grab area,
+                      // and this heading is `no-drag` inside it — which is what lets it be
+                      // clicked at all, and what took the window's own title bar away from
+                      // the one part of it that looks like a title bar. `window-drag.ts`
+                      // carries the whole of why that cannot be expressed in CSS.
+                      onMouseDown={(event) => {
+                        dragWindowFrom(event.nativeEvent, (moved) => {
+                          dragged.current = moved;
+                        });
+                      }}
                       // **A Tab stop, and the third one in the window's order** (B94):
                       // folders, notes, *this*, then the four fields and the note itself.
                       // It was reachable by click and by Mod-Shift-R and by nothing else,
@@ -3061,6 +3078,15 @@ export function Library(): React.ReactElement {
                         if (open.editable) setEditingTitle(open.title);
                       }}
                       onClick={() => {
+                        // A click *does* arrive after a drag: the window moved with the
+                        // pointer, so the press and the release landed on this same
+                        // heading and Chromium fires one exactly as if nothing had
+                        // happened. Without this, letting go of a dragged title would open
+                        // the rename every time.
+                        if (dragged.current) {
+                          dragged.current = false;
+                          return;
+                        }
                         if (open.editable) setEditingTitle(open.title);
                       }}
                     >

@@ -117,6 +117,7 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
+    dragWindow: () => {},
     setSort: () => {},
     listVaults: async () => [],
     chooseVault: async () => null,
