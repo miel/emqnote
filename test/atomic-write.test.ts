@@ -77,11 +77,23 @@ describe("writing a note that lands", () => {
    */
   it("does not let two writes of one note share a temporary", async () => {
     const file = join(vault, "note.md");
-    await Promise.all([
+    const results = await Promise.allSettled([
       writeAtomicAsync(file, "one\n"),
       writeAtomicAsync(file, "two\n"),
       writeAtomicAsync(file, "three\n"),
     ]);
+
+    // `allSettled`, and the assertion is about *which* failure rather than about none.
+    // On Windows two concurrent renames onto one target can genuinely collide on the
+    // target — that is the OS, and retrying is what answers it. `ENOENT` is the one code
+    // that cannot come from the OS being busy: it means a write renamed a temporary that
+    // another had already consumed, which is only possible if they shared a name. A
+    // `toHaveLength(0)` on the failures here would be a test that passes on Linux and
+    // reports the wrong bug on the Windows runner.
+    const codes = results.flatMap((one) =>
+      one.status === "rejected" ? [(one.reason as { code?: string }).code] : [],
+    );
+    expect(codes).not.toContain("ENOENT");
 
     expect(["one\n", "two\n", "three\n"]).toContain(readFileSync(file, "utf8"));
     expect(temporariesIn(vault)).toEqual([]);
