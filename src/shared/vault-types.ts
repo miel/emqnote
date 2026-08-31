@@ -209,6 +209,28 @@ export interface SaveNoteRequest {
 
 export type SortKey = "modified" | "created" | "title";
 
+/** Which way round a `SortKey` runs: A first / oldest first, or the reverse. */
+export type SortDirection = "asc" | "desc";
+
+/**
+ * The way round each key runs when it is chosen.
+ *
+ * The direction is a second control beside the key (B94) — arrows on the left, the key's
+ * name on the right — and picking a key sets the direction back to this, the way every
+ * file manager's column headings do. It is not a preference that outlives the choice:
+ * "newest first" and "A–Z" are what those three words mean, and a Title sort that opened
+ * at Z–A because the dates had been reversed an hour earlier is the list disagreeing with
+ * its own label.
+ *
+ * These three values are also exactly what the list did before there was a direction to
+ * choose, which is the other half of why they are the defaults.
+ */
+export const NATURAL_SORT_DIRECTION: Record<SortKey, SortDirection> = {
+  modified: "desc",
+  created: "desc",
+  title: "asc",
+};
+
 /**
  * What the note list is showing.
  *

@@ -2198,6 +2198,17 @@ body {
   font-size: 12px;
 }
 
+/* Both at once — an icon-only button in a footer, which is the sort direction's arrow
+   (B94) and the first control to ask for the combination. It is a square at the footer's
+   own size: `.chrome-button-icon`'s 26px is the *header's* slot, and the two rules
+   otherwise land on each other, `-small`'s 6px of padding squeezing a 12px glyph into a
+   26px box that is taller than the band it sits in. Two classes deep so it out-ranks both
+   halves whatever the source order, which is `.overlay.overlay-bare`'s lesson. */
+.chrome-button-icon.chrome-button-small {
+  width: 20px;
+  padding: 0;
+}
+
 /* `--hover` and `--border`, which is to say: the same tint every other hovered thing in
    this app wears, and not a grey of its own (B87). The design handed over `#dfe3e7` on
    `#c9ced4`, which is this pair in the light theme and nothing at all in the dark one. */

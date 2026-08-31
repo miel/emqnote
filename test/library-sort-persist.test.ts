@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
-import type { FolderNode } from "../src/shared/vault-types.js";
+import type { FolderNode, NoteSummary } from "../src/shared/vault-types.js";
 
 /**
  * The note list's sort order round-trips through `settings.json`, the same way the two
@@ -28,6 +28,27 @@ interface Fake {
   setSort: ReturnType<typeof vi.fn>;
 }
 
+function note(title: string, modified: string): NoteSummary {
+  return {
+    path: `00 Inbox/${title}.md`,
+    fileName: `${title}.md`,
+    title,
+    kind: "quick",
+    created: "2026-08-01T09:00:00+02:00",
+    modified,
+    attendees: [],
+    tags: [],
+    excerpt: "",
+    pinned: false,
+  };
+}
+
+const NOTES: NoteSummary[] = [
+  note("Beta", "2026-08-20T12:00:00+02:00"),
+  note("Alfa", "2026-08-02T12:00:00+02:00"),
+  note("Gamma", "2026-08-10T12:00:00+02:00"),
+];
+
 function buildFake(): Fake {
   const tree: FolderNode = {
     path: "",
@@ -40,7 +61,9 @@ function buildFake(): Fake {
 
   const library: LibraryApi = {
     tree: async () => tree,
-    notes: async () => [],
+    // Three notes with titles that sort differently from their dates, so a list read off
+    // the screen says which key *and* which way round is in force (B94).
+    notes: async () => NOTES,
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
     noteTaskCounts: async () => ({}),
@@ -105,6 +128,7 @@ function buildFake(): Fake {
       // The persisted value, deliberately not "modified" — the default `useState` in
       // `Library.tsx` starts on — so seeding from the wrong place would go unnoticed.
       librarySort: "title",
+      librarySortDirection: "asc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,
@@ -247,11 +271,108 @@ describe("the note list's sort order persists across a relaunch", () => {
     });
     await flush();
 
-    expect(fake.setSort).toHaveBeenCalledWith("created");
+    // Two arguments now: picking a key puts the direction back to that key's own, so a
+    // message carrying only the key would leave the stored direction describing the sort
+    // before last.
+    expect(fake.setSort).toHaveBeenCalledWith("created", "desc");
     expect(trigger().textContent).toBe("Created");
     // The asked-for collapse: choosing is what closes it, not a second click somewhere.
     expect(menuRows()).toHaveLength(0);
     expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  /** The arrow button, which is the other half of the split chooser. */
+  function direction(): HTMLButtonElement {
+    const button = container.querySelector<HTMLButtonElement>(".notes .sort-direction");
+    expect(button).not.toBeNull();
+    return button!;
+  }
+
+  /** The list as it reads on screen, top to bottom. */
+  function titles(): (string | null)[] {
+    return Array.from(container.querySelectorAll(".notes-list .note-title")).map(
+      (node) => node.textContent,
+    );
+  }
+
+  it("seeds the direction from the persisted value too", async () => {
+    const fake = buildFake();
+    await mount(fake);
+
+    // "title" / "asc" in this fake's bootstrap, deliberately not the `useState` default.
+    expect(titles()).toEqual(["Alfa", "Beta", "Gamma"]);
+  });
+
+  it("turns the list over when the arrows are pressed, and persists that", async () => {
+    const fake = buildFake();
+    await mount(fake);
+
+    await act(async () => {
+      direction().click();
+    });
+    await flush();
+
+    expect(titles()).toEqual(["Gamma", "Beta", "Alfa"]);
+    expect(fake.setSort).toHaveBeenCalledWith("title", "desc");
+  });
+
+  it("puts the direction back to the key's own when a different key is chosen", async () => {
+    const fake = buildFake();
+    await mount(fake);
+
+    // Reversed by hand first, so what is under test is the reset and not the default.
+    await act(async () => {
+      direction().click();
+    });
+    await flush();
+    await openMenu();
+    await act(async () => {
+      menuRows()
+        .find((row) => row.querySelector(".context-menu-label")?.textContent === "Modified")!
+        .click();
+    });
+    await flush();
+
+    // Newest first, which is what "Modified" means — not Z–A carried over from the title.
+    expect(titles()).toEqual(["Beta", "Gamma", "Alfa"]);
+    expect(fake.setSort).toHaveBeenLastCalledWith("modified", "desc");
+  });
+
+  it("leaves the direction alone when the key already in force is chosen again", async () => {
+    const fake = buildFake();
+    await mount(fake);
+
+    await act(async () => {
+      direction().click();
+    });
+    await flush();
+    await openMenu();
+    await act(async () => {
+      menuRows()
+        .find((row) => row.querySelector(".context-menu-label")?.textContent === "Title")!
+        .click();
+    });
+    await flush();
+
+    // Choosing "Title" from a menu that already says Title is not a request to undo the
+    // arrows you just pressed.
+    expect(titles()).toEqual(["Gamma", "Beta", "Alfa"]);
+    expect(fake.setSort).toHaveBeenLastCalledWith("title", "desc");
+  });
+
+  it("keeps the two halves apart: the arrows are not the chooser", async () => {
+    const fake = buildFake();
+    await mount(fake);
+
+    await act(async () => {
+      direction().click();
+    });
+    await flush();
+
+    // No menu, and the name of the key is untouched — the report this split answers is
+    // that there was no way to ask for the other end of the list at all.
+    expect(menuRows()).toHaveLength(0);
+    expect(trigger().textContent).toBe("Title");
   });
 
   it("closes again on a second click of the chooser, choosing nothing", async () => {

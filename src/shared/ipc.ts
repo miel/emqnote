@@ -15,6 +15,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortDirection,
   SortKey,
   TaskCount,
   TaskItem,
@@ -255,7 +256,15 @@ export const IPC = {
   settingsChanged: "app:settings-changed",
   /** renderer → main, fire-and-forget: the library's splitters settled at a new width. */
   setPaneWidths: "app:set-pane-widths",
-  /** renderer → main, fire-and-forget: the note list's sort order changed. */
+  /**
+   * renderer → main, fire-and-forget: the note list's sort changed — the key, the
+   * direction, or both.
+   *
+   * One message for the two halves rather than one each, because they are one choice made
+   * in one place: picking a key resets the direction to that key's own
+   * (`NATURAL_SORT_DIRECTION`), so a message that carried only the key would leave the
+   * stored direction describing the sort before last.
+   */
   setSort: "app:set-sort",
 
   /**
@@ -419,6 +428,8 @@ export interface Bootstrap {
   libraryPaneWidths: { tree: number; notes: number } | null;
   /** The note list's last sort order — see `setPaneWidths`'s comment for the precedent this follows. */
   librarySort: SortKey;
+  /** Which way round it runs (B94), stored beside it for the reason `settings.ts` gives. */
+  librarySortDirection: SortDirection;
   /** Whether a `![…](https://…)` picture is fetched and drawn (B50) — for the Settings row. */
   loadRemoteImages: boolean;
   /** Whether pinned rows stay against the top of the note list while it scrolls (B76). */
@@ -822,7 +833,7 @@ export interface CaptureApi {
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /** Fire-and-forget, same as `setPaneWidths` — the note list's sort order persisted across a relaunch. */
-  setSort: (sort: SortKey) => void;
+  setSort: (sort: SortKey, direction: SortDirection) => void;
   /** The remembered vaults, classified and labelled fresh on every call. */
   listVaults: () => Promise<VaultLocation[]>;
   /** Opens the folder picker and answers with the chosen path, or null. */

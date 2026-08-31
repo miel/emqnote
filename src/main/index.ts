@@ -166,6 +166,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortDirection,
   SortKey,
   VaultFileEvent,
 } from "../shared/vault-types.js";
@@ -1284,6 +1285,7 @@ function registerAppIpc(): void {
       vaultPath: settings.vaultPath,
       libraryPaneWidths: settings.libraryPaneWidths,
       librarySort: settings.librarySort,
+      librarySortDirection: settings.librarySortDirection,
       loadRemoteImages: settings.loadRemoteImages,
       keepPinnedInView: settings.keepPinnedInView,
       editorFontSize: settings.editorFontSize,
@@ -1705,8 +1707,8 @@ function registerAppIpc(): void {
 
   // Same fire-and-forget shape as `setPaneWidths` just above: the note list already
   // shows the new order the moment it is clicked, this only has to survive a relaunch.
-  ipcMain.on(IPC.setSort, (_event, sort: SortKey) => {
-    saveSettings({ librarySort: sort });
+  ipcMain.on(IPC.setSort, (_event, sort: SortKey, direction: SortDirection) => {
+    saveSettings({ librarySort: sort, librarySortDirection: direction });
   });
 }
 

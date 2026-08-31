@@ -173,6 +173,7 @@ function buildFake(): Fake {
       vaultPath: "/vault",
       libraryPaneWidths: null,
       librarySort: "modified",
+      librarySortDirection: "desc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,

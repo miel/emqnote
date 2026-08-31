@@ -13,6 +13,7 @@ import type {
   SaveNoteRequest,
   ScanProgress,
   Selection,
+  SortDirection,
   SortKey,
   VaultFileEvent,
   WikiLinkOpen,
@@ -59,7 +60,8 @@ contextBridge.exposeInMainWorld("emqnote", {
   setLibraryHotkey: (hotkey: string) => ipcRenderer.invoke(IPC.setLibraryHotkey, hotkey),
   setPaneWidths: (widths: { tree: number; notes: number }) =>
     ipcRenderer.send(IPC.setPaneWidths, widths),
-  setSort: (sort: SortKey) => ipcRenderer.send(IPC.setSort, sort),
+  setSort: (sort: SortKey, direction: SortDirection) =>
+    ipcRenderer.send(IPC.setSort, sort, direction),
   listVaults: () => ipcRenderer.invoke(IPC.listVaults),
   chooseVault: () => ipcRenderer.invoke(IPC.chooseVault),
   switchVault: (path: string) => ipcRenderer.invoke(IPC.switchVault, path),

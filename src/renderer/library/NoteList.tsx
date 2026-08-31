@@ -5,6 +5,7 @@ import {
   type FileSummary,
   type NoteSummary,
   type Selection,
+  type SortDirection,
   type SortKey,
   type TaskCount,
 } from "../../shared/vault-types.js";
@@ -101,6 +102,15 @@ interface Props {
   onExitSearch: () => void;
   sort: SortKey;
   onSort: (key: SortKey) => void;
+  /**
+   * Which way round that key runs (B94) — the arrow button beside the chooser.
+   *
+   * Two controls and not one, because they are two questions: the arrows say which end of
+   * the list you are looking at, the name says which end of *what*. They were one button
+   * whose menu offered three keys and no direction at all.
+   */
+  sortDirection: SortDirection;
+  onSortDirection: (direction: SortDirection) => void;
   onSelect: (path: string) => void;
   /** Double-click: hand the note to the capture window for quick editing. */
   onOpenInCapture: (path: string) => void;
@@ -200,30 +210,44 @@ const pinGlyph = (
 );
 
 /**
- * The mark on the sort chooser — an arrow up beside an arrow down, the sign every file
- * manager and mail client uses for "this is what the list is ordered by".
+ * The mark on the direction button: one arrow, pointing the way the list currently runs.
+ *
+ * It used to be two arrows on one button — the file-manager sign for "this is what the
+ * list is ordered by" — and the comment beside it said, correctly at the time, that it must
+ * not imply a direction because there was no direction to choose: the date keys were always
+ * newest first and the title always A–Z. B94 splits that button in two and the direction
+ * *is* a choice now, so the glyph says which way round it is and clicking it turns the
+ * list over.
  *
  * Same house style as `pinGlyph` above and `FolderTree.tsx`'s three: an inline SVG in
- * `currentColor` at the 12px slot this window's icon column uses, never an emoji. The two
- * arrows sit on whole pixel columns (x = 5 and x = 11 of 16) and their shafts are vertical,
- * so nothing in the drawing depends on a subpixel landing the right way at that size.
- *
- * It does *not* say which direction the sort runs: there is no direction to choose in this
- * app — the date keys are always newest first and the title always A–Z — and a glyph
- * implying a toggle that does not exist would be an invitation to click it.
+ * `currentColor` at the 12px slot this window's icon column uses, never an emoji. The
+ * shaft sits on a whole pixel column (x = 8 of 16) and is vertical, so nothing in the
+ * drawing depends on a subpixel landing the right way at that size.
  */
-const sortGlyph = (
+const arrowGlyph = (down: boolean): React.ReactElement => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
-      d="M5 13V3M2.6 5.4 5 3l2.4 2.4M11 3v10M8.6 10.6 11 13l2.4-2.4"
+      d={down ? "M8 2.8v10.4M4.4 9.8 8 13.2l3.6-3.4" : "M8 13.2V2.8M4.4 6.2 8 2.8l3.6 3.4"}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.2"
+      strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
+
+/**
+ * What the current key and direction are *called* — "Newest first", "A–Z".
+ *
+ * The direction button's tooltip, and the one place the four names are chosen between.
+ * Composed rather than interpolated, like `taskCount` below and `FolderTree`'s
+ * `badgeTitle`: the i18n tables are plain `Record<string, string>` with no placeholders.
+ */
+function orderName(key: SortKey, direction: SortDirection, t: (key: string) => string): string {
+  if (key === "title") return t(direction === "asc" ? "library.sortAZ" : "library.sortZA");
+  return t(direction === "asc" ? "library.sortOldest" : "library.sortNewest");
+}
 
 /**
  * The plus on + New note, drawn rather than typed for `FolderTree`'s reason: the design's
@@ -300,6 +324,8 @@ export function NoteList({
   onExitSearch,
   sort,
   onSort,
+  sortDirection,
+  onSortDirection,
   onSelect,
   onOpenInCapture,
   onNewNote,
@@ -877,12 +903,35 @@ export function NoteList({
                   arrow/Home/End walk, Escape, focus handed back to whatever opened it, the
                   clamp against the window edge, and the tick that marks the current entry.
                   A second implementation of any of those is a second one to get wrong. */}
+              {/* The direction, as its own control. It is the half you press most — "show
+                  me the other end of this list" — and it was not on offer at all: the
+                  chooser's menu named three keys and the order each ran in was decided for
+                  you. Left of the name because that is the order the pair reads in: which
+                  way, then of what.
+
+                  Its label is what it *does* rather than what the list currently is: a
+                  name that moved with the state would be a name `--click-button` cannot
+                  aim at, and the arrow already says which way round we are. The state is
+                  in the tooltip, in words, because an arrow does not say "newest". */}
+              <ChromeButton
+                className="sort-direction"
+                label={t("library.sortDirection")}
+                title={`${t("library.sortBy")}: ${t(`library.sort.${sort}`)} — ${orderName(
+                  sort,
+                  sortDirection,
+                  t,
+                )}`}
+                icon={arrowGlyph(sortDirection === "desc")}
+                iconOnly
+                small
+                offTabOrder
+                onClick={() => onSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+              />
               <ChromeButton
                 ref={sortButton}
                 className="sort-choose"
                 label={t(`library.sort.${sort}`)}
                 title={t("library.sortBy")}
-                icon={sortGlyph}
                 small
                 menu
                 offTabOrder

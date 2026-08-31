@@ -105,6 +105,7 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
       vaultPath: "/vault",
       libraryPaneWidths: null,
       librarySort: "modified",
+      librarySortDirection: "desc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,

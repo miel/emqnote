@@ -11,6 +11,7 @@ import {
   folderOf,
   INBOX,
   isInTrash,
+  NATURAL_SORT_DIRECTION,
   selectionKey,
   TRASH_FOLDER,
   type ConflictPair,
@@ -22,6 +23,7 @@ import {
   type OpenedNote,
   type ScanProgress,
   type Selection,
+  type SortDirection,
   type SortKey,
   type TaskCount,
   type VaultFileEvent,
@@ -74,8 +76,8 @@ function flatten(node: FolderNode): string[] {
  * One comparator, wrapped rather than replaced, so all three sort keys inherit the pin for
  * free and a fourth would too. Pinned notes keep the sort *among themselves* rather than a
  * pin order of their own: three rows is few enough that a hand-kept order would be more to
- * maintain than to read, and it means the top of the list still answers "most recent
- * first" the way the rest of it does.
+ * maintain than to read, and it means the top of the list still answers the same question
+ * the rest of it does — including when that question has been turned round.
  *
  * **`pins` says whether the pin means anything to this list at all** (B77). It used to
  * mean something to every list — the comment here said in so many words that a pinned note
@@ -86,12 +88,25 @@ function flatten(node: FolderNode): string[] {
  * folder, so it is honoured where the list *is* a folder and disregarded where the rows
  * come from everywhere.
  */
-function sortNotes(notes: NoteSummary[], key: SortKey, pins: boolean): NoteSummary[] {
+function sortNotes(
+  notes: NoteSummary[],
+  key: SortKey,
+  direction: SortDirection,
+  pins: boolean,
+): NoteSummary[] {
   const sorted = [...notes];
+  // **The direction is applied to the comparator, not to the sorted array** (B94). A
+  // `reverse()` afterwards would also reverse the order *within* every tie — two notes
+  // saved in the same second, which is not rare when a paste writes several — and the pin
+  // pass below leans on this sort being stable. Flipping the sign leaves ties exactly
+  // where they were.
+  const flip = direction === "asc" ? -1 : 1;
   if (key === "title") {
-    sorted.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+    sorted.sort(
+      (a, b) => -flip * a.title.localeCompare(b.title, undefined, { numeric: true }),
+    );
   } else {
-    sorted.sort((a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
+    sorted.sort((a, b) => flip * (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
   }
   // A stable sort, so this keeps the order above within each of the two groups — which is
   // why it is a second pass rather than a first clause in the comparators.
@@ -413,6 +428,16 @@ export function Library(): React.ReactElement {
    * from clobbering a drag in progress — here, from clobbering a sort the user just picked.
    */
   const [sort, setSort] = useState<SortKey>("modified");
+  /**
+   * Which way round that sort runs (B94) — the arrows in the note list's footer, beside
+   * the key's own name.
+   *
+   * Seeded from the bootstrap alongside `sort` and by the same guard, and reset to the
+   * key's own `NATURAL_SORT_DIRECTION` whenever the key changes: "newest first" and "A–Z"
+   * are what those words mean, and a Title sort opening at Z–A because the dates were
+   * reversed an hour ago is a list disagreeing with its own label.
+   */
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const sortLoaded = useRef(false);
   const [open, setOpen] = useState<OpenedNote | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -639,13 +664,35 @@ export function Library(): React.ReactElement {
     if (sortLoaded.current || !app.bootstrapped) return;
     sortLoaded.current = true;
     setSort(app.librarySort);
-  }, [app.bootstrapped, app.librarySort]);
+    setSortDirection(app.librarySortDirection);
+  }, [app.bootstrapped, app.librarySort, app.librarySortDirection]);
 
-  /** Changes the sort order and persists it — the note list's `onSort` prop. */
-  const onSort = useCallback((next: SortKey) => {
-    setSort(next);
-    window.emqnote.setSort(next);
-  }, []);
+  /**
+   * Changes which key the list is sorted on and persists it — the note list's `onSort`.
+   *
+   * Picking a key puts the direction back to that key's own, which is what every file
+   * manager's column headings do and what keeps "Title" meaning A–Z. Picking the key that
+   * is already in force leaves the direction alone: choosing "Created" from a menu that
+   * already says Created is not a request to undo the arrows you just pressed.
+   */
+  const onSort = useCallback(
+    (next: SortKey) => {
+      const direction = next === sort ? sortDirection : NATURAL_SORT_DIRECTION[next];
+      setSort(next);
+      setSortDirection(direction);
+      window.emqnote.setSort(next, direction);
+    },
+    [sort, sortDirection],
+  );
+
+  /** Turns the current sort round — the arrows beside the key's name (B94). */
+  const onSortDirection = useCallback(
+    (next: SortDirection) => {
+      setSortDirection(next);
+      window.emqnote.setSort(sort, next);
+    },
+    [sort],
+  );
 
   /**
    * Applies one splitter's pointer/keyboard movement, clamped so the reader can never be
@@ -1854,8 +1901,8 @@ export function Library(): React.ReactElement {
   );
   const pinsApply = pinsApplyTo(selection, searchQuery);
   const sorted = useMemo(
-    () => sortNotes(notes, sort, pinsApply),
-    [notes, sort, pinsApply],
+    () => sortNotes(notes, sort, sortDirection, pinsApply),
+    [notes, sort, sortDirection, pinsApply],
   );
   notesRef.current = notes;
 
@@ -2795,6 +2842,8 @@ export function Library(): React.ReactElement {
             onExitSearch={exitSearch}
             sort={sort}
             onSort={onSort}
+            sortDirection={sortDirection}
+            onSortDirection={onSortDirection}
             onSelect={(path) => {
               setOpenFile(null);
               void openNote(path);

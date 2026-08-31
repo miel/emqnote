@@ -139,6 +139,7 @@ function buildFake(files = FILES, notes: NoteSummary[] = []): Fake {
       vaultPath: "/vault",
       libraryPaneWidths: null,
       librarySort: "modified",
+      librarySortDirection: "desc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,

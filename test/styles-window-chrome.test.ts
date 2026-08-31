@@ -154,6 +154,11 @@ describe("styles: every button in the chrome is one rule for both windows", () =
     // rules of their own.
     expect(rule(shared, "\\.chrome-button-icon")).toMatch(/width:\s*26px;/);
     expect(rule(shared, "\\.chrome-button-small")).toMatch(/height:\s*20px;/);
+    // The pair, which is the sort direction's arrow (B94): a square at the footer's size
+    // rather than the header's 26px slot with the smaller rule's padding inside it.
+    expect(rule(shared, "\\.chrome-button-icon\\.chrome-button-small")).toMatch(
+      /width:\s*20px;/,
+    );
   });
 
   it("leaves no second opinion behind in the library's own stylesheet", () => {

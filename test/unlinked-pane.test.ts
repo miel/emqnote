@@ -135,6 +135,7 @@ function buildFake(answer: () => Promise<FileSummary[]> = async () => ORPHANS): 
       vaultPath: "/vault",
       libraryPaneWidths: null,
       librarySort: "modified",
+      librarySortDirection: "desc",
       loadRemoteImages: true,
       keepPinnedInView: false,
       editorFontSize: 16,

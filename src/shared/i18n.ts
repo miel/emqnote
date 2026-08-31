@@ -214,6 +214,15 @@ const DUTCH: Record<string, string> = {
   // hierboven; deze zin zegt waar dat veld over gaat, want "Gewijzigd" alleen zegt dat
   // niet aan wie de lijst voor het eerst ziet.
   "library.sortBy": "Sorteren op",
+  // B94. De pijl-knop ernaast. Het label zegt wat de knop *doet* en niet welke kant de
+  // lijst nu op staat — dat zegt de pijl zelf, en een naam die met de stand meebeweegt is
+  // een naam waar `--click-button` niet op kan mikken. De vier zinnen hieronder staan in
+  // de tooltip, want "omkeren" zegt niet waarnaar.
+  "library.sortDirection": "Volgorde omkeren",
+  "library.sortNewest": "Nieuwste eerst",
+  "library.sortOldest": "Oudste eerst",
+  "library.sortAZ": "A–Z",
+  "library.sortZA": "Z–A",
   "library.pick": "Kies links een notitie.",
   "library.pickHint": "Klik met rechts op een map voor nieuwe map, hernoemen, verwijderen of een nieuwe notitie.",
   "library.saved": "Bewaard",
@@ -703,6 +712,15 @@ const ENGLISH: Record<string, string> = {
   // says what that field is *for*, which "Modified" on its own does not tell anyone
   // seeing the list for the first time.
   "library.sortBy": "Sort by",
+  // B94. The arrow button beside it. The label says what the button *does* rather than
+  // which way the list currently runs — the arrow itself says that, and a name that moved
+  // with the state is a name `--click-button` cannot aim at. The four below name the
+  // order, in the tooltip, because "reverse" does not say reverse of what.
+  "library.sortDirection": "Reverse the order",
+  "library.sortNewest": "Newest first",
+  "library.sortOldest": "Oldest first",
+  "library.sortAZ": "A–Z",
+  "library.sortZA": "Z–A",
   "library.pick": "Pick a note on the left.",
   "library.pickHint":
     "Right-click a folder for new folder, rename, delete or a new note.",
