@@ -1922,3 +1922,38 @@ that cannot be written to, which is a faithful stand-in for the *shape* of the f
 not for OneDrive's own timing. Whether the retry actually rides out a real OneDrive lock on
 Windows — and whether `clearReadOnly` is the thing that clears it — is `TEST-PROTOCOL.md`
 material and has not been seen live.
+
+
+**`v0.12.5` shipped three batches at once, and not on purpose.** The tag was cut to get the
+data-loss fix onto the Windows machine that had lost the notes. What went out with it was
+everything else that had accumulated on `worktree-pane-consistency` since `v0.12.3` and had
+never been merged: **B92**'s one-header-line rework of both windows, and the **six items
+from using that build** — the three entries above this one, in that order. `main` was at
+`v0.12.4`, the branch was three commits ahead, and only the last of the three was the fix
+being released.
+
+It was missed by reading `git rev-list --left-right --count origin/main...HEAD` as a check
+that the merge would be clean — which it answered, honestly, with `0 3`. What it was not
+asked, and what nobody thought to ask, is *which* three. A count is not an inventory, and
+"nothing to reconcile" is a different question from "nothing unexpected is coming along".
+Before a release tag, the question worth asking is `git log --oneline TAG..HEAD` and reading
+the subjects.
+
+Nothing was harmed by it: `release.yml` runs `typecheck` and the whole suite on Windows and
+macOS before packaging, so what was published is as tested as any other release, and both
+batches were bound for `main` regardless. What it did break was the *description*. The tag
+annotation — which is what `--notes-from-tag` publishes — described only B93, so the release
+page told a user installing it about a save fix and nothing about the fact that both windows
+had gone frameless underneath them. **The release notes were rewritten by hand afterwards to
+carry all three batches and, separately, what each one has not been confirmed against.** The
+annotation on the tag itself was deliberately left alone: re-pointing a published tag means
+force-pushing the ref that the release, its artifacts and every fetch already made are
+anchored to, which is a worse problem than an annotation that has been superseded. So for
+this one version the tag and the release page disagree, the release page is the one that is
+right, and this paragraph is the record of why.
+
+The two batches are unconfirmed on opposite platforms, which is worth keeping together in
+one place: the save fix has never met real OneDrive (`TEST-PROTOCOL.md` §47), and the window
+work has never run anywhere but Linux — the one platform it deliberately does not change,
+since Linux keeps its native frame (§45, §46). A window that looks wrong after this update
+is §45/§46, not B93.
