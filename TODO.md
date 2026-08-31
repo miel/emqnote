@@ -3,8 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 31 August 2026, **unreleased**, on the `batch-b94` branch — **twelve items
-from daily use** (B94): five bugs and seven features, and one trade running through all of
+Last updated 31 August 2026, released as `v0.12.6` — **twelve items from daily use**
+(B94): five bugs and seven features, and one trade running through all of
 them.
 
 The trade is in the note list's footer. The plain Tab order is now the order the eye reads —
