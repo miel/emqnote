@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 1 September 2026 — one report from daily use (B97): a note holding
+Last updated 1 September 2026, released as `v0.12.9` — one report from daily use (B97): a note holding
 `![|1282x293](data:image/png;base64,R0lGODdh…)` drew the grey chip and not the picture, with
 the whole image sitting in the note's own text.
 
