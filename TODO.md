@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 1 September 2026 — **five reports from daily use** (B98), no common cause, two of
+Last updated 1 September 2026, released as `v0.12.10` — **five reports from daily use** (B98), no common cause, two of
 which turned out to be one function.
 
 **Tab and Ctrl+Tab swapped jobs in the library.** Plain Tab out of the note list lands in the
