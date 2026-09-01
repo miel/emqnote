@@ -3,6 +3,44 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 1 September 2026 — **five reports from daily use** (B98), no common cause, two of
+which turned out to be one function.
+
+**Tab and Ctrl+Tab swapped jobs in the library.** Plain Tab out of the note list lands in the
+note's text; the chord lands on the title. B94's eight-stop reading order put the note five
+presses away, behind four fields nobody was going to. The ring is four stops forward — tree →
+notes → title → note → tree — and three back. What it costs: the four metadata fields have no
+route from the list that is not a chord, and keep three others (Tab on from the title,
+Mod+Shift+W, the mouse).
+
+**Ctrl+Shift+Tab in the folder tree reaches the note**, where it used to do nothing at all —
+the tree was the ring's first stop and going back from it was `null`. "Do nothing when no note
+is open" is one rule rather than a branch: **a step with nowhere to land does nothing**, which
+needed `focusPane("editor")` to stop claiming `true` when there is no `Editor` mounted.
+
+**Focus comes back to the library that opened the capture window.** One `raisedByLibrary` flag
+on the distinction that was already there — `showCaptureWindow` is the hotkey and the tray,
+`focusCaptureWindow` is the library's two routes. A hotkey capture from another app still
+leaves the foreground where it was, deliberately.
+
+**"Check for updates…" says it is checking.** `IPC.updateCheckState`, a `boolean`, from main —
+not the outcome, which stays the native dialog. `false` means the *check* is over, not the
+update, which is why it is ended in front of all five `showMessageBox` calls.
+
+**A picture with a stored `WxH` keeps its shape.** `applySize` writes `aspect-ratio` instead of
+an inline pixel height, which could not follow the width down when `max-width: 100%` narrowed
+it. Reported against `![|1282x293](data:…)`; `![[foto.png|250x180]]` had it too.
+
+**What is open on it.** `TEST-PROTOCOL.md` §52. `drive:library` presses a real Ctrl+Tab and a
+real Ctrl+Shift+Tab; `drive:capture` measures the drawn picture. Left for a person: which
+window holds the foreground after Ctrl+Enter — Electron window state, and neither driver can
+ask it, so all five of 52a–52e are a first sighting, 52c and 52d especially, being what stops
+the fix from being worse than the bug — the update check's three outcomes and the Windows
+download path, and 52k, which walks the two chords on Windows, where Ctrl+Tab has a history of
+being eaten by something nobody has identified.
+
+---
+
 Last updated 1 September 2026, released as `v0.12.9` — one report from daily use (B97): a note holding
 `![|1282x293](data:image/png;base64,R0lGODdh…)` drew the grey chip and not the picture, with
 the whole image sitting in the note's own text.

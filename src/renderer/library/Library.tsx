@@ -121,6 +121,10 @@ function sortNotes(
  * Which of the three panes an element belongs to, or `null` for anything this does not
  * recognise.
  *
+ * Three, still, even though the pane ring stops at four places since B98: the fourth is
+ * the note's own title, and it is recognised by `inNoteFields` below rather than here,
+ * for the reason the last paragraph of this comment gives.
+ *
  * At module scope because more than one thing asks it now: the pane-cycle listener, its
  * Escape branch, and — since leaving a search is a thing you can do from a note row — the
  * exits that run from the render body. It lived inside that effect until then, and a
@@ -157,10 +161,15 @@ function paneOf(element: Element | null): "tree" | "notes" | "editor" | null {
  *
  * A separate question from `paneOf`, which deliberately answers `null` for all of them so
  * that a plain Tab keeps walking them (see its own comment). Only the pane ring asks this,
- * and only to know that it is standing *between* two panes rather than in none: the ring
- * never lands here, but a press made from here has to go somewhere sensible — on to the
- * note going forward, back to the list going back — rather than falling into the "focus is
- * on nothing" branch and jumping to the far end of the window.
+ * and only to know where a press made from here should go: on to the note going forward,
+ * back to the list going back, rather than falling into the "focus is on nothing" branch
+ * and jumping to the far end of the window.
+ *
+ * **The title is now a place the ring lands as well as passes through** (B98) — Ctrl+Tab
+ * out of the note list is what puts you there — and that needs nothing added here,
+ * because the answer for a press made *from* the title is the same either way: forward to
+ * the note, backward to the list. The four fields underneath it are still passed through
+ * only, and `focusFields` (Mod+Shift+W) is still the one press that reaches them.
  *
  * `.header-reader` rather than `.header`: the capture window wears the same block under
  * `.header-capture` and has no pane cycle at all. `.reader-header` beside it is the 40px
@@ -639,18 +648,28 @@ export function Library(): React.ReactElement {
    *
    * **`title` is the note's own title in the band above that block**, in whichever of its
    * two states it is in: the `<h1>` most of the time, the rename input while it is being
-   * edited. One selector for both, because a Tab landing on the title should not care
+   * edited. One selector for both, because a press landing on the title should not care
    * which, and the `<h1>` is a tab stop in its own right since B94 put it in the order.
+   * B98 made it the pane ring's fourth stop as well — Ctrl+Tab out of the note list —
+   * while plain Tab now goes straight to the note.
    *
-   * The answer matters for both of those. With no note open there is no title and no
-   * header block, so this returns `false` and the caller — the Tab walk, or the chord —
-   * leaves the press alone rather than swallowing it.
+   * **The answer matters for every one of them, `editor` included** (B98). With no note
+   * open there is no title, no header block and no editor either, so this returns `false`
+   * and the caller — the Tab walk, or the chord — leaves the press alone rather than
+   * swallowing it. That is the whole of "do nothing when there is no note".
    */
   const focusPane = useCallback(
     (pane: "tree" | "notes" | "editor" | "header" | "title", atEnd = false): boolean => {
       const root = libraryRef.current;
       if (pane === "editor") {
-        editor.current?.focus();
+        // The answer, not `true` (B98). With no note open there is no `Editor` mounted at
+        // all — the reader draws its empty state — so this used to report a move it had
+        // not made, and both callers read that answer to decide whether to take the press
+        // off the browser. It did not show while the note was the *third* Tab stop; it
+        // does the moment Tab and the backward ring aim straight at it.
+        const view = editor.current;
+        if (view === null) return false;
+        view.focus();
         return true;
       }
       if (root === null) return false;
@@ -1363,34 +1382,42 @@ export function Library(): React.ReactElement {
   /**
    * The macro keyboard cycle around the window:
    *
-   *     forward   tree → notes → editor → tree
+   *     forward   tree → notes → title → editor → tree
    *     backward  tree → editor → notes → tree
    *
-   * **Three stops, and it is three again.** The note's own header block was a fourth for
-   * one release, entered at whichever end you arrived at. The problem it answered was
-   * real — from the editor, which is where a wrong date is noticed, there was no way back
-   * up to When — but every press that had nothing to do with those fields paid for it:
-   * getting from the list to the note went through four inputs on the way. B94 puts the
-   * fields back where they belong, in the plain Tab order beside the title, and gives them
-   * a chord of their own (`focusFields`, Mod-Shift-W) that reaches them from anywhere in
-   * one press. The ring is for the three regions of the window again.
+   * **Four stops forward and three back, and the asymmetry is the point** (B98). The
+   * title is a destination you ask for; the note is where you were going anyway. So
+   * Ctrl+Tab out of the note list stops on the title — the fourth stop — while
+   * Ctrl+Shift+Tab out of the note goes straight back to the list, and Ctrl+Shift+Tab out
+   * of the tree reaches the note's text, which it declined to do at all before.
    *
-   * The block and the title are still *passed through*: a press from inside either goes on
-   * to the note going forward and back to the list going back, which is where the ring
-   * would have put you. They are simply not somewhere it ever lands, which is why
-   * `inNoteFields` answers a different question from `paneOf` — see both.
+   * This is not the fourth stop B94 removed. That one was the *header block*, entered at
+   * whichever end you arrived at, and it was paid for by every press that had nothing to
+   * do with the fields: getting from the list to the note went through four inputs on the
+   * way. `focusFields` (Mod-Shift-W) replaced it and still does. The title costs one press
+   * on one route, and it is the route that was asked for.
+   *
+   * The block is still *passed through*, and so is the title when a press is made from
+   * inside it: on to the note going forward, back to the list going back, which is where
+   * the ring would have put you. That is `inNoteFields`, which answers a different
+   * question from `paneOf` — see both.
+   *
+   * **A step with nowhere to land does nothing.** `focusPane` answers whether it moved,
+   * and `cycle` returns that answer rather than `true`. With no note open there is no
+   * title and no editor, so Ctrl+Shift+Tab in the tree stays in the tree instead of
+   * skipping on to a stop the press was not about.
    *
    * **Plain Tab is a different walk from this one, and `tabStep` is where it lives.** It
-   * is the linear order the eye reads in — tree → notes → title → When → Tags → Where →
-   * Who → note — of which the browser already does everything but the two ends: a dialog's
-   * own trap handles a modal, the five fields are five focusable controls in DOM order,
-   * and inside the editor `keymap.ts` binds Tab to list indent and always returns `true`,
-   * so it never reaches here at all (nothing to special-case: the event simply never
-   * bubbles up to `window`). What the browser cannot do is skip the two panes' own
-   * chrome — the sort chooser, Tasks, the splitters, all of which B94 took out of the tab
-   * order for exactly this reason — and it cannot get back out of the editor, which is why
-   * `cyclePanes` (Ctrl-Tab/Ctrl-Shift-Tab, `shortcuts.ts`) exists as well: `keymap.ts` has
-   * no binding for it, so it is the one key that can always complete the loop.
+   * is tree → notes → the note, of which the browser already does everything but the two
+   * ends: a dialog's own trap handles a modal, the note's title and its four fields are
+   * five focusable controls in DOM order once you are on the first of them, and inside the
+   * editor `keymap.ts` binds Tab to list indent and always returns `true`, so it never
+   * reaches here at all (nothing to special-case: the event simply never bubbles up to
+   * `window`). What the browser cannot do is skip the two panes' own chrome — the sort
+   * chooser, Tasks, the splitters, all of which B94 took out of the tab order for exactly
+   * this reason — and it cannot get back out of the editor, which is why `cyclePanes`
+   * (Ctrl-Tab/Ctrl-Shift-Tab, `shortcuts.ts`) exists as well: `keymap.ts` has no binding
+   * for it, so it is the one key that can always complete the loop.
    *
    * Escape is the editor's own way out, for the same reason Tab cannot be: nothing in
    * `outlookKeymap` binds it (see `Editor.tsx`'s own comment on why), so a plain
@@ -1426,8 +1453,7 @@ export function Library(): React.ReactElement {
       // a stop; this is where the ring would have put you had you been in the pane on
       // either side of them.
       if (inNoteFields(document.activeElement)) {
-        focusPane(forward ? "editor" : "notes");
-        return true;
+        return focusPane(forward ? "editor" : "notes");
       }
 
       const current = paneOf(document.activeElement);
@@ -1437,46 +1463,57 @@ export function Library(): React.ReactElement {
         // recognise) after an ordinary click that lands nowhere in particular — the
         // usual state, not an edge case. There is no pane to "complete the loop" from,
         // so enter the first one instead of doing nothing.
-        focusPane(backward ? "editor" : "tree");
-        return true;
+        return focusPane(backward ? "editor" : "tree");
       }
 
-      const next: "tree" | "notes" | "editor" | null =
+      const next: "tree" | "notes" | "editor" | "title" =
         current === "tree"
           ? forward
             ? "notes"
-            : null
+            : "editor"
           : current === "notes"
             ? forward
-              ? "editor"
+              ? "title"
               : "tree"
             : forward
               ? "tree"
               : "notes";
 
-      if (next === null) return false;
-      focusPane(next);
-      return true;
+      // The answer is `focusPane`'s, and that is the rule (B98): **a step with nowhere to
+      // land does nothing.** Backward out of the tree with no note open is the case that
+      // asked for it — there is no note text to reach, and skipping on to the next stop
+      // in the ring would be answering a different question from the one pressed.
+      return focusPane(next);
     };
 
     /**
-     * One step of the *plain* Tab order — tree → notes → title → When → Tags → Where →
-     * Who → note, and back — from wherever focus is now. `true` when this handler moved
-     * it, which is also when the press is taken off the browser.
+     * One step of the *plain* Tab order — tree → notes → **the note itself** — from
+     * wherever focus is now. `true` when this handler moved it, which is also when the
+     * press is taken off the browser.
      *
-     * Only the steps the browser cannot make on its own are here, and there are two of
-     * them. Between the tree and the note list sit the note pane's own search button and
-     * "+ New note", which are controls in that pane rather than the pane itself; and
-     * between the list and the title there is nothing left to skip since B94 took the sort
-     * chooser, Tasks and the splitters out of the tab order — but the *title* has to be
-     * asked for by name, because with no note open there is nothing there at all and the
-     * press belongs to the browser again.
+     * **B98 swapped this with the chord, and the swap is the whole of the report.** B94's
+     * order was the one the eye reads — folders, notes, title, When, Tags, Where, Who,
+     * note — and daily use answered it: the note is where you were going, five presses
+     * away, every time. So plain Tab lands in the note and Ctrl+Tab lands on the title,
+     * which is the press you make when the title is what you came for.
      *
-     * Everything past the title is the browser's: the title, When, Tags, Where, Who and
-     * the note are six focusable things in DOM order, and Shift-Tab walks them backwards
-     * for free. That is why this is not a table of eight stops — a table would be a second
-     * definition of an order the DOM already states, and the first thing to disagree with
-     * it after a pane is reordered.
+     * What that costs is real and worth naming: the four fields no longer have a route
+     * from the list that is not a chord. They keep three others — Tab on from the title,
+     * `focusFields` (Mod+Shift+W) from anywhere, and the mouse — and the ring still passes
+     * through them rather than landing (`inNoteFields`).
+     *
+     * Only the steps the browser cannot make on its own are here, and there are still two.
+     * Between the tree and the note list sit the note pane's own search button and
+     * "+ New note", which are controls in that pane rather than the pane itself; and the
+     * note has to be asked for by name, because with no note open there is nothing there
+     * at all and the press belongs to the browser again — which is `focusPane` answering
+     * `false`, not a check written here.
+     *
+     * Everything past the title is still the browser's: the title, When, Tags, Where, Who
+     * and the note are six focusable things in DOM order, and Shift-Tab walks them
+     * backwards for free. That is why this is not a table of stops — a table would be a
+     * second definition of an order the DOM already states, and the first thing to
+     * disagree with it after a pane is reordered.
      */
     const tabStep = (backward: boolean): boolean => {
       const current = paneOf(document.activeElement);
@@ -1492,7 +1529,10 @@ export function Library(): React.ReactElement {
           focusPane("tree");
           return true;
         }
-        return focusPane("title");
+        // The note itself, not its title (B98) — see this function's own comment above.
+        // Still answers `false` with no note open, exactly as `focusPane("title")` did,
+        // so the press goes back to the browser rather than being swallowed.
+        return focusPane("editor");
       }
 
       return false;
@@ -1578,9 +1618,9 @@ export function Library(): React.ReactElement {
       if (current === null) return;
 
       // `tabStep`, not `cycle`: the two used to be one function and they are two orders.
-      // The ring has three stops and skips the note's own fields; the Tab order walks
-      // every one of them, which is what makes the title and When reachable without a
-      // chord at all.
+      // The ring stops on the title on its way past; plain Tab goes straight to the note
+      // and leaves the title to the chord (B98). Reading either one out of the other is
+      // how they would come to disagree.
       if (tabStep(event.shiftKey)) event.preventDefault();
     };
 

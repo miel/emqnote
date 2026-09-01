@@ -45,6 +45,8 @@ describe("the settings panel's pinned-notes switch", () => {
       setLocale: async () => {},
       chooseVault: async () => null,
       switchVault: async () => {},
+      // B98: the panel subscribes on mount; the row this file is about is not it.
+      onUpdateCheckState: () => () => {},
     };
     ({ Settings: SettingsComponent } = await import("../src/renderer/library/Settings.js"));
   });

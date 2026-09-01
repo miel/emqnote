@@ -2184,3 +2184,95 @@ so a base64 picture still travels through main over `emqnote-remote://` like eve
 Widening it would be the one-line version of this and would take the sniff, the cap and the
 single place these addresses are decided out of the path — which is what B50 put in main in
 the first place.
+
+**Five reports from daily use landed on 1 September 2026** (**B98**), with no common cause;
+two of them turned out to be one function.
+
+*Tab and Ctrl+Tab swapped jobs.* B94 gave the library the order the eye reads — folders,
+notes, the title, When, Tags, Where, Who, the note — and it described the window correctly
+and worked badly. Where the press was going is the note's text, every time, and that was five
+stops away. So plain Tab lands in the note now and the chord lands on the title. That reads
+like a fourth stop bolted onto B94's three-stop ring and it is not: the title was already
+reachable, and this is only which key reaches it. The ring is four stops forward — tree →
+notes → title → note → tree — and three back, because coming back out of the note means
+coming back to the list you came from and picking the title up on the way would lengthen the
+return leg nobody complained about. What it costs is named rather than glossed: the four
+metadata fields no longer have a route from the list that is not a chord. They keep three —
+Tab on from the title, `focusFields` (Mod+Shift+W), and the mouse.
+
+*Ctrl+Shift+Tab in the folder tree did nothing*, and that is the second half of the same
+function: the tree was the ring's first stop and going back from the first stop was literally
+`null`. It reaches the open note's text now. The interesting part is what that forced. "Do
+nothing if no note is open" could have been a branch; instead it is one rule — **a step with
+nowhere to land does nothing** — which needed `focusPane("editor")` to stop answering `true`
+unconditionally. With no note open there is no `Editor` mounted at all, so it had been
+claiming a move it never made; invisible while the note was the *third* Tab stop, and
+immediate once Tab and the backward ring aimed straight at it. The alternative — skipping on
+to the next stop that can take focus — is defensible and is a different gesture, so it was
+rejected rather than forgotten.
+
+*Focus now comes back to the library that opened the capture window.* Mod+N, type, Ctrl+Enter,
+and then an Alt+Tab to be back where you started: `hideCaptureWindow` did `hide()` and nothing
+else, and the OS chose. The distinction needed to fix it was already in the tree and simply
+not written down — `showCaptureWindow` is the hotkey, the tray and the second instance,
+`focusCaptureWindow` is the library's two routes and nothing else — so it is one
+`raisedByLibrary` flag beside the existing hide/blur handlers. Both entries write it, which is
+the detail worth keeping: a hotkey capture taken from Outlook an hour later must not drag the
+note browser forward, and `selftest.ts` shows and hides fifty times in a row. It raises through
+`getLibraryWindow`, never `showLibraryWindow`, which would *create* a window and turn filing a
+note into opening the browser. Always raising the library when one exists, and tracking the
+previous *application* for the hotkey case, were both considered and both rejected — the first
+is a worse bug than the one being fixed, the second is a different request.
+
+*"Check for updates…" now says it is checking.* The click resolves immediately by design —
+`IPC.checkForUpdates` answers once the check has been *started*, because on Windows the same
+call only settles after a download has been answered — so a slow GitHub left a button that had
+visibly done nothing and then a dialog out of nowhere. `IPC.updateCheckState` carries a
+`boolean` and is emphatically not the outcome, which stays the native dialog. Two things make
+it honest: the state comes from main, because the tray runs the same check and a flag set in
+the panel would describe only half of them; and `false` means the *check* is over, not the
+update, which is why `announce` ends it in front of all five `showMessageBox` calls rather
+than at the end of `checkForUpdates` — the Windows path would otherwise read "Checking for
+updates…" through a download and a restart prompt. The modal the report itself suggested does
+not work: `dialog.showMessageBox` cannot be closed from code, and would stack in front of the
+outcome it announced.
+
+*A base64 picture scaled only sideways*, and it is not a base64 bug. `![|1282x293](data:…)` is
+what Word and Outlook write, and what is special about it is the *pair*: a width and a height.
+`applySize` wrote them as inline pixels, `.wiki-embed-image` carries `max-width: 100%`, and an
+inline `height: 293px` stands through that — beating the stylesheet's own `height: auto`, which
+existed for exactly this and could never win. The picture was drawn at column width by 293. It
+is a ratio now: `aspect-ratio: W / H` with `height: auto`, which states the shape without
+stating a size. B97 has nothing to do with it beyond the occasion — that batch made such
+pictures draw at all, and Office is simply the source that writes a pair. `![[foto.png|250x180]]`
+had the same bug, both going through the one function.
+
+Driven in the running app: `drive:library` grew two steps — a real Ctrl+Tab landing on the
+title and a real Ctrl+Shift+Tab out of the tree landing in the note — and its Tab walk went
+from eight stops to two.
+
+**Those two steps had to be written with `xdotool`, and that is worth keeping.** Every other
+chord in that script is a CDP `Input.dispatchKeyEvent`, which reaches the *page* — where
+Mod+T, Mod+S and Mod+Shift+W are handled. Ctrl+Tab is claimed in main, in
+`library-window.ts`'s `before-input-event`, and a CDP-injected press does not pass that point:
+written the obvious way, the step left focus exactly where it was and looked like a broken
+fix. Real XTEST keys go through the native pipeline the claim sits in — which is the whole
+reason the claim was moved there, against a Windows report whose cause was never found — so
+the window has to hold X focus first, found by a stamped `document.title` for
+`drive-capture.ts`'s reason: every window this app opens is called "emqnote". So `drive:library`
+is now the only place the *forwarded* half of that chord runs end to end; the jsdom suite can
+only call the handler main would have called.
+
+`drive:capture` grew one step that measures the drawn rectangle, because jsdom has no layout:
+`test/image-stored-size.test.ts` can say what lands in `img.style` and nothing about what the
+browser makes of it. The fixture's base64 line carries the `|WxH` suffix now, which is why the
+eleventh step could not have caught this. Measured here: `547×125, 4.38:1` with the fix, and
+with it backed out `drawn 547×293 is 1.87:1` — the column width by the height the file gave
+it, which is the report in one line.
+
+**Not confirmed here.** Which window holds the foreground after Ctrl+Enter is Electron window
+state and neither driver can ask it, so all five focus-return rows are `TEST-PROTOCOL.md` §52
+on both platforms — 52c and 52d especially, being what stops the fix from being worse than the
+bug. The update check's three outcomes are §52 too, the Windows download path in particular.
+And 52k walks the two chords on Windows, which is where Ctrl+Tab has a history of being eaten
+by something nobody has ever identified (B32, §22b).

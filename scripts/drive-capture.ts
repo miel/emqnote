@@ -142,6 +142,18 @@ const RED_PNG = Buffer.from(
 const OFFICE_GIF_DATA_URL =
   "data:image/png;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=";
 
+/**
+ * The size the note states for it, which is a different thing from the size the file is.
+ *
+ * The reported note read `![|1282x293](data:…)` — Office writes the pair, not a bare
+ * width — and those are the numbers, so that the ratio being asserted is one a human can
+ * check against the report. The picture behind them is 1×1, deliberately: a stored size is
+ * a statement about how to *draw* it and owes nothing to the pixels, which is the whole
+ * reason a wrong height could stand for as long as it did.
+ */
+const OFFICE_GIF_WIDTH = 1282;
+const OFFICE_GIF_HEIGHT = 293;
+
 function scaffoldVault(): string {
   const vault = mkdtempSync(join(tmpdir(), "emqnote-drive-"));
   mkdirSync(join(vault, "00 Inbox"), { recursive: true });
@@ -168,7 +180,13 @@ function scaffoldVault(): string {
       "",
       // B97: a base64 picture, in the shape Office writes one — a GIF behind an
       // `image/png` label. Nothing in jsdom can say whether it decodes; see the step.
-      `![](${OFFICE_GIF_DATA_URL})`,
+      //
+      // B98 gave it the `|WxH` suffix Office writes too, and that is the second step's
+      // whole subject: the pair is what the report carried and what the old code turned
+      // into an inline pixel height that could not follow the column down. 1282 is far
+      // wider than this window's text column (the window's own minimum is 460), so
+      // `max-width: 100%` is guaranteed to be doing something by the time it is measured.
+      `![|${OFFICE_GIF_WIDTH}x${OFFICE_GIF_HEIGHT}](${OFFICE_GIF_DATA_URL})`,
       "",
       // B96: the two states of a task item, for the step that copies them. What a box
       // *is* on the clipboard cannot be asked of jsdom — the editor draws it as a widget
@@ -549,6 +567,45 @@ async function main(): Promise<number> {
           );
         }
         return `naturalWidth ${width}`;
+      },
+    },
+    {
+      name: "and it keeps its proportions when the column is narrower than it (B98)",
+      run: async () => {
+        // The one measurement this bug is actually about, and there is nowhere else to
+        // take it: jsdom has no layout at all, so `test/image-stored-size.test.ts` can say
+        // what lands in `img.style` and nothing about what the browser then draws.
+        //
+        // `![|1282x293]` in a column a few hundred pixels wide: `.wiki-embed-image` caps
+        // the width at 100%, and before B98 the inline `height: 293px` stood while it did
+        // — beating the stylesheet's own `height: auto`, as an inline declaration always
+        // will — so the picture was drawn `column × 293` and squashed sideways as the
+        // window moved. Backing the fix out puts the ratio at roughly 1.5 here, not 4.4.
+        const seen = await open.capture!.evaluate<string>(
+          `(() => {
+             const img = document.querySelector('img.wiki-embed-image[src^="emqnote-remote:"]');
+             if (img === null) return JSON.stringify({ width: 0, height: 0 });
+             const rect = img.getBoundingClientRect();
+             return JSON.stringify({ width: rect.width, height: rect.height });
+           })()`,
+        );
+
+        const { width, height } = JSON.parse(seen) as { width: number; height: number };
+        if (width <= 0 || height <= 0) throw new Error(`drawn ${width}×${height}`);
+        // Narrower than the file asked for, or the cap is not engaged and the step is
+        // measuring nothing.
+        if (width >= OFFICE_GIF_WIDTH) {
+          throw new Error(`drawn ${width}px wide — the column never capped it`);
+        }
+
+        const wanted = OFFICE_GIF_WIDTH / OFFICE_GIF_HEIGHT;
+        const drawn = width / height;
+        // A percent of slack for the 1px border and for subpixel rounding, and no more:
+        // the failure being guarded against is off by a factor of three.
+        if (Math.abs(drawn - wanted) / wanted > 0.02) {
+          throw new Error(`drawn ${width}×${height} is ${drawn.toFixed(2)}:1, wanted ${wanted.toFixed(2)}:1`);
+        }
+        return `${Math.round(width)}×${Math.round(height)}, ${drawn.toFixed(2)}:1`;
       },
     },
     {

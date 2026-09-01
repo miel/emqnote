@@ -20,6 +20,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 const checkForUpdates = vi.fn(async () => {});
 
+/**
+ * Main's "a check is running" broadcast, held so a test can raise it (B98).
+ *
+ * The panel learns this from main rather than setting it on click, because the tray runs
+ * the same check and a flag set here would describe only half of them — so the fake has
+ * to be able to speak, not merely to exist.
+ */
+let announce: ((checking: boolean) => void) | null = null;
+
 async function flush(rounds = 4): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     // eslint-disable-next-line no-await-in-loop
@@ -45,6 +54,12 @@ describe("the settings panel's update check", () => {
       chooseVault: async () => null,
       switchVault: async () => {},
       checkForUpdates,
+      onUpdateCheckState: (handler: (checking: boolean) => void) => {
+        announce = handler;
+        return () => {
+          announce = null;
+        };
+      },
     };
     ({ Settings: SettingsComponent } = await import("../src/renderer/library/Settings.js"));
   });
@@ -71,6 +86,7 @@ describe("the settings panel's update check", () => {
             ({
               "settings.updates": "Updates",
               "settings.updatesCheck": "Check for updates…",
+              "settings.updatesChecking": "Checking for updates…",
             })[key] ?? key,
           onChanged: () => {},
           onBeforeSwitch: async () => {},
@@ -107,5 +123,34 @@ describe("the settings panel's update check", () => {
     await flush();
 
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it is checking while main is checking, and stops when main stops", async () => {
+    // The report is the gap between the click and the dialog (B98): `checkForUpdates`
+    // resolves as soon as the check has been *started*, deliberately, so a slow GitHub
+    // left a button that had visibly done nothing and then a dialog out of nowhere.
+    expect(button().disabled).toBe(false);
+
+    await act(async () => {
+      announce?.(true);
+    });
+    await flush();
+
+    expect(button().textContent).toBe("Checking for updates…");
+    // Disabled as well as relabelled: a second check while the first is in the air is one
+    // `updater.ts` refuses anyway, and a button that can be pressed to no effect is the
+    // same complaint again one layer down.
+    expect(button().disabled).toBe(true);
+
+    await act(async () => {
+      announce?.(false);
+    });
+    await flush();
+
+    // `false` means the *check* is over, not the update — on Windows a download and a
+    // restart prompt still follow, and a button describing those would be describing
+    // something that finished minutes earlier.
+    expect(button().textContent).toBe("Check for updates…");
+    expect(button().disabled).toBe(false);
   });
 });

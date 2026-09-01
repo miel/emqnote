@@ -11,9 +11,11 @@
  * asked anywhere else in this repository:
  *
  *  - **Tab.** jsdom implements no sequential focus navigation at all, so every test of the
- *    keyboard order can only check the two steps this app performs itself and has to take
- *    the browser's word for the other five. Here a real Tab is pressed and the answer is
- *    read off `document.activeElement`.
+ *    keyboard order can only check the steps this app performs itself and has to take the
+ *    browser's word for the rest. Here a real Tab is pressed and the answer is read off
+ *    `document.activeElement`. Since B98 that is also the only place the *chord* is
+ *    pressed end to end: main claims Ctrl+Tab in `before-input-event` and forwards the
+ *    intent, so the jsdom suite can only call the forwarded handler.
  *  - **Dragging the note's title moves the window.** It is main that moves it, over
  *    `IPC.windowDrag`, and `window.screenX` is the only place the result shows up.
  *  - **The window's own drag region.** `-webkit-app-region` does not exist in jsdom — the
@@ -258,6 +260,16 @@ async function startX(): Promise<{ display: string; server: ChildProcess }> {
  * There is no window manager here: nothing may use `xdotool windowactivate`, which aborts
  * without `_NET_ACTIVE_WINDOW`.
  */
+/**
+ * The title the library window wears while a real key is being aimed at it.
+ *
+ * `drive-capture.ts`'s trick, for its reason: every window this app opens is called
+ * "emqnote", so `xdotool search --name emqnote` cannot say which one it found — and the
+ * capture window exists throughout this run, hidden. Stamped just before a press and taken
+ * off just after, so nothing else in the script has to know about it.
+ */
+const STAMP = "emqnote-library-under-drive";
+
 function isMapped(display: string): boolean {
   const on = { encoding: "utf8" as const, env: { ...process.env, DISPLAY: display } };
   const search = spawnSync("xdotool", ["search", "--name", "emqnote"], on);
@@ -336,6 +348,36 @@ async function main(): Promise<number> {
     );
     if (box === null) throw new Error(`nothing at ${selector}`);
     return box;
+  };
+
+  /**
+   * One chord, pressed by X rather than injected over CDP.
+   *
+   * The distinction is not a detail and it is what the two Ctrl+Tab steps below are worth
+   * having at all. `Input.dispatchKeyEvent` reaches the *page*, which is where Mod+T,
+   * Mod+S and Mod+Shift+W are handled — but Ctrl+Tab is claimed in main, in
+   * `library-window.ts`'s `before-input-event`, and a CDP-injected press never passes that
+   * point. Measured here: the same step written with `key("Tab", { modifiers: 2 })` leaves
+   * focus exactly where it was. Real XTEST keys go through the native pipeline the claim
+   * sits in, which is the whole reason the claim was moved there (B62's Windows report).
+   *
+   * `windowfocus`, never `windowactivate`: there is no window manager under this Xvfb and
+   * the latter aborts without `_NET_ACTIVE_WINDOW`.
+   */
+  const realChord = async (chord: string): Promise<void> => {
+    const on = { encoding: "utf8" as const, env: { ...process.env, DISPLAY: display } };
+    await open.library!.evaluate(`document.title = ${JSON.stringify(STAMP)}`);
+    const ids = (spawnSync("xdotool", ["search", "--name", STAMP], on).stdout ?? "")
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    if (ids.length === 0) throw new Error("the library window is not findable in X by its title");
+    for (const id of ids) spawnSync("xdotool", ["windowfocus", id], on);
+    await new Promise((done) => setTimeout(done, 200));
+
+    spawnSync("xdotool", ["key", "--clearmodifiers", chord], on);
+    await new Promise((done) => setTimeout(done, 400));
+    await open.library!.evaluate(`document.title = 'emqnote'`);
   };
 
   const click = async (
@@ -482,14 +524,18 @@ async function main(): Promise<number> {
       },
     },
     {
-      name: "a real Tab walks folders → notes → title → When → Tags → Where → Who → note",
+      name: "a real Tab walks folders → notes → the note itself (B98)",
       run: async () => {
         // The step that cannot be asked anywhere else: jsdom implements no sequential
-        // focus navigation, so every jsdom test of this order checks the two steps the app
-        // performs itself and takes the browser's word for the other five.
+        // focus navigation, so every jsdom test of this order checks the steps the app
+        // performs itself and takes the browser's word for the rest.
+        //
+        // Two stops now, not eight. B94's order walked the title and the four metadata
+        // fields on the way, and daily use answered it: the note is where the press was
+        // going every time. The title has the chord instead — the next step presses it.
         await open.library!.evaluate(`document.querySelector('.tree [tabindex="0"]').focus()`);
         const walk: string[] = [await focused()];
-        for (let i = 0; i < 7; i += 1) {
+        for (let i = 0; i < 2; i += 1) {
           // eslint-disable-next-line no-await-in-loop
           await open.library!.key("Tab", { windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
           // eslint-disable-next-line no-await-in-loop
@@ -497,16 +543,42 @@ async function main(): Promise<number> {
           // eslint-disable-next-line no-await-in-loop
           walk.push(await focused());
         }
-        const wanted = ["branch", "note", "pane-title", "created", "tags", "location", "attendees", "editor-content"];
+        const wanted = ["branch", "note", "editor-content"];
         const missed = wanted.filter((want, index) => walk[index]?.includes(want) !== true);
         if (missed.length > 0) throw new Error(`walked ${walk.join(" → ")}`);
         return walk.join(" → ");
       },
     },
     {
-      name: "and Shift+Tab walks back down it",
+      name: "a real Ctrl+Tab out of the note list stops on the title, the other half of the swap",
       run: async () => {
-        // From Who, which is where a Ctrl+Shift+Tab out of the note lands you next to.
+        await open.library!.evaluate(
+          `document.querySelector('.notes-list .note[tabindex="0"]').focus()`,
+        );
+        await realChord("ctrl+Tab");
+        const where = await focused();
+        if (!where.includes("pane-title")) throw new Error(`focus is on ${where}`);
+        return where;
+      },
+    },
+    {
+      name: "and a real Ctrl+Shift+Tab out of the folder tree reaches the note's text",
+      run: async () => {
+        // The backward ring stopped dead at the tree before B98 — it was the first stop,
+        // and going back from the first stop was `null`.
+        await open.library!.evaluate(`document.querySelector('.tree [tabindex="0"]').focus()`);
+        await realChord("ctrl+shift+Tab");
+        const where = await focused();
+        if (!where.includes("editor-content")) throw new Error(`focus is on ${where}`);
+        return where;
+      },
+    },
+    {
+      name: "and Shift+Tab walks the note's own fields back down to the title",
+      run: async () => {
+        // Pure DOM order, and untouched by B98: once you are on one of the five controls
+        // in the reader's head — which is what Ctrl+Tab and Mod+Shift+W are for now —
+        // Tab and Shift+Tab walk them for free, and that is why there is no table of stops.
         await open.library!.evaluate(`document.querySelector('.header-reader .attendees').focus()`);
         const walk: string[] = [await focused()];
         for (let i = 0; i < 4; i += 1) {

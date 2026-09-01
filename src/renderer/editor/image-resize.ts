@@ -23,6 +23,10 @@ import { normaliseDimension } from "../../markdown/embed-field.js";
  * grab a corner would be this app deciding something it cannot know. Only a picture with
  * no stored height is dragged to a bare width.
  *
+ * **A height that is kept is kept as a shape, not as a height.** `applySize` writes
+ * `aspect-ratio`, because the column can be narrower than the picture and a pixel height
+ * cannot follow a width down (B98) — see its own comment.
+ *
  * **The transaction lands once, on release.** During the drag the width goes onto
  * `img.style` and nowhere else, so a drag is one undo step rather than one per pixel, and
  * a picture the user drags and then thinks better of costs the file nothing until the
@@ -102,9 +106,25 @@ export interface ImageResize {
 
 function applySize(target: ResizeTarget, size: ImageSize): void {
   target.img.style.width = size.width === null ? "" : `${size.width}px`;
-  // Set only when the file says so. Left empty the stylesheet's `height: auto` applies and
-  // the picture keeps its own proportions, which is what a bare `|400` means.
-  target.img.style.height = size.height === null ? "" : `${size.height}px`;
+
+  // **A stored height is written as a ratio, never as a number of pixels** (B98). It was
+  // pixels, and that is a bug you only see once the window is narrower than the picture:
+  // `.wiki-embed-image` carries `max-width: 100%`, so a picture wider than the column is
+  // drawn narrower — and an inline `height: 293px` beats the stylesheet's own
+  // `height: auto` and stands, so the picture squashed sideways as the window moved and
+  // kept the height the file gave it. `aspect-ratio` is the shape without being a size:
+  // at full width it draws exactly the `WxH` box the file asked for, and under the cap it
+  // takes the height down with the width.
+  //
+  // Reported against `![|1282x293](data:…)`, which is what Word and Outlook write and so
+  // is where a `WxH` pair actually comes from; `![[foto.png|250x180]]` has the same shape
+  // and had the same bug.
+  //
+  // Left empty when the file states no height, the stylesheet's `height: auto` applies
+  // and the picture keeps its own proportions, which is what a bare `|400` means.
+  const ratio = size.width !== null && size.height !== null;
+  target.img.style.setProperty("aspect-ratio", ratio ? `${size.width} / ${size.height}` : "");
+  target.img.style.height = ratio ? "auto" : "";
   // The stylesheet's `max-height` would break the proportions of a picture that has been
   // given an explicit size, so a sized box says so and the rule stands down. An attribute
   // rather than a `style` sniff, so the CSS says what it means.

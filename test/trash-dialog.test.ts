@@ -125,6 +125,7 @@ function buildFake(contents: Contents): CaptureApi {
     setEditorFontSize: async () => {},
     setTheme: async () => {},
     checkForUpdates: async () => {},
+    onUpdateCheckState: () => () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

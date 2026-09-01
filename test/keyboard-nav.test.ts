@@ -167,6 +167,7 @@ function buildFake(): CaptureApi {
     setEditorFontSize: async () => {},
     setTheme: async () => {},
     checkForUpdates: async () => {},
+    onUpdateCheckState: () => () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},
@@ -397,7 +398,7 @@ describe("keyboard navigation across the library's panes", () => {
     return noteRow;
   }
 
-  it("Tab moves focus from the note list's active row onto the note's title", async () => {
+  it("Tab moves focus from the note list's active row into the note's text", async () => {
     await mount();
     // The editor is only mounted once a note is open (`Library.tsx` renders it inside
     // the `open !== null` branch) — the same as clicking the row would, or Enter on it.
@@ -409,13 +410,29 @@ describe("keyboard navigation across the library's panes", () => {
     keydown(noteRow, "Tab");
     await flush();
 
-    // The third stop of the reading order (B94): folders, notes, *title*, then When, Tags,
-    // Where, Who and the note itself — the last five of which are the browser's own walk
-    // through five focusable controls in DOM order, which is why only this step is here.
+    // The note, not its title (B98). B94's reading order put the title here and the note
+    // five presses further on, and daily use answered that: the note is where the press
+    // was going every time. The title keeps the chord instead — see the Ctrl-Tab case
+    // below — and the four fields keep `focusFields` and a Tab on from the title.
+    expect(document.activeElement?.className).toContain("editor-content");
+  });
+
+  it("Ctrl-Tab moves focus from the note list onto the note's title", async () => {
+    await mount();
+    const noteRow = await openTheNote();
+
+    act(() => {
+      noteRow.focus();
+    });
+    cycle(false);
+    await flush();
+
+    // The other half of B98's swap. Plain Tab and the chord traded places rather than the
+    // ring growing a stop: the title was reachable before, and this is which key reaches it.
     expect(document.activeElement?.className).toContain("pane-title");
   });
 
-  it("leaves Tab alone in the note list when there is no note open to have a title", async () => {
+  it("leaves Tab alone in the note list when there is no note to move into", async () => {
     await mount();
     const noteRow = noteRows().find((node) => node.tabIndex === 0)!;
     act(() => {
@@ -425,10 +442,44 @@ describe("keyboard navigation across the library's panes", () => {
     act(() => {
       const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
       noteRow.dispatchEvent(event);
-      // Nothing to move to, so the press stays the browser's — the walk does not swallow
-      // it and leave focus sitting on the row.
+      // Nothing to move to — no note open means no `Editor` mounted at all — so the press
+      // stays the browser's: the walk does not swallow it and leave focus sitting on the
+      // row. This is `focusPane("editor")` answering `false`, which it did not use to do
+      // (B98); it always claimed the move, and the lie only showed once Tab aimed here.
       expect(event.defaultPrevented).toBe(false);
     });
+  });
+
+  it("Ctrl-Shift-Tab out of the tree reaches the open note's text", async () => {
+    await mount();
+    await openTheNote();
+
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    act(() => {
+      treeRow.focus();
+    });
+    cycle(true);
+    await flush();
+
+    // The backward ring used to stop dead here — the tree was its first stop and going
+    // back from the first stop was `null` (B98).
+    expect(document.activeElement?.className).toContain("editor-content");
+  });
+
+  it("and does nothing at all from the tree when no note is open", async () => {
+    await mount();
+
+    const treeRow = treeRows().find((node) => node.tabIndex === 0)!;
+    act(() => {
+      treeRow.focus();
+    });
+    cycle(true);
+    await flush();
+
+    // **A step with nowhere to land does nothing** (B98). Skipping on to the next stop in
+    // the ring would answer a question the press did not ask, and this is the rule that
+    // makes "do nothing if no note is active" one rule rather than a branch of its own.
+    expect(document.activeElement).toBe(treeRow);
   });
 
   it("Enter on the title starts the rename, so it is a control and not just a heading", async () => {
@@ -485,9 +536,10 @@ describe("keyboard navigation across the library's panes", () => {
     cycle(true);
     await flush();
 
-    // Three stops again (B94). The header block was the fourth for one release, and every
-    // press that had nothing to do with those fields paid for it; `focusFields` reaches
-    // them in one chord instead.
+    // Backward is three stops (B98) — the title is a forward stop only, because going
+    // back out of the note means going back to the list you came from. The header block
+    // was a stop in both directions for one release and every press that had nothing to
+    // do with those fields paid for it; `focusFields` reaches them in one chord instead.
     const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeNote);
   });

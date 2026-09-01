@@ -442,6 +442,9 @@ const DUTCH: Record<string, string> = {
   // bovendien onder het pijltje zijn opgeborgen.
   "settings.updates": "Updates",
   "settings.updatesCheck": "Controleren op updates…",
+  // Wat de knop zegt terwijl hij bezig is (B98). GitHub kan er even over doen, en tot nu
+  // toe veranderde er in die tijd niets op het scherm.
+  "settings.updatesChecking": "Bezig met controleren…",
   "settings.updatesWhy":
     "Kijkt op GitHub of er een nieuwere versie is. Je krijgt altijd antwoord, ook als er niets nieuws is.",
   "settings.vault": "Waar je notities staan",
@@ -933,6 +936,9 @@ const ENGLISH: Record<string, string> = {
   // overflow chevron.
   "settings.updates": "Updates",
   "settings.updatesCheck": "Check for updates…",
+  // What the button says while it is busy (B98). GitHub can take a moment, and until now
+  // nothing on screen changed while it did.
+  "settings.updatesChecking": "Checking for updates…",
   "settings.updatesWhy":
     "Looks on GitHub for a newer release. You get an answer either way, including when there is nothing new.",
   "settings.vault": "Where your notes live",

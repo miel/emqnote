@@ -1504,6 +1504,12 @@ body {
    deliberately left in place — a stored width wider than the column still draws inside
    it, and that is a better answer than a picture running off the edge.
 
+   `height: auto` here is what the *width-only* case rides on. A picture that also states
+   a height gets `aspect-ratio` and `height: auto` inline from `image-resize.ts`, because
+   this rule cannot reach past an inline declaration and that is exactly what went wrong:
+   an inline `height: 293px` stood while `max-width` pulled the width in, so the picture
+   squashed sideways as the window narrowed (B98).
+
    Keyed on an attribute `image-resize.ts` sets beside the inline width, rather than on a
    `[style*="width"]` sniff, so the rule says what it means. */
 .editor-content .wiki-embed-image-box[data-sized="true"] .wiki-embed-image {
