@@ -889,6 +889,36 @@ See "Settled" below and B22 in `05-besluitenlog.md`.
   `better-sqlite3`, it's pure JS with no native binary); nothing in `src/`
   imports it yet.
 
+- **`_templates/` is created on every vault and nothing reads it.** Noticed
+  1 September 2026, while answering a question about what the folder is for.
+  `grep -rn TEMPLATES src/` returns exactly two hits: the constant in
+  `vault.ts:26`, and the `mkdirSync` in `ensureVaultLayout` (`vault.ts:110`)
+  that makes it beside `00 Inbox/`, `_incoming/` and `_attachments/`. Two other
+  places name the string and neither is a feature — `vault-io.ts`'s
+  `HIDDEN_FOLDERS` keeps it out of the tree and the move chooser, and
+  `unlinked-attachments.ts` skips it during the walk, which is a *fix*: the old
+  walk descended into it, so a picture named only from a template counted as
+  unreferenced and was offered for deletion.
+
+  **This is not a bug and there is nothing to undo.** It is post-v1 on purpose
+  — `04-bouwplan.md`'s after-v1 list, item 2 (telefoongesprek, 1-op-1, besluit,
+  editable by you), and `05-besluitenlog.md` says own templates come after v1
+  "als de behoefte zich in de praktijk aandient". The decision it sits under is
+  the one *against* shipping five built-in templates: that is a choice to make
+  at every note, and "too many choices" was one of the objections to Obsidian.
+  Scaffolding it now is also deliberate for a second reason — B-entry on
+  keeping the index out of the vault names `_templates/` and a rarely-written
+  `config.json` as the only two things that belong *inside* it, because you want
+  them shared between the two machines.
+
+  What is worth knowing, and is the reason this is written down: **`01-functioneel-ontwerp.md`
+  §289 describes it to the user as "sjablonen die je zelf kunt aanpassen", and
+  §293 says the app enforces `00 Inbox/`, `_attachments/` and `_templates/`.**
+  That is a promise, not a description of what the app does — a note put in
+  there today appears nowhere at all. Either build the feature, or say in that
+  document that the folder is reserved and not yet used. Nothing else needs
+  touching.
+
 ## Verification still owed
 
 **Update, 2 August 2026: `Xvfb` actually works here.**
