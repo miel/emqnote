@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_IMAGE_BYTES,
+  acceptedExtension,
   extensionForContentType,
   isFetchableUrl,
   isFollowableUrl,
+  isInlineImageUrl,
   isOpenableUrl,
   normaliseContentType,
   originalNameForUrl,
@@ -233,5 +236,69 @@ describe("originalNameForUrl", () => {
 
   it("keeps the stem short enough to leave room for the timestamp prefix", () => {
     expect(originalNameForUrl(`https://x.example/${"a".repeat(200)}.png`).length).toBe(40);
+  });
+});
+
+describe("isInlineImageUrl", () => {
+  it("is data: and nothing else, whatever case it is spelled in", () => {
+    expect(isInlineImageUrl("data:image/png;base64,iVBORw0KGgo=")).toBe(true);
+    expect(isInlineImageUrl("DATA:image/gif;base64,R0lGODdh")).toBe(true);
+    expect(isInlineImageUrl("https://x.example/a.png")).toBe(false);
+    expect(isInlineImageUrl("file:///etc/passwd")).toBe(false);
+    expect(isInlineImageUrl("/images/a.png")).toBe(false);
+    expect(isInlineImageUrl("")).toBe(false);
+  });
+});
+
+describe("acceptedExtension, from the network", () => {
+  it("takes bytes the server named correctly", () => {
+    expect(acceptedExtension("image/png", PNG, "network")).toBe(".png");
+    expect(acceptedExtension("image/jpg", JPEG, "network")).toBe(".jpg");
+  });
+
+  it("refuses bytes that are not what the server called them", () => {
+    // A server that says PNG and sends a GIF is broken or lying, and this app is not
+    // storing that in the vault under a name it invented.
+    expect(acceptedExtension("image/png", GIF, "network")).toBeNull();
+  });
+
+  it("refuses a type that is not on the allowlist at all", () => {
+    expect(acceptedExtension("text/html", PNG, "network")).toBeNull();
+    expect(acceptedExtension(null, PNG, "network")).toBeNull();
+  });
+});
+
+describe("acceptedExtension, from a data: URL", () => {
+  it("reads the bytes and ignores the label the same string carries", () => {
+    // The reported case, byte for byte: Word and Outlook write
+    // `data:image/png;base64,R0lGODdh…` — a GIF87a with `Software: Microsoft Office` in
+    // its comment block, labelled PNG. Under the network rule every one of those was
+    // refused, so a note holding the whole picture drew a grey chip instead.
+    expect(acceptedExtension("image/png", GIF, "inline")).toBe(".gif");
+    expect(acceptedExtension("image/gif", PNG, "inline")).toBe(".png");
+  });
+
+  it("accepts one that names no type at all — the RFC's own default", () => {
+    // `data:;base64,…` is `text/plain` by RFC and normalises to null here, which could
+    // never pass a check that required a declared type.
+    expect(acceptedExtension(null, JPEG, "inline")).toBe(".jpg");
+    expect(acceptedExtension("text/plain", WEBP, "inline")).toBe(".webp");
+  });
+
+  it("still refuses anything the bytes do not prove is an image", () => {
+    // Trusting the payload is not the same as trusting the label: an SVG has no magic
+    // number, so it can never sniff as anything and passes no more than it did.
+    const svg = new Uint8Array([...Buffer.from("<svg xmlns=")]);
+    expect(acceptedExtension("image/svg+xml", svg, "inline")).toBeNull();
+    expect(acceptedExtension("image/png", svg, "inline")).toBeNull();
+    expect(acceptedExtension("image/png", new Uint8Array([...Buffer.from("<!DOCTYPE")]), "inline"))
+      .toBeNull();
+  });
+
+  it("keeps the cap, which is the one rule the origin does not touch", () => {
+    const huge = new Uint8Array(MAX_IMAGE_BYTES + 1);
+    huge.set(PNG);
+    expect(acceptedExtension("image/png", huge, "inline")).toBeNull();
+    expect(acceptedExtension("image/png", huge, "network")).toBeNull();
   });
 });

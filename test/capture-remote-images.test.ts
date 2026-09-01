@@ -91,6 +91,34 @@ describe("a web picture in the capture window", () => {
     expect(probes.seen).toEqual(["emqnote-remote://vault/data%3Aimage%2Fpng%3Bbase64%2CAAA"]);
   });
 
+  it("still asks for a data: address with the switch off (B97)", async () => {
+    await open(false, "![](data:image/png;base64,AAA)\n");
+
+    // "Load images from the web" is about this app reaching a host on a note's say-so. A
+    // base64 picture names no host and costs no request — it is already in the file — so
+    // the switch does not reach it, and turning it off does not blank out part of the
+    // note's own text. Main exempts it on its side for the same reason.
+    expect(probes.seen).toEqual(["emqnote-remote://vault/data%3Aimage%2Fpng%3Bbase64%2CAAA"]);
+  });
+
+  it("keeps the switch over a web address in the same note", async () => {
+    await open(
+      false,
+      "![](data:image/png;base64,AAA)\n\n![](https://cdn.example.com/plan.png)\n",
+    );
+
+    // One exemption, not a hole: the `https://` picture beside it is still not asked for.
+    expect(probes.seen).toEqual(["emqnote-remote://vault/data%3Aimage%2Fpng%3Bbase64%2CAAA"]);
+  });
+
+  it("hangs no tooltip off a base64 address, which is the picture itself", async () => {
+    await open(true, "![](data:image/png;base64,AAA)\n");
+
+    // A `title` is for an address. A `data:` one is tens of thousands of characters of
+    // base64 and says nothing about where the picture came from — it came from this note.
+    expect(capture.container.querySelector(".external-image")!.hasAttribute("title")).toBe(false);
+  });
+
   it("opens the chip's own address in the browser on a plain click", async () => {
     await open(true);
 

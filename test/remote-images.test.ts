@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,6 +17,10 @@ import { remoteImageKey } from "../src/main/remote-cache.js";
  *
  * The success path needs a real server and is a live item in `TEST-PROTOCOL.md`, alongside
  * the cache-and-go-offline check that is the whole point of keeping the bytes.
+ *
+ * With one exception, and it is the useful one: a `data:` address carries its own bytes, so
+ * the whole of B97's path — decode, sniff, cap, name, write, serve — runs here end to end
+ * with nothing to stand up at all.
  */
 
 function scratch(): string {
@@ -63,5 +67,59 @@ describe("serveRemoteImage serves", () => {
     writeFileSync(join(dir, `${remoteImageKey(url)}.png`), "x");
 
     expect(await serveRemoteImage(dir, url)).toBeNull();
+  });
+});
+
+/**
+ * B97, the whole way through, with no network anywhere near it.
+ *
+ * A 1×1 GIF87a: the same format Word and Outlook write into a note, and here labelled
+ * `image/png` exactly as they label it. Before B97 that mismatch was a refusal — a note
+ * carrying the picture in its own text drew a grey chip — and the extension it lands under
+ * is the second half of the fix: the bytes decide it, so the cache never holds a file whose
+ * name lies about what is in it.
+ */
+const OFFICE_GIF = "R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=";
+
+describe("serveRemoteImage on a data: address", () => {
+  it("decodes, sniffs and caches one whose label disagrees with its bytes", async () => {
+    const dir = scratch();
+    const file = await serveRemoteImage(dir, `data:image/png;base64,${OFFICE_GIF}`);
+
+    expect(file).not.toBeNull();
+    // `.gif`, not `.png`: the label is ignored and the magic number names the file.
+    expect(file!.endsWith(".gif")).toBe(true);
+    expect(readFileSync(file!).subarray(0, 6).toString("latin1")).toBe("GIF87a");
+  });
+
+  it("takes one that names no type at all, which is the RFC's default", async () => {
+    const dir = scratch();
+    expect(await serveRemoteImage(dir, `data:;base64,${OFFICE_GIF}`)).not.toBeNull();
+  });
+
+  it("serves the second ask out of the cache, under the same key", async () => {
+    const dir = scratch();
+    const url = `data:image/png;base64,${OFFICE_GIF}`;
+
+    const first = await serveRemoteImage(dir, url);
+    const second = await serveRemoteImage(dir, url);
+
+    expect(second).toBe(first);
+    expect(first!.includes(remoteImageKey(url))).toBe(true);
+  });
+
+  it("still refuses one whose bytes are not an image", async () => {
+    const dir = scratch();
+    const svg = Buffer.from("<svg xmlns=\"http://www.w3.org/2000/svg\"/>").toString("base64");
+
+    // Trusting the payload is not the same as trusting the label. An SVG has no magic
+    // number, and `openWikiLink` hands a stored attachment to a viewer where script inside
+    // one runs — the asymmetry `remote-image.ts` spells out, unchanged by B97.
+    expect(await serveRemoteImage(dir, `data:image/svg+xml;base64,${svg}`)).toBeNull();
+    expect(await serveRemoteImage(dir, `data:image/png;base64,${svg}`)).toBeNull();
+  });
+
+  it("refuses a payload that is not base64 at all", async () => {
+    expect(await serveRemoteImage(scratch(), "data:image/png,%89PNG%0D%0A")).toBeNull();
   });
 });

@@ -29,6 +29,12 @@ Een breedte zonder alt-tekst: ![|240](https://voorbeeld.nl/grafiek.png)
 
 Een pijp in de alt-tekst is gewoon tekst: ![Voor|na](https://voorbeeld.nl/vergelijking.png)
 
+Een afbeelding die zijn eigen bytes meedraagt, met een doos erbij, zoals Word er een schrijft: ![|1282x293](data:image/png;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=)
+
+Dezelfde zonder formaat: ![](data:image/gif;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=)
+
+En met alt-tekst ernaast: ![Het schema](data:image/gif;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=)
+
 Midden in een zin staat <u>een ![[2026-08-20-0915-schermafbeelding.png|120]] onderstreepte</u> miniatuur, en een tweede eronder.
 
 - ![[2026-08-20-0915-plattegrond.png|500]]

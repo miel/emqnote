@@ -157,7 +157,7 @@ import { attachmentRoute } from "./attachment-route.js";
 import { openPdfViewer, shutdownPdfViewer } from "./pdf-window.js";
 import { fetchRemoteImage } from "./fetch-attachment.js";
 import { serveRemoteImage } from "./remote-images.js";
-import { isOpenableUrl } from "./remote-image.js";
+import { isInlineImageUrl, isOpenableUrl } from "./remote-image.js";
 import { FOLDER_ERROR, folderOf, TRASH_FOLDER } from "../shared/vault-types.js";
 import type {
   ConflictChoice,
@@ -868,12 +868,20 @@ function remoteImageCacheDir(): string {
  * either. **The setting is one of them**: `loadRemoteImages` is enforced here, in main, and
  * not by the renderer deciding whether to ask. Everything the renderer might be talked into
  * is decided again on this side, which is the same rule `remote-image.ts` opens with.
+ *
+ * A `data:` address is exempt from that switch, and it has to be (B97). The setting says
+ * "Load images from the web", and its whole subject is this process reaching a host on a
+ * note's say-so; a base64 picture names no host, costs no request and is already sitting in
+ * the file the reader has open. Refusing it would blank out part of the note's own text to
+ * protect against a fetch that never happens.
  */
 function registerRemoteImageProtocol(): void {
   protocol.handle("emqnote-remote", async (request) => {
-    if (!loadSettings().loadRemoteImages) return new Response(null, { status: 404 });
-
     const url = attachmentNameFromUrl(request.url, "emqnote-remote");
+    if (!isInlineImageUrl(url) && !loadSettings().loadRemoteImages) {
+      return new Response(null, { status: 404 });
+    }
+
     const file = await serveRemoteImage(remoteImageCacheDir(), url);
     if (file === null) return new Response(null, { status: 404 });
 
