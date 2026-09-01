@@ -6,6 +6,7 @@ import { IPC, type ShowPayload, type StatusPayload } from "../shared/ipc.js";
 import { beginMeasurement } from "./latency.js";
 import { installEditorKeyClaims } from "./editor-keys.js";
 import { installKeyProbe } from "./key-probe.js";
+import { getLibraryWindow } from "./library-window.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -187,6 +188,28 @@ export function setBlurHandler(handler: Handler): void {
 }
 
 /**
+ * True when it was the *library* that brought this window up, so committing hands focus
+ * back to it (B98).
+ *
+ * The report is one Alt+Tab: Mod+N in the library opens the capture window, Ctrl+Enter
+ * files the note, and focus then goes wherever the OS decides — which is not the window
+ * the gesture started in. What makes this answerable at all is that the distinction was
+ * already here and simply not written down: `showCaptureWindow` is the hotkey, the tray
+ * and the second instance, and `focusCaptureWindow` is the library's two routes and
+ * nothing else (`IPC.captureNew`, `IPC.captureLoad`).
+ *
+ * **It is consumed, and both entries write it.** A hotkey capture taken from Outlook an
+ * hour after a library one must not drag the library into the foreground, so
+ * `showCaptureWindow` clears the flag rather than leaving `hideCaptureWindow` to be the
+ * only writer. That is also what keeps `selftest.ts` — which drives show/hide in a loop
+ * of fifty — from raising a window on every iteration.
+ *
+ * The flag lives beside the two handlers above rather than inside `reveal`, because
+ * `reveal`'s own parameter is about latency and says nothing about who asked.
+ */
+let raisedByLibrary = false;
+
+/**
  * Shows the window and starts the measurement.
  *
  * The order is deliberate: window to the front first, only then the message to the
@@ -195,6 +218,7 @@ export function setBlurHandler(handler: Handler): void {
  * `moveTop` covers the cases where it still resists.
  */
 export function showCaptureWindow(): void {
+  raisedByLibrary = false;
   reveal(beginMeasurement());
 }
 
@@ -209,6 +233,7 @@ export function showCaptureWindow(): void {
  * no-op instead of a special case.
  */
 export function focusCaptureWindow(): void {
+  raisedByLibrary = true;
   reveal(-1);
 }
 
@@ -258,9 +283,40 @@ export function hideCaptureWindow(): void {
   const target = window;
   if (target === null || target.isDestroyed() || !target.isVisible()) return;
 
+  const returnToLibrary = raisedByLibrary;
+  raisedByLibrary = false;
+
   target.hide();
   onHide();
   target.webContents.send(IPC.captureReset);
+
+  // After the hide, deliberately: raising the library while this window is still on
+  // screen would blur it, and `blur` above saves. Hidden first, the save has already
+  // happened through `onHide()` and the handler has nothing left to do.
+  if (returnToLibrary) returnFocusToLibrary();
+}
+
+/**
+ * Hands the foreground back to the library window, if there still is one.
+ *
+ * `getLibraryWindow` rather than `showLibraryWindow`: that one *creates* the window when
+ * there is none, and a note being filed is not a request to open the note browser. A
+ * library closed while the capture window was up simply gets nothing, which is the
+ * behaviour every other capture has.
+ *
+ * `app.focus({ steal: true })` for `reveal`'s reason one screen up — with no library
+ * window this app runs as a macOS accessory, and although the policy is `regular` again
+ * while one exists (`library-window.ts`'s `closed` handler flips it back), the app has
+ * just hidden its own frontmost window and a plain `focus()` on a second one is not
+ * reliably enough to bring the application forward with it.
+ */
+function returnFocusToLibrary(): void {
+  const library = getLibraryWindow();
+  if (library === null || library.isDestroyed()) return;
+
+  if (process.platform === "darwin") app.focus({ steal: true });
+  if (library.isMinimized()) library.restore();
+  library.focus();
 }
 
 export function sendStatus(status: StatusPayload): void {

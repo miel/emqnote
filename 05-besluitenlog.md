@@ -4022,3 +4022,168 @@ assertie is `naturalWidth`, niet het bestaan van een `<img>`. Geen enkele test o
 kan dit zien — jsdom laadt geen afbeeldingen — en de fout waar het om gaat is juist het
 *chipje*: de notitie blijft er opzettelijk uitzien terwijl het plaatje nooit getekend wordt.
 Met de fix eruit gedraaid faalt die stap ook echt, en met de woorden uit de melding.
+
+---
+
+## B98 — Tab gaat naar de notitie, Ctrl+Tab naar de titel, en de vensterfocus komt terug
+
+**Genomen** op 1 september 2026, uit dagelijks gebruik. Vijf meldingen, geen gedeelde
+oorzaak; twee ervan gaan over hetzelfde onderwerp en zijn samen beslist.
+
+### Tab en Ctrl+Tab ruilen van baan
+
+B94 gaf de bibliotheek de volgorde die het oog leest: mappen → notities → titel → Wanneer →
+Labels → Waar → Wie → de notitie. Dat klopte als beschrijving en bleek verkeerd als
+gereedschap. Waar je heen wilt is bijna altijd de tekst van de notitie, en dat waren vijf
+aanslagen — vier daarvan door velden waar je niet was en niet heen wilde.
+
+Dus ruilen de twee gebaren van baan. **Tab uit de notitielijst landt in de tekst van de
+notitie.** **Ctrl+Tab uit de notitielijst landt op de titel.** Dat is geen halte die erbij
+komt maar één die van toets wisselt: de titel was al bereikbaar, de vraag was met welke
+toets. En hij past bij die toets — een titel is een bestemming die je vraagt, de tekst is
+waar je toch al heen ging.
+
+De ring wordt daarmee vier haltes vooruit en drie terug:
+
+```
+vooruit   mappen → notities → titel → notitie → mappen
+terug     mappen → notitie → notities → mappen
+```
+
+Die asymmetrie is niet slordigheid. Terug uit de notitie betekent terug naar de lijst waar je
+vandaan kwam; de titel onderweg meepakken zou de terugweg langer maken dan de heenweg zonder
+dat iemand daarom vroeg.
+
+**Dit is niet de vierde halte die B94 weghaalde.** Dat was het *kopblok* — Wanneer, Labels,
+Waar, Wie — in beide richtingen, en dat werd betaald door elke aanslag die niet over die
+velden ging. `focusFields` (Mod+Shift+W) verving het en doet dat nog steeds. De titel kost
+één aanslag op één route, en dat is precies de route waar om gevraagd is.
+
+### Wat het kost, en wat de vier velden overhouden
+
+Eerlijk opgeschreven: de vier velden hebben geen route meer vanuit de lijst die geen akkoord
+is. Ze houden er drie: Tab verder vanaf de titel (waar Ctrl+Tab je zet), `focusFields` vanuit
+elk venster in één aanslag, en de muis. De ring gáát er nog steeds doorheen — een aanslag
+vanuit een van de velden gaat vooruit naar de notitie en terug naar de lijst — hij landt er
+alleen nooit. Dat is `inNoteFields`, niet `paneOf`, en dat onderscheid staat er sinds B94 om
+precies deze reden.
+
+### Ctrl+Shift+Tab in de mappenlijst deed niets
+
+Tweede melding, dezelfde functie. De mappenlijst was de eerste halte van de ring en teruggaan
+vanaf de eerste halte was `null`: de aanslag deed letterlijk niets. Nu gaat hij naar de tekst
+van de open notitie.
+
+En daarmee komt de vraag boven wat er moet gebeuren als er geen notitie open is. Het antwoord
+is één regel, en die vervangt de `null`-tak: **een stap zonder plek om te landen doet niets.**
+`focusPane` zegt of hij verplaatst heeft, `cycle` geeft dat antwoord door in plaats van `true`,
+en daarmee is "doe niets als er geen notitie actief is" geen aparte tak maar hetzelfde
+mechanisme dat de titel en het kopblok al gebruikten.
+
+Daar zat één leugen in de weg: `focusPane("editor")` gaf altijd `true`, ook als er helemaal
+geen editor gemonteerd was — met een lege lezer is die er niet. Dat viel niet op zolang de
+notitie de *derde* Tab-halte was, en valt onmiddellijk op zodra Tab en de ring er recht op
+mikken.
+
+**Verworpen:** doorlopen naar de volgende halte die wél iemand kan ontvangen. Dat is
+verdedigbaar en het is een ander gebaar: Ctrl+Shift+Tab in de mappenlijst zou dan in de
+notitielijst eindigen, wat een antwoord is op een vraag die niet gesteld is.
+
+### Focus komt terug in het venster dat het opnamevenster opriep
+
+Derde melding: een notitie beginnen met Mod+N in de bibliotheek, afsluiten met Ctrl+Enter, en
+dan alt-tabben om terug te zijn waar je was. `hideCaptureWindow` deed `hide()` en verder
+niets; het besturingssysteem koos maar wat.
+
+Het onderscheid dat hiervoor nodig is stond er al en was alleen niet opgeschreven:
+`showCaptureWindow` is de sneltoets, het pictogram en de tweede instantie, en
+`focusCaptureWindow` is de bibliotheek en niets anders — beide routes van dat venster
+(`IPC.captureNew`, `IPC.captureLoad`) gaan erlangs. Eén `raisedByLibrary` naast de twee
+handlers, gezet door de een en gewist door de ander, en `hideCaptureWindow` geeft de focus
+terug als hij gezet stond.
+
+**Verworpen:** altijd de bibliotheek naar voren halen als er een is. Dat maakt van een notitie
+die je vanuit Outlook met de sneltoets typt een reden om de notitiebrowser in beeld te
+trekken, en dat is een ergere fout dan degene die hier opgelost wordt.
+
+**Verworpen:** ook onthouden welke *andere applicatie* voor de sneltoets vooraan stond en die
+teruggeven. Dat is een ander verzoek dan het gemelde, en de Windows-helft ervan is een gevecht
+met de voorgrondregels dat geen enkele melding vraagt.
+
+Het wordt gewist door `showCaptureWindow` en niet alleen verbruikt door `hideCaptureWindow`,
+zodat een sneltoets-notitie een uur later de bibliotheek niet alsnog naar voren haalt — en
+zodat `selftest.ts`, dat vijftig keer achter elkaar toont en verbergt, geen enkel venster
+optilt.
+
+### "Controleren op updates" zegt nu dat hij bezig is
+
+Vierde melding: je klikt en er gebeurt niets, tot er ineens een dialoog staat. Dat is precies
+wat het is — `IPC.checkForUpdates` lost op zodra de controle *gestart* is, met opzet, omdat op
+Windows dezelfde aanroep pas klaar is als de gebruiker een download heeft beantwoord. Er was
+alleen niets wat het tussenliggende moment beschreef.
+
+`IPC.updateCheckState` doet dat, en draagt een `boolean` en verder niets. **Het is nadrukkelijk
+niet de uitslag**: elke uitkomst blijft de systeemdialoog die `updater.ts` opwerpt. De knop
+staat uit en leest "Bezig met controleren…" zolang hij waar is.
+
+`false` betekent dat de *controle* voorbij is, niet de update. Op Windows volgen daarna nog een
+download en een herstartvraag, en een knop die daar doorheen "bezig met controleren" bleef
+zeggen zou iets beschrijven dat minuten eerder klaar was. Alle vijf uitkomsten van die module
+zijn een `showMessageBox`, dus loopt er één `announce` voor die vijf langs die de controle
+beëindigt — één plek in plaats van een vlag die op vijf takken bijgehouden moet worden.
+
+De toestand komt van main en wordt niet hier op de klik gezet, want het pictogram in de
+systeembalk start dezelfde controle; een vlag in het paneel zou de helft ervan beschrijven.
+
+**Verworpen:** een modale "bezig met controleren"-dialoog, wat de melding zelf voorstelde.
+`dialog.showMessageBox` gaat niet vanuit code weer dicht, en op Windows zou hij vóór de
+uitkomst blijven staan die hij aankondigde.
+
+### Een plaatje met een opgegeven hoogte houdt zijn vorm
+
+Vijfde melding: een base64-plaatje schaalt alleen in de breedte mee met het venster.
+
+Het is geen base64-fout. `![|1282x293](data:…)` is wat Word en Outlook schrijven, en het
+bijzondere eraan is het *paar*: een breedte én een hoogte. `applySize` zette die als
+`width: 1282px; height: 293px` inline op het plaatje. `.wiki-embed-image` heeft
+`max-width: 100%`, dus de breedte kwam mee omlaag met de kolom — en de inline hoogte bleef
+staan, want een inline declaratie wint van de stylesheet, ook van de `height: auto` die daar
+precies voor bedoeld was. Wat je zag was `kolombreedte × 293`.
+
+Het staat er nu als een verhouding: `aspect-ratio: 1282 / 293` met `height: auto`. Dat zegt de
+vorm zonder een maat te zeggen — bij volle breedte tekent het exact het vak dat het bestand
+vraagt, en onder de bovengrens neemt het de hoogte mee naar beneden. B97 heeft hier niets mee
+te maken behalve de aanleiding: die maakte dat zulke plaatjes überhaupt *getekend* werden, en
+Office is nu eenmaal de bron die een paar schrijft in plaats van één getal. Dezelfde fout zat
+in `![[foto.png|250x180]]`, want beide gaan door dezelfde functie.
+
+**Verworpen:** `height: auto !important` in de stylesheet. Dat gooit de hoogte die iemand
+opgeschreven heeft helemaal weg, en de regel dat een hoogte die een ander schreef bewaard
+blijft (B74) is nu juist de reden dat er iets te bewaren viel.
+
+### Wat het bewijst
+
+`npm run drive:library` heeft er twee stappen bij — een echte Ctrl+Tab die op de titel landt en
+een echte Ctrl+Shift+Tab uit de mappenlijst die in de tekst landt — en de bestaande Tab-wandeling
+is van acht haltes naar twee gegaan. Dat is ook de enige plek waar het akkoord van begin tot eind
+loopt: main claimt Ctrl+Tab in `before-input-event`, dus de jsdom-suite kan alleen de doorgestuurde
+handler aanroepen.
+
+**Die twee stappen moesten met `xdotool` geschreven worden**, en dat is het onthouden waard. Elk
+ander akkoord in dat script is een CDP-`Input.dispatchKeyEvent`, en die komt op de *pagina* uit —
+waar Mod+T, Mod+S en Mod+Shift+W afgehandeld worden. Ctrl+Tab wordt in main geclaimd, en een via
+CDP ingespoten toets komt daar nooit langs: op de voor de hand liggende manier geschreven bleef de
+focus staan waar hij stond en zag de stap eruit als een kapotte fix. Echte XTEST-toetsen lopen wél
+door de pijplijn waar de claim in zit — precies de reden dat die claim daarheen verhuisd is — dus
+moet het venster eerst X-focus hebben, gevonden via een gestempelde `document.title`, om de reden
+die `drive-capture.ts` al had: elk venster van deze app heet "emqnote".
+
+`npm run drive:capture` heeft er één bij, en die meet het getekende rechthoekje: jsdom heeft geen
+opmaak, dus `test/image-stored-size.test.ts` kan zeggen wat er in `img.style` terechtkomt en niets
+over wat de browser er dan van maakt. Hier gemeten: `547×125, 4.38:1` mét de fix, en met de fix
+eruit gedraaid `drawn 547×293 is 1.87:1` — de kolombreedte bij de hoogte die het bestand opgaf,
+wat de melding in één regel is.
+
+Van de vijf is er één die nergens automatisch heen kan: welk venster na Ctrl+Enter de focus
+heeft, is vensterstaat van Electron en geen van beide drivers kan het vragen.
+`TEST-PROTOCOL.md` §52 heeft het, op beide platforms.

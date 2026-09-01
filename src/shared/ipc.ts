@@ -243,11 +243,26 @@ export const IPC = {
    * Carries nothing and answers nothing. Every outcome of a check — up to date, an update
    * to download, a network that would not answer — is a native dialog raised by
    * `updater.ts`, on the same "you asked, so you get an answer" rule the tray item has
-   * always followed; there is no result for the panel to draw and nothing for it to
+   * always followed; there is no *result* for the panel to draw and nothing for it to
    * decide. It resolves once the check has been *started*, not once it has finished, so a
-   * slow GitHub cannot leave a button in the panel waiting on it.
+   * slow GitHub cannot leave a button in the panel waiting on it — which is exactly why
+   * `updateCheckState` below exists.
    */
   checkForUpdates: "app:check-for-updates",
+  /**
+   * main → the library window: a check has started, or has finished checking (B98).
+   *
+   * Carries a `boolean` and nothing else, and it is deliberately not the outcome — that
+   * is still the native dialog `checkForUpdates` above describes. What the panel had no
+   * way of knowing is that anything was happening at all: the click resolved instantly
+   * and the dialog arrived whenever GitHub got round to answering, so for a few seconds
+   * the button looked as if it had done nothing.
+   *
+   * `false` means the *check* is over, not the update. On Windows `updater.ts` goes on to
+   * offer a download and a restart, and a button still reading "Checking for updates…"
+   * through all of that would be describing something that finished minutes earlier.
+   */
+  updateCheckState: "app:update-check-state",
   /**
    * main → both windows: something in `settings.json` that a window *draws with* has
    * changed, so re-read the bootstrap.
@@ -868,6 +883,11 @@ export interface CaptureApi {
    * Resolves when the check has been started; what it found is a native dialog.
    */
   checkForUpdates: () => Promise<void>;
+  /**
+   * Whether a check is running — see `IPC.updateCheckState`. Not the outcome, which stays
+   * a native dialog; this is only what lets the button say it is busy.
+   */
+  onUpdateCheckState: (handler: (checking: boolean) => void) => () => void;
   /** Fire-and-forget, like `revealNote` — nothing downstream needs to await it landing. */
   setPaneWidths: (widths: { tree: number; notes: number }) => void;
   /**

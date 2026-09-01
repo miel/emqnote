@@ -195,12 +195,22 @@ export function Settings({
   const [themeChoice, setThemeChoice] = useState(theme);
   const [vaults, setVaults] = useState<VaultLocation[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
+  /**
+   * Whether main has a check for updates in the air (B98).
+   *
+   * Starts `false` and learns from the broadcast rather than asking on mount: the only
+   * way this panel can be looking at a check it did not start is the once-a-day startup
+   * one, and that is over long before anyone has opened Settings. Nothing polls.
+   */
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     void window.emqnote.listVaults().then(setVaults);
   }, []);
+
+  useEffect(() => window.emqnote.onUpdateCheckState(setCheckingUpdates), []);
 
   /**
    * The same focus handling `Help.tsx` and `ContextMenu.tsx` do, and for the same reason:
@@ -377,14 +387,27 @@ export function Settings({
             a button that goes and does something, not a value being shown, so the fixed
             200px a `.settings-row button` wears would be width spent on nothing.
 
-            Nothing is drawn from the result and nothing is awaited. Every outcome is a
+            Nothing is drawn from the *result* and nothing is awaited. Every outcome is a
             native dialog raised in main — up to date, an update to download, a network
-            that would not answer — which is the tray item's contract unchanged, and the
-            panel has no state that depends on any of them. */}
+            that would not answer — which is the tray item's contract unchanged.
+
+            What the button does draw is that a check is running (B98). It was reported as
+            confusion, and the shape of it is worth keeping in mind: the click resolves
+            immediately by design, so a slow GitHub left a button that had visibly done
+            nothing for several seconds and then raised a dialog out of nowhere. The state
+            is main's — `IPC.updateCheckState` — rather than something set here on click,
+            because the tray runs the same check and the panel would otherwise be describing
+            only half of them. A modal "checking…" was the other candidate and was dropped:
+            `dialog.showMessageBox` cannot be closed from code, and on Windows it would
+            stack in front of the outcome it was announcing. */}
         <div className="settings-row settings-row-block">
           <span>{t("settings.updates")}</span>
-          <button type="button" onClick={() => void window.emqnote.checkForUpdates()}>
-            {t("settings.updatesCheck")}
+          <button
+            type="button"
+            disabled={checkingUpdates}
+            onClick={() => void window.emqnote.checkForUpdates()}
+          >
+            {t(checkingUpdates ? "settings.updatesChecking" : "settings.updatesCheck")}
           </button>
         </div>
 

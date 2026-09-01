@@ -154,6 +154,7 @@ function buildFake(initial: OpenedNote): Fake {
     setEditorFontSize: async () => {},
     setTheme: async () => {},
     checkForUpdates: async () => {},
+    onUpdateCheckState: () => () => {},
     setHotkey: async () => true,
     setLibraryHotkey: async () => true,
     setPaneWidths: () => {},

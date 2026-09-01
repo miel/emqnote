@@ -1,7 +1,9 @@
-import { app, dialog, shell } from "electron";
+import { app, dialog, shell, type MessageBoxOptions, type MessageBoxReturnValue } from "electron";
 import { createRequire } from "node:module";
 import type { AppUpdater } from "electron-updater";
 import { isNewerVersion, parseLatestRelease } from "./update-check.js";
+import { getLibraryWindow } from "./library-window.js";
+import { IPC } from "../shared/ipc.js";
 
 const REPO = "miel/emqnote";
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
@@ -21,6 +23,66 @@ export function setBeforeInstall(handler: () => Promise<void>): void {
 }
 
 /**
+ * Whether a check is in the air right now (B98).
+ *
+ * The reported confusion is the gap between the click and the dialog: the settings
+ * panel's button is fire-and-forget by design — `IPC.checkForUpdates` resolves once the
+ * check has been *started*, because on Windows the call only settles after the user has
+ * answered a download prompt — so for as long as GitHub takes to answer, nothing on
+ * screen has changed and the click looks lost.
+ *
+ * This is the one thing worth telling the window, and it is deliberately not the result:
+ * every outcome is a native dialog and stays one.
+ */
+let checking = false;
+
+/**
+ * `true` when this call owns the check, `false` when one was already running.
+ *
+ * A second check while the first is in the air is not something to queue: the once-a-day
+ * startup check can still be waiting on GitHub when the panel is opened, and two of them
+ * would race to raise two dialogs about the same answer. The settings button is disabled
+ * while this is `true`, so from the panel the refused click cannot be made at all; from
+ * the tray it can, and the answer it gets is the dialog the check already in the air is
+ * about to raise, which is the answer it asked for.
+ */
+function beginCheck(): boolean {
+  if (checking) return false;
+  checking = true;
+  reportChecking();
+  return true;
+}
+
+/** Idempotent, because both `announce` and `checkForUpdates`'s `finally` call it. */
+function endCheck(): void {
+  if (!checking) return;
+  checking = false;
+  reportChecking();
+}
+
+/** Guarded exactly as `index.ts`'s `notifyLibrary` is: the panel may not be open at all. */
+function reportChecking(): void {
+  const library = getLibraryWindow();
+  if (library === null || library.isDestroyed()) return;
+  library.webContents.send(IPC.updateCheckState, checking);
+}
+
+/**
+ * Every outcome this module has, and the one place the check is declared over.
+ *
+ * The check ends when the *check* ends, not when the user has finished answering — the
+ * Windows path stays inside `checkWindows` for as long as a download takes, and a button
+ * reading "Checking for updates…" through all of it would be describing something that
+ * finished minutes ago. Since every outcome here is a message box, putting `endCheck` in
+ * front of `showMessageBox` puts it in front of all five of them at once, rather than a
+ * flag to be kept in step at each branch.
+ */
+async function announce(options: MessageBoxOptions): Promise<MessageBoxReturnValue> {
+  endCheck();
+  return dialog.showMessageBox(options);
+}
+
+/**
  * Checks the latest tagged GitHub release against the running version.
  *
  * Windows gets a real install: electron-updater's NSIS-based auto-update, gated behind
@@ -37,6 +99,7 @@ export function setBeforeInstall(handler: () => Promise<void>): void {
  * answer.
  */
 export async function checkForUpdates(trigger: "startup" | "manual"): Promise<void> {
+  if (!beginCheck()) return;
   try {
     if (process.platform === "win32") {
       await checkWindows(trigger);
@@ -52,6 +115,11 @@ export async function checkForUpdates(trigger: "startup" | "manual"): Promise<vo
     // name itself. `reportError` still respects `trigger`, so the startup check stays
     // quiet.
     await reportError(trigger, error);
+  } finally {
+    // `announce` has almost always ended it already. What is left for this is the one
+    // path that raises no dialog at all: the startup check finding nothing, which
+    // `reportUpToDate` returns from before it ever reaches a message box.
+    endCheck();
   }
 }
 
@@ -85,7 +153,7 @@ function loadAutoUpdater(): AppUpdater {
 
 async function reportError(trigger: "startup" | "manual", error: unknown): Promise<void> {
   if (trigger !== "manual") return;
-  await dialog.showMessageBox({
+  await announce({
     type: "error",
     title: "Could not check for updates",
     message: "Checking GitHub for the latest release failed.",
@@ -95,7 +163,7 @@ async function reportError(trigger: "startup" | "manual", error: unknown): Promi
 
 async function reportUpToDate(trigger: "startup" | "manual"): Promise<void> {
   if (trigger !== "manual") return;
-  await dialog.showMessageBox({
+  await announce({
     type: "info",
     title: "Up to date",
     message: `emqnote ${app.getVersion()} is the latest version.`,
@@ -117,7 +185,7 @@ async function checkMac(trigger: "startup" | "manual"): Promise<void> {
     return;
   }
 
-  const answer = await dialog.showMessageBox({
+  const answer = await announce({
     type: "info",
     title: "Update available",
     message: `emqnote ${release.version} is available (you have ${app.getVersion()}).`,
@@ -161,7 +229,7 @@ async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
 
     autoUpdater.once("update-available", (info) => {
       void (async () => {
-        const answer = await dialog.showMessageBox({
+        const answer = await announce({
           type: "info",
           title: "Update available",
           message: `emqnote ${info.version} is available (you have ${app.getVersion()}).`,
@@ -181,7 +249,7 @@ async function checkWindows(trigger: "startup" | "manual"): Promise<void> {
 
     autoUpdater.once("update-downloaded", () => {
       void (async () => {
-        const answer = await dialog.showMessageBox({
+        const answer = await announce({
           type: "info",
           title: "Update downloaded",
           message: "Restart emqnote now to finish installing?",

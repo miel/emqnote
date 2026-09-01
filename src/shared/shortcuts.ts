@@ -224,6 +224,10 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "those fields — and it replaces it because a stop in the ring made every Ctrl+Tab " +
       "walk through four fields to get past them. A chord that goes straight there costs " +
       "nothing to the gesture that was not about the fields at all.\n\n" +
+      "**It carries more weight since B98**, which sent plain Tab from the note list " +
+      "straight into the note. The four fields keep three routes — this chord, a Tab on " +
+      "from the title (Ctrl+Tab out of the list), and the mouse — and this is the only " +
+      "one that is a single press from wherever you are.\n\n" +
       "'W' for When, the field it lands on, and the ring's own rule holds inside the " +
       "block once you are in it: plain Tab and Shift-Tab walk the four fields in DOM " +
       "order, which is what makes one chord enough for all of them.\n\n" +
@@ -304,20 +308,25 @@ export const SHORTCUTS: ShortcutEntry[] = [
     where: "library",
     group: "window",
     why:
-      "Tab already cycles tree → notes → editor, but it cannot leave the editor: " +
-      "keymap.ts binds Tab there to list indent, and that binding always returns true. " +
-      "F6 used to be the one key that reached every pane; dropped for the fn-key " +
-      "reason (B32) and replaced with the browser's own 'switch tab' chord, which " +
-      "keymap.ts has no binding for and so still reaches out of the editor.\n\n" +
-      "**Three stops, and it went back to three.** The note's own header block was the " +
-      "fourth for one release: the problem it answered was real — from the editor there " +
-      "was no way back up to When — but the price was paid by every press that was not " +
-      "about the fields, since cycling from the list to the note then walked through the " +
-      "block on the way. `focusFields` (Mod-Shift-W) answers the same question in one " +
-      "chord and takes nothing from this one. The block is still *passed through*: a " +
-      "press from inside it moves to the note going forward and to the list going back, " +
-      "which is where the ring would have put you. It is simply not somewhere the ring " +
-      "ever lands. See `Library.tsx`'s `cycle`.",
+      "Tab walks tree → notes → the note, but it cannot leave the editor: keymap.ts " +
+      "binds Tab there to list indent, and that binding always returns true. F6 used to " +
+      "be the one key that reached every pane; dropped for the fn-key reason (B32) and " +
+      "replaced with the browser's own 'switch tab' chord, which keymap.ts has no " +
+      "binding for and so still reaches out of the editor.\n\n" +
+      "**Four stops forward, three back** (B98), and the asymmetry is the report: " +
+      "forward is tree → notes → the note's *title* → the note → tree, backward is the " +
+      "note → notes → tree → the note. The title is a destination you ask for, so it " +
+      "gets the chord; the note is where you were going anyway, so it gets plain Tab. " +
+      "That is a swap of the two gestures, not a new stop bolted on — plain Tab used to " +
+      "land on the title and the chord used to skip it.\n\n" +
+      "This is not the fourth stop B94 removed. That one was the note's own header " +
+      "block, and the price was paid by every press that was not about the fields, " +
+      "since cycling from the list to the note then walked through four inputs on the " +
+      "way. `focusFields` (Mod-Shift-W) answers that in one chord and still does. The " +
+      "block is still *passed through*: a press from inside it moves to the note going " +
+      "forward and to the list going back, which is where the ring would have put you. " +
+      "**A step with nowhere to land does nothing** — Ctrl-Shift-Tab in the tree with " +
+      "no note open stays in the tree. See `Library.tsx`'s `cycle`.",
   },
   {
     id: "goBack",

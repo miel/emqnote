@@ -41,7 +41,7 @@ date" at 0.8.8 and "Update available → 0.8.8" at 0.8.0.
 
 **The capture window is hidden, never destroyed.** `capture-window.ts` holds exactly one `BrowserWindow` reference, assigned once, so a destroyed window is unrecoverable: `reveal()` fails on `isDestroyed()` forever — hotkey and New note silently dead — and `hideCaptureWindow()` never runs, so `writer.finish()` never releases the loaded note and the library reports it "open for editing" in a window that no longer exists. On macOS the traffic lights are real (`titleBarStyle: "hidden"`), so the red button would do exactly that. The `close` handler therefore calls `preventDefault()` and routes to `hideCaptureWindow()`, the same commit-and-put-away path `IPC.captureClose` uses. A `quitting` flag, set from `before-quit`, lets a genuine quit through — without it the tray's Quit hangs on that `preventDefault()`. `reveal()` keeps its `isDestroyed()` guard but now recreates the window rather than returning.
 
-**The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the tree → notes → editor ring from there, and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
+**The pane cycle is claimed in main, not in the window.** `Ctrl+Tab`/`Ctrl+Shift+Tab` (`cyclePanes`, B32) is caught by `library-window.ts`'s `before-input-event`, which `preventDefault`s it and forwards the *intent* over `IPC.libraryCyclePanes`; `Library.tsx` runs the ring from there (tree → notes → title → editor forward, and three stops back — see B98 below), and its `keydown` listener now handles only plain Tab and Escape. Main asks `matches(shortcut("cyclePanes"), …)` rather than comparing `input`'s fields, so the chord has one spelling — the one the help sheet prints. This is a fix for a Windows report whose cause was never found (see the batch note below), so the thing to know before changing it is *why* it is there rather than in the renderer: `before-input-event` runs ahead of every native accelerator and ahead of the page, which is the only position that helps against an unidentified consumer. **A consequence worth knowing before writing a test for it** (B98): a CDP `Input.dispatchKeyEvent` reaches the page and never passes that point, so `drive:library`'s two chord steps press real XTEST keys through `xdotool` after focusing the window by a stamped `document.title` — written the CDP way they leave focus where it was and read as a broken fix. It replaced the renderer branch rather than joining it — with main preventing the default, a second branch could only fire when the forward had already failed.
 
 **An editor chord can be claimed in main too, and one of them is** (`editor-keys.ts`, 17 August 2026). `Mod+Shift+T` — the checkbox item — was reported doing nothing on Windows, which is the Ctrl+Tab report's exact shape: the command is fine (`toggleTask` covers a plain paragraph, a bullet list and a numbered one), the chord is spelled once in `shortcuts.ts`, and nothing here can see what eats it. So it takes the same fix at the same position, extended to the window that had no `before-input-event` handler at all — the capture window, which is where notes are written. Three things are load-bearing. **The matching is a pure function** (`editorKeyIntent`), so the half that can be tested is; the claim itself is an Electron event. **The renderer runs it only when the editor has focus** — `Editor.tsx` subscribes to `IPC.editorCommand` and checks `view.hasFocus()`, because main cannot tell the caret in the note from the caret in the subject field, and a chord that suddenly worked from the note list would be a second behaviour nobody asked for. And **the keymap entry stays** even though it no longer fires: it is what the help sheet prints and what `shortcuts.test.ts` checks, and the registry is where a chord is defined. Measured on Linux with real XTEST keys: after the claim the `T` never reaches the page while an unclaimed `Ctrl+Shift+L` still does, and the task item appears anyway.
 
@@ -2172,24 +2172,28 @@ rather than throwing, for the reason above — the reader's `save()` does not ca
 `test/atomic-write.test.ts` and `test/capture-writer.test.ts`'s "a write that could not
 land" block pin all of it; the latter's three cases all fail against the old `enqueue`.
 
-**The library's plain Tab order is the order the eye reads, and only two of its steps are
-this app's** (B94). Folders → notes → the note's title → When → Tags → Where → Who → the
-note itself, and backwards the same. `tabStep` in `Library.tsx` performs the two steps a
-browser cannot — tree → notes, which skips that pane's own search and "+ New note" buttons,
-and notes → title, which has to be asked for by name because with no note open there is
-nothing there. The other six are the browser walking six focusable controls in DOM order.
-**A table of eight stops is the thing to avoid here**: it would be a second definition of an
-order the DOM already states, and the first to disagree with it the day a pane is reordered.
-Three things were taken *out* of the order to make it true — both pane splitters and the
-note list's footer buttons (the sort chooser and Tasks) — and the two buttons gained chords
-in the same change (Mod+T, Mod+S). That is the trade: **if either chord is ever removed,
-the `offTabOrder` on its button has to go with it**, or the control becomes unreachable
-without a mouse, which is the rule `pinNote` and `settings` exist for. `paneOf` deliberately
-answers `null` for the title and the four fields so a plain Tab keeps walking them;
-`inNoteFields` is the separate question, and only the pane ring asks it. jsdom implements no
-sequential focus navigation at all, so no test under `test/` can see more than the two steps
-this app performs — `npm run drive:library` presses a real Tab and reads back
-`document.activeElement`.
+**The library's plain Tab goes tree → notes → the note, and only those two steps are this
+app's** (B94, B98). It was the order the eye reads — folders, notes, the title, When, Tags,
+Where, Who, the note — and daily use answered that: the note is where the press was going
+every time, five stops away. **Tab and Ctrl+Tab swapped jobs.** Plain Tab lands in the
+note's text; the chord lands on the title. `tabStep` in `Library.tsx` performs the two steps
+a browser cannot — tree → notes, which skips that pane's own search and "+ New note"
+buttons, and notes → the editor, which has to be asked for by name because with no note open
+there is nothing there. Everything past the title is still the browser walking focusable
+controls in DOM order, and **a table of stops is the thing to avoid here**: it would be a
+second definition of an order the DOM already states, and the first to disagree with it the
+day a pane is reordered. What the swap costs is that the four metadata fields have no route
+from the list that is not a chord; they keep three — Tab on from the title, `focusFields`
+(Mod+Shift+W), and the mouse. Three things were taken *out* of the order to make the walk
+true — both pane splitters and the note list's footer buttons (the sort chooser and Tasks) —
+and the two buttons gained chords in the same change (Mod+T, Mod+S). That is the trade:
+**if either chord is ever removed, the `offTabOrder` on its button has to go with it**, or
+the control becomes unreachable without a mouse, which is the rule `pinNote` and `settings`
+exist for. `paneOf` deliberately answers `null` for the title and the four fields so a plain
+Tab keeps walking them; `inNoteFields` is the separate question, and only the pane ring asks
+it. jsdom implements no sequential focus navigation at all, so no test under `test/` can see
+more than the two steps this app performs — `npm run drive:library` presses a real Tab and
+reads back `document.activeElement`.
 
 **Mod+T toggles, and it is the only route that can** (B95). It opened the Tasks view and had
 no way of closing it — a second press re-set the same selection and nothing moved. The
@@ -2203,14 +2207,25 @@ and is worth the contrast: it *presses the sort button* rather than owning a cop
 does, so it inherits that button's own toggle for free — and is silently a no-op inside the
 Tasks view, `.sort-choose` not being mounted there either.
 
-**The pane ring is three stops, and adding a fourth costs every press that was not about
-it** (B94). Ctrl+Tab / Ctrl+Shift+Tab go tree → notes → editor and back. The note's header
-block was a fourth stop for one release, on the sound argument that from the editor there
-was no way back up to When; the cost was that getting from the list to the note then walked
-through four inputs. `focusFields` (Mod+Shift+W) answers the same question in one press,
-from either window, and lands on When with Tab walking on to the other three. The block and
-the title are still *passed through* — a press from inside either goes where the ring would
-have put you — which is `inNoteFields`, not `paneOf`.
+**The pane ring is four stops forward and three back, and the asymmetry is deliberate**
+(B94, B98). Forward: tree → notes → the note's *title* → the note → tree. Backward: the note
+→ notes → tree → the note. The title is a destination you ask for, so it gets the chord; the
+note is where you were going anyway, so it gets plain Tab — and going back out of the note
+means going back to the list you came from, so the title is not on the return leg. **This is
+not the fourth stop B94 removed.** That was the note's header block, a stop in *both*
+directions, and the cost was that getting from the list to the note walked through four
+inputs; `focusFields` (Mod+Shift+W) answers that in one press, from either window, and lands
+on When with Tab walking on to the other three. The block is still *passed through*, and so
+is the title when a press is made from inside it — a press from either goes where the ring
+would have put you — which is `inNoteFields`, not `paneOf`.
+
+**A ring step with nowhere to land does nothing** (B98). `focusPane` answers whether it
+moved and `cycle` returns that answer rather than `true`, so Ctrl+Shift+Tab in the tree with
+no note open stays in the tree instead of skipping on to a stop the press was not about.
+That one rule is the whole of "do nothing when there is no note", and it needed
+`focusPane("editor")` to stop claiming `true` unconditionally: with no note open there is no
+`Editor` mounted at all. The lie was invisible while the note was the third Tab stop and
+showed the moment Tab and the backward ring aimed straight at it.
 
 **Marked is not selected** (B94, `multi-select.ts`). The note in the reader is what
 `selected` means and there is exactly one of it; the marked set is a second, temporary thing
@@ -2263,3 +2278,47 @@ that slides out of the grip. And **a click does arrive after a drag** — the wi
 with the pointer, so press and release land on the same element — so it is suppressed, or
 letting go of a dragged title opens the rename every time. jsdom has no app-region and no
 window position, so `npm run drive:library` is the only place either half is visible.
+
+**Only the library gets its focus back, and the capture window remembers who asked** (B98).
+`hideCaptureWindow` hands the foreground to the library window when — and only when —
+`focusCaptureWindow` was what raised it. That distinction was already in the code and simply
+not recorded: `showCaptureWindow` is the global hotkey, the tray and the second instance,
+`focusCaptureWindow` is the library's two routes (`IPC.captureNew`, `IPC.captureLoad`) and
+nothing else. **The flag is written by both entries, not only consumed by the hide**, or a
+hotkey capture taken from Outlook an hour later would drag the note browser into the
+foreground — and `selftest.ts`, which shows and hides fifty times in a row, would raise a
+window on every iteration. Three details are load-bearing: it raises through
+`getLibraryWindow`, never `showLibraryWindow`, which *creates* a window and so would turn
+filing a note into opening the browser; it runs *after* `hide()`, so the `blur` handler that
+saves has nothing left to do; and it calls `app.focus({ steal: true })` on darwin for
+`reveal`'s own reason. Nothing under `test/` can see any of it — which window holds the
+foreground is Electron window state, and neither driver can ask — so it is
+`TEST-PROTOCOL.md` §52 on both platforms.
+
+**A picture's stored height is written as a ratio, never as a number of pixels** (B98,
+B74). `applySize` in `image-resize.ts` sets `aspect-ratio: W / H` with `height: auto`, and
+that is the *only* place a size the file states reaches the DOM — both NodeViews go through
+it. Pixels do not work and the reason is worth keeping: `.wiki-embed-image` carries
+`max-width: 100%`, so a picture wider than the column is drawn narrower, and an inline
+`height: 293px` stands through that — beating the stylesheet's own
+`[data-sized="true"] { height: auto }`, as an inline declaration always will. The picture
+squashed sideways as the window moved. Reported against `![|1282x293](data:…)`, which is what
+Word and Outlook write; `![[foto.png|250x180]]` had it too. A bare `|400` still writes
+nothing at all for the height — inventing proportions from one number is exactly what B74
+says this app must not do. `test/image-stored-size.test.ts` pins what lands in `img.style`,
+and `npm run drive:capture` measures the drawn rectangle, because jsdom has no layout and so
+cannot tell a correct inline style from a correct picture.
+
+**Whether an update check is running is main's answer, not the panel's** (B98).
+`IPC.updateCheckState` carries a `boolean` and nothing else, and it is emphatically **not
+the outcome** — every outcome stays the native dialog `updater.ts` raises. What was missing
+was the middle: `IPC.checkForUpdates` resolves once the check has been *started*, on purpose,
+because on Windows the same call only settles after the user has answered a download prompt,
+so a slow GitHub left a button that had visibly done nothing and then a dialog out of
+nowhere. Two things keep it honest. **The state comes from main because the tray runs the
+same check** — a flag set in `Settings.tsx` on click would describe only half of them. And
+**`false` means the check is over, not the update**: `announce` ends it in front of all five
+`showMessageBox` calls rather than at the end of `checkForUpdates`, or the Windows path would
+go on reading "Checking for updates…" through a download and a restart prompt. A modal
+"checking…" was the obvious alternative and does not work: `dialog.showMessageBox` cannot be
+closed from code, and it would stack in front of the outcome it announced.

@@ -60,4 +60,20 @@ describe("styles.css: the image resize handles", () => {
     expect(rule).toMatch(/max-height:\s*none;/);
     expect(rule).toMatch(/height:\s*auto;/);
   });
+
+  it("caps the width of a sized picture, which is why the height cannot be a number", () => {
+    // The other half of B98, and the half that lives here. `max-width: 100%` is what makes
+    // a `|1282x293` picture narrower than the file asked for, and the rule above cannot
+    // carry the height down with it: `image-resize.ts` writes the size inline, and an
+    // inline `height: 293px` beats any stylesheet. So the height is stated as a ratio
+    // instead — `test/image-stored-size.test.ts` is that assertion, and `drive:capture`
+    // is the only place the drawn rectangle can actually be measured.
+    const rule = css.match(/\.editor-content \.wiki-embed-image \{[^}]*\}/)?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/max-width:\s*100%;/);
+    // A ceiling, and no bare `height` beside it: one would be a second answer to the
+    // question the `[data-sized]` rule and the inline style already share.
+    expect(rule).toMatch(/max-height:\s*480px;/);
+    expect(rule).not.toMatch(/(?<![-\w])height:/);
+  });
 });

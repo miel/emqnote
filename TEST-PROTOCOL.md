@@ -1783,6 +1783,44 @@ clipboard to feed it.
 
 ---
 
+## §52 — Where the focus goes, and what a picture does when the window narrows (B98)
+
+Five reports from daily use. Three of the five are confirmed on Linux by a driver step
+before this list starts — `drive:library` presses a real Ctrl+Tab and a real Ctrl+Shift+Tab,
+and `drive:capture` measures the drawn picture — so what is left here is the two platforms
+those drivers do not run on, and the one thing neither of them can ask: **which window holds
+the foreground.** That is Electron window state, and it is why 52a–52d exist at all.
+
+Prepare a note holding `![|1282x293](data:image/png;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=)`
+— the `|WxH` suffix is the whole point of it, and is the shape Word and Outlook write.
+Better still, paste a real picture out of a real message and read the size off the file.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 52a | In the library, Mod+N → type a line → Ctrl+Enter | Focus is back in the **library**, caret in the note list or wherever it was. No Alt+Tab, no click |  |
+| 52b | Double-click a note row to open it in capture, then Ctrl+Enter | The same. It is the same IPC route |  |
+| 52c | From **Outlook** (or any other app), press the global hotkey → type → Ctrl+Enter | Focus goes back to **Outlook**, or wherever the OS puts it. The library is *not* pulled to the front |  |
+| 52d | 52a, then quit nothing and repeat 52c an hour later | Still 52c's answer. The flag is consumed, not sticky |  |
+| 52e | Close the library window entirely, then hotkey → type → Ctrl+Enter | Nothing is raised and nothing is created. Filing a note is not a request to open the browser |  |
+| 52f | In the library, focus a note row and press **Tab** | The caret lands in the note's text |  |
+| 52g | From the same row press **Ctrl+Tab** | Focus lands on the note's **title**. Tab from there walks When → Tags → Where → Who → the note |  |
+| 52h | From inside the note press **Ctrl+Tab**, then **Ctrl+Shift+Tab** twice | Folders, then the note, then the note list. Four stops forward, three back |  |
+| 52i | In the folder tree press **Ctrl+Shift+Tab** with a note open | The caret lands in the note's text |  |
+| 52j | The same with **no** note open (click an empty folder first) | Nothing moves. Focus stays on the folder row |  |
+| 52k | 52f–52j again on **Windows** | The same. This chord has a history of being eaten there (B32, §22b), which is why it is claimed in `before-input-event` |  |
+| 52l | Settings → **Check for updates…** | The button greys out and reads "Checking for updates…" *before* any dialog appears, and comes back when it does |  |
+| 52m | The same with the network off | The button comes back, and the failure dialog says so. It must not stay disabled |  |
+| 52n | On **Windows**, take an update that really downloads | The button comes back when the *check* ends — at the "Update available" dialog — not when the download does |  |
+| 52o | Open the prepared note and drag the window narrower and wider | The picture keeps its shape. It must not squash sideways |  |
+| 52p | The same note in the **other** window (reader vs capture) | Identical. One `applySize`, both NodeViews |  |
+| 52q | Drag a corner handle on it, then double-click a handle | The drag keeps the box's shape; the double-click returns it to its own size and leaves no ratio behind |  |
+| 52r | 52o on the **other machine** | The same |  |
+
+52c and 52d are the rows worth walking carefully: they are what stops this being a worse bug
+than the one it fixes, and neither is visible from inside the app.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
