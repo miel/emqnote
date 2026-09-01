@@ -11,6 +11,7 @@ import {
   wikiLinkNodeView,
 } from "./attachment-view.js";
 import { clipboardText } from "./clipboard-text.js";
+import { clipboardHtml } from "./clipboard-html.js";
 import { transformPastedImages } from "./paste-images.js";
 import { transformPastedWikiSyntax } from "./paste-wiki.js";
 import { focusTaskAt } from "./focus-task.js";
@@ -297,6 +298,12 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       // The `text/plain` flavour of a copy. The default flattens a list to its text and
       // drops every bullet, number and box on the way out — see `clipboard-text.ts`.
       clipboardTextSerializer: clipboardText,
+      // And the `text/html` flavour, which loses the same information a different way:
+      // a task item's box and a star are attributes on the `<li>`, the editor draws both
+      // as decorations, and neither survives into a mail. `clipboard-html.ts` writes the
+      // glyph beside the attribute — never instead of it — and styles the constructions
+      // whose meaning is otherwise carried by this app's own stylesheet.
+      clipboardSerializer: clipboardHtml,
     });
 
     view.current = created;

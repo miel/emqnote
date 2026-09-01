@@ -3881,3 +3881,68 @@ is.
 
 **Verworpen:** de rij in de zijbalk ook laten schakelen. Een maprij die zichzelf uitzet bij
 een tweede klik doet iets anders dan elke maprij ernaast.
+
+---
+
+## B96 — Wat je kopieert houdt zijn vinkje, ook buiten dit venster
+
+**Genomen** op 1 september 2026, uit dagelijks gebruik. De melding: bij het plakken in een
+andere toepassing worden vinkjes bullets, koppen krijgen de grootte van gewone tekst en
+markeringen verdwijnen.
+
+### Waarom een decoratie nooit meekopieert
+
+Het `text/plain`-smaakje was al eens gerepareerd (`clipboard-text.ts`), en de opmerking
+erboven zei: het `text/html`-smaakje was altijd al goed. Dat klopte niet, en de reden staat
+in dit logboek al twee keer eerder beschreven zonder dat iemand de conclusie trok.
+
+Een taakregel draagt haar staat als **attribuut** — `data-checked` op de `<li>`, `data-starred`
+voor B72's ster — en het vakje dat je in de editor ziet is een *widget-decoratie*
+(`checkbox.ts`). Een decoratie staat naast het document en maakt er geen deel van uit; dat is
+precies waarom `link-title.ts` er een is. Geen enkele serializer kan er dus bij. Op het
+klembord stond `<li data-checked="true"><p>Klaar</p></li>`: één attribuut dat alleen deze app
+leest, en verder een bullet als elke andere. Aangevinkt en niet-aangevinkt kwamen in de mail
+als hetzelfde streepje aan. Dat is echte informatie die verdwijnt — de andere twee klachten
+zijn opmaak, deze niet.
+
+`<mark>` is HTML5 en Word — en Word ís de tekstverwerker onder een Outlook-bericht — pakt uit
+wat het niet kent: de tag verdween en de markering ermee. Een `<h1>` zonder eigen stijl is zo
+groot als de bestemming vindt dat hij is, en dat was body-grootte.
+
+### Wat er nu staat
+
+`clipboard-html.ts`, een `clipboardSerializer` naast het bestaande
+`clipboardTextSerializer`, en één pas over wat `DOMSerializer.fromSchema` heeft opgeleverd.
+Drie regels dragen het:
+
+**`toDOM` blijft ongemoeid.** Dat is tegelijk de tekening van de editor, de heenweg van
+kopiëren-en-plakken *binnen* deze app (`readChecked` is de terugweg) en het schema van het
+bestandsformaat — B6. Een tweede definitie daarvan zou precies het soort drift zijn waar B6
+tegen is. ProseMirror heeft voor dit verschil één prop, en dit is hem.
+
+**Een glyph is een plaatje van een attribuut, nooit een tweede definitie ervan.** De `☑`
+komt náást `data-checked` te staan en draagt `data-emq-clip`, waar `schema.ts` een
+`ignore`-regel voor heeft. Zonder die regel levert kopiëren en terugplakken in dezelfde app
+een letterlijke `☑` in de tekst mét een echt vakje ernaast — de bekende vorm van deze fout,
+en de reden dat `readChecked` überhaupt bestaat.
+
+**Elke stijl staat op het element én op een `<span>` erbinnen.** Een bestemming die de tag
+kent leest hem daar af; een die hem uitpakt (Word, bij `<mark>`) houdt de span over. En
+`font-weight`, `font-style` en `text-decoration` worden **nergens** geschreven: `schema.ts`
+leest die drie als marks, dus een kop die vet meegaat komt bij het terugplakken terug als een
+kop vol `**vet**` — een fout die het bestand in gaat, niet een die je alleen ziet.
+
+Het vakje is hier wél getypt en niet getekend, tegen het argument in dat in `checkbox.ts`
+staat (☐ en ☑ komen uit verschillende fallback-fonts en passen niet bij elkaar). Dat argument
+geldt nog steeds en helpt hier niet: inline SVG wordt door elke mailclient gestript en een
+`data:`-afbeelding blokkeert Outlook. Wat de bestemming wél kan krijgen is een teken.
+
+**Verworpen:** `<input type="checkbox" checked disabled>`, zoals GitHub het schrijft.
+`readChecked` leest die vorm al, dus de terugweg zou gratis zijn — maar een uitgeschakeld
+formulierveld tekent Word niet en Gmail strippen het. Het vakje moet tekst zijn om overal aan
+te komen.
+
+**Verworpen:** een `background-color`-regel in `schema.ts` waardoor gemarkeerde tekst uit
+Outlook *terug* als `==markering==` binnenkomt. Verleidelijk, want het is dezelfde naad van de
+andere kant — maar dan wordt elke gele achtergrond uit elke geplakte webpagina een markering,
+en dat is een andere beslissing dan deze.

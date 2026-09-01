@@ -365,11 +365,31 @@ of it rather than lifting it out, and `joinAdjacentLists` rejoins the halves whe
 paragraph between them is removed. An empty item at the *end* of a list still lifts out —
 nothing follows, so nothing can split, and leaving the list is the useful reading there.
 
-**Copying a list carries its markers.** `clipboardTextSerializer` is
-`clipboard-text.ts`, not ProseMirror's default `textBetween`, which knows nothing about
+**Copying a list carries its markers, in both flavours** (B96). `clipboardTextSerializer`
+is `clipboard-text.ts`, not ProseMirror's default `textBetween`, which knows nothing about
 structure and hands a plain-text target a checklist with every bullet, number and box
-stripped off. The `text/html` flavour was always fine, so this is only about the plain-text
-one — and it stays plain: no escaping, nothing that would make it markdown.
+stripped off — and it stays plain: no escaping, nothing that would make it markdown.
+`clipboardSerializer` is `clipboard-html.ts`, and the sentence that used to stand here —
+"the `text/html` flavour was always fine" — was wrong for three years' worth of the same
+information. A box and a star are *attributes* on the `<li>` (`data-checked`,
+`data-starred`), the editor draws both as widget decorations, and a decoration is not part
+of the document: no serializer of any kind can see one, so a ticked and an unticked item
+arrived in the mail as the same plain bullet. The pass adds `☐`/`☑`/`⭐` **beside** the
+attribute and never instead of it, marked `data-emq-clip` so `schema.ts`'s ignore rule
+drops it on the way back in — without that, copying a task item and pasting it into a note
+in this same app leaves a literal `☑` in the text with a real box beside it. Three rules
+hold the rest of it together: **`toDOM` is not touched** (it is the editor's rendering, the
+in-app round trip and the file-format schema at once — B6), **every style is emitted on the
+element *and* on a `<span>` inside it** because Word unwraps the tags it does not know
+(`<mark>` among them, which is why a highlight vanished), and **`font-weight`,
+`font-style` and `text-decoration` are never emitted at all** — `schema.ts` parses those
+three as marks, so a heading styled bold on the way out comes back as a heading full of
+`**bold**`, a saved corruption of exactly the kind `link-title.ts` describes for `title`.
+`clipboard-html.test.ts` pins both directions, and `drive:capture`'s tenth step is the one
+that could not be written under `test/` at all: a real Ctrl+C in the real window, read back
+off the real clipboard by `--dump-clipboard` in a second process. What the far end then
+*draws* is `TEST-PROTOCOL.md` §50 and a person's, because jsdom cannot ask Outlook anything
+and neither can a driver.
 
 **A bullet can carry a star instead, and that star is in the file** (B72). `- ⭐ Bel Jan`
 on disk; `starred` on `listItem` beside `checked` in memory, so the star stands where the
