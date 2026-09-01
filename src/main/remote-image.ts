@@ -183,6 +183,67 @@ export function typesAgree(declared: string | null | undefined, sniffed: string 
   return left !== null && sniffed !== null && left === sniffed;
 }
 
+/**
+ * Where the bytes came from — which is the whole of the difference between trusting a
+ * declared type and ignoring one.
+ *
+ * `"network"` is a server's `Content-Type`: a claim made by somebody else about bytes that
+ * arrive separately. `"inline"` is a `data:` URL's own label, which travels in the same
+ * string as the payload it describes.
+ */
+export type ImageOrigin = "network" | "inline";
+
+/** Whether this address carries its bytes with it rather than naming somewhere to get them. */
+export function isInlineImageUrl(url: string): boolean {
+  return schemeOf(url) === "data:";
+}
+
+/**
+ * The extension these bytes have earned, or `null` for a refusal — the one place the
+ * declared type and the magic number are weighed against each other.
+ *
+ * **`"network"`: the two must say the same thing.** That is `typesAgree`'s rule and the
+ * reason for it is written on that function — a server that says PNG and sends something
+ * else is either broken or lying, and neither is a file this app should store in the
+ * user's vault under a name it invented.
+ *
+ * **`"inline"`: the label is ignored completely and the bytes decide.** There is no second
+ * party to catch out here; the label and the payload are two halves of one string, so a
+ * mismatch is evidence of nothing, and an author who wanted PNG bytes served would simply
+ * have written a PNG. What the network rule did catch was real notes. Word and Outlook
+ * write `data:image/png;base64,R0lGODdh…` — a GIF, labelled PNG, `Software: Microsoft
+ * Office` in its comment block — and every one of those was refused: a grey chip in a note
+ * that had the whole picture sitting in it, and a paste that left the base64 in the file
+ * instead of turning it into an attachment. The RFC's own default is the same shape:
+ * `data:;base64,…` names no type at all, which normalises to `null` and could never pass a
+ * check that required one.
+ *
+ * Nothing else is relaxed. The bytes still have to sniff as one of `ALLOWED_TYPES`, so an
+ * SVG — which has no magic number and so can never sniff as anything — passes no more than
+ * it did, and neither does an HTML document or a `text/plain` payload. The cap is the same
+ * cap. The extension still comes from what the bytes *are*, never from what anything called
+ * them, which is what stops a file being stored under a name that lies about its contents.
+ */
+export function acceptedExtension(
+  declared: string | null | undefined,
+  bytes: Uint8Array,
+  origin: ImageOrigin,
+): string | null {
+  if (bytes.length > MAX_IMAGE_BYTES) return null;
+
+  const sniffed = sniffImageType(bytes);
+  if (origin === "inline") {
+    return sniffed === null ? null : extensionForContentType(sniffed);
+  }
+
+  // An allowed declared type is required before the sniff is even consulted, so a server
+  // answering `text/html` is refused on its own say-so rather than by what it sent.
+  if (extensionForContentType(declared) === null) return null;
+  if (!typesAgree(declared, sniffed)) return null;
+
+  return extensionForContentType(sniffed) ?? extensionForContentType(declared) ?? ".png";
+}
+
 const BASE64_DATA_URL = /^data:([a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+)?((?:;[^,;]*)*);base64,([\s\S]*)$/i;
 const BASE64_CHARS = /^[A-Za-z0-9+/\r\n]*={0,2}$/;
 

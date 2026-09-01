@@ -2119,3 +2119,68 @@ steps, green.
 app's responsibility ends. That the two boxes are on the clipboard is now confirmed here;
 what Word, Outlook and Gmail *draw* from that is not, and this sandbox has none of the three
 to ask.
+
+## A base64 picture in a note draws (1 September 2026)
+
+**Reported from use.** A note holding `![|1282x293](data:image/png;base64,R0lGODdh…)` drew
+the grey chip instead of the picture — with the whole image sitting in the note's own text.
+
+The address is the diagnosis. `R0lGODdh` is base64 for `GIF87a`, and thirteen bytes further
+in the payload says `Software: Microsoft Office`; the dimensions in its header are 1282×293,
+matching the `|1282x293` the alt text carries. So it is a GIF, labelled `image/png`, and that
+is not an oddity — it is what Word and Outlook write.
+
+`typesAgree` refused it, correctly by its own terms: the declared type and the magic bytes
+disagreed. The rule exists because a *server* that says PNG and sends something else is
+broken or lying. A `data:` URL has no server. The label and the payload are two halves of one
+string, written by one hand, so a mismatch between them is evidence of nothing — and anyone
+who wanted PNG bytes served would simply have written a PNG. The check protected against
+nobody and refused real notes, in both places that share the pipeline: the picture never drew
+when a note was opened, and a paste carrying one never became a file in `_attachments/`.
+
+`acceptedExtension(declared, bytes, origin)` is the fix (B97) — one function in
+`remote-image.ts`, where every rule on this path already lives, called by `fetch-attachment.ts`
+for both destinations. `"network"` is `typesAgree` unchanged. `"inline"` reads the bytes and
+ignores the label, which also lets in `data:;base64,…` — the RFC's own no-type form, which
+normalises to `null` and so could never pass a check that required one. Nothing else moved:
+the bytes still have to sniff as an allowed type, so an SVG (no magic number, so it can never
+sniff as anything) passes exactly as little as before, the 20 MB cap is the same cap, and the
+extension still comes from the sniff, so the cache never stores a file whose name lies about
+its contents.
+
+The switch went with it. "Load images from the web" is about this process reaching a host
+because a note asked; a base64 picture names no host and costs no request. Turning the switch
+off was blanking out part of the note's own text to prevent a fetch that never happens, so
+`data:` now falls outside it — in main's handler and in the renderer's copy of the setting,
+which exists for the Chromium-image-cache reason B50 measured.
+
+One thing came along with it: the address sits as a `title` on both the chip and the picture,
+and for a `data:` address that is the picture itself — tens of thousands of characters of
+base64 in a tooltip nobody can read, saying nothing about where the image came from, because
+it came from this note. There is no `title` on one now.
+
+16 new tests plus three corpus lines: the origin rule and its refusals in `remote-image.test.ts`, and — the useful
+half — the whole path end to end in `remote-images.test.ts`, because an address that carries
+its own bytes needs nothing stood up. Decode, sniff, cap, name, write, serve, and the second
+ask out of the cache, all offline.
+
+The markdown layer needed nothing: `parseNote`/`serializeNote` already carried a `data:`
+address through byte for byte, pipe suffix and all. That is now written down rather than
+merely true — `test/corpus/30-afbeeldingsformaat.md` carries the reported shape and two
+variants, and `03-markdown-dialect.md` §5 says it out loud, including the part that has not
+changed: what this app *writes* is never base64, because a pasted picture becomes a file in
+`_attachments/` (B28). A `data:` address comes from outside, and stays.
+
+Driven in the running app: `drive:capture` grew an eleventh step. The fixture note carries the
+reported shape and the assertion is `naturalWidth`, never the presence of an `<img>` — jsdom
+loads no images, and the failure being fixed *is* the chip, which looks like a note that meant
+to be that way. Backing the fix out and clearing `<userData>/remote-images` makes the step
+fail with the words from the report: `still a chip labelled "image" — main refused the data:
+URL`. The cache is why that had to be cleared, and is worth knowing before reading any run of
+this script: a picture served once is served again without the pipeline being consulted.
+
+**Not changed, deliberately.** The capture window's CSP still allows no `data:` in `img-src`,
+so a base64 picture still travels through main over `emqnote-remote://` like every other one.
+Widening it would be the one-line version of this and would take the sniff, the cap and the
+single place these addresses are decided out of the path — which is what B50 put in main in
+the first place.

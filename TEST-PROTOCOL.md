@@ -1756,6 +1756,33 @@ change could introduce, and the only place a *real* clipboard is involved is thi
 
 ---
 
+## §51 — A base64 picture in a note (B97)
+
+`scripts/drive-capture.ts` step 11 already draws one in the **capture window** on Linux, and
+asserts `naturalWidth` rather than the presence of an `<img>` — so the mechanism is confirmed
+and what is left here is the reader, the other two platforms, and the paths a script cannot
+produce: a real Outlook message and the user's own notes.
+
+Prepare a note holding `![](data:image/png;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=)`
+— a 1×1 GIF87a behind an `image/png` label, which is the shape Word and Outlook write and the
+shape that was refused. Better still, use a real one out of a real message.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 51a | Open that note in the **library reader** | The picture draws. Not a grey chip |  |
+| 51b | Open the same note in the **capture window** | The same. Both windows, one path |  |
+| 51c | Settings → turn **Load images from the web** off, reopen the note | The base64 picture still draws. It names no host and costs no request; the switch is not about it |  |
+| 51d | With the switch still off, open a note holding an `https://` picture | *That* one is a chip. One exemption, not a hole |  |
+| 51e | Copy a picture-carrying message body out of **Outlook** and paste it into a note | The pictures become files in `_attachments/`, and the saved `.md` holds `![[…]]`, not base64 |  |
+| 51f | Save the note from 51a and reopen it | Byte-identical. Opening a note never rewrites it (B10), and a `data:` address is text like any other |  |
+| 51g | Repeat 51a on the **other machine** | The same. `<userData>/remote-images` is a derived cache; a note read on one machine carries its own bytes to the other |  |
+
+51e is the half no automation reaches: `remote-image.test.ts` proves the decoder takes what
+Office writes, and nothing under `test/` or in either driver can produce a genuine Outlook
+clipboard to feed it.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

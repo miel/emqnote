@@ -1,7 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { attachmentUrl } from "../../shared/attachment-url.js";
-import { isFetchableImageSrc } from "./paste-images.js";
+import { isFetchableImageSrc, isInlineImageSrc } from "./paste-images.js";
 import { translate } from "../../shared/i18n.js";
 import { checkAttachment } from "./missing-attachments.js";
 import { attachImageResize, type ImageResize, type ImageSize } from "./image-resize.js";
@@ -616,7 +616,12 @@ export function externalImageView(
   let size = sizeOf(node);
 
   const src = (node.attrs.src as string | null) ?? "";
-  span.title = src;
+  // The address, as a tooltip — for an address. A `data:` one is the picture itself, tens of
+  // thousands of characters of base64, and hanging that off a hover is a tooltip nobody can
+  // read and nothing can dismiss; there is no "where this came from" to tell about it either,
+  // since where it came from is this note.
+  const tooltip = isInlineImageSrc(src) ? null : src;
+  if (tooltip !== null) span.title = tooltip;
 
   // Held down, not clicked — the same reason `wikiLinkNodeView` does it: `mousedown` is
   // what ProseMirror uses to decide it should select the atom under the pointer.
@@ -653,8 +658,10 @@ export function externalImageView(
   // own image cache without going near the protocol handler, `no-store` and all. So a note
   // reopened after switching it off went on showing its pictures. Main stays the authority —
   // nothing here can talk it into serving one — and this is what stops the question being
-  // asked a second time in a session where the answer is now no.
-  if (loadRemoteImages && isFetchableImageSrc(src)) {
+  // asked a second time in a session where the answer is now no. A `data:` address is
+  // outside the switch entirely (B97): "Load images from the web" is about reaching a host,
+  // and this one is the note's own bytes — main exempts it on its side for the same reason.
+  if ((loadRemoteImages || isInlineImageSrc(src)) && isFetchableImageSrc(src)) {
     const url = attachmentUrl("emqnote-remote", src);
     const probe = new Image();
     probe.addEventListener("load", () => {
@@ -662,7 +669,7 @@ export function externalImageView(
       picture.className = "wiki-embed-image";
       picture.src = url;
       picture.alt = externalImageLabel(node);
-      picture.title = src;
+      if (tooltip !== null) picture.title = tooltip;
       picture.draggable = true;
 
       span.textContent = "";

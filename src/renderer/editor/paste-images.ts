@@ -92,8 +92,24 @@ export function attachmentTargetOf(src: string): string | null {
 export function isFetchableImageSrc(src: string): boolean {
   const lower = src.trim().toLowerCase();
   return (
-    lower.startsWith("https://") || lower.startsWith("http://") || lower.startsWith("data:")
+    lower.startsWith("https://") || lower.startsWith("http://") || isInlineImageSrc(src)
   );
+}
+
+/**
+ * Whether this address carries its own bytes rather than naming somewhere to get them.
+ *
+ * The renderer's spelling of `remote-image.ts`'s `isInlineImageUrl`, kept here for the same
+ * reason `isFetchableImageSrc` is: main decides again on its own side and nothing over here
+ * can talk it into anything, so this is only ever about which question is worth asking.
+ *
+ * The question it settles is `loadRemoteImages` (B97). The setting is "Load images from the
+ * web", and a base64 picture is not from the web — it is in the note. So the switch does not
+ * reach it, in either window, and turning off remote images does not blank out a picture
+ * that was never going to cost a request.
+ */
+export function isInlineImageSrc(src: string): boolean {
+  return src.trim().toLowerCase().startsWith("data:");
 }
 
 function mapFragment(fragment: Fragment): Fragment {

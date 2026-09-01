@@ -4,14 +4,15 @@ import {
   MAX_CONCURRENT_FETCHES,
   MAX_IMAGE_BYTES,
   MAX_REDIRECTS,
+  acceptedExtension,
   extensionForContentType,
   isFetchableUrl,
   isFollowableUrl,
+  isInlineImageUrl,
   normaliseContentType,
   originalNameForUrl,
   parseDataUrl,
-  sniffImageType,
-  typesAgree,
+  type ImageOrigin,
 } from "./remote-image.js";
 
 /**
@@ -136,23 +137,19 @@ async function fetchFollowing(url: string, signal: AbortSignal): Promise<Respons
  * Bytes that have passed every check, with the extension they turned out to deserve — or
  * null for any refusal at all.
  *
- * Priority for the extension: what the bytes are, then what the server called them, then
- * `.png`. The URL's own suffix is never consulted — a path ending `.png` that sniffs as
- * JPEG would otherwise produce a file whose name lies about its contents.
+ * Every rule behind that is `acceptedExtension`, next door: the cap, the type allowlist,
+ * the magic-byte sniff, and the one difference between an address that names bytes and an
+ * address that carries them. Priority for the extension is written there too — what the
+ * bytes are, then what the server called them, then `.png`, and never the URL's own
+ * suffix, so a path ending `.png` whose bytes are JPEG cannot produce a lying filename.
  */
-function accept(declaredType: string | null, bytes: Uint8Array): FetchedImage | null {
-  if (bytes.length > MAX_IMAGE_BYTES) return null;
-  // An allowed declared type is required, so a `data:` URL that names no type at all
-  // (`text/plain` by RFC) is refused here rather than sniffed into acceptance.
-  if (extensionForContentType(declaredType) === null) return null;
-
-  const sniffed = sniffImageType(bytes);
-  if (!typesAgree(declaredType, sniffed)) return null;
-
-  const extension =
-    extensionForContentType(sniffed) ?? extensionForContentType(declaredType) ?? ".png";
-
-  return { bytes, extension };
+function accept(
+  declaredType: string | null,
+  bytes: Uint8Array,
+  origin: ImageOrigin,
+): FetchedImage | null {
+  const extension = acceptedExtension(declaredType, bytes, origin);
+  return extension === null ? null : { bytes, extension };
 }
 
 /** What came back off the network, once every rule in `remote-image.ts` has said yes. */
@@ -178,9 +175,9 @@ export interface FetchedImage {
 export async function fetchImageBytes(url: string): Promise<FetchedImage | null> {
   if (!isFetchableUrl(url)) return null;
 
-  if (url.slice(0, 5).toLowerCase() === "data:") {
+  if (isInlineImageUrl(url)) {
     const parsed = parseDataUrl(url);
-    return parsed === null ? null : accept(parsed.contentType, parsed.bytes);
+    return parsed === null ? null : accept(parsed.contentType, parsed.bytes, "inline");
   }
 
   return withSlot(async () => {
@@ -200,7 +197,7 @@ export async function fetchImageBytes(url: string): Promise<FetchedImage | null>
       const bytes = await readCapped(response);
       if (bytes === null) return null;
 
-      return accept(declared, bytes);
+      return accept(declared, bytes, "network");
     } catch {
       return null;
     } finally {

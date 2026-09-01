@@ -374,6 +374,19 @@ Obsidian het schrijft. Daar bestaat het "alles is alt-tekst"-geval niet: de alt-
 ![Het logo|250x180](https://voorbeeld.nl/logo.png)
 ```
 
+**Het adres mag ook de afbeelding zélf zijn.** Een `data:`-URI is voor dit dialect een adres
+als elk ander — het gaat er ongewijzigd in en ongewijzigd uit, met hetzelfde gleufje erop —
+en het is de vorm waarin Word en Outlook een geplakt plaatje schrijven:
+
+```markdown
+![|1282x293](data:image/png;base64,R0lGODdh…)
+```
+
+Dat het label voor de komma iets anders kan zeggen dan de bytes erachter is niet de zorg van
+het bestandsformaat maar van wie het plaatje tekent; daar beslissen de bytes (B97). Wat deze
+app zélf schrijft is nooit base64: een geplakte afbeelding wordt een bestand in
+`_attachments/` en dus een `![[…]]` (B28). Een `data:`-adres komt van buiten, en blijft.
+
 **Er gaat niets in dat gleufje verloren.** Een breedte en een hoogte worden getekend;
 alt-tekst wordt bewaard en — voorlopig met opzet — nergens getoond: niet op de `<img>`, niet
 in het uittreksel, niet in de index. Dat is het verschil met hoe het tot B74 was, en het was

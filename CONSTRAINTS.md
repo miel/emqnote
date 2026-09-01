@@ -290,6 +290,31 @@ pictures stayed). And **a `data:` address goes the same way** rather than straig
 `<img>`: the capture window's CSP allows no `data:` in `img-src`, so the short cut would draw
 in one window and not the other.
 
+**At a `data:` address the bytes decide what the picture is, and the label does not vote**
+(B97). `acceptedExtension` takes an origin. `"network"` keeps `typesAgree`'s rule — a server
+that says PNG and sends something else is broken or lying — and `"inline"` ignores the
+declared type completely, because there is no second party to catch out: the label and the
+payload are two halves of one string, and an author who wanted PNG bytes served would simply
+have written a PNG. What that rule caught instead was real notes. Word and Outlook write
+`data:image/png;base64,R0lGODdh…` — a GIF87a, labelled PNG, `Software: Microsoft Office` in
+its comment block — and every one was refused, so a note holding the whole picture in its own
+text drew a grey chip. `data:;base64,…`, the RFC's own no-type form, could never pass either.
+Nothing else bends: the bytes still have to sniff as one of `ALLOWED_TYPES`, so **an SVG
+passes no more than it did** (it has no magic number, so it can never sniff as anything, and
+the picker-versus-paste asymmetry above is untouched), the cap is the same cap, and the
+extension still comes from the sniff so the cache never holds a file whose name lies about
+its contents. **`loadRemoteImages` does not reach a `data:` address either**, in main or in
+the renderer's copy: "Load images from the web" is about this process contacting a host on a
+note's say-so, and a base64 picture names no host, costs no request and is already in the
+open file — refusing it would blank out part of the note's own text to prevent a fetch that
+never happens. And **no `title` is hung off a `data:` address** in either state of the node
+view: a tooltip is for an address, and this one is the picture itself — tens of thousands of
+characters of base64 that no hover can show and that say nothing about where the picture came
+from, since it came from this note. No test under `test/` can see the failure this fixes, because jsdom loads no
+images and the symptom is a chip that looks deliberate; `scripts/drive-capture.ts` carries
+the picture and asserts `naturalWidth`, and that step really does fail with the fix backed
+out.
+
 **An item is blank when it *draws* blank, not when its content size is zero**
 (`commands.ts`'s `drawsBlank`, 20 August 2026). Enter on an empty bullet ends the list; it
 was reported doing that sometimes and producing a second empty bullet other times, with no

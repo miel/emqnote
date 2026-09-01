@@ -125,6 +125,23 @@ const RED_PNG = Buffer.from(
   "base64",
 );
 
+/**
+ * B97's picture: a real GIF87a, in a note, labelled `image/png` — and the label is the
+ * whole point.
+ *
+ * That is what Word and Outlook write. The one the bug was reported with is 1282×293 with
+ * `Software: Microsoft Office` in its comment block and `data:image/png;base64,R0lGODdh…`
+ * in front of it, and until B97 every such picture was refused for the mismatch: the note
+ * drew a grey chip with the whole image sitting in its own text.
+ *
+ * Driven rather than unit-tested for the reason the step below says out loud: jsdom loads
+ * no images, so nothing under `test/` can tell a decoded picture from an `<img>` element
+ * that happens to exist. Small enough to inline, and a genuine GIF Chromium will decode —
+ * the same standard `RED_PNG` above is held to.
+ */
+const OFFICE_GIF_DATA_URL =
+  "data:image/png;base64,R0lGODdhAQABAIAAAAAAAAAAACwAAAAAAQABAAACAkQBADs=";
+
 function scaffoldVault(): string {
   const vault = mkdtempSync(join(tmpdir(), "emqnote-drive-"));
   mkdirSync(join(vault, "00 Inbox"), { recursive: true });
@@ -148,6 +165,10 @@ function scaffoldVault(): string {
       `![[${PICTURE}]]`,
       "",
       "Tekst na de afbeelding, met een #klantx erin.",
+      "",
+      // B97: a base64 picture, in the shape Office writes one — a GIF behind an
+      // `image/png` label. Nothing in jsdom can say whether it decodes; see the step.
+      `![](${OFFICE_GIF_DATA_URL})`,
       "",
       // B96: the two states of a task item, for the step that copies them. What a box
       // *is* on the clipboard cannot be asked of jsdom — the editor draws it as a widget
@@ -486,7 +507,7 @@ async function main(): Promise<number> {
 
         const width = await open.capture!.evaluate<number>(
           `(() => {
-             const img = document.querySelector('img.wiki-embed-image');
+             const img = document.querySelector('img.wiki-embed-image[src^="emqnote-attachment:"]');
              return img === null ? -1 : img.naturalWidth;
            })()`,
         );
@@ -496,6 +517,37 @@ async function main(): Promise<number> {
         // nothing at all about whether the picture arrived and decoded. Four features have
         // been unverified on exactly that difference.
         if (width <= 0) throw new Error(`naturalWidth was ${width}`);
+        return `naturalWidth ${width}`;
+      },
+    },
+    {
+      name: "a base64 picture in the note draws too, label and all (B97)",
+      run: async () => {
+        const seen = await open.capture!.evaluate<string>(
+          `(() => {
+             const img = document.querySelector('img.wiki-embed-image[src^="emqnote-remote:"]');
+             if (img === null) {
+               const chip = document.querySelector('.external-image');
+               return JSON.stringify({ width: -1, chip: chip === null ? null : chip.textContent });
+             }
+             return JSON.stringify({ width: img.naturalWidth, chip: null });
+           })()`,
+        );
+
+        const { width, chip } = JSON.parse(seen) as { width: number; chip: string | null };
+        // The failure this step exists to catch is the *chip*, not a missing element: a
+        // refusal in main leaves the node view in the state it starts in, so the note goes
+        // on looking deliberate while the picture it holds is never drawn. That is exactly
+        // how the reported bug looked, and no test in the suite can see it — the capture
+        // window's CSP allows no `data:` in `img-src`, so this whole path runs through main
+        // and `emqnote-remote://`, and jsdom serves neither and decodes nothing.
+        if (width <= 0) {
+          throw new Error(
+            chip === null
+              ? "no base64 picture and no chip either"
+              : `still a chip labelled ${JSON.stringify(chip)} — main refused the data: URL`,
+          );
+        }
         return `naturalWidth ${width}`;
       },
     },
