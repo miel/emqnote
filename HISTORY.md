@@ -1999,3 +1999,77 @@ not close the window, ⌘T is Show Fonts in a Mac text view, and Ctrl+T is Chrom
 "new tab" — and two judgements no script can make, whether the sort arrow reads as something
 to press and whether the window keeps up with the pointer when the title is dragged on a
 machine that has a window manager.
+
+**Five bug reports from daily use landed on 1 September 2026 (B95)**, and two of them were
+the same bug read from opposite ends: "moving several notes by drag & drop is very slow after
+the mouse is released", and "when moving multiple notes, an error is triggered: *This note was
+deleted outside emqnote*".
+
+The seam behind both is one line. `moveNotesTo` looped over `IPC.libraryMoveNote`, awaiting
+each one — and the comment above it said so in as many words, "one after another, awaited,
+never in parallel" — but `runRelinkable` was synchronous and `void`ed the promise it handed
+back, so the loop awaited the *link question* and nothing after it. Every `performMove` ran
+on top of the last. Per note that cost a `linkingNotes` call (which goes through
+`ensureScanned`, which has no memo for a clean index and walks the whole vault, with a
+recursive `attrib … /s` on Windows), a move, and three `library:refresh` broadcasts — one
+from the handler and two from the watcher's `unlink` and `add` — each of which reloads seven
+things. Six notes was around thirty full walks of the vault, interleaved.
+
+And the same overlap is what produced the false deletion. The open note is normally *in* a
+marked set (`toggleMarked` seeds the set with it) and a marked set is usually contiguous, so
+`sorted[row - 1]` — the row `performMove` handed the reader — was another note on its way
+out. The reader stood on a path the next move vacated, and the `unlink` for it arrived as
+"deleted outside emqnote".
+
+What replaced it: `IPC.libraryMoveNotes` takes the set and raises one `notifyLibrary()`;
+`IPC.libraryLinkingNotes` takes a set too, deduped by the *linking* note, so the question is
+asked once for the batch; the neighbour walk skips every path in the set; and
+`library:refresh` is coalesced leading-edge-first at 60 ms. The per-note ordering inside the
+handler is deliberately unchanged — each note's references are resolved immediately before
+*that* note moves, because two notes in one set can link to each other. A third defect fell
+out of the same reading and had never been reported: with two linked notes in a set, each
+`setDialog` overwrote the last, so every note but the final one silently did not move.
+
+Beside that, `own-writes.ts` grew a path-keyed sibling to its content hash —
+`rememberOwnMove`, `wasOwnRemoval`, `wasOwnArrival` — because a hash has nothing to compare
+at a path that no longer exists, so `index-watch.ts` wrote `own: false` on every `unlink` and
+every move this app made was reported as a deletion from outside it. `trashNote` had kept no
+record of any kind, the one mover in `vault-io.ts` with no bookkeeping at all.
+
+**That last piece was measured rather than assumed, and the measurement is worth keeping**:
+with the batched move in place, `npm run drive:library` stays green with the watcher
+suppression torn out. A four-note vault under `Xvfb` reloads faster than chokidar's 300 ms
+settle, so the reader has already stepped off the vacated path by the time the event lands.
+The suppression closes the race that batching only narrows — and the slower the vault, the
+wider that race, which is exactly why the two complaints arrived together. It is pinned where
+it *is* decidable, in `index-watch.test.ts` and `vault-io.test.ts`, and the drive step says so
+in its own comment rather than claiming coverage it does not have.
+
+The other three reports were smaller. The three bars `.library-shell` stacks above the pane
+grid — the index scan, the conflict banner, the disk-change bar — reserve the Windows 11
+caption-button inset now: `.pane-header-caption` had it, but that is the reader's header one
+row *down*, and when a bar is up it is the bar the controls are drawn over. `--caption-inset`
+is declared once in `:root` and read by all four, and the reader's header keeps its inset even
+while a bar is above it, the scan bar being about 22px against a 40px overlay. The reader with
+no note open draws an empty `PaneHeader` and `PaneFooter` rather than nothing, so B92's two
+lines run the full width of the window — with `title={null}` and not `""`, because an empty
+`.pane-title` is a real element that `focusPane("title")` finds, which `keyboard-nav.test.ts`
+caught within a minute. The file preview became a real `PaneHeader`/`PaneFooter` in the same
+change, having been a fourth idea about how tall chrome is that `styles-pane-bands.test.ts`
+could not catch precisely because it stated no height at all. And `Mod+T` toggles the Tasks
+view: the branch lives in the chord's handler rather than in the shared one, because the note
+list is unmounted while the view is showing and the button that opened it is not on screen to
+close it.
+
+Driven in the running app: the Mod+T toggle and a marked set moved through the picker, as two
+new `drive:library` steps (sixteen now, green twice), plus photographs of the empty reader and
+the file preview showing both bands lined up with the panes beside them.
+
+**What is left for a person** (`TEST-PROTOCOL.md` §49): four Windows 11 rows, that being the
+only platform where the caption-button overlay exists at all — `env(titlebar-area-width)` is
+absent everywhere else and every rule added for it evaluates to zero — and three rows for the
+latency report itself, which needs a real vault on real OneDrive. And one thing is written
+down rather than fixed: `ensureScanned` still walks the whole vault on every call that reaches
+it. That is the largest single cost left, and it was left deliberately — a memo means trusting
+the watcher to have seen everything, and Windows polling (B57) is where that trust has already
+failed once.

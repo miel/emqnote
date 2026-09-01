@@ -111,6 +111,14 @@ undo by accident and expensive to rediscover:
   offers system / light / dark; main sets the source before the first window is built, and
   every stylesheet goes on asking `prefers-color-scheme` exactly as it did when the OS was the
   only voice in it. No `data-theme`, no second set of rules.
+- **A pane keeps both bands even when it is empty, and the window's top band keeps clear of
+  the OS's own controls** (B95). The reader with no note open draws an empty `PaneHeader` and
+  `PaneFooter` rather than nothing, and the file preview is a real one of each rather than a
+  band of its own. `--caption-inset` is declared once in `styles.css` and read by the reader's
+  header *and* by the three bars `.library-shell` can stack above the pane grid — those bars
+  are what Windows 11 draws its caption buttons over, not the header one row down. None of it
+  is visible off Windows, where `env(titlebar-area-width)` does not exist and every such rule
+  evaluates to zero, so `styles-pane-bands.test.ts` counts them by hand.
 - **Every pane's header is 40px and every footer 28px, from one rule** (B92). `PaneHeader`
   and `PaneFooter` in `src/renderer/` draw all four bands across both windows, and every
   button in either window's chrome is one `ChromeButton` at one of three sizes. The heights
@@ -138,6 +146,16 @@ undo by accident and expensive to rediscover:
   either chord and the `offTabOrder` on its button has to go with it**, or the control is
   unreachable without a mouse. `npm run drive:library` is the only place a real Tab can be
   pressed; jsdom implements no focus navigation at all.
+- **Moving notes is one call carrying a set, and the app's own removals are not external
+  changes** (B95). `IPC.libraryMoveNotes` takes `string[]` and raises one `notifyLibrary()`;
+  `IPC.libraryLinkingNotes` takes a set too, so the link question is asked once. The renderer
+  looped over a one-note channel before, and the loop did not serialise — `runRelinkable`
+  `void`ed the promise — so filing six notes was around thirty full walks of the vault and
+  left the reader standing on a path another move had just vacated. Beside `own-writes.ts`'s
+  content hash there is now `rememberOwnMove`/`wasOwnRemoval`/`wasOwnArrival`: a hash cannot
+  speak for a path that no longer exists, which is why every move this app made was reported
+  as a deletion from outside it. **Only the notification is ever suppressed, never the
+  indexing** — B31's rule, unchanged.
 - **Anything in a header band that must *also* move the window cannot get there with CSS**
   (B94). A `-webkit-app-region: drag` region swallows the press; `no-drag` gives it back and
   takes the window move away. The note's title needs both, so `window-drag.ts` watches the
@@ -153,7 +171,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 2075 tests in roughly thirty-five seconds of test time (about a minute and a
+The suite runs its 2089 tests in roughly thirty-nine seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -196,7 +214,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B94, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B95, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |

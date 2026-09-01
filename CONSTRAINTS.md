@@ -1341,6 +1341,66 @@ Called from `capture-store.ts`'s `renameSessionFile` and from `vault-io.ts`'s `r
 and `moveNote`. Confirmed in the running app both ways round — with the call disabled the
 reported sentence appears, with it there it does not.
 
+**And a hash cannot answer for a file that has moved away, so a second, path-keyed record
+sits beside it** (B95). There are no bytes at a path that no longer exists, so `forget` in
+`index-watch.ts` wrote `own: false` on every `unlink` — with a comment above it explaining
+why that was safe, which was true of the case it had in mind (`writeAtomic`'s rename *over*
+an existing path reports as a `change` on all three platforms) and false of the one nobody
+had asked about: filing a note into another folder renames it into a different directory, so
+the source really is gone. Every move this app made was reported as a deletion from outside
+it. `rememberOwnMove(from, to)` records both ends, `wasOwnRemoval` and `wasOwnArrival` read
+them, and `moveNote`, `renameNote` and `trashNote` all write it — `trashNote` kept no record
+of any kind before this, the one mover in the file with no bookkeeping at all. The arrival
+half matters for the same reason the removal half does: a note being filed was very likely
+never *written* by this app, so `renameOwnWrite` has nothing to carry across and the `add` at
+the destination reads as an external edit. Path-keyed rather than time-keyed, which is why
+B31's objection to a TTL does not apply: "this app moved that file" stays true however long
+the watcher takes to notice. Non-consuming and LRU-bounded, exactly like the hashes, for
+`wasOwnWrite`'s reason. **The index is still pruned and still upserted either way** — only
+the notification is ever suppressed, which is B31's rule and not a new one.
+
+Worth knowing what this did *not* fix, because it was measured rather than assumed: with the
+batched move below in place, `npm run drive:library` stays green with this suppression torn
+out. A four-note vault under Xvfb reloads faster than chokidar's 300 ms settle, so the reader
+has already stepped off the vacated path by the time the event lands. This closes the race
+that batching only narrows — and the slower the vault, the wider that race, which is why "the
+move is slow" and "it says the note was deleted" were reported as one thing.
+
+**Moving notes is one call carrying a set, never a call per note** (B95). `IPC.libraryMoveNotes`
+takes `string[]`, does the whole batch, and raises **one** `notifyLibrary()`. The renderer had
+the loop before, and the loop did not even do what its own comment claimed: `runRelinkable`
+was synchronous and `void`ed `performMove`, so `moveNotesTo` awaited the link question and
+nothing after it, and every move in the set ran on top of the last. Per note that cost a
+`linkingNotes` call — which goes through `ensureScanned`, which has no memo for a clean index
+and so walks the whole vault, with a recursive `attrib … /s` on Windows — plus the move, plus
+three `library:refresh` broadcasts (one from the handler, two from the watcher's `unlink` and
+`add`), each of which reloads seven things. Six notes was around thirty full walks of the
+vault. `IPC.libraryLinkingNotes` takes a set too, deduped by the *linking* note: one note
+pointing at three of the six being moved is one file to rewrite and one answer to the
+question. **The per-note ordering inside the handler is unchanged and load-bearing**: each
+note's references are resolved immediately before *that* note moves, never once for the batch
+up front, because two notes in one set can link to each other and a target resolves against
+where a note is at the moment it is asked.
+
+**The row the reader steps onto after a move is never a row that is itself moving** (B95).
+`performMove` took `sorted[row - 1]`, the row above. The open note is normally *in* a marked
+set (`toggleMarked` seeds the set with it) and a marked set is usually contiguous, so that row
+was another note on its way out: the reader was parked on a path the next move vacated, and
+the `unlink` for it put "This note was deleted outside emqnote" on screen over a move the app
+had just made. It now walks up, then down, past every path in the set.
+
+**And the link question is asked once for the set, not once per note** (B95). A dialog holds
+one question; the loop raised one per note and each `setDialog` overwrote the last, so with
+two linked notes in a set every one but the final note silently never moved. Nobody reported
+that, which is the point of writing it down here.
+
+**`library:refresh` is coalesced, leading edge first** (B95). Seven reloads is what one
+broadcast costs and most of them walk the vault; a burst is the normal case, not the
+exceptional one, since the watcher raises one for the `unlink` and one for the `add` of every
+file that moves. The first still runs immediately and everything inside 60 ms collapses into
+one more. Deliberately not a plain trailing debounce: that would delay *every* refresh by the
+window, and this window is on the path between ticking a checkbox and seeing the badge move.
+
 **On Windows the vault is watched by polling** (B57). chokidar's native handler opens an
 `fs.watch` handle on every *directory* it watches and none on a file, which on Windows is a
 kernel handle held for as long as the app is resident — and this app is resident all day by
@@ -1968,6 +2028,38 @@ claims — these declarations, on these elements — and `styles-title-field.tes
 ever pinned the first; it now pins the container against the markup, which is the only way a
 text check of a stylesheet can catch this at all.
 
+**A pane keeps both its bands even when there is nothing in it** (B95). The reader drew
+neither its header nor its footer with no note open, so both of B92's lines stopped a third
+of the way across the window — which reads as chrome that has been cut off, not as a pane
+with nothing in it. `PaneHeader` and `PaneFooter` now wrap `.reader-empty` as well, both
+empty. The header's title is `null` and **not** `""`: a string makes `PaneHeader` draw an
+`<h2 class="pane-title">`, and an empty one of those is a real element that
+`focusPane("title")` finds, so Tab out of the note list landed on a heading in a pane with no
+note. `keyboard-nav.test.ts` caught exactly that within a minute of the change, which is the
+one thing jsdom is good for here.
+
+**The file preview is the fourth band, and it was not one** (B47, corrected by B95). It drew
+its own bar — its own padding, its own border, no footer — which is precisely the fourth idea
+about how tall chrome is that B92 exists to prevent, and `styles-pane-bands.test.ts`'s
+"states each height exactly once" could not catch it because it stated no height at all. It
+is a `PaneHeader captionButtons` plus a `PaneFooter` now, keeping the `.file-preview-bar`
+class, which `library-folder-files.test.ts` reaches its two buttons through.
+
+**Where Windows draws its caption buttons is a question about the window's top band, not
+about one header** (B95). `.pane-header-caption` reserved the right-hand inset on the
+reader's header — and the library window is not three panes at y=0. `.library-shell` stacks
+up to three full-width bars *above* the pane grid (the index scan, the conflict banner, the
+disk-change bar); they push the headers down while the caption buttons stay at y=0, so
+whichever bar is up is the thing underneath them. The disk-change bar puts Reload / Close /
+Keep mine flush against that edge with `space-between`, which is the report. `--caption-inset`
+is declared once in `:root` and read by all four. **The reader's header keeps its inset even
+while a bar is above it**: the scan bar is about 22px and the overlay is 40, so the top half
+of that header is still inside it — being clever here costs a title under Close, and being
+unconditional costs a gap to the right of a title that is left-aligned anyway. None of this
+can be seen on any machine but Windows, `env(titlebar-area-width)` being absent everywhere
+else and every one of these rules evaluating to zero, so `styles-pane-bands.test.ts` counts
+them by hand and `TEST-PROTOCOL.md` §45 carries the rows a person has to look at.
+
 **An icon-only button still has a name, and `--click-button` falls back to it** (B92).
 `ChromeButton` makes `label` mandatory and puts it on `aria-label` whenever `iconOnly` is
 set; `captureWindowTo` in `library-window.ts` reads `textContent` first and only then
@@ -2053,6 +2145,18 @@ answers `null` for the title and the four fields so a plain Tab keeps walking th
 sequential focus navigation at all, so no test under `test/` can see more than the two steps
 this app performs — `npm run drive:library` presses a real Tab and reads back
 `document.activeElement`.
+
+**Mod+T toggles, and it is the only route that can** (B95). It opened the Tasks view and had
+no way of closing it — a second press re-set the same selection and nothing moved. The
+obvious fix is to make the shared handler a toggle, and it does not work: `selection.kind ===
+"tasks"` swaps `NoteList` for `TaskList`, so the footer button that opened the view is
+**unmounted** while the view is showing, and the sidebar's Tasks row is a destination like
+every folder row beside it. So the branch lives in the chord's own handler, on
+`selectionRef.current.kind`, and calls `exitTasks` — the same function Escape and the view's
+own Exit tasks button call, so there is still exactly one way out. Mod+S needs none of this
+and is worth the contrast: it *presses the sort button* rather than owning a copy of what it
+does, so it inherits that button's own toggle for free — and is silently a no-op inside the
+Tasks view, `.sort-choose` not being mounted there either.
 
 **The pane ring is three stops, and adding a fourth costs every press that was not about
 it** (B94). Ctrl+Tab / Ctrl+Shift+Tab go tree → notes → editor and back. The note's header

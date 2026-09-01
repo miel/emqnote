@@ -3758,3 +3758,126 @@ de lege vakjes nog wél in staan. Hernummeren zou het verkeerde vinkje aanzetten
 
 **Verworpen:** een leeg vakje mét een genest lijstje toch meetellen. Dat is een omhulsel: de
 vakjes eronder tellen op zichzelf al, en de ouder meetellen telt hetzelfde werk twee keer.
+
+## B95 — Een set verplaatsen is één handeling, en de app noemt haar eigen werk niet "van buitenaf"
+
+**Genomen** op 1 september 2026, na een ronde van dagelijks gebruik. Vijf meldingen, waarvan
+twee dezelfde bleken te zijn.
+
+### Twee klachten, één naad
+
+De meldingen: "meerdere notities verslepen duurt lang nadat je de muis loslaat", en "bij het
+verplaatsen van meerdere notities verschijnt *deze notitie is buiten emqnote verwijderd*".
+Ze staan hier onder één kopje omdat ze uit dezelfde regel kwamen.
+
+`moveNotesTo` liep de set af en wachtte elke verplaatsing af — dacht het. De opmerking erboven
+zei het met zoveel woorden: "één voor één, afgewacht, nooit parallel". Maar `runRelinkable`
+was synchroon en gooide zijn belofte weg (`void performMove(...)`), dus de lus wachtte alleen
+op de *vraag* naar de links en op niets daarna. Alle verplaatsingen liepen door elkaar.
+
+Wat dat kostte, per notitie: één `linkingNotes` — en die loopt door `ensureScanned`, dat geen
+geheugen heeft van een schone index en dus **de hele kluis opnieuw wandelt**, op Windows met
+een `attrib … /s` erbij — plus een verplaatsing, plus een `library:refresh` uit main, plus de
+twee die de watcher stuurt voor het verdwijnen en het verschijnen van het bestand. Elke
+`library:refresh` laadt zeven dingen opnieuw. Zes notitities verplaatsen was zo'n dertig
+wandelingen door de kluis.
+
+En de tweede klacht is dezelfde lus, van de andere kant bekeken. De geopende notitie zit
+normaal *in* de gemarkeerde set — `toggleMarked` begint de set met haar — en `performMove`
+zette de lezer op `sorted[row - 1]`, de rij erboven. Bij een aaneengesloten selectie is dat
+een andere notitie die óók weg gaat. De lezer stond dus op een pad dat de volgende
+verplaatsing leeghaalde, en toen de `unlink` daarvan binnenkwam zei het venster dat iemand
+anders die notitie had verwijderd.
+
+Wat er nu staat: **`IPC.libraryMoveNotes` neemt de hele set**, met één `notifyLibrary()` aan
+het eind, en `linkingNotes` neemt er ook een set — ontdubbeld op de *verwijzende* notitie,
+want een notitie die naar drie van de zes wijst is één bestand om te herschrijven en één
+antwoord op de vraag. De volgorde binnen de lus is de oude en blijft dragend: de verwijzingen
+naar een notitie worden opgehaald vlak vóórdat *die* notitie verhuist, nooit één keer vooraf,
+omdat twee notities in één set naar elkaar kunnen wijzen. De buurrij wordt gekozen met de set
+eruit gefilterd. En de vraag over de links wordt één keer gesteld in plaats van per notitie —
+wat meteen een fout oploste die niemand had gemeld: bij twee notities met inkomende links
+overschreef de tweede `setDialog` de eerste, en alles behalve de laatste verhuisde stilletjes
+niet.
+
+`library:refresh` wordt bovendien samengevat: de eerste komt meteen door, alles wat binnen
+60 ms volgt wordt één extra ronde. Voorrand en dan pas samenvatten, niet andersom — deze
+wachttijd ligt op het pad tussen een vinkje aanzetten en het badge zien bewegen.
+
+**Verworpen:** `ensureScanned` een geheugen geven. Dat is de grootste post, en het is ook de
+enige die correctheid inruilt voor snelheid: overslaan betekent de watcher op zijn woord
+geloven, en juist op Windows (B57) is dat waar dat woord al eens niet klopte. Van ~3n naar 2
+wandelingen is dezelfde winst zonder die ruil.
+
+### Een verplaatsing is geen verwijdering van buitenaf
+
+`own-writes.ts` vergelijkt bytes (B31), en dat is precies waarom het deze vraag niet kon
+beantwoorden: op een pad dat niet meer bestaat staan geen bytes. `index-watch.ts` schreef
+daarom `own: false` op elke `unlink`, met een opmerking erboven die het uitlegde voor het
+geval dat het niet was — hernoemen *over een bestaand pad heen* komt als `change` binnen. Een
+notitie in een andere map zetten is dat niet: het bronpad is echt weg.
+
+Ernaast staat nu een tweede, pad-gesleutelde notitie van wat de app zelf deed:
+`rememberOwnMove(from, to)`, gelezen door `wasOwnRemoval` en `wasOwnArrival`. Geen tijdklok —
+"deze app heeft dat bestand verplaatst" blijft waar, hoe lang de watcher er ook over doet, en
+dat is waar B31 tegen een TTL argumenteerde. Niet-verbruikend en met dezelfde LRU-grens als
+de hashes, om `wasOwnWrite`'s reden: chokidar kan `add` en `change` sturen voor één aankomst.
+`moveNote`, `renameNote` en `trashNote` schrijven het op — die laatste hield tot nu toe
+helemaal niets bij, de enige verplaatser in het bestand zonder boekhouding.
+
+**En de index wordt hoe dan ook bijgewerkt.** Alleen de melding wordt onderdrukt, nooit het
+opruimen — B31's regel, letterlijk.
+
+Wat dit *niet* is: de reparatie van de meldingen hierboven. Met de set-verplaatsing erbij
+staat de lezer niet meer op een pad dat leegloopt, en `npm run drive:library` blijft groen
+als je deze onderdrukking eruit haalt — een kluis van vier notities onder Xvfb herlaadt
+sneller dan chokidar's 300 ms. Op een echte kluis niet, en dat is waarom de twee klachten
+samen binnenkwamen: hoe trager de verplaatsing, hoe breder het venster waarin het venster
+iets onwaars kan zeggen. Deze helft is vastgelegd waar hij wél te beslissen is, in
+`index-watch.test.ts` en `vault-io.test.ts`.
+
+### De vensterknoppen staan boven wat er ook maar in de bovenste band staat
+
+`.pane-header-caption` hield de titel van de leespaneel vrij van de knoppen die Windows 11 in
+de band tekent. Maar het bibliotheekvenster is geen drie panelen op y=0: `.library-shell`
+stapelt tot drie balken over de volle breedte *boven* het raster — de scanbalk, de
+conflictbalk en de schijfwijzigingsbalk — en die duwen de kopbanden omlaag terwijl de knoppen
+op y=0 blijven staan. De schijfwijzigingsbalk zet Herladen / Sluiten / Mijn versie behouden
+met `space-between` tegen de rechterrand, precies eronder. Dat is de melding.
+
+`--caption-inset` staat nu één keer in `:root` en wordt door alle vier gelezen. De inspring
+van de leeskop **blijft staan als er een balk boven hangt**: de scanbalk is zo'n 22 px en de
+overlay 40, dus de bovenste helft van die kop zit er nog steeds onder. Slim zijn kost hier een
+titel onder Sluiten; niet slim zijn kost een gat rechts naast een titel die toch links staat.
+
+**Verworpen:** de balken onder het raster hangen. Ze gaan over het venster, niet over een
+paneel, en een conflictmelding onderaan is een conflictmelding die je niet ziet.
+
+### Een leeg leespaneel houdt zijn twee banden
+
+B92 tekent één lijn over de bovenkant en één over de onderkant van het venster, uit één
+regel per band. Zonder geopende notitie tekende het leespaneel geen van beide, en dan houden
+allebei die lijnen een derde van het venster voor het einde op — wat leest als afgesneden
+chrome, niet als een paneel waar niets in zit. Er staat nu een `PaneHeader` en een
+`PaneFooter` omheen, allebei leeg.
+
+De titel is `null` en niet `""`: bij een string tekent `PaneHeader` een `<h2
+class="pane-title">`, en een lege daarvan is een echt element dat `focusPane("title")` vindt
+— Tab uit de notitielijst zou dan op een kop landen in een paneel zonder notitie.
+
+De bestandsweergave (B47) had hetzelfde probleem én een eigen idee over hoe hoog chrome is:
+een eigen balk met eigen padding en geen voet. Dat was het vierde idee waar B92 er één van
+wilde maken. Het is nu dezelfde `PaneHeader` — met `captionButtons`, dus Openen en Tonen
+staan niet langer onder Sluiten — en een `PaneFooter` met het pad erin.
+
+### Mod+T zet de takenweergave aan én uit
+
+Het akkoord opende de weergave en had geen weg terug: een tweede druk zette dezelfde selectie
+opnieuw en er bewoog niets. Het is nu een schakelaar, en het akkoord is de enige route die
+dat kán zijn — de notitielijst is weg zolang de takenweergave er staat, dus de knop die haar
+opende is niet meer op het scherm om haar te sluiten. De weg naar buiten is `exitTasks`,
+dezelfde functie als Escape en de knop Takenweergave sluiten, zodat er nog steeds precies één
+is.
+
+**Verworpen:** de rij in de zijbalk ook laten schakelen. Een maprij die zichzelf uitzet bij
+een tweede klik doet iets anders dan elke maprij ernaast.

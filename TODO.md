@@ -3,6 +3,39 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 1 September 2026, **unreleased** — **five bug reports from daily use** (B95),
+two of which turned out to be one.
+
+Moving a marked set was slow *and* announced "This note was deleted outside emqnote", and
+both came out of the same seam: `moveNotesTo` looped over a one-note IPC channel and did not
+even serialise the loop — `runRelinkable` `void`ed the promise it was supposed to be awaited
+through — so every note cost a full walk of the vault, three `library:refresh` broadcasts and
+a seven-part reload, all interleaved. It is one `IPC.libraryMoveNotes` call for the set now,
+with one broadcast, one link question and one reload; the row the reader steps onto afterwards
+excludes every path in the set (it used to be the row above, which in a contiguous selection
+is another note on its way out); and `library:refresh` is coalesced, leading edge first. A
+third defect fell out of the same reading and had never been reported: with two linked notes
+in a set, each `setDialog` overwrote the last and every note but the final one silently did
+not move.
+
+Beside that, `own-writes.ts` grew a path-keyed sibling to its content hash — a hash cannot
+speak for a path that no longer exists, so every move the app made was reported as a deletion
+from outside it. Three more: the three bars above the pane grid now reserve the Windows 11
+caption-button inset (`--caption-inset`, declared once); the empty note pane keeps its header
+and footer, and the file preview became a real `PaneHeader`/`PaneFooter` instead of a fourth
+idea about how tall chrome is; and `Mod+T` toggles the Tasks view.
+
+**What is open on it.** `TEST-PROTOCOL.md` §49 carries ten rows. Four are Windows 11, where
+the caption-button overlay is the only place these CSS rules do anything at all. Three are
+the latency report itself, which needs a real vault on real OneDrive — four notes under
+`Xvfb` prove the shape of the fix and nothing about the size of it. And one thing is written
+down rather than fixed: `ensureScanned` still has no memo for a clean index, so every call
+that reaches it walks the whole vault. That is the largest single cost left, and it was left
+deliberately — skipping the walk means trusting the watcher to have seen everything, and
+Windows polling (B57) is where that trust has already failed once.
+
+---
+
 Last updated 31 August 2026, released as `v0.12.6` — **twelve items from daily use**
 (B94): five bugs and seven features, and one trade running through all of
 them.
