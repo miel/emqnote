@@ -728,6 +728,102 @@ async function main(): Promise<number> {
         return `${seen.content}px of rows scrolling inside ${seen.panel}px, in a ${seen.window}px window`;
       },
     },
+    /**
+     * B95, and the last step on purpose: it empties the Inbox, so anything after it would
+     * be asking about a list this step took away.
+     *
+     * What this step covers, exactly — and what it does not, which is worth writing down
+     * because the step was measured against the unfixed code to find out.
+     *
+     * It covers the half that is *decidable*: a real chokidar watching a real directory
+     * through a real `renameSync`, with the real window deciding what to do with the event
+     * that comes back. Both notes are in the marked set and one of them is the note the
+     * reader has open, which is the arrangement the report came from — and with the
+     * reader now stepping onto a row that is **not** itself moving, no `unlink` in the
+     * batch ever matches the path it is standing on.
+     *
+     * It does not, and cannot, cover the race behind that: the window between main
+     * renaming the file and this window finishing `loadTree` and reopening. Reverting the
+     * watcher's own-removal suppression leaves this step green, because a four-note vault
+     * under Xvfb reloads faster than chokidar's 300 ms settle. On a real vault it does
+     * not, which is why the two reports arrived as one — the slower the move, the wider
+     * the window for it to announce a deletion. That half is pinned where it *is*
+     * decidable: `index-watch.test.ts` and `vault-io.test.ts`.
+     *
+     * The latency half is not asserted at all. A wall-clock figure on four notes under
+     * Xvfb says nothing about a real vault; what stands in for it is the shape that caused
+     * it, pinned in `note-list-multi-select.test.ts` — one call to main for the set.
+     */
+    {
+      name: "moving a marked set files both notes and says nothing about a deletion (B95)",
+      run: async () => {
+        await open.library!.key("Escape");
+        await settle();
+
+        // Alfa opens, Beta joins the set. The open note is *in* the set, which is what
+        // `toggleMarked`'s seeding makes the normal case rather than the awkward one.
+        await click(".notes-list .note:nth-of-type(1)");
+        await click(".notes-list .note:nth-of-type(2)", 2 /* Ctrl */);
+
+        const at = await centre(".notes-list .note:nth-of-type(2)");
+        for (const [type, buttons] of [["mousePressed", 2], ["mouseReleased", 0]] as const) {
+          // eslint-disable-next-line no-await-in-loop
+          await open.library!.send("Input.dispatchMouseEvent", {
+            type, x: Math.round(at.x), y: Math.round(at.y),
+            button: "right", buttons, clickCount: 1,
+          });
+        }
+        await settle();
+
+        const opened = await open.library!.evaluate<string>(
+          `(() => {
+             const labels = [...document.querySelectorAll('.context-menu-label')];
+             const move = labels.find((n) => n.textContent.startsWith('Move'));
+             if (move === undefined) return 'the menu offers ' + (labels.map((n) => n.textContent).join(', ') || 'nothing');
+             move.closest('button').click();
+             return 'ok';
+           })()`,
+        );
+        if (opened !== "ok") throw new Error(opened);
+
+        await settle();
+        const picked = await open.library!.evaluate<string>(
+          `(() => {
+             const rows = [...document.querySelectorAll('.palette .palette-list li')];
+             const target = rows.find((n) => n.textContent.includes('01 Projecten'));
+             if (target === undefined) return 'the picker offers ' + (rows.map((n) => n.textContent).join(', ') || 'nothing');
+             target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+             return 'ok';
+           })()`,
+        );
+        if (picked !== "ok") throw new Error(picked);
+
+        // Long enough for chokidar's own `stabilityThreshold` and for the app's reaction
+        // to it: the bar this is looking for arrives *after* the move, not with it, which
+        // is exactly why it was invisible to every jsdom test of the move itself.
+        await settle(2000);
+
+        const bar = await open.library!.evaluate<string | null>(
+          `(() => {
+             const node = document.querySelector('.disk-change-bar');
+             return node === null ? null : node.textContent;
+           })()`,
+        );
+        if (bar !== null) throw new Error(`the window says: ${bar}`);
+
+        const left = await listed();
+        if (left.length !== 1 || left[0] !== "Gamma") {
+          throw new Error(`the Inbox is left holding ${left.join(", ") || "nothing"}`);
+        }
+
+        const filed = ["Alfa", "Beta"].filter((title) =>
+          existsSync(join(vault, "01 Projecten", `${title}.md`)),
+        );
+        if (filed.length !== 2) throw new Error(`only ${filed.join(", ") || "nothing"} was filed`);
+
+        return "Alfa and Beta filed, no disk-change bar, Gamma left in the Inbox";
+      },
+    },
   ];
 
   for (const step of steps) {
