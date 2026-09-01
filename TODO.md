@@ -3,6 +3,29 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 1 September 2026, **unreleased** — one report from daily use (B96): pasting a
+note into another application turned checkmarks into bullets, headings into body text and
+highlights into nothing.
+
+The first of those three is not formatting. A task item carries its state as an attribute on
+the `<li>` and the box you see is a widget decoration, so nothing in the document said which
+items were ticked and the HTML flavour of a copy could not carry it. `clipboard-html.ts` is a
+`clipboardSerializer` beside the plain-text one that already existed: it adds `☐`/`☑`/`⭐`
+beside the attribute (never instead of it, and marked so `schema.ts` drops it on the way back
+in), and puts the styles a destination cannot get from this app's stylesheet — a highlight's
+background, a heading's size — on the element *and* on a span inside it, because Word unwraps
+the tags it does not know. Nothing emits `font-weight`, `font-style` or `text-decoration`:
+`schema.ts` parses those three as marks, and a heading that went out bold would come back as
+a heading full of `**bold**`.
+
+**What is open on it.** `TEST-PROTOCOL.md` §50, and it is the shape of question this file
+rarely carries: everything left is what a *second application* draws. That both boxes reach
+the system clipboard is confirmed here — `drive:capture`'s tenth step presses a real Ctrl+C
+and reads it back with `--dump-clipboard` — but no machine in this sandbox has Outlook, Word
+or Gmail to ask what they make of it.
+
+---
+
 Last updated 1 September 2026, released as `v0.12.7` — **five bug reports from daily use**
 (B95), two of which turned out to be one.
 

@@ -2073,3 +2073,49 @@ down rather than fixed: `ensureScanned` still walks the whole vault on every cal
 it. That is the largest single cost left, and it was left deliberately — a memo means trusting
 the watcher to have seen everything, and Windows polling (B57) is where that trust has already
 failed once.
+
+---
+
+## A copy that keeps its vinkje outside this window (1 September 2026)
+
+One report from daily use, three symptoms: pasting a note into another application turns
+checkmarks into bullets, headings into body text and highlights into nothing.
+
+The third and second are formatting. The first is not, and that is what made this worth a
+decision (B96): a task item carries its state as an *attribute* on the `<li>` and the box you
+see is a widget decoration, so a ticked and an unticked item leave the app as the same plain
+bullet. B72's star is the same shape of loss. Nothing in the document said which was which,
+so nothing could be pasted that did.
+
+`clipboard-html.ts` is a `clipboardSerializer` beside the `clipboardTextSerializer`
+`clipboard-text.ts` already provided for the plain-text flavour — the comment above that file
+claimed the HTML flavour "was always fine", which is the line this batch retired. It is one
+pass over what `DOMSerializer.fromSchema` produced, and the pass is where the two things a
+`DOMOutputSpec` cannot say live: the glyph goes *inside* the item's first paragraph (a
+sibling before it renders on a line of its own), and it is added only where an attribute
+already says so.
+
+Three rules kept it from becoming a second definition of anything. `toDOM` is untouched, being
+the editor's rendering and the file-format schema at once. The glyph carries `data-emq-clip`
+and `schema.ts` has an `ignore` rule for it, so an in-app copy and paste does not leave a
+literal `☑` next to a real box. And no inline style ever names `font-weight`, `font-style` or
+`text-decoration`, because `schema.ts` parses those three as marks — a heading that went out
+bold would come back as a heading full of `**bold**`, and that one reaches the file.
+
+`clipboard-html.test.ts` (16 tests) pins both directions, including the nested-item case that
+would prefix a box once per level if the pass ran on every recursive `serializeFragment`
+rather than only the outermost.
+
+Driven in the running app: `drive:capture` grew a tenth step, and it is the only one in
+either driver that needs a *system* clipboard. It presses a real Ctrl+C through X in the real
+capture window and reads what landed back with the app's own `--dump-clipboard`, a second
+process alongside the running one — because a checkbox is a widget decoration, and no test
+environment can be asked what a decoration puts on a clipboard. It also needs the window to
+hold X focus, which nothing before it did: both windows are called "emqnote", so the capture
+one stamps its own `document.title` for the length of the step and is found by that. Ten
+steps, green.
+
+**What is left for a person** (`TEST-PROTOCOL.md` §50): everything after the point where this
+app's responsibility ends. That the two boxes are on the clipboard is now confirmed here;
+what Word, Outlook and Gmail *draw* from that is not, and this sandbox has none of the three
+to ask.

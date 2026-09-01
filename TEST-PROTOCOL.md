@@ -313,7 +313,7 @@ Needs a second application, which is why it is here rather than in a test.
 | 6A.6b | Same with a numbered list | `1.`, `2.`, counting from the list's own start |  |
 | 6A.6c | Same with a task list | `- [ ]` and `- [x]` |  |
 | 6A.6d | Same with a list nested two or three deep | Indented by the width of the marker above it, so the levels line up |  |
-| 6A.6e | Paste the same clipboard into **Outlook or Word** | A real list, formatted — the HTML flavour, unchanged by this fix |  |
+| 6A.6e | Paste the same clipboard into **Outlook or Word** | A real list, formatted. The HTML flavour was unchanged by *this* fix and is no longer unchanged at all — see §50, which is where it is now checked |  |
 | 6A.6f | Copy an ordinary paragraph containing `[1]` or `#tag` | No backslashes appear. This is plain text, not markdown |  |
 
 ---
@@ -1725,6 +1725,37 @@ new empty bands read.
 
 ---
 
+## §50 — What a copy looks like in the other application (B96)
+
+The one section of this file that is entirely about a second application, and it cannot be
+anything else: `clipboard-html.test.ts` pins what goes *onto* the clipboard and what comes
+back off it, and jsdom has no opinion whatever about what Word does with a `<mark>`.
+
+Copy the same selection once and paste it into each destination — the clipboard holds both
+flavours at the same time, and which one is taken is the destination's choice, so a single
+copy is the honest test.
+
+Prepare a note holding: a heading at level 1 and 2, a paragraph with `==marked==` text and
+some `code`, and a list with one unticked item, one ticked item, one `⭐` item, one ordinary
+bullet, and a nested ticked item under it. Select the whole note.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 50a | Paste into an **Outlook** message body | Both boxes are there and are different: `☐` for open, `☑` for done |  |
+| 50b | Same paste | The ticked and unticked items carry the box *instead of* a bullet, not beside one |  |
+| 50c | Same paste | The `⭐` item keeps its bullet and its star |  |
+| 50d | Same paste | The marked text still has a yellow background |  |
+| 50e | Same paste | The two headings are bigger than the body text, and the second smaller than the first |  |
+| 50f | Same paste | The nested ticked item has exactly one box, not one per level of nesting |  |
+| 50g | Repeat 50a in **Word**, in **Gmail or Teams**, and in a **plain-text** field | Boxes present everywhere. The look degrades; the two states never become the same thing |  |
+| 50h | Copy the same selection and paste it back into a note **in this app** | Exactly what left. No literal `☐`, `☑` or `⭐` in the text, real boxes and a real star instead |  |
+| 50i | Save that note and reopen it | No `**bold**` around the headings, no stray characters in the list. This is the one that would be a corruption of the file rather than of a paste |  |
+
+50h and 50i are covered by the test file and are here anyway: they are the failure this
+change could introduce, and the only place a *real* clipboard is involved is this one.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
@@ -1769,6 +1800,17 @@ a defect (level one falls back to a different face on a Mac, deliberately, again
 that was too heavy at two depths), and §38q names the one decision in the batch that could
 reasonably go the other way. §38c–§38g are judgements about colour and weight that no
 screenshot from this sandbox could have settled.
+
+**§50 asks what a *different application* makes of the clipboard, and this sandbox has none
+of the three to ask** — no Outlook, no Word, no Gmail — so every row about *rendering* is a
+first sighting. One thing under it is not: `drive:capture`'s tenth step presses a real
+Ctrl+C in the real window and reads the system clipboard back with `--dump-clipboard`, so
+that both boxes are genuinely on it is confirmed, on this machine, at the only point where
+this app's responsibility ends. What no script here can settle is everything after that
+point: whether Word draws `☑`, whether it keeps `list-style-type`, whether Outlook's yellow
+survives. §50h and §50i are covered by `clipboard-html.test.ts` as well, and are listed
+anyway because they are the failure the change could have introduced and the one place a
+real clipboard is involved.
 
 **§46a is the sharpest single instance of the fourth kind below**: everything else in that
 batch was driven in the running app first, and it is the one row that could not be, because
