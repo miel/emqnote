@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { attachmentUrl } from "../../shared/attachment-url.js";
+import { ChromeButton } from "../ChromeButton.js";
+import { PaneFooter } from "../PaneFooter.js";
+import { PaneHeader } from "../PaneHeader.js";
 
 interface Props {
   /** Vault-relative path, exactly as `FileSummary.path` gives it. */
@@ -37,17 +40,39 @@ export function FilePreview({ path, t }: Props): React.ReactElement {
 
   return (
     <div className="file-preview">
-      <div className="file-preview-bar">
-        <span className="file-preview-name" title={path}>
-          {fileName(path)}
-        </span>
-        <button type="button" onClick={() => void window.emqnote.openWikiLink(path)}>
-          {t("library.openFile")}
-        </button>
-        <button type="button" onClick={() => window.emqnote.library.revealNote(path)}>
-          {t("library.reveal")}
-        </button>
-      </div>
+      {/* The same two bands the note beside it wears, from the same two components (B95).
+          This was a bar of its own before — its own padding, its own idea of how tall
+          chrome is, no footer at all — which is the third column breaking the line across
+          the top of the window that B92 exists to draw, and on Windows 11 it put Open file
+          and Reveal underneath the caption buttons. `captionButtons` is what fixes the
+          second half; being a `PaneHeader` at all is what fixes the first.
+
+          The class stays on the header rather than being dropped for `.pane-header`: it is
+          what `library-folder-files.test.ts` reaches these two buttons through, and the
+          rule behind it now says only what is particular to this pane. */}
+      <PaneHeader
+        captionButtons
+        className="file-preview-bar"
+        title={
+          <span className="file-preview-name pane-title" title={path}>
+            {fileName(path)}
+          </span>
+        }
+        actions={
+          <>
+            <ChromeButton
+              label={t("library.openFile")}
+              small
+              onClick={() => void window.emqnote.openWikiLink(path)}
+            />
+            <ChromeButton
+              label={t("library.reveal")}
+              small
+              onClick={() => window.emqnote.library.revealNote(path)}
+            />
+          </>
+        }
+      />
 
       <div className="file-preview-body">
         {IMAGE_EXTENSIONS.has(extension) ? (
@@ -58,6 +83,14 @@ export function FilePreview({ path, t }: Props): React.ReactElement {
           <p className="file-preview-none">{t("library.noPreview")}</p>
         )}
       </div>
+
+      {/* Where the note's own footer says where it is filed, this one says the same about
+          the file — the pane's bottom edge has to be a line whatever is in the pane, and a
+          band with nothing in it would be a band with nothing in it. */}
+      <PaneFooter
+        className="file-preview-footer"
+        status={<span className="file-preview-path">{path}</span>}
+      />
     </div>
   );
 }

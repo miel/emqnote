@@ -3072,10 +3072,27 @@ export function Library(): React.ReactElement {
           {open === null && openFile !== null ? (
             <FilePreview path={openFile} t={app.t} />
           ) : open === null ? (
-            <div className="reader-empty">
-              <p>{app.t("library.pick")}</p>
-              <p className="reader-hint">{app.t("library.pickHint")}</p>
-            </div>
+            /* Empty, and still wearing both bands (B95). The three panes' headers and
+               footers are one 40px and one 28px rule precisely so there is a line across
+               the top and the bottom of the window (B92) — and a reader with no note in it
+               was breaking both of them a third of the way along, which reads as a header
+               and a footer that have been cut off rather than as a pane with nothing in
+               it. There is nothing to put in either band: no title, because no note, and
+               no state, because nothing is being saved. `.reader-empty` keeps `margin:
+               auto`, so its two lines still centre in what is left between them. */
+            <>
+              {/* `null`, not `""`: a string title makes `PaneHeader` draw an `<h2
+                  class="pane-title">`, and an empty one of those is a real element that
+                  `focusPane("title")` finds — so Tab out of the note list would land on a
+                  heading with nothing in it, in a pane with no note. A node title draws
+                  exactly what it is given, which here is nothing. */}
+              <PaneHeader captionButtons className="reader-header" title={null} />
+              <div className="reader-empty">
+                <p>{app.t("library.pick")}</p>
+                <p className="reader-hint">{app.t("library.pickHint")}</p>
+              </div>
+              <PaneFooter className="reader-footer" status={null} />
+            </>
           ) : (
             <>
               {/* Title and nothing else. The path moved to the footer — a note's location

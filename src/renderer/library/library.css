@@ -1271,7 +1271,11 @@
 .scan-bar {
   position: relative;
   width: 100%;
-  padding: 5px 14px;
+  /* `--caption-inset` on all three of these bars, for the reason `styles.css` gives at
+     `.pane-header-caption`: they are drawn *above* the pane grid, so on Windows 11 it is
+     these — not the reader's header — that the caption buttons are painted over, and the
+     right-hand end of this one is where the count sits. */
+  padding: 5px calc(14px + var(--caption-inset)) 5px 14px;
   font-size: 11px;
   color: var(--muted);
   background: var(--surface);
@@ -1304,7 +1308,10 @@
   gap: 12px;
   width: 100%;
   font-size: 12px;
-  padding: 7px 14px;
+  /* The bar this rule was written for: `space-between` puts Reload / Close / Keep mine
+     flush against the right edge, which on Windows 11 is exactly where the caption buttons
+     are drawn. See `.scan-bar` above. */
+  padding: 7px calc(14px + var(--caption-inset)) 7px 14px;
   color: #7a4a00;
   background: #ffe6b3;
   border-bottom: 1px solid var(--border);
@@ -1322,7 +1329,10 @@
   font: inherit;
   font-size: 12px;
   text-align: left;
-  padding: 7px 14px;
+  /* See `.scan-bar`. This one is a full-width button, so the inset keeps its *text* clear
+     of the controls; the last stretch of the button box still sits under them and is not
+     clickable there, which is the platform's own rule and not something CSS can undo. */
+  padding: 7px calc(14px + var(--caption-inset)) 7px 14px;
   color: #7a4a00;
   background: #ffd875;
   border: 0;
@@ -1471,14 +1481,18 @@
   height: 100%;
 }
 
+/* **Everything this rule used to say is `.pane-header`'s now** — the height, the shading,
+   the border and the drag region — for `.reader-header`'s reason exactly (B92, B95): a
+   fourth idea about how tall chrome is meant no line across the top of the window, and
+   this pane was the fourth. What is left is the one thing particular to it, the same 12px
+   the reader indents its own title by. */
 .file-preview-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
+  padding-left: 12px;
 }
 
+/* Sits where `.pane-title` sits and carries its own weight and ellipsis, because a file
+   name is not a heading — it is the name of the thing on screen, and `PaneHeader` draws an
+   `<h2>` only for the string form of its title. */
 .file-preview-name {
   flex: 1 1 auto;
   overflow: hidden;
@@ -1487,8 +1501,22 @@
   font-weight: 600;
 }
 
+.file-preview-footer {
+  padding-left: 12px;
+}
+
+/* The whole vault-relative path, ellipsised from the left would be better and is not worth
+   a second rule: the folder is the half that repeats and the file name is already in the
+   header above it. */
+.file-preview-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-preview-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 16px;
   display: flex;
