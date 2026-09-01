@@ -539,7 +539,7 @@ async function main(): Promise<number> {
       },
     },
     {
-      name: "Mod+T opens the Tasks view, counting only the boxes with something written on them",
+      name: "Mod+T opens the Tasks view and a second press closes it again (B95)",
       run: async () => {
         await open.library!.key("t", {
           windowsVirtualKeyCode: 84, nativeVirtualKeyCode: 84, modifiers: 2,
@@ -551,9 +551,22 @@ async function main(): Promise<number> {
         if (rows.length === 0) throw new Error("the Tasks view lists nothing at all");
         const empty = rows.filter((row) => row.trim() === "");
         if (empty.length > 0) throw new Error(`${empty.length} of ${rows.length} rows name no task`);
-        await open.library!.key("Escape");
-        await settle();
-        return `${rows.length} rows, none of them empty`;
+
+        // The other half of the toggle, and the reason this step is driven rather than
+        // asked under `test/`: the chord has to reach the window's own key listener, and
+        // the pane it closes is the one that unmounted the button that opened it.
+        await open.library!.key("t", {
+          windowsVirtualKeyCode: 84, nativeVirtualKeyCode: 84, modifiers: 2,
+        });
+        await settle(800);
+        const after = await open.library!.evaluate<string>(
+          `document.querySelector('.task-list') === null
+             ? (document.querySelector('.notes-list') === null ? 'neither pane' : 'the note list')
+             : 'the Tasks view'`,
+        );
+        if (after !== "the note list") throw new Error(`a second Mod+T left ${after} on screen`);
+
+        return `${rows.length} rows, none of them empty, and gone again on a second press`;
       },
     },
     {

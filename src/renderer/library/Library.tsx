@@ -1310,11 +1310,21 @@ export function Library(): React.ReactElement {
       }
 
       if (fires("tasksView")) {
-        // The same handler the sidebar's Tasks row and the note list's footer button call
-        // — never a second route that could come to mean something else. The footer button
-        // is out of the tab order now, and this is the other half of that trade.
+        // The way in is the same handler the sidebar's Tasks row and the note list's
+        // footer button call — never a second route that could come to mean something
+        // else. The footer button is out of the tab order now, and this is the other half
+        // of that trade.
+        //
+        // The way *out* has to be spelled here rather than in that shared handler, and
+        // that is not an inconsistency: the note list is unmounted while the Tasks view is
+        // showing (`selection.kind === "tasks"` swaps `NoteList` for `TaskList`), so its
+        // footer button is not on screen to be pressed a second time. The chord is the
+        // only route that can be both, which is what makes it the one that toggles.
+        // `exitTasks` is the same function Escape and TaskList's own button use, so
+        // leaving still happens in exactly one place.
         event.preventDefault();
-        openTasksRef.current();
+        if (selectionRef.current.kind === "tasks") exitTasks();
+        else openTasksRef.current();
         return;
       }
 

@@ -404,6 +404,10 @@ export const SHORTCUTS: ShortcutEntry[] = [
       "button, and both are the mouse. It is now also the pane the note list's Tab stop " +
       "*cannot* reach: that footer is out of the tab order (B94), which is the trade this " +
       "chord is the other half of.\n\n" +
+      "It **toggles** (B95), and it is the only route that can: the note list is unmounted " +
+      "while the Tasks view is showing, so the footer button that opened it is not on " +
+      "screen to close it again. A second press is `exitTasks`, the same function Escape " +
+      "and the view's own Exit tasks button call.\n\n" +
       "'T' for tasks, and plain Mod rather than Mod-Shift because Mod-Shift-T is the task " +
       "*item* in the editor — one binding, one owner (B32), and the two are a keystroke " +
       "apart on purpose: the same letter for the same subject, shifted for the thing you " +
