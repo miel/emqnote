@@ -3,8 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 1 September 2026, **unreleased** — **five bug reports from daily use** (B95),
-two of which turned out to be one.
+Last updated 1 September 2026, released as `v0.12.7` — **five bug reports from daily use**
+(B95), two of which turned out to be one.
 
 Moving a marked set was slow *and* announced "This note was deleted outside emqnote", and
 both came out of the same seam: `moveNotesTo` looped over a one-note IPC channel and did not
