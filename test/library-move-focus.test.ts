@@ -22,7 +22,7 @@ import type { FolderNode, NoteSummary, OpenedNote } from "../src/shared/vault-ty
  * it is.
  *
  * Mounted through a real `Library`, like `reader-menu.test.ts` beside it: the move goes
- * through `moveNoteTo` → `askRelinkThen` → `performMove`, and a stand-in for any of those
+ * through `moveNotesTo` → `askRelinkThen` → `performMove`, and a stand-in for any of those
  * would be testing the stand-in.
  */
 
@@ -71,7 +71,7 @@ function openedNote(path: string, title: string): OpenedNote {
 
 interface Fake {
   emqnote: CaptureApi;
-  moveNote: ReturnType<typeof vi.fn>;
+  moveNotes: ReturnType<typeof vi.fn>;
 }
 
 /** The Inbox, holding three notes, and one other folder to move into. */
@@ -89,9 +89,12 @@ function buildFake(): Fake {
   // The list the window is shown, mutated by the move exactly as the vault would be.
   let inbox = [...PATHS];
 
-  const moveNote = vi.fn(async (path: string, folder: string) => {
-    inbox = inbox.filter((entry) => entry !== path);
-    return { path: `${folder}/${path.split("/").pop()}` };
+  const moveNotes = vi.fn(async (paths: string[], folder: string) => {
+    inbox = inbox.filter((entry) => !paths.includes(entry));
+    return {
+      moved: paths.map((path) => ({ from: path, to: `${folder}/${path.split("/").pop()}` })),
+      locked: [],
+    };
   });
 
   const library: LibraryApi = {
@@ -108,7 +111,7 @@ function buildFake(): Fake {
       return index === -1 ? null : openedNote(path, TITLES[index] ?? path);
     },
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote,
+    moveNotes,
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
@@ -205,7 +208,7 @@ function buildFake(): Fake {
     library,
   };
 
-  return { emqnote, moveNote };
+  return { emqnote, moveNotes };
 }
 
 async function flush(rounds = 14): Promise<void> {
@@ -300,7 +303,7 @@ describe("moving a note out of the list it was selected in", () => {
 
     await moveTo("01 Werk");
 
-    expect(fake.moveNote).toHaveBeenCalled();
+    expect(fake.moveNotes).toHaveBeenCalled();
     // The whole report, in one assertion: focus is somewhere a Tab can be counted from,
     // and not on `<body>`.
     expect(document.activeElement?.classList.contains("note")).toBe(true);

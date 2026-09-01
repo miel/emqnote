@@ -111,7 +111,7 @@ const DUTCH: Record<string, string> = {
   "shortcut.newNoteHere": "Nieuwe notitie in deze map",
   "shortcut.pinNote": "Notitie bovenaan vastprikken",
   "shortcut.searchVault": "Zoeken in alle notities",
-  "shortcut.tasksView": "Taken tonen",
+  "shortcut.tasksView": "Taken tonen of verbergen",
   "shortcut.sortNotes": "Volgorde van de lijst kiezen",
   "shortcut.settings": "Instellingen openen",
 
@@ -610,7 +610,7 @@ const ENGLISH: Record<string, string> = {
   "shortcut.newNoteHere": "New note in this folder",
   "shortcut.pinNote": "Pin note to top",
   "shortcut.searchVault": "Search every note",
-  "shortcut.tasksView": "Show tasks",
+  "shortcut.tasksView": "Show or hide tasks",
   "shortcut.sortNotes": "Choose how the list is ordered",
   "shortcut.settings": "Open settings",
 

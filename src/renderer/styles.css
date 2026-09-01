@@ -42,6 +42,17 @@
      the same proportion, which is the whole of what "larger text" means here. The window
      around it does not move: chrome is chrome at any note size. */
   --editor-font-size: 16px;
+
+  /* How much of the window's right-hand edge the OS has taken for its own window controls,
+     and therefore how far anything drawn in the top band has to keep clear of them (B95).
+     Zero everywhere except Windows: `env(titlebar-area-width)` is defined only where
+     Chromium has a Window Controls Overlay, and the fallback makes the whole expression
+     `100vw - 100vw`. A token rather than the expression repeated, because it is now asked
+     by four different bands — the reader's header and the three that can appear above the
+     pane grid — and four copies of a `calc` is four places for the next one to be
+     forgotten, which is exactly how the disk-change bar came to have its buttons drawn
+     underneath Close. */
+  --caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
 }
 
 /* The light theme's polarity used to be upside down: `--surface` was `#ffffff` and
@@ -2306,9 +2317,17 @@ body {
  * The Windows controls land on the right, over the *last* band — the note pane in the
  * library. That header's right edge is empty by design (its `⋯` menu lives in the footer
  * with Insert and Actions), so this only has to keep the title itself from running under
- * Close. `100vw - env(titlebar-area-width)` is the width of the controls, whatever the
- * display scaling makes it; on macOS and Linux the variable is absent, the fallback makes
- * the expression 0, and the rule costs nothing. */
+ * Close. `--caption-inset` is the width of those controls, whatever the display scaling
+ * makes it; on macOS and Linux the variable it is built from is absent, the fallback makes
+ * it 0, and the rule costs nothing.
+ *
+ * **The inset stays on even when a bar is drawn above this header** (B95). Switching it
+ * off then is tempting — the bars in `.library-shell` push the pane grid down, so the
+ * controls are no longer over this band at all — and wrong: the scan bar is about 22px
+ * tall and the overlay is 40, so the top half of this header is still inside it. The cost
+ * of being unconditional is a right-hand gap beside a title that is left-aligned anyway;
+ * the cost of being clever would be a title under Close whenever the thinnest of the three
+ * bars is up. Those bars take the same inset themselves, in `library.css`. */
 .pane-header-lights {
   padding-left: 92px;
 }
@@ -2328,7 +2347,7 @@ body {
 }
 
 .pane-header-caption {
-  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 6px);
+  padding-right: calc(6px + var(--caption-inset));
 }
 
 /* Placeholder for an empty editor, since contenteditable has none of its own.

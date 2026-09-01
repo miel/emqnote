@@ -57,7 +57,10 @@ function buildFake(
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => null,
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote: async (path) => ({ path }),
+    moveNotes: async (paths: string[]) => ({
+      moved: paths.map((path) => ({ from: path, to: path })),
+      locked: [],
+    }),
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
@@ -331,5 +334,46 @@ describe("the Tasks view's scope, and what can be chosen as one", () => {
     // And the header goes with the list it belongs to, so the button that opened this is
     // no longer on screen — the view it opened has replaced the note list entirely.
     expect(container.querySelector(".notes-actions")).toBeNull();
+  });
+
+  /**
+   * B95. `Mod+T` opened the view and had no way of closing it: a second press re-set the
+   * same selection and nothing on screen moved.
+   *
+   * The chord is the only route that can toggle, and the assertion above is why — the note
+   * list is unmounted while the view is showing, so the button that opened it is not there
+   * to be pressed again. The way out is `exitTasks`, the same function Escape and the
+   * view's own Exit tasks button call, which is why there is still exactly one of them.
+   */
+  it("closes the Tasks view on a second Mod+T, having opened it on the first", async () => {
+    const fake = buildFake();
+    (window as unknown as { emqnote: unknown }).emqnote = fake.emqnote;
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LibraryComponent));
+    });
+    await flush();
+
+    const press = async (): Promise<void> => {
+      await act(async () => {
+        window.dispatchEvent(
+          // `Mod` is Cmd here: this fake reports `platform: "darwin"`, and `matches` is
+          // asked which one that means rather than accepting either.
+          new KeyboardEvent("keydown", { key: "t", metaKey: true, bubbles: true, cancelable: true }),
+        );
+      });
+      await flush();
+    };
+
+    await press();
+    expect(container.querySelector(".task-list")).not.toBeNull();
+    expect(fake.tasks).toHaveBeenCalledWith("00 Inbox", true);
+
+    await press();
+    expect(container.querySelector(".task-list")).toBeNull();
+    // Back on the folder the tree was standing on when it opened, with its note list —
+    // which is `exitTasks`' whole job, and the reason the chord does not spell one of
+    // its own.
+    expect(container.querySelector(".notes-list")).not.toBeNull();
   });
 });

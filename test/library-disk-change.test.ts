@@ -84,7 +84,10 @@ function buildFake(initial: OpenedNote): Fake {
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote: async (path) => ({ path }),
+    moveNotes: async (paths: string[]) => ({
+      moved: paths.map((path) => ({ from: path, to: path })),
+      locked: [],
+    }),
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
@@ -358,6 +361,18 @@ describe("the library reacts to a note changing on disk (Package C)", () => {
 
     expect(container.querySelector(".reader-empty")).not.toBeNull();
     expect(container.querySelector(".disk-change-bar")).toBeNull();
+
+    // B95. The pane is empty; its two bands are not gone. A reader that dropped its
+    // header and footer when it had nothing to show broke the 40px line across the top of
+    // the window and the 28px one across the bottom a third of the way along, which reads
+    // as chrome that has been cut off rather than as a pane with nothing in it.
+    const reader = container.querySelector(".reader")!;
+    expect(reader.querySelector(".pane-header")).not.toBeNull();
+    expect(reader.querySelector(".pane-footer")).not.toBeNull();
+    // And nothing *in* the header: an empty `.pane-title` is a real element, and
+    // `focusPane("title")` would find it and hand Tab out of the note list to a heading in
+    // a pane with no note.
+    expect(reader.querySelector(".pane-title")).toBeNull();
   });
 
   it("a 'removed' event never auto-closes a clean note on its own", async () => {

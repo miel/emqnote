@@ -1695,6 +1695,36 @@ green on this machine and is here for a second pair of eyes on real hardware.
 
 ---
 
+## §49 — Filing a set, the window's top band, and Mod+T as a toggle (B95)
+
+Five reports from daily use, two of which turned out to be one. `npm run drive:library` has
+sixteen steps now and covers what it can: the Mod+T toggle, and a marked set moved through
+the Move to… picker with the reader ending on a row that is not itself moving and no
+disk-change bar appearing afterwards.
+
+**What is left for a person is three kinds of thing.** §49a–§49d are Windows 11, the one
+platform the caption-button overlay exists on — `env(titlebar-area-width)` is absent
+everywhere else, so every rule added for it evaluates to zero on this machine and no
+screenshot from here could tell a correct one from a missing one. §49e–§49g are the latency
+report itself, which needs a real vault on real OneDrive: four notes under `Xvfb` prove the
+shape of the fix and nothing about the size of it. §49h–§49j are judgements about how the
+new empty bands read.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 49a | **On Windows 11**, open a note in the library and edit the file underneath it from another editor, so the disk-change bar appears | The bar's buttons — Reload / Keep mine — are fully visible and clickable, clear of Minimise/Maximise/Close. This is the reported bug: they were drawn underneath them |  |
+| 49b | **On Windows 11**, with that bar showing, look at the note's title in the header below it | The title is still clear of the caption buttons. The inset stays on deliberately even when a bar is above the header, because the overlay is 40px and the bar is thinner than that |  |
+| 49c | **On Windows 11**, start the app on a vault it has not indexed, so the scan bar appears | The "Indexing n / m" text ends clear of the caption buttons |  |
+| 49d | **On Windows 11**, click a file (not a note) in a folder that has one | The file preview's Open and Reveal buttons are clear of the caption buttons — this band was not a `PaneHeader` at all before and reserved nothing |  |
+| 49e | On a real vault, mark six notes and drag them onto a folder | They move, and the wait after letting go is short. Say roughly how long it takes — this is the report, and the sandbox figure is worthless for it |  |
+| 49f | Do the same with the note you are *reading* among the six | The reader lands on a note that stayed put, and **no bar appears saying the note was deleted outside emqnote**. That sentence over the app's own move is the second report |  |
+| 49g | Mark six notes where two of them have `[[…]]` links pointing at them, and move the set | **One** question about the links, naming how many notes point at the set — not one question per note. Answer it either way: all six move. Before this, everything but the last note silently did not |  |
+| 49h | Open the library with no note selected | The note pane wears an empty header and an empty footer, so the grey line across the top and the one across the bottom run the full width of the window. Say if the empty bands read as unfinished rather than as a pane with nothing in it |  |
+| 49i | Click a file in a folder that has one | Its bar is the same height as the two headers beside it, and there is a footer under it naming the file's path. All three headers line up |  |
+| 49j | Press Mod+T twice in the library | The Tasks view opens and closes again, back on the folder you were standing in. Escape and the view's own "Exit tasks" button still work |  |
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

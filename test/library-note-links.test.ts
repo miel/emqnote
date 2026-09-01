@@ -68,7 +68,7 @@ function openedNote(path: string, title: string): OpenedNote {
 
 interface Fake {
   emqnote: CaptureApi;
-  moveNote: ReturnType<typeof vi.fn>;
+  moveNotes: ReturnType<typeof vi.fn>;
   renameNote: ReturnType<typeof vi.fn>;
   linkingNotes: ReturnType<typeof vi.fn>;
   openNoteMock: ReturnType<typeof vi.fn>;
@@ -96,7 +96,10 @@ function buildFake(): Fake {
     [LINKED_PATH, openedNote(LINKED_PATH, "Doel")],
   ]);
 
-  const moveNote = vi.fn(async (path: string) => ({ path }));
+  const moveNotes = vi.fn(async (paths: string[]) => ({
+    moved: paths.map((path) => ({ from: path, to: path })),
+    locked: [],
+  }));
   const renameNote = vi.fn(async (path: string) => ({ path }));
   const linkingNotes = vi.fn(async () => [] as { path: string; title: string }[]);
   const openNoteMock = vi.fn(async (path: string) => notesByPath.get(path) ?? null);
@@ -113,7 +116,7 @@ function buildFake(): Fake {
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote,
+    moveNotes,
     renameNote,
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
@@ -215,7 +218,7 @@ function buildFake(): Fake {
 
   return {
     emqnote,
-    moveNote,
+    moveNotes,
     renameNote,
     linkingNotes,
     openNoteMock,
@@ -304,7 +307,7 @@ describe("internal note links in the library (B35)", () => {
     await moveIt();
 
     expect(container.querySelector(".ask")).toBeNull();
-    expect(fake.moveNote).toHaveBeenCalledWith(NOTE_PATH, "01 Projecten", false);
+    expect(fake.moveNotes).toHaveBeenCalledWith([NOTE_PATH], "01 Projecten", false);
   });
 
   it("asks before the move when notes link to it, and counts them", async () => {
@@ -318,7 +321,7 @@ describe("internal note links in the library (B35)", () => {
 
     // Asked *before* anything moved: the targets resolve against where the note is now,
     // so after the move there would be nothing left for main to find.
-    expect(fake.moveNote).not.toHaveBeenCalled();
+    expect(fake.moveNotes).not.toHaveBeenCalled();
     expect(container.querySelector(".ask")?.textContent).toContain("3 notes link to this one");
   });
 
@@ -333,7 +336,7 @@ describe("internal note links in the library (B35)", () => {
     });
     await flush();
 
-    expect(fake.moveNote).toHaveBeenCalledWith(NOTE_PATH, "01 Projecten", true);
+    expect(fake.moveNotes).toHaveBeenCalledWith([NOTE_PATH], "01 Projecten", true);
   });
 
   /**
@@ -353,7 +356,7 @@ describe("internal note links in the library (B35)", () => {
     });
     await flush();
 
-    expect(fake.moveNote).toHaveBeenCalledWith(NOTE_PATH, "01 Projecten", false);
+    expect(fake.moveNotes).toHaveBeenCalledWith([NOTE_PATH], "01 Projecten", false);
   });
 
   it("opens the note straight away when a clicked link names exactly one", async () => {

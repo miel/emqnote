@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -329,6 +329,56 @@ describe("the vault watcher", () => {
         kind: "removed",
         own: false,
       });
+    });
+  });
+
+  /**
+   * B95. A content hash cannot answer for an `unlink` — there are no bytes at a path that
+   * no longer exists — so every note this app filed into another folder was reported as
+   * having been deleted from outside it, and the library put "This note was deleted
+   * outside emqnote" over a move it had just made itself.
+   *
+   * The invariant is the one the own-write test above states, in the other direction: the
+   * flag is about the *notification*, and the index is pruned either way.
+   */
+  it("marks a removal this app performed as its own, while still pruning the index", async () => {
+    const from = join(vault, "00 Inbox", "Verplaatst.md");
+    const to = join(vault, "01 Werk", "Verplaatst.md");
+    const events: { path: string; kind: string; own: boolean }[] = [];
+    watcher = await startWatching({
+      wasOwnRemoval: (path) => path === from,
+      wasOwnArrival: (path) => path === to,
+      onChange: (event) => events.push(event),
+    });
+
+    mkdirSync(join(vault, "01 Werk"), { recursive: true });
+    writeFileSync(from, noteContents("Verplaatst"));
+    await waitFor(() => {
+      expect(getNote(db, "00 Inbox/Verplaatst.md")).not.toBeNull();
+    });
+
+    renameSync(from, to);
+
+    await waitFor(() => {
+      expect(events).toContainEqual({
+        path: "00 Inbox/Verplaatst.md",
+        kind: "removed",
+        own: true,
+      });
+    });
+    // Pruned from the index all the same, and present at its new path — the suppression is
+    // of one message, never of the bookkeeping.
+    expect(getNote(db, "00 Inbox/Verplaatst.md")).toBeNull();
+    await waitFor(() => {
+      expect(getNote(db, "01 Werk/Verplaatst.md")).not.toBeNull();
+    });
+
+    // And the arrival is the app's own too, which is the half a hash cannot answer either:
+    // a note being filed was very likely never written by this app, so `renameOwnWrite`
+    // has nothing to carry across and the `add` would otherwise read as an external edit.
+    await waitFor(() => {
+      const arrival = events.find((event) => event.path === "01 Werk/Verplaatst.md");
+      expect(arrival?.own).toBe(true);
     });
   });
 });

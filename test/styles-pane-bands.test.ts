@@ -108,4 +108,56 @@ describe("styles: the panes share one header and one footer geometry", () => {
     // over them is a press that goes to the window manager instead of to the button.
     expect(rule(shared, "\\.pane-footer")).not.toMatch(/-webkit-app-region:\s*drag;/);
   });
+
+  /**
+   * B95. Windows 11 paints its caption buttons into the top-right 40px of the *window*,
+   * over whatever the renderer has drawn there — and the library window is not three panes
+   * at y=0. `.library-shell` stacks up to three full-width bars above the pane grid, so
+   * when one of them is up it is that bar, not the reader's header, that the controls
+   * cover. The disk-change bar puts Reload / Close / Keep mine flush against that edge,
+   * and they were drawn underneath them.
+   *
+   * Counted here by hand for this file's usual reason: `env(titlebar-area-width)` is
+   * defined only where a Window Controls Overlay exists, which is Windows, so on this
+   * machine every one of these rules evaluates to zero and no test that *runs* the CSS
+   * could tell a correct one from a missing one.
+   */
+  it("keeps everything in the window's top band clear of the caption buttons", () => {
+    // Declared once, so the four users cannot come to disagree about the expression.
+    expect(shared.split("\n").filter((line) => line.trim().startsWith("--caption-inset:")))
+      .toHaveLength(1);
+    expect(rule(shared, ":root")).toMatch(
+      /--caption-inset:\s*calc\(100vw - env\(titlebar-area-width, 100vw\)\);/,
+    );
+
+    // The reader's header, which is where the controls land when no bar is above it — and
+    // which keeps its inset even when one is, since a 22px bar still leaves the top half
+    // of this band inside the 40px overlay.
+    expect(rule(shared, "\\.pane-header-caption")).toMatch(/var\(--caption-inset\)/);
+
+    // And the three bars that can push that header out from under them.
+    for (const selector of ["\\.scan-bar", "\\.disk-change-bar", "\\.conflict-banner"]) {
+      expect(rule(library, selector), `${selector} does not reserve the caption inset`).toMatch(
+        /var\(--caption-inset\)/,
+      );
+    }
+  });
+
+  /**
+   * The fourth band, and the one that was not a band at all: the file preview drew its own
+   * bar with its own padding and no footer, so the third column broke the line across the
+   * top of the window whenever a file was being looked at rather than a note (B95).
+   */
+  it("draws the file preview's chrome from the same two components", () => {
+    const preview = readFileSync(
+      new URL("../src/renderer/library/FilePreview.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(preview).toContain("<PaneHeader");
+    expect(preview).toContain("<PaneFooter");
+    // No geometry of its own left — the height and the border are `.pane-header`'s, and
+    // the count above is what would catch a second one being written down here.
+    expect(rule(library, "\\.file-preview-bar")).not.toMatch(/height:/);
+    expect(rule(library, "\\.file-preview-bar")).not.toMatch(/border-bottom:/);
+  });
 });

@@ -65,7 +65,7 @@ function openedNote(path: string, title: string): OpenedNote {
 interface Fake {
   emqnote: CaptureApi;
   trashNote: ReturnType<typeof vi.fn>;
-  moveNote: ReturnType<typeof vi.fn>;
+  moveNotes: ReturnType<typeof vi.fn>;
   openNoteMock: ReturnType<typeof vi.fn>;
 }
 
@@ -84,7 +84,10 @@ function buildFake(): Fake {
     PATHS.includes(path) ? openedNote(path, path.split("/").pop()!.replace(".md", "")) : null,
   );
   const trashNote = vi.fn(async () => true);
-  const moveNote = vi.fn(async (path: string) => ({ path }));
+  const moveNotes = vi.fn(async (paths: string[]) => ({
+    moved: paths.map((path) => ({ from: path, to: path })),
+    locked: [],
+  }));
 
   const library: LibraryApi = {
     tree: async () => tree,
@@ -102,7 +105,7 @@ function buildFake(): Fake {
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote,
+    moveNotes,
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote,
@@ -197,7 +200,7 @@ function buildFake(): Fake {
     library,
   };
 
-  return { emqnote, trashNote, moveNote, openNoteMock };
+  return { emqnote, trashNote, moveNotes, openNoteMock };
 }
 
 async function flush(rounds = 12): Promise<void> {
@@ -428,7 +431,44 @@ describe("marking several notes in the list", () => {
     });
     await flush();
 
-    expect(fake.moveNote.mock.calls.map((call) => call[0])).toEqual([PATHS[0], PATHS[1]]);
+    // **One call carrying the set**, not a call per note (B95): the loop that used to be
+    // here cost a walk of the index, a broadcast and a full reload for every row in it.
+    expect(fake.moveNotes).toHaveBeenCalledTimes(1);
+    expect(fake.moveNotes.mock.calls[0]![0]).toEqual([PATHS[0], PATHS[1]]);
+  });
+
+  /**
+   * B95's second report — "This note was deleted outside emqnote", raised by moving
+   * several notes — read from this end.
+   *
+   * The open note is normally *in* the marked set (`toggleMarked` seeds the set with it)
+   * and a marked set is usually contiguous, so the row next to the note that left was
+   * another note on its way out. The reader was handed that path, the very next move
+   * vacated it, and when the watcher's `unlink` for it arrived the window announced a
+   * deletion it had performed itself.
+   */
+  it("leaves the reader on a note that is not itself moving", async () => {
+    await click(0);
+    await click(1, { ctrlKey: true });
+    await rightClick(0);
+
+    await act(async () => {
+      menuItem("Move — 2 notes").click();
+    });
+    await flush();
+
+    fake.openNoteMock.mockClear();
+    const destination = Array.from(
+      container.querySelectorAll<HTMLElement>(".move-dialog .palette-row, .palette li"),
+    ).find((row) => row.textContent?.includes("01 Projecten"));
+    await act(async () => {
+      destination!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    // The row below the two that left, never the one between them: `Beta` is in the set.
+    expect(fake.openNoteMock).toHaveBeenCalledWith(PATHS[2]);
+    expect(fake.openNoteMock).not.toHaveBeenCalledWith(PATHS[1]);
   });
 
   it("carries the whole set in a drag started from inside it", async () => {

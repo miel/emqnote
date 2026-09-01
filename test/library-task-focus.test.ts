@@ -124,7 +124,10 @@ function buildFake(): CaptureApi {
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: async () => openedNote(),
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote: async (path) => ({ path }),
+    moveNotes: async (paths: string[]) => ({
+      moved: paths.map((path) => ({ from: path, to: path })),
+      locked: [],
+    }),
     renameNote: async (path) => ({ path }),
     duplicateNote: async (path) => ({ path }),
     trashNote: async () => true,
