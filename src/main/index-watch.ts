@@ -101,6 +101,20 @@ export interface WatchOptions {
    * tested and carries no policy of its own about what an own write should mean.
    */
   isOwnWrite?(path: string, contents: string): boolean;
+  /**
+   * The same question for a file this app *moved away from* a path, which `isOwnWrite`
+   * cannot answer: there are no bytes left at a path that no longer exists (B95). Injected
+   * for `isOwnWrite`'s reason, and absent in a test that has no opinion, which then gets
+   * the old answer — every removal external.
+   */
+  wasOwnRemoval?(path: string): boolean;
+  /**
+   * And for a file this app moved *to* a path, asked only after `isOwnWrite` has declined:
+   * a note filed into another folder was very likely never written by this app, so there
+   * is no hash to carry over and the `add` at the destination would otherwise read as an
+   * external change.
+   */
+  wasOwnArrival?(path: string): boolean;
 }
 
 export interface VaultWatcher {
@@ -146,7 +160,10 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
     try {
       const stats = statSync(path);
       const contents = readFileSync(path, "utf8");
-      const own = options.isOwnWrite?.(path, contents) ?? false;
+      // The hash first, because it compares bytes and so answers for an edit as well as
+      // for an arrival; the move record only where it has nothing to say (B95).
+      const own =
+        (options.isOwnWrite?.(path, contents) ?? false) || (options.wasOwnArrival?.(path) ?? false);
       upsertNote(db, buildRecord(vault, path, contents, stats));
       options.onChange?.({ path: toPosix(relative(vault, path)), kind: "changed", own });
     } catch {
@@ -161,7 +178,7 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
   const forget = (path: string): void => {
     if (!isNoteFile(path)) return;
 
-    // Not a defence against this app's own writes — a rename-over-an-existing-path
+    // Not a defence against this app's own *writes* — a rename-over-an-existing-path
     // reports as a `change` event on all three platforms, never a delete. This is
     // specifically for OneDrive's own delete-then-recreate dance during sync, and for
     // ordinary rename transients: if the file exists again by the time this runs, it
@@ -173,8 +190,20 @@ export function watchVault(vault: string, db: IndexDb, options: WatchOptions = {
     }
 
     const relativePath = toPosix(relative(vault, path));
+    // **The index is updated whichever answer comes back.** Only the notification is ever
+    // suppressed for an own change, never the indexing — B31's rule, and the reason the
+    // flag is on the event rather than a reason to skip the event.
     deleteNote(db, relativePath);
-    options.onChange?.({ path: relativePath, kind: "removed", own: false });
+    // Where the paragraph above stops being true (B95): a note filed into another folder
+    // is a rename to a *different directory*, so the source really is gone and this really
+    // is an `unlink`. Every one of them was reported as an external deletion, and the
+    // library put "This note was deleted outside emqnote" over a move it had just made
+    // itself.
+    options.onChange?.({
+      path: relativePath,
+      kind: "removed",
+      own: options.wasOwnRemoval?.(path) ?? false,
+    });
   };
 
   /**

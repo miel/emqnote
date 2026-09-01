@@ -40,7 +40,7 @@ import {
 import { writeAtomicSync } from "./atomic-write.js";
 import { diffText, type DiffLine } from "./diff.js";
 import { isoWithOffset, noteFileName, sanitiseFolderName, uniquePath } from "./filename.js";
-import { rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
+import { rememberOwnMove, rememberOwnWrite, renameOwnWrite } from "./own-writes.js";
 import {
   removeFromTrash,
   type RemovalFailure,
@@ -701,6 +701,11 @@ export function moveNote(vault: string, notePath: string, targetFolder: string):
   const to = uniquePath(targetDirectory, basename(notePath));
   renameSync(from, to);
   renameOwnWrite(from, to);
+  // The move itself, as opposed to the bytes: `renameOwnWrite` carries a hash across only
+  // when this app had recently written this note, and filing a note usually means moving
+  // one it has never touched. Without this the watcher's `unlink` at the source is an
+  // external deletion and the `add` at the destination an external change (B95).
+  rememberOwnMove(from, to);
 
   return toPosix(relative(vault, to));
 }
@@ -756,6 +761,9 @@ export function renameNote(vault: string, notePath: string, title: string): stri
     // carrying that over, the watcher's `add` at the new name is an external change to a
     // file this app wrote itself — see `own-writes.ts`'s `renameOwnWrite`.
     renameOwnWrite(from, to);
+    // And the old name is now a file that has disappeared, which the hash cannot speak
+    // for. Same reason as `moveNote`'s call (B95).
+    rememberOwnMove(from, to);
   }
 
   return toPosix(relative(vault, to));
@@ -804,6 +812,12 @@ export function trashNote(vault: string, notePath: string): string {
 
   const to = uniquePath(trashDirectory, basename(notePath));
   renameSync(from, to);
+  // The one mover that recorded nothing at all until B95. The destination is inside
+  // `_trash`, which the watcher ignores outright, so only the removal half is ever asked
+  // about — but it is asked, and answering "somebody else deleted this" for the app's own
+  // Delete is the same falsehood `moveNote` was telling.
+  renameOwnWrite(from, to);
+  rememberOwnMove(from, to);
 
   return toPosix(relative(vault, to));
 }
@@ -1155,7 +1169,7 @@ export function createFolder(vault: string, parent: string, name: string): strin
  *
  * **The links into it are repaired, but not here** (B44). This moves a directory and
  * nothing else; `IPC.libraryRenameFolder` asks the index which notes link into the folder
- * *before* calling this and rewrites them after, the same ordering `IPC.libraryMoveNote`
+ * *before* calling this and rewrites them after, the same ordering `IPC.libraryMoveNotes`
  * uses for one note — a target resolves against where a note is now, so once the folder
  * has moved there is nothing left to find. This comment used to say that nothing inside
  * needed rewriting, because a wikilink carried a bare name rather than a path. That

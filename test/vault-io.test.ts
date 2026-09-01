@@ -35,6 +35,7 @@ import {
   trashFolder,
   trashNote,
 } from "../src/main/vault-io.js";
+import { wasOwnArrival, wasOwnRemoval } from "../src/main/own-writes.js";
 import { FOLDER_ERROR, TRASH_FOLDER } from "../src/shared/vault-types.js";
 import { paragraphs } from "./helpers/doc.js";
 
@@ -504,6 +505,27 @@ describe("moving and renaming", () => {
     expect(readNotesIn(vault, "10 Projects/Klant X/Project Alpha")).toHaveLength(1);
   });
 
+  /**
+   * B95. The move has to be recorded as this app's own, or the watcher's `unlink` at the
+   * source is an external deletion and the library says "This note was deleted outside
+   * emqnote" about a move it just made. Asserted here rather than only in `own-writes` so
+   * that removing the call from `moveNote` fails a test, which is the way this was missed
+   * for `trashNote` — the one mover that recorded nothing at all.
+   */
+  it("records the move as this app's own, at both ends", () => {
+    const moved = moveNote(vault, path, "10 Projects");
+
+    expect(wasOwnRemoval(join(vault, path))).toBe(true);
+    expect(wasOwnArrival(join(vault, moved))).toBe(true);
+  });
+
+  it("records a rename the same way, for the name it left behind", () => {
+    const renamed = renameNote(vault, path, "Kickoff Alpha opnieuw");
+
+    expect(wasOwnRemoval(join(vault, path))).toBe(true);
+    expect(wasOwnArrival(join(vault, renamed))).toBe(true);
+  });
+
   it("never overwrites a note already in the target folder", () => {
     writeFileSync(
       join(vault, "10 Projects", "2026-07-25 1432 Kickoff project Alpha.md"),
@@ -810,6 +832,22 @@ describe("resolving a OneDrive conflict", () => {
     expect(existsSync(join(vault, "00 Inbox", "Kickoff-LAPTOP-ABC123.md"))).toBe(false);
     expect(existsSync(join(vault, TRASH_FOLDER, "Kickoff.md"))).toBe(true);
     expect(readFileSync(join(vault, TRASH_FOLDER, "Kickoff.md"), "utf8")).toBe("origineel");
+  });
+});
+
+/**
+ * B95, the other half of the move records above: `trashNote` was the one mover in this
+ * file that recorded nothing at all, so deleting a note produced a "this was deleted
+ * outside emqnote" event for the app's own Delete. The destination is inside `_trash`,
+ * which the watcher ignores outright, so only the removal is ever actually asked about —
+ * but it is asked.
+ */
+describe("trashing a note, as the watcher sees it", () => {
+  it("records the note leaving as this app's own doing", () => {
+    const path = "00 Inbox/2026-07-25 1432 Kickoff project Alpha.md";
+    trashNote(vault, path);
+
+    expect(wasOwnRemoval(join(vault, path))).toBe(true);
   });
 });
 

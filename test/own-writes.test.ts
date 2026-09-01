@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { rememberOwnWrite, renameOwnWrite, wasOwnWrite } from "../src/main/own-writes.js";
+import {
+  rememberOwnMove,
+  rememberOwnWrite,
+  renameOwnWrite,
+  wasOwnArrival,
+  wasOwnRemoval,
+  wasOwnWrite,
+} from "../src/main/own-writes.js";
 
 /**
  * `own-writes.ts` is what lets the watcher tell its own echo of a debounced autosave
@@ -126,6 +133,72 @@ describe("own-writes", () => {
         renameOwnWrite("C:\\VAULT\\BEFORE.md", "C:\\Vault\\After.md");
 
         expect(wasOwnWrite("C:\\vault\\after.md", "hello")).toBe(true);
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
+    });
+  });
+
+  /**
+   * B95. The half a content hash cannot answer: a file this app *moved* leaves no bytes at
+   * the path it came from, so `wasOwnWrite` has nothing to compare and the watcher called
+   * every one of this app's own moves an external deletion.
+   */
+  describe("a move this app performed", () => {
+    it("answers for the path it left and the path it arrived at", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnMove(from, to);
+
+      expect(wasOwnRemoval(from)).toBe(true);
+      expect(wasOwnArrival(to)).toBe(true);
+    });
+
+    it("does not answer the two questions the other way round", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnMove(from, to);
+
+      // The destination was not vacated and the source was not arrived at. Asked in
+      // reverse this would suppress a real deletion of the file just written.
+      expect(wasOwnRemoval(to)).toBe(false);
+      expect(wasOwnArrival(from)).toBe(false);
+    });
+
+    it("says nothing about a path this app never moved", () => {
+      expect(wasOwnRemoval(freshPath())).toBe(false);
+      expect(wasOwnArrival(freshPath())).toBe(false);
+    });
+
+    /** Non-consuming, for `wasOwnWrite`'s reason: chokidar can fire `add` then `change`
+     *  for one logical arrival, and both have to get the same answer. */
+    it("keeps answering, rather than being used up by the first asker", () => {
+      const from = freshPath();
+      const to = freshPath();
+      rememberOwnMove(from, to);
+
+      expect(wasOwnRemoval(from)).toBe(true);
+      expect(wasOwnRemoval(from)).toBe(true);
+      expect(wasOwnArrival(to)).toBe(true);
+      expect(wasOwnArrival(to)).toBe(true);
+    });
+
+    it("is capped the way the hashes are, oldest first", () => {
+      const first = freshPath();
+      rememberOwnMove(first, freshPath());
+      for (let i = 0; i < 64; i += 1) rememberOwnMove(freshPath(), freshPath());
+
+      expect(wasOwnRemoval(first)).toBe(false);
+    });
+
+    it("lowercases the key on Windows, where two spellings are one file", () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, "platform", { value: "win32" });
+      try {
+        rememberOwnMove("C:\\Vault\\Van.md", "C:\\Vault\\Naar.md");
+
+        expect(wasOwnRemoval("C:\\VAULT\\VAN.md")).toBe(true);
+        expect(wasOwnArrival("C:\\vault\\naar.md")).toBe(true);
       } finally {
         Object.defineProperty(process, "platform", { value: originalPlatform });
       }

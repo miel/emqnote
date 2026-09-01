@@ -99,3 +99,64 @@ export function wasOwnWrite(absolutePath: string, contents: string): boolean {
   const stored = hashes.get(keyFor(absolutePath));
   return stored !== undefined && stored === hashOf(contents);
 }
+
+/**
+ * The same question for a file this app *moved*, which the hashes above cannot answer.
+ *
+ * A move is an `unlink` at one path and an `add` at another, and a content hash has
+ * nothing to say about either: there are no bytes at a path that no longer exists, and the
+ * bytes at the new one were never written by this app — `moveNote` renames a file it has
+ * very often never touched, so `renameOwnWrite` finds nothing to carry over. So
+ * `index-watch.ts` reported every note this app filed into another folder as having been
+ * "deleted outside emqnote", and the destination as having changed outside it. Moving a
+ * marked set is where that became visible, because the reader ends up standing on one of
+ * the paths the app itself has just vacated (B95).
+ *
+ * Two sets rather than one map with a direction, because the two questions are asked by
+ * two different handlers about two different paths and neither needs to know the other
+ * half. Path-keyed, not time-keyed: this says "this app moved that file", which stays true
+ * however long the watcher takes to notice — B31's objection is to a *timer*, not to
+ * remembering what we did.
+ *
+ * Non-consuming, for `wasOwnWrite`'s reason, and bounded the same way. The cost of not
+ * consuming is a narrow one: a path this app moved away from, recreated by hand, and then
+ * deleted from outside would have that deletion suppressed until `MAX_ENTRIES` other moves
+ * had pushed it out. The cost of consuming would be an `add`-then-`change` pair whose
+ * second half is reported as an external edit, which is the same bug in a different place.
+ */
+const removals = new Set<string>();
+const arrivals = new Set<string>();
+
+/** Oldest-first eviction, the way `hashes` above does it — insertion order, no second
+ *  structure to keep in step. */
+function remember(set: Set<string>, path: string): void {
+  const key = keyFor(path);
+  set.delete(key);
+  set.add(key);
+
+  while (set.size > MAX_ENTRIES) {
+    const oldest = set.values().next().value;
+    if (oldest === undefined) break;
+    set.delete(oldest);
+  }
+}
+
+/**
+ * Records that this app renamed `from` to `to` — a file filed into another folder, renamed
+ * in place, or moved into `_trash`. All three are the same event to a watcher.
+ */
+export function rememberOwnMove(from: string, to: string): void {
+  remember(removals, from);
+  remember(arrivals, to);
+}
+
+/** Did this app move a file away from here? Answers the watcher's `unlink`. */
+export function wasOwnRemoval(absolutePath: string): boolean {
+  return removals.has(keyFor(absolutePath));
+}
+
+/** Did this app move a file *to* here? Answers the watcher's `add`, after the hash has
+ *  declined — the hash is the better answer where it has one, since it compares bytes. */
+export function wasOwnArrival(absolutePath: string): boolean {
+  return arrivals.has(keyFor(absolutePath));
+}

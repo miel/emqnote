@@ -132,7 +132,7 @@ import {
  */
 const MAX_PINNED = 3;
 import { watchVault, type VaultWatcher } from "./index-watch.js";
-import { wasOwnWrite } from "./own-writes.js";
+import { wasOwnArrival, wasOwnRemoval, wasOwnWrite } from "./own-writes.js";
 import { parseSearchQuery } from "./search-query.js";
 import {
   attachmentsOrphanedByTrash,
@@ -696,6 +696,11 @@ async function main(): Promise<void> {
   if (selfTestRounds === 0 && watchedVault !== null && indexDb !== null) {
     vaultWatcher = watchVault(watchedVault, indexDb, {
       isOwnWrite: wasOwnWrite,
+      // The two questions a content hash cannot answer, for a file this app moved rather
+      // than wrote (B95). Same suppression, same `own` flag, same rule about the index
+      // being updated regardless.
+      wasOwnRemoval,
+      wasOwnArrival,
       // `notifyLibrary` fires unconditionally, exactly as it always has — the library's
       // own lists, facets and conflict banner need to refresh on the app's own writes
       // too. `notifyFileEvent` is strictly additional and only for a real external
