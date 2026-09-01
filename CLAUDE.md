@@ -171,7 +171,7 @@ undo by accident and expensive to rediscover:
 
 **The suite runs on all three platforms in CI, not only on Linux.** `build.yml`'s `check` job runs it on ubuntu; the `package` matrix job runs it again on Windows and macOS before packaging. That line was missing until `v0.3.3` and it cost a release: `vault.ts` shells out to `attrib` on Windows, reads block counts on macOS, `filename.ts` exists for Windows' reserved names, and every path comparison meets a backslash for the first time there — so a Windows-only bug in `checkFilesOnDemand` sat in `main` until a tag was pushed and `release.yml` (which always did run the suite per platform) failed the release. It has since caught a second, macOS-only bug on the very next pull request. When a test asserts on a path, assume the three platforms disagree until CI says otherwise.
 
-The suite runs its 2105 tests in roughly thirty-nine seconds of test time (about a minute and a
+The suite runs its 2121 tests in roughly thirty-nine seconds of test time (about a minute and a
 half of wall clock, most of it transform and environment setup). That number is worth
 watching rather than defending: this file said "under about two seconds" for a long while
 after it had stopped being true, and a budget nobody re-measures is a budget that quietly
@@ -214,7 +214,7 @@ Read these before making structural changes; they carry the reasoning that the c
 | `02-technisch-ontwerp.md` | How it fits together; §6.3 is the paste pipeline |
 | `03-markdown-dialect.md` | The vault format as a specification |
 | `04-bouwplan.md` | Phases with acceptance criteria |
-| `05-besluitenlog.md` | Decisions B1–B96, with what was rejected and why |
+| `05-besluitenlog.md` | Decisions B1–B97, with what was rejected and why |
 | `06-ipad.md` | Whether to build an iPad client. Answered **no** (B53); kept for the analysis, not as a plan |
 | `07-iphone.md` | Plan for a capture-only iPhone companion app; not a reversal of B53, see its own §1 |
 | `CONSTRAINTS.md` | The full "constraints that bite if forgotten" — one rule, its reason, and what broke, per entry |

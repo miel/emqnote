@@ -3,6 +3,29 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 1 September 2026 — one report from daily use (B97): a note holding
+`![|1282x293](data:image/png;base64,R0lGODdh…)` drew the grey chip and not the picture, with
+the whole image sitting in the note's own text.
+
+The address is the diagnosis. `R0lGODdh` is `GIF87a`, and `Software: Microsoft Office` is
+thirteen bytes further in — a GIF, labelled `image/png`, which is what Word and Outlook write.
+`typesAgree` refused the mismatch, correctly by its own terms: a *server* that says PNG and
+sends something else is broken or lying. A `data:` URL has no server, and the label and the
+payload are two halves of one string. `acceptedExtension` now takes an origin: `"network"`
+keeps that rule, `"inline"` reads the bytes and ignores the label. The bytes must still sniff
+as an allowed type, so an SVG passes no more than before, and the extension still comes from
+the sniff. `loadRemoteImages` stops reaching a `data:` address too — "Load images from the
+web" is about contacting a host, and this one names none.
+
+**What is open on it.** `TEST-PROTOCOL.md` §51. `drive:capture`'s eleventh step draws one in
+the capture window and asserts `naturalWidth` (and really does go red with the fix backed out,
+once `<userData>/remote-images` is cleared — the cache will otherwise answer for a run whose
+code would have refused). Left for a person: the same note in the reader, the other two
+platforms, the switch-off case, and 51e — a real Outlook message body pasted in, which no
+driver can produce.
+
+---
+
 Last updated 1 September 2026, released as `v0.12.8` — one report from daily use (B96):
 pasting a note into another application turned checkmarks into bullets, headings into body
 text and highlights into nothing.

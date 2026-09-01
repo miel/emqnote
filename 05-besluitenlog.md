@@ -3946,3 +3946,79 @@ te komen.
 Outlook *terug* als `==markering==` binnenkomt. Verleidelijk, want het is dezelfde naad van de
 andere kant — maar dan wordt elke gele achtergrond uit elke geplakte webpagina een markering,
 en dat is een andere beslissing dan deze.
+
+## B97 — Bij een `data:`-adres beslissen de bytes, en het etiket telt niet mee
+
+**Genomen** op 1 september 2026, uit dagelijks gebruik. De melding: een notitie met
+`![|1282x293](data:image/png;base64,R0lGODdh…)` erin tekent geen plaatje maar het grijze
+chipje, terwijl de hele afbeelding gewoon in de tekst van het bestand staat.
+
+### Waarom dat plaatje geweigerd werd
+
+De eerste bytes van dat adres zijn niet die van een PNG. `R0lGODdh` is base64 voor `GIF87a`,
+en verderop staat `Software: Microsoft Office` in het commentaarblok. Het is een GIF, met
+`image/png` op het etiket — en zo schrijft Word het, en Outlook, en dat is niet zeldzaam maar
+het normale geval.
+
+`typesAgree` in `remote-image.ts` eist dat het opgegeven type en de magische bytes hetzelfde
+zeggen, en dat is een goede regel: een server die PNG zegt en iets anders stuurt is stuk of
+liegt, en geen van beide is een bestand dat deze app in de kluis zet onder een naam die hij
+zelf verzonnen heeft. Alleen — bij een `data:`-adres is er geen server. Het etiket en de
+inhoud zijn twee helften van één string, allebei door dezelfde hand geschreven. Een verschil
+tussen die twee bewijst niets, en wie PNG-bytes geserveerd wilde krijgen had eenvoudig een
+PNG kunnen schrijven. De regel beschermde tegen niemand en weigerde ondertussen echte
+notities.
+
+### Wat er nu staat
+
+`acceptedExtension(declared, bytes, origin)` — één functie, twee herkomsten. `"network"` is
+de regel van hierboven, ongewijzigd. `"inline"` — een `data:`-adres — **negeert het etiket en
+leest de bytes**. Daarmee komt ook `data:;base64,…` binnen, de RFC-vorm die helemaal geen
+type noemt (`text/plain` per definitie) en dus nooit langs een controle kon die er een eiste.
+
+Wat níét meebuigt: de bytes moeten nog steeds *snuiven* als een van de toegestane types. Een
+SVG heeft geen magisch nummer en kan dus nooit ergens als snuiven — de asymmetrie die
+`remote-image.ts` uitschrijft (de kiezer mag er wel een, een geplakte pagina niet, want
+`openAttachment` geeft een bijlage aan een viewer waar script in een SVG draait) blijft
+precies zoals hij was. De extensie komt nog steeds van de bytes en nooit van het etiket, dus
+de cache krijgt nooit een bestand met een naam die over zijn eigen inhoud liegt.
+
+### En de schakelaar staat er niet meer voor
+
+"Afbeeldingen van het web laden" (B50) gaat over dít proces dat een host benadert omdat een
+notitie daarom vraagt. Een base64-plaatje noemt geen host, kost geen verzoek en staat al in
+het bestand dat de lezer open heeft. Die schakelaar uitzetten zou dan een stuk van de eigen
+tekst van de notitie zwart maken om te beschermen tegen een verzoek dat nooit plaatsvindt.
+Dus: `data:` valt buiten de schakelaar, in main én in de renderer, om dezelfde reden dat de
+renderer überhaupt een kopie van die instelling heeft.
+
+Eén kleinigheid hoort er nog bij: het adres stond als `title` op zowel het chipje als het
+plaatje, en bij een `data:`-adres is dat het plaatje zélf — tienduizenden tekens base64 in
+een tooltip die niemand kan lezen en die niets vertelt over waar de afbeelding vandaan komt,
+want die komt uit deze notitie. Bij een `data:`-adres staat er nu geen `title`.
+
+**Verworpen:** `data:` toevoegen aan `img-src` van het opnamevenster en het plaatje direct in
+de `<img>` zetten. Dat is de regel van één regel, en hij haalt de snuif, de bovengrens en de
+enige plek waar over dit soort adressen beslist wordt uit de weg — precies wat B50 in main
+heeft gezet. De bibliotheek staat `data:` al toe en het opnamevenster niet; die asymmetrie
+opheffen door de strengste van de twee te versoepelen is de verkeerde kant op.
+
+**Verworpen:** het etiket aanhouden en de gebruiker vertellen dat het plaatje "beschadigd" is.
+Het plaatje is niet beschadigd. Chromium tekent het zonder klagen zodra iemand het hem geeft,
+en dat is ook wat Obsidian met hetzelfde bestand doet — B7.
+
+### Het bestandsformaat wist het al
+
+Aan de markdown-kant hoefde niets. `parseNote`/`serializeNote` laten een `data:`-adres al
+byte voor byte door, gleufje en al, en dat is nu ook zo opgeschreven: `30-afbeeldingsformaat.md`
+in de corpus draagt de gemelde vorm en twee varianten ernaast, en `03-markdown-dialect.md` §5
+zegt het uit. Wat deze app zélf schrijft blijft geen base64 — een geplakte afbeelding wordt
+een bestand in `_attachments/` (B28). Een `data:`-adres komt van buiten, en blijft.
+
+### Wat het bewijst
+
+`scripts/drive-capture.ts` heeft er een stap bij: dezelfde vorm in de fixture-notitie, en de
+assertie is `naturalWidth`, niet het bestaan van een `<img>`. Geen enkele test onder `test/`
+kan dit zien — jsdom laadt geen afbeeldingen — en de fout waar het om gaat is juist het
+*chipje*: de notitie blijft er opzettelijk uitzien terwijl het plaatje nooit getekend wordt.
+Met de fix eruit gedraaid faalt die stap ook echt, en met de woorden uit de melding.
