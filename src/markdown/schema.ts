@@ -173,6 +173,15 @@ const nodes: Record<string, NodeSpec> = {
     attrs: { checked: { default: null }, starred: { default: false } },
     defining: true,
     parseDOM: [
+      // The `☑`/`☐`/`⭐` this app's own clipboard HTML puts in front of an item
+      // (`clipboard-html.ts`, which is where the reasoning is). It is a picture of the
+      // `checked`/`starred` attribute sitting beside it on the same `<li>`, so a copy
+      // that comes back in has to drop it — otherwise a round trip inside this very app
+      // leaves a literal `☑` in the text with a real box drawn next to it. It is
+      // declared here rather than anywhere else because this is the node whose attribute
+      // it stands for; an `ignore` rule is honoured whatever spec carries it (see
+      // `DOMParser.schemaRules`), and this one matches nothing any other app writes.
+      { tag: "span[data-emq-clip]", ignore: true },
       {
         tag: "li",
         getAttrs: (dom) => ({
