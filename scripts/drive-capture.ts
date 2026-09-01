@@ -25,7 +25,7 @@
  * offers every hook it needs.
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,6 +38,14 @@ const HOTKEY = "ctrl+shift+y";
 const NOTE = "2026-08-22 1200 Driven note.md";
 const PICTURE = "driven-picture.png";
 const PDF = "driven-document.pdf";
+/**
+ * A title the capture window wears for as long as one step needs to find it in X.
+ *
+ * Both windows are called "emqnote", so `xdotool search --name emqnote` answers with two
+ * ids and no way to tell them apart — and focusing the wrong one sends the chord to the
+ * library, where it does something else entirely and reports nothing.
+ */
+const STAMP = "emqnote-capture-under-drive";
 
 const keep = process.argv.includes("--keep");
 const screenshot =
@@ -140,6 +148,13 @@ function scaffoldVault(): string {
       `![[${PICTURE}]]`,
       "",
       "Tekst na de afbeelding, met een #klantx erin.",
+      "",
+      // B96: the two states of a task item, for the step that copies them. What a box
+      // *is* on the clipboard cannot be asked of jsdom — the editor draws it as a widget
+      // decoration, which is not part of the document, and the system clipboard is not
+      // part of a test environment either.
+      "- [ ] Open taak",
+      "- [x] Afgeronde taak",
       "",
       // A table, for the one thing about B49 that no jsdom test can reach: a rectangle of
       // cells selected by *dragging*. `cellPointerAt` goes through `posAtCoords`, which
@@ -883,6 +898,60 @@ async function main(): Promise<number> {
 
         const side = seen.panel.top < seen.caretTop ? "above" : "below";
         return `16 rows, ${Math.round(seen.panel.height)}px tall, ${side} the caret, inside a ${seen.window.width}×${seen.window.height} window`;
+      },
+    },
+    {
+      // Last, because it presses Ctrl+A: every step above wants the caret where it left it.
+      name: "a real Ctrl+C puts the box on the system clipboard (B96)",
+      run: async () => {
+        // Three things have to be real here and none of them can be faked from inside the
+        // page. The chord goes through X rather than through `Input.dispatchKeyEvent`,
+        // because what is being asked is whether the *system* clipboard ends up holding
+        // it. The window has to hold X focus, which the hotkey does not guarantee and
+        // `openInCapture` above certainly does not. And the clipboard is read by the app's
+        // own `--dump-clipboard`, a second process alongside the running one, because
+        // nothing inside the renderer may read the clipboard it just wrote.
+        await open.capture!.evaluate(`document.title = ${JSON.stringify(STAMP)}`);
+        await new Promise((done) => setTimeout(done, 400));
+
+        const on = { encoding: "utf8" as const, env: { ...process.env, DISPLAY: display } };
+        const ids = (spawnSync("xdotool", ["search", "--name", STAMP], on).stdout ?? "")
+          .trim()
+          .split("\n")
+          .filter(Boolean);
+        if (ids.length === 0) throw new Error("the capture window is not findable in X by its title");
+        for (const id of ids) spawnSync("xdotool", ["windowfocus", id], on);
+
+        await open.capture!.evaluate(`document.querySelector('.ProseMirror').focus()`);
+        await new Promise((done) => setTimeout(done, 300));
+        // Escape closes whatever the step above left open; it does nothing to the note
+        // (`Editor.tsx` says why that key is deliberately inert there).
+        for (const chord of ["Escape", "ctrl+a", "ctrl+c"]) {
+          spawnSync("xdotool", ["key", "--clearmodifiers", chord], on);
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((done) => setTimeout(done, 400));
+        }
+
+        const prefix = join(vault, "driven-clipboard");
+        spawnSync(
+          "node_modules/.bin/electron",
+          ["out/main/index.js", `--dump-clipboard=${prefix}`],
+          { stdio: "ignore", env: { ...process.env, DISPLAY: display } },
+        );
+        await open.capture!.evaluate(`document.title = 'emqnote'`);
+
+        if (!existsSync(`${prefix}.html`)) throw new Error("nothing on the clipboard at all");
+        const html = readFileSync(`${prefix}.html`, "utf8");
+
+        // The attribute is what comes back into this app and the glyph is what every other
+        // application has to draw; the bug was that only the first of the two was there.
+        const missing = ["☐", "☑", 'data-checked="false"', 'data-checked="true"'].filter(
+          (want) => !html.includes(want),
+        );
+        if (missing.length > 0) {
+          throw new Error(`the clipboard HTML is missing ${missing.join(", ")}: ${html.slice(0, 400)}`);
+        }
+        return `${html.length} chars of HTML, both boxes present`;
       },
     },
   ];
