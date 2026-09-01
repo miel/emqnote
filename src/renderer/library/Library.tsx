@@ -191,7 +191,10 @@ function pinsApplyTo(selection: Selection, searchQuery: string): boolean {
  * siblings, and so the action is still legible from the state alone.
  */
 type Relinkable =
-  | { kind: "move"; path: string; folder: string }
+  /** A set, always — one note is a set of one (B95). The link question is asked once for
+   *  the whole of it, because a dialog can only hold one question and a loop that raised
+   *  one per note simply overwrote the previous one and silently dropped its move. */
+  | { kind: "move"; paths: string[]; folder: string }
   | { kind: "rename"; path: string; title: string };
 
 /**
@@ -1094,7 +1097,8 @@ export function Library(): React.ReactElement {
     void loadTaskCounts();
     void loadConflicts();
     void loadUnlinkedCount();
-    const stop = window.emqnote.library.onRefresh(() => {
+
+    const reload = (): void => {
       void loadTree();
       // Ticking a box is a save, and a save is what raises `library:refresh` — so the
       // badge follows a checkbox without needing to know anything about one.
@@ -1106,8 +1110,48 @@ export function Library(): React.ReactElement {
       // `loadNotes` above already ran this scan when the pane is the selection, and set
       // the count from the same reply.
       if (selectionRef.current.kind !== "unlinked") void loadUnlinkedCount();
+    };
+
+    /**
+     * Seven reloads is what one of these costs, and most of them go through
+     * `ensureScanned` in main, which walks the vault (B95). One broadcast is fine; a burst
+     * of them is not, and a burst is the normal case rather than the exceptional one — the
+     * watcher raises one for the `unlink` and one for the `add` of every file that moves,
+     * on top of the one the operation itself sends.
+     *
+     * **Leading edge, then a trailing coalesce.** The first broadcast still reloads
+     * immediately, which is what keeps this responsive for the single events that make up
+     * ordinary use — and what keeps every test that fires `onRefresh` and looks straight
+     * after it honest. Anything arriving inside the window collapses into exactly one more
+     * reload at the end of it, so a batch of any size costs two rounds rather than 3n.
+     *
+     * Deliberately not a plain trailing debounce: that would delay every single refresh by
+     * the window, and this window is on the path between ticking a checkbox and seeing the
+     * badge move.
+     */
+    const COALESCE_MS = 60;
+    let last = 0;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+
+    const stop = window.emqnote.library.onRefresh(() => {
+      const now = Date.now();
+      if (now - last >= COALESCE_MS) {
+        last = now;
+        reload();
+        return;
+      }
+      if (pending !== null) return;
+      pending = setTimeout(() => {
+        pending = null;
+        last = Date.now();
+        reload();
+      }, COALESCE_MS - (now - last));
     });
-    return stop;
+
+    return () => {
+      if (pending !== null) clearTimeout(pending);
+      stop();
+    };
   }, [
     loadTree,
     loadTaskCounts,
@@ -2092,10 +2136,15 @@ export function Library(): React.ReactElement {
 
   /**
    * Carries out a move or a rename, having settled the link question one way or the other.
+   *
+   * Returns the promise rather than `void`ing it, which is not a tidy-up: `moveNotesTo`
+   * used to `await` its way down to here and then let go, so its loop serialised the
+   * question and nothing else, and every move in a set ran on top of the last one. That is
+   * what left the reader standing on a path another move had already vacated (B95).
    */
-  const runRelinkable = (action: Relinkable, rewriteLinks: boolean): void => {
-    if (action.kind === "move") void performMove(action.path, action.folder, rewriteLinks);
-    else void performRename(action.path, action.title, rewriteLinks);
+  const runRelinkable = async (action: Relinkable, rewriteLinks: boolean): Promise<void> => {
+    if (action.kind === "move") await performMove(action.paths, action.folder, rewriteLinks);
+    else await performRename(action.path, action.title, rewriteLinks);
   };
 
   /**
@@ -2105,11 +2154,17 @@ export function Library(): React.ReactElement {
    * moment the answer can still be acted on: a link target resolves against where the note
    * is now, so once the file has moved there is nothing left for main to find. See the
    * `relink` case in `Dialog` for what dismissing it means.
+   *
+   * One question for the whole set, counted over the notes that would be *rewritten* —
+   * main dedupes by the linking note, so one note pointing at three of the six being moved
+   * is one answer and not three.
    */
   const askRelinkThen = async (action: Relinkable): Promise<void> => {
-    const linking = await window.emqnote.library.linkingNotes(action.path);
+    const linking = await window.emqnote.library.linkingNotes(
+      action.kind === "move" ? action.paths : [action.path],
+    );
     if (linking.length === 0) {
-      runRelinkable(action, false);
+      await runRelinkable(action, false);
       return;
     }
     setDialog({ kind: "relink", count: linking.length, action });
@@ -2300,59 +2355,56 @@ export function Library(): React.ReactElement {
   };
 
   /**
-   * Files a note into a folder. Both ways of asking for that — the "Move to…" dialog and
-   * dragging a row onto the tree — come through here, so the two cannot drift apart.
+   * Files notes into a folder. Every way of asking for that — the "Move to…" dialog, a
+   * dragged row, a dragged marked set, Restore out of the trash — comes through here, so
+   * they cannot drift apart.
    *
-   * Only the note that is actually open needs saving first; a dragged row is usually not
-   * it, and flushing an unrelated pending save would write one note because another one
-   * moved. The reopen at the end is likewise conditional: following the note into its new
-   * folder is right when you moved the note you were reading, and wrong when you flicked
-   * a different row out of the Inbox and are still reading what you had.
+   * **One note is a set of one** (B95), rather than a single-note function beside a
+   * plural one. There were two, and the plural one was the singular one in a loop: it cost
+   * a walk of the index, a round trip, a broadcast and a three-part reload per note, and
+   * it did not actually serialise, because the singular one let go of its own promise
+   * halfway down. Both of the reported faults came out of that one seam.
+   *
+   * Only a note that is actually open needs saving first; a dragged row is usually not it,
+   * and flushing an unrelated pending save would write one note because another one moved.
+   * The reopen at the end is likewise conditional: following the note into its new folder
+   * is right when you moved the note you were reading, and wrong when you flicked a
+   * different row out of the Inbox and are still reading what you had.
    *
    * The *tree* never follows, and that is the point of filing: emptying an Inbox means
-   * moving one note after another out of the same folder, and jumping to each destination
+   * moving notes out of the same folder one after another, and jumping to each destination
    * meant clicking back to the source between every one of them. The note stays open in
    * the reader under its new path, so the move is still visibly confirmed — it is simply
    * no longer in the list on the left, which is what moving it means.
-   */
-  const moveNoteTo = async (notePath: string, target: string): Promise<void> => {
-    await askRelinkThen({ kind: "move", path: notePath, folder: target });
-  };
-
-  /**
-   * The same, for several notes at once (B94) — a marked set dragged onto a folder, or
-   * "Move n notes…".
-   *
-   * **One after another, awaited, never in parallel.** Every move reloads the tree, the
-   * list and the facets and may raise the "should the links follow?" question; two of them
-   * in flight at once would interleave those reloads and could put two dialogs on screen.
-   * Filing is a handful of notes at a time, so the cost is a few round trips in a row.
    *
    * The marks go first, not last: they name rows in a list that is about to be rebuilt
    * without them, and a set left standing would light up whatever moved into those
    * positions.
    */
   const moveNotesTo = async (notePaths: string[], target: string): Promise<void> => {
+    if (notePaths.length === 0) return;
     setMarked([]);
-    for (const path of notePaths) {
-      // eslint-disable-next-line no-await-in-loop
-      await moveNoteTo(path, target);
-    }
+    await askRelinkThen({ kind: "move", paths: notePaths, folder: target });
+  };
+
+  const moveNoteTo = async (notePath: string, target: string): Promise<void> => {
+    await moveNotesTo([notePath], target);
   };
 
   const performMove = async (
-    notePath: string,
+    notePaths: string[],
     target: string,
     rewriteLinks: boolean,
   ): Promise<void> => {
+    const moving = new Set(notePaths);
     const current = openRef.current;
-    const wasOpen = current !== null && current.path === notePath;
+    const wasOpen = current !== null && moving.has(current.path);
     if (wasOpen && dirty) await save();
 
     /**
-     * The row to stand on afterwards, worked out *before* the note leaves.
+     * The row to stand on afterwards, worked out *before* anything leaves.
      *
-     * A move takes the note out of the list it was selected in, so the `<li>` holding
+     * A move takes notes out of the list they were selected in, so the `<li>` holding
      * focus is unmounted and focus falls to `<body>` — from where Tab walks the whole
      * window before it reaches the tree again, which is the report. `NoteList` already
      * recovers its *roving row* on its own (`active` falls back to the first note when
@@ -2363,15 +2415,34 @@ export function Library(): React.ReactElement {
      * the first one: after taking something out of a list, the eye is where the thing
      * above it is. `sorted` and not `notes`, because it has to be the order actually on
      * screen — this is a question about which row the reader was looking at.
+     *
+     * **And never a row that is itself moving** (B95). The open note is normally *in* a
+     * marked set — `toggleMarked` seeds the set with it — and a marked set is usually
+     * contiguous, so the note directly above it was another note on its way out. The
+     * reader was parked on a path the very next move vacated, and when the watcher's
+     * `unlink` for it arrived the window said "This note was deleted outside emqnote"
+     * about a move it had just made itself.
      */
-    const row = sorted.findIndex((note) => note.path === notePath);
-    const neighbour = row === -1 ? null : (sorted[row - 1]?.path ?? sorted[row + 1]?.path ?? null);
-
-    const result = await window.emqnote.library.moveNote(notePath, target, rewriteLinks);
-    if (result.locked === true) {
-      setDialog({ kind: "problem", message: app.t("library.moveLocked") });
-      return;
+    const row = current === null ? -1 : sorted.findIndex((note) => note.path === current.path);
+    const stays = (index: number): string | null => {
+      const note = sorted[index];
+      return note === undefined || moving.has(note.path) ? null : note.path;
+    };
+    let neighbour: string | null = null;
+    for (let above = row - 1; above >= 0 && neighbour === null; above -= 1) neighbour = stays(above);
+    for (let below = row + 1; below < sorted.length && neighbour === null; below += 1) {
+      neighbour = stays(below);
     }
+
+    // One call for the whole set, and one `library:refresh` broadcast at the end of it.
+    const result = await window.emqnote.library.moveNotes(notePaths, target, rewriteLinks);
+    if (result.locked.length > 0) {
+      // Said once, however many were refused, and *after* the rest have gone: a batch is
+      // refused per note, so the honest report is that some of them did not move rather
+      // than that the gesture failed.
+      setDialog({ kind: "problem", message: app.t("library.moveLocked") });
+    }
+    if (result.moved.length === 0) return;
 
     await loadTree();
 
@@ -2380,7 +2451,9 @@ export function Library(): React.ReactElement {
     // menu opens. A note dragged out of the list while something else is open is the
     // other case, and it deliberately changes neither the reader nor where focus is: the
     // caret may be in the editor, and a drag of some other note must not take it away.
-    if (wasOpen && row !== -1) {
+    const openMoved =
+      current === null ? undefined : result.moved.find((one) => one.from === current.path);
+    if (openMoved !== undefined && row !== -1) {
       // Through the same flag the Tasks and search exits use, and for its reason: the
       // rows `focusPane` would find right now belong to the list about to be replaced.
       focusNotesOnNextList.current = true;
@@ -2391,11 +2464,11 @@ export function Library(): React.ReactElement {
         setOpen(null);
         openRef.current = null;
       }
-    } else if (wasOpen) {
+    } else if (openMoved !== undefined) {
       // The reader follows the file it is showing: the note was open but not in the list
       // on screen — read out of a tag, a search or a `[[…]]` link — so there is no row to
       // step back onto and nothing to hand focus to.
-      await openNote(result.path);
+      await openNote(openMoved.to);
     }
 
     await loadNotes(selectionRef.current);
@@ -2423,11 +2496,14 @@ export function Library(): React.ReactElement {
   /**
    * Several at once (B94): a marked set dropped on the Trash row, or "Delete n notes".
    *
-   * One reload for the whole batch rather than one per note, unlike `moveNotesTo` next
-   * door — and the difference is not an inconsistency. A move raises a question per note
-   * (should the links follow?) and has to finish answering one before it asks the next; a
-   * trash asks nothing, so the only reason to interleave reloads would be to watch the
-   * list shorten a row at a time.
+   * One reload for the whole batch rather than one per note — which `moveNotesTo` next
+   * door does too now (B95), the link question having become one question for the set
+   * rather than one per note. This was the shape that was already right when that one was
+   * not.
+   *
+   * The IPC is still a call per note, which is the remaining difference and a small one:
+   * `trashNote` asks main nothing that needs the index, so it costs a `renameSync` each
+   * where a move cost a walk of the whole vault each.
    */
   const trashNotesAt = async (notePaths: string[]): Promise<void> => {
     setMarked([]);
@@ -2449,7 +2525,7 @@ export function Library(): React.ReactElement {
   /**
    * Puts a trashed note or folder back somewhere real.
    *
-   * Deliberately the ordinary move on both halves — `IPC.libraryMoveNote` never had a
+   * Deliberately the ordinary move on both halves — `IPC.libraryMoveNotes` never had a
    * trash restriction, and `IPC.libraryMoveFolder` is the rename handler with one line
    * swapped — rather than a "restore" that would have to know where things came from. The
    * trash records nothing about that: `trashNote` flattens every note into one folder, so
@@ -3619,7 +3695,7 @@ export function Library(): React.ReactElement {
           onCancel={() => {
             const current = dialog;
             setDialog(null);
-            if (current.kind === "relink") runRelinkable(current.action, false);
+            if (current.kind === "relink") void runRelinkable(current.action, false);
           }}
           onConfirm={(value) => {
             const current = dialog;
@@ -3639,7 +3715,7 @@ export function Library(): React.ReactElement {
               void window.emqnote.library.createFolder(current.parent, value);
             }
             if (current.kind === "renameFolder") void renameFolderAt(current.path, value);
-            if (current.kind === "relink") runRelinkable(current.action, true);
+            if (current.kind === "relink") void runRelinkable(current.action, true);
             if (current.kind === "duplicateTitle") {
               void askRelinkThen({ kind: "rename", path: current.path, title: current.title });
             }

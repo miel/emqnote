@@ -95,7 +95,10 @@ function buildFake(listPath: string = NOTE_PATH): Fake {
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
     saveNote: async (request) => ({ written: false, path: request.path }),
-    moveNote: async (path) => ({ path }),
+    moveNotes: async (paths: string[]) => ({
+      moved: paths.map((path) => ({ from: path, to: path })),
+      locked: [],
+    }),
     renameNote: async (path) => ({ path }),
     duplicateNote,
     trashNote,

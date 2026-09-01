@@ -68,7 +68,7 @@ export const FOLDER_ERROR = {
   /**
    * A note inside it is open in the capture window (B44). Renaming would move that file
    * out from under `CaptureWriter`'s session, which pins the path it will write to next —
-   * the same "one note in two folders" hazard `IPC.libraryMoveNote` and
+   * the same "one note in two folders" hazard `IPC.libraryMoveNotes` and
    * `IPC.libraryTrashFolder` already refuse, arriving here as a code because the folder
    * dialogs already decode one.
    */

@@ -99,11 +99,11 @@ contextBridge.exposeInMainWorld("emqnote", {
     facets: () => ipcRenderer.invoke(IPC.libraryFacets),
     openNote: (path: string) => ipcRenderer.invoke(IPC.libraryOpenNote, path),
     saveNote: (request: SaveNoteRequest) => ipcRenderer.invoke(IPC.librarySaveNote, request),
-    moveNote: (path: string, folder: string, rewriteLinks?: boolean) =>
-      ipcRenderer.invoke(IPC.libraryMoveNote, path, folder, rewriteLinks),
+    moveNotes: (paths: string[], folder: string, rewriteLinks?: boolean) =>
+      ipcRenderer.invoke(IPC.libraryMoveNotes, paths, folder, rewriteLinks),
     renameNote: (path: string, title: string, rewriteLinks?: boolean) =>
       ipcRenderer.invoke(IPC.libraryRenameNote, path, title, rewriteLinks),
-    linkingNotes: (path: string) => ipcRenderer.invoke(IPC.libraryLinkingNotes, path),
+    linkingNotes: (paths: string[]) => ipcRenderer.invoke(IPC.libraryLinkingNotes, paths),
     onOpenLink: (handler: (event: WikiLinkOpen) => void) =>
       subscribe<WikiLinkOpen>(IPC.libraryOpenLink, handler),
     onOpenTag: (handler: (event: { name: string }) => void) =>

@@ -92,7 +92,13 @@ export const IPC = {
   librarySearch: "library:search",
   libraryOpenNote: "library:open-note",
   librarySaveNote: "library:save-note",
-  libraryMoveNote: "library:move-note",
+  /**
+   * Files notes into a folder — a set of them, always, because one is a set of one (B95).
+   * It was one note per call and a renderer loop, which cost a full vault walk, a
+   * broadcast and a reload *per note*, and asked the "should the links follow?" question
+   * once per note into a dialog that could only hold one.
+   */
+  libraryMoveNotes: "library:move-notes",
   libraryRenameNote: "library:rename-note",
   /** Copies a note beside itself, `-copy` appended to the title — never the file bytes (B6). */
   libraryDuplicateNote: "library:duplicate-note",
@@ -179,7 +185,7 @@ export const IPC = {
   libraryUnlinkedAttachments: "library:unlinked-attachments",
   libraryTrashAttachment: "library:trash-attachment",
 
-  /** Which notes link to one, so a move or a rename can offer to bring them along (B35). */
+  /** Which notes link to these, so a move or a rename can offer to bring them along (B35). */
   libraryLinkingNotes: "library:linking-notes",
   /** main → library renderer: a `[[…]]` link was clicked and names a note. One candidate opens it; several raise the picker. */
   libraryOpenLink: "library:open-link",
@@ -593,20 +599,28 @@ export interface LibraryApi {
     request: SaveNoteRequest,
   ) => Promise<{ written: boolean; path: string; locked?: boolean; error?: SaveError }>;
   /**
-   * Answers the note's path after the move — unchanged, with `locked`, when the capture
-   * window has it claimed. Silently answering the old path would look like a move that
-   * did nothing, which is the one outcome a drag must never be allowed to look like.
+   * Files one or more notes into a folder.
+   *
+   * `moved` answers where each one ended up, in the order they were asked for — a move
+   * that silently answered the old path would look like a move that did nothing, which is
+   * the one outcome a drag must never be allowed to look like — and `locked` names the
+   * ones that did not move because the capture window has them claimed. A batch can be
+   * partly refused, so the two are separate lists rather than a flag.
+   *
+   * A set rather than one note per call (B95): the loop that used to live in the renderer
+   * cost a `linkingNotes` walk, an IPC round trip, a `library:refresh` broadcast and a
+   * three-part reload for every note in it.
    */
-  moveNote: (
-    path: string,
+  moveNotes: (
+    paths: string[],
     folder: string,
     /**
-     * Whether the notes linking to this one follow it (B35). The references are resolved
-     * in main *before* the move — after it, every target would resolve to nothing — so
+     * Whether the notes linking to these follow them (B35). The references are resolved
+     * in main *before* each move — after it, every target would resolve to nothing — so
      * this is a flag rather than a list of paths the renderer worked out for itself.
      */
     rewriteLinks?: boolean,
-  ) => Promise<{ path: string; locked?: boolean }>;
+  ) => Promise<{ moved: { from: string; to: string }[]; locked: string[] }>;
   /**
    * Answers the note's path after the rename — unchanged, with `locked`, when the
    * capture window has this exact note claimed. Mirrors `moveNote`'s shape for the same
@@ -616,15 +630,20 @@ export interface LibraryApi {
   renameNote: (
     path: string,
     title: string,
-    /** Same as `moveNote`'s: a rename changes the filename, so it moves the link target too. */
+    /** Same as `moveNotes`': a rename changes the filename, so it moves the link target too. */
     rewriteLinks?: boolean,
   ) => Promise<{ path: string; locked?: boolean }>;
   /**
-   * The notes that link to this one, for the confirmation a move or a rename shows before
-   * it offers to bring them along. Empty when nothing links to it, which is the common
-   * case and the one where nothing is asked at all.
+   * The notes that link to these, for the confirmation a move or a rename shows before it
+   * offers to bring them along. Empty when nothing links to any of them, which is the
+   * common case and the one where nothing is asked at all.
+   *
+   * A set for the same reason `moveNotes` takes one, and deduped by the *linking* note:
+   * one note pointing at three of the notes being moved is one note whose links would be
+   * rewritten, and the confirmation counts what it would touch. One walk of the index
+   * answers for the whole batch, where a call per note was a walk per note.
    */
-  linkingNotes: (path: string) => Promise<LinkingNoteSummary[]>;
+  linkingNotes: (paths: string[]) => Promise<LinkingNoteSummary[]>;
   /**
    * A `[[…]]` link was clicked somewhere and names a note. One candidate is a note to
    * open; several mean the target is ambiguous and the picker decides.

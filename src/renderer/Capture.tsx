@@ -779,7 +779,7 @@ export function Capture(): React.ReactElement {
 
               One item, and the four the library offers are deliberately absent. Rename is
               what the title field above already is. Move refuses a note this window has
-              claimed — `IPC.libraryMoveNote` says so — and this window has claimed it by
+              claimed — `IPC.libraryMoveNotes` says so — and this window has claimed it by
               definition. Duplicate makes a copy nothing here would open. Reveal wants a
               file, and for most of this window's life there is not one yet.
 

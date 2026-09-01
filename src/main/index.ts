@@ -356,15 +356,29 @@ async function switchVaultTo(path: string): Promise<void> {
 }
 
 /**
- * The notes linking to one, as `rewriteWikiLinks` wants them — the two move/rename
- * handlers ask the same question the same way, and the index may not be open yet.
+ * The notes linking to a set of them, as `rewriteWikiLinks` wants them — the move and
+ * rename handlers ask the same question the same way, and the index may not be open yet.
+ *
+ * Deduped by the *linking* note, merging its targets: one note pointing at three of the
+ * notes being moved is one file to rewrite, and handing `rewriteWikiLinks` the same path
+ * three times would have it parse, mutate and write that file three times over (B95).
  */
 async function linkingNotesFor(
   vault: string,
-  path: string,
+  paths: string[],
 ): Promise<{ path: string; targets: string[] }[]> {
   if (indexDb === null) return [];
-  return linkingNotes(vault, indexDb, path);
+
+  const byPath = new Map<string, { path: string; targets: string[] }>();
+  for (const path of paths) {
+    // eslint-disable-next-line no-await-in-loop
+    for (const one of await linkingNotes(vault, indexDb, path)) {
+      const existing = byPath.get(one.path);
+      if (existing === undefined) byPath.set(one.path, { path: one.path, targets: [...one.targets] });
+      else existing.targets.push(...one.targets);
+    }
+  }
+  return [...byPath.values()];
 }
 
 /**
@@ -1953,7 +1967,7 @@ function registerLibraryIpc(): void {
       : await tasksMatching(vault, indexDb, scope, openOnly);
   });
 
-  // Refuses a note the capture window has claimed, the same guard `IPC.libraryMoveNote`
+  // Refuses a note the capture window has claimed, the same guard `IPC.libraryMoveNotes`
   // uses and for the same reason: the write goes straight to the file, bypassing the
   // capture window's own session, and its next debounced write would otherwise land on
   // top of — or right after — this one with no conflict copy on either side.
@@ -2072,29 +2086,55 @@ function registerLibraryIpc(): void {
   // believes it is still editing the first. The move dialog could only reach a note the
   // reader had open; dragging can reach any row in the list, which is what makes the
   // guard worth having rather than worth noting.
+  //
+  // **One handler for the whole set, and one `notifyLibrary` at the end of it** (B95). The
+  // renderer used to loop over a one-note channel, and every turn of that loop cost a
+  // `linkingNotes` walk of the index, a round trip, a broadcast and the seven-part reload
+  // the library runs on one — so filing six notes was some thirty full walks of the vault,
+  // most of a second each on Windows where `checkFilesOnDemand` shells out to `attrib`.
+  //
+  // The per-note order inside the loop is the old handler's, unchanged and load-bearing:
+  // each note's references are resolved immediately before *that* note moves, never once
+  // for the batch up front. Two notes in one set can link to each other, and a target
+  // resolves against where a note is at the moment the question is asked.
+  //
+  // A refusal is per note rather than for the batch: dragging a set can reach the one row
+  // the capture window happens to have claimed, and refusing the other five for its sake
+  // would make one open note able to veto a filing gesture.
   ipcMain.handle(
-    IPC.libraryMoveNote,
-    async (_event, path: string, folder: string, rewriteLinks?: boolean) => {
+    IPC.libraryMoveNotes,
+    async (_event, paths: string[], folder: string, rewriteLinks?: boolean) => {
       const vault = vaultPath();
-      if (vault === null) return { path };
-      if (writer.activePath() === path) return { path, locked: true };
+      if (vault === null) return { moved: [], locked: [] };
 
-      // Resolved *before* the move, and here rather than in the renderer: a target
-      // resolves against where the note is now, so after `moveNote` there is nothing left
-      // to find. The renderer only says whether the user agreed, never which notes to
-      // touch — that list is main's to compute, twice if need be (B35).
-      const references = rewriteLinks === true ? await linkingNotesFor(vault, path) : [];
-      const moved = moveNote(vault, path, folder);
-      if (references.length > 0) {
-        rewriteWikiLinks(vault, references, linkTargetFor(moved), writer.activePath());
+      const moved: { from: string; to: string }[] = [];
+      const locked: string[] = [];
+
+      for (const path of paths) {
+        if (writer.activePath() === path) {
+          locked.push(path);
+          continue;
+        }
+
+        // Resolved *before* the move, and here rather than in the renderer: a target
+        // resolves against where the note is now, so after `moveNote` there is nothing
+        // left to find. The renderer only says whether the user agreed, never which notes
+        // to touch — that list is main's to compute, twice if need be (B35).
+        // eslint-disable-next-line no-await-in-loop
+        const references = rewriteLinks === true ? await linkingNotesFor(vault, [path]) : [];
+        const to = moveNote(vault, path, folder);
+        if (references.length > 0) {
+          rewriteWikiLinks(vault, references, linkTargetFor(to), writer.activePath());
+        }
+        moved.push({ from: path, to });
       }
 
       notifyLibrary();
-      return { path: moved };
+      return { moved, locked };
     },
   );
 
-  // Refuses a note the capture window has claimed, the same way `libraryMoveNote` does
+  // Refuses a note the capture window has claimed, the same way `libraryMoveNotes` does
   // and for the same reason: renaming writes straight to the file, bypassing the capture
   // window's own session, which holds the path it will write to next. Renaming out from
   // under it would not update that path, so its next debounced write would recreate the
@@ -2106,9 +2146,10 @@ function registerLibraryIpc(): void {
       if (vault === null) return { path };
       if (writer.activePath() === path) return { path, locked: true };
 
-      // Same ordering, same reason as `libraryMoveNote` above: a rename changes the
-      // filename, so it moves the link target as surely as a move does.
-      const references = rewriteLinks === true ? await linkingNotesFor(vault, path) : [];
+      // Same ordering, same reason as `libraryMoveNotes` above: a rename changes the
+      // filename, so it moves the link target as surely as a move does. One note, so a
+      // one-element set — a rename is always about the note being read.
+      const references = rewriteLinks === true ? await linkingNotesFor(vault, [path]) : [];
       const renamed = renameNote(vault, path, title);
       if (references.length > 0) {
         rewriteWikiLinks(vault, references, linkTargetFor(renamed), writer.activePath());
@@ -2120,18 +2161,29 @@ function registerLibraryIpc(): void {
   );
 
   /**
-   * How many notes link to one — the count the confirmation names before a move or a
+   * How many notes link to these — the count the confirmation names before a move or a
    * rename. Answers an empty list when the index is not available (an un-hydrated
    * OneDrive vault), which reads as "nothing links here" and so asks nothing: offering to
    * rewrite links this app cannot currently see would be worse than staying quiet.
+   *
+   * A set, and deduped by the linking note (B95): the question a marked set raises is "how
+   * many notes would have their links rewritten", and a note pointing at two of the six
+   * being moved is one answer to it, not two. One `ensureScanned` for the whole batch is
+   * the other half — asked per note, this was a full walk of the vault per note, awaited
+   * one after another, and it was the largest single cost of filing a set.
    */
-  ipcMain.handle(IPC.libraryLinkingNotes, async (_event, path: string) => {
+  ipcMain.handle(IPC.libraryLinkingNotes, async (_event, paths: string[]) => {
     const vault = vaultPath();
     if (vault === null || indexDb === null) return [];
-    return (await linkingNotes(vault, indexDb, path)).map((one) => ({
-      path: one.path,
-      title: one.title,
-    }));
+
+    const byPath = new Map<string, { path: string; title: string }>();
+    for (const path of paths) {
+      // eslint-disable-next-line no-await-in-loop
+      for (const one of await linkingNotes(vault, indexDb, path)) {
+        if (!byPath.has(one.path)) byPath.set(one.path, { path: one.path, title: one.title });
+      }
+    }
+    return [...byPath.values()];
   });
 
   // The source file is only read, never written, but a note the capture window has
@@ -2317,7 +2369,7 @@ function registerLibraryIpc(): void {
     return vault === null ? 0 : openTasksAt(vault, path);
   });
 
-  // Same hazard `IPC.libraryMoveNote` guards against, one level up: `CaptureWriter`'s
+  // Same hazard `IPC.libraryMoveNotes` guards against, one level up: `CaptureWriter`'s
   // session pins the path it will write to when a note is loaded, and moving — or here,
   // trashing — the folder underneath it does not update that path. The next debounced
   // write would then recreate the note at its old location inside a folder that no
