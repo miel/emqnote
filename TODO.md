@@ -3,9 +3,9 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 1 September 2026, **unreleased** — one report from daily use (B96): pasting a
-note into another application turned checkmarks into bullets, headings into body text and
-highlights into nothing.
+Last updated 1 September 2026, released as `v0.12.8` — one report from daily use (B96):
+pasting a note into another application turned checkmarks into bullets, headings into body
+text and highlights into nothing.
 
 The first of those three is not formatting. A task item carries its state as an attribute on
 the `<li>` and the box you see is a widget decoration, so nothing in the document said which
