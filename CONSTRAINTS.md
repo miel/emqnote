@@ -2207,6 +2207,31 @@ and is worth the contrast: it *presses the sort button* rather than owning a cop
 does, so it inherits that button's own toggle for free — and is silently a no-op inside the
 Tasks view, `.sort-choose` not being mounted there either.
 
+**The way out of the Tasks view sits in the seat the way in sits in, and its third filter
+overrules the scope rather than narrowing it** (B99). "Exit tasks" is a `small`
+`ChromeButton` in `TaskList`'s `PaneFooter`, wearing `tasksGlyph` — the exact seat, size and
+glyph of the note list's own Tasks button, because that is the button it undoes and the pair
+has to read as one control pressed twice rather than as two that swap bands when you press
+them. It is `offTabOrder` on B94's trade and keeps two keys (Escape, and the `Mod+T` that
+opened it); **remove either and the `offTabOrder` goes with it**. It has now moved three
+times and the same thing has held every time: it is a *word*, not an ×, because
+`--click-button="Exit tasks"` is how the packaged self-test leaves this view and
+`library-window.ts` matches a control by its `textContent`.
+
+The seat it left in the header holds `.task-note-only`, the "this note only" tick — a
+checkbox and not a `ChromeButton`, since it is a state the list is showing under rather than
+an action (B78, from the other side). **It queries `folderOf(notePath)` and keeps that one
+note's rows, never `scope`.** The note in the reader can be filed anywhere — stand in one
+folder, read a note from another, press `Mod+T` — so a filter that only sieved the rows
+already fetched would answer "no tasks" for a note that plainly has some. While it is ticked
+the scope `<select>` is `disabled`, because a chooser offering to narrow a list it no longer
+decides is saying something untrue; with no note open the checkbox is `disabled` too, which
+is a real state and not a defensive one, the view being reachable from the sidebar with an
+empty reader. `noteOnly` lives in `Selection` beside `scope` and `openOnly` so all three
+filters are read from one place. jsdom cannot see the half that matters most here: the
+checkbox sits in a header band, which is `-webkit-app-region: drag`, and only
+`npm run drive:library` can press it for real.
+
 **The pane ring is four stops forward and three back, and the asymmetry is deliberate**
 (B94, B98). Forward: tree → notes → the note's *title* → the note → tree. Backward: the note
 → notes → tree → the note. The title is a destination you ask for, so it gets the chord; the

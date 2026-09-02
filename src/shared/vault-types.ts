@@ -242,7 +242,12 @@ export type Selection =
   | { kind: "folder"; path: string }
   | { kind: "tag"; name: string }
   | { kind: "person"; name: string }
-  | { kind: "tasks"; scope: string; openOnly: boolean }
+  // `noteOnly` is the third filter of the Tasks view and lives here beside the other two
+  // rather than as state inside `TaskList`, so all three are read from one place and a
+  // remount cannot leave one of them disagreeing with the list on screen. It says "only
+  // the note the reader has open"; which note that is stays `Library`'s own state, since
+  // the filter outlives any particular note (open another one and it follows).
+  | { kind: "tasks"; scope: string; openOnly: boolean; noteOnly: boolean }
   // §6.5's unlinked attachments: the files in `_attachments/` no note points at any more.
   // A place in the sidebar rather than a modal, for the same reason `tasks` is one — it
   // is a list of things in the vault, and every other such list is reached by selecting
@@ -269,7 +274,9 @@ export interface RemovalFailure {
 export function selectionKey(selection: Selection): string {
   if (selection.kind === "folder") return `folder:${selection.path}`;
   if (selection.kind === "tasks") {
-    return `tasks:${selection.scope}:${selection.openOnly ? "open" : "all"}`;
+    return `tasks:${selection.scope}:${selection.openOnly ? "open" : "all"}${
+      selection.noteOnly ? ":note" : ""
+    }`;
   }
   if (selection.kind === "unlinked") return "unlinked";
   return `${selection.kind}:${selection.name}`;

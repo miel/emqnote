@@ -67,16 +67,18 @@ npm run drive:library
 npm run drive:library -- --screenshot=/tmp/library.png
 ```
 
-Drives the **library window**, the same way and for the same kind of reason (B94). Fifteen
-steps over a scaffolded four-note vault, of which three cannot be asked anywhere under
-`test/` at all: **a real Tab** — jsdom implements no sequential focus navigation, so every
-jsdom test of a focus order checks the two steps the app performs itself and takes the
-browser's word for the rest — **the window's own position**, which is the only place the
-result of dragging the note's title shows up, and **`-webkit-app-region`**, which does not
-exist in jsdom and is the class of bug `TODO.md` records twice. The other twelve are cheap
-to keep honest: the empty checkbox that no longer counts as a task (a question about the
-index and the scan, so it is asked of the running app), the split sort chooser turning the
-list over, a Ctrl+click marking two rows and the menu that is then about the set, `Mod+T` /
-`Mod+S` / `Mod+Shift+W`, the shortcut sheet's `/` search and its two columns *measured*, and
-the settings panel scrolling inside a short window. Exits non-zero on the first failed step
-and names it. See `scripts/drive-library.ts`.
+Drives the **library window**, the same way and for the same kind of reason (B94). Nineteen
+steps over a scaffolded four-note vault, of which three *kinds* of question cannot be asked
+anywhere under `test/` at all: **a real Tab** — jsdom implements no sequential focus
+navigation, so every jsdom test of a focus order checks the two steps the app performs itself
+and takes the browser's word for the rest — **the window's own position**, which is the only
+place the result of dragging the note's title shows up, and **`-webkit-app-region`**, which
+does not exist in jsdom and is the class of bug `TODO.md` records twice: the note title's
+drag, and the Tasks view's "this note only" checkbox, which sits in a header band and is
+pressed here with a real pointer (B99). The rest are cheap to keep honest: the empty checkbox
+that no longer counts as a task (a question about the index and the scan, so it is asked of
+the running app), the split sort chooser turning the list over, a Ctrl+click marking two rows
+and the menu that is then about the set, `Mod+T` / `Mod+S` / `Mod+Shift+W`, the Tasks view
+leaving by its own footer button, the shortcut sheet's `/` search and its two columns
+*measured*, and the settings panel scrolling inside a short window. Exits non-zero on the
+first failed step and names it. See `scripts/drive-library.ts`.

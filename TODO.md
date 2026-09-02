@@ -3,6 +3,27 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 2 September 2026, released as `v0.12.11` — two nitpicks from daily use (B99),
+both about the Tasks view, and connected: the first frees the seat the second needs.
+
+**"Exit tasks" moved to the Tasks view's own footer**, into the seat the note list's Tasks
+button occupies — same size, same glyph — because that button is the one it undoes, and a
+pair that swap bands when pressed read as two controls rather than one. `offTabOrder` on
+B94's trade; Escape and Mod+T are the two keys that keep it honest.
+
+**"This note only" is a third filter, in the header seat that freed up.** It overrules the
+scope rather than narrowing it: the note in the reader can be filed anywhere, so it asks
+`folderOf(notePath)` and keeps that note's rows. The scope chooser greys out while it is
+ticked, and the tick itself is refused with no note open.
+
+**What is open on it.** `TEST-PROTOCOL.md` §53. `drive:library` has a nineteenth step that
+presses the checkbox with a real pointer — it sits in a `-webkit-app-region: drag` band,
+which is the one class of bug no test under `test/` can see — and leaves the view by the
+footer button. Left for a person: the same rows on Windows and macOS, §53f in particular,
+that being the only band this change touched where the OS draws its own window controls.
+
+---
+
 Last updated 1 September 2026, released as `v0.12.10` — **five reports from daily use** (B98), no common cause, two of
 which turned out to be one function.
 

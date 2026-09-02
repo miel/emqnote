@@ -398,6 +398,12 @@ async function main(): Promise<number> {
 
   const settle = (ms = 400): Promise<unknown> => new Promise((done) => setTimeout(done, ms));
 
+  /** Which note each visible task row names — `title · path`, as the row itself draws it. */
+  const taskNotes = (): Promise<string[]> =>
+    open.library!.evaluate<string[]>(
+      `[...document.querySelectorAll('.task-list .task-row .task-row-note')].map((n) => n.textContent)`,
+    );
+
   /** The note titles as the list reads them, top to bottom. */
   const listed = (): Promise<string[]> =>
     open.library!.evaluate<string[]>(
@@ -639,6 +645,55 @@ async function main(): Promise<number> {
         if (after !== "the note list") throw new Error(`a second Mod+T left ${after} on screen`);
 
         return `${rows.length} rows, none of them empty, and gone again on a second press`;
+      },
+    },
+    {
+      name: "the Tasks view narrows to the open note, and leaves by its footer button (B99)",
+      run: async () => {
+        await open.library!.key("t", {
+          windowsVirtualKeyCode: 84, nativeVirtualKeyCode: 84, modifiers: 2,
+        });
+        await settle(800);
+
+        const before = await taskNotes();
+        if (before.length < 2) throw new Error(`the view lists ${before.length} tasks`);
+
+        // "This note only" means nothing until the reader holds one, and the checkbox says
+        // so by refusing the press — so open a note the way the view offers to.
+        await click(".task-list .task-row:nth-of-type(1) .task-row-text");
+        await settle(600);
+
+        // **The press jsdom cannot make.** This checkbox lives in a header band, which is
+        // `-webkit-app-region: drag` — a press inside one goes to the window move, not to
+        // the element under the pointer (B94). `.pane-actions` is what gives it back, and
+        // no test under `test/` can tell whether that worked.
+        await click(".task-note-only input");
+        await settle(600);
+
+        const after = await taskNotes();
+        const notes = new Set(after);
+        if (after.length === 0 || notes.size !== 1) {
+          throw new Error(`${after.length} rows over ${notes.size} notes`);
+        }
+        if (after.length >= before.length) {
+          throw new Error(`${before.length} rows became ${after.length}, which narrows nothing`);
+        }
+
+        const offered = await open.library!.evaluate<boolean>(
+          `document.querySelector('.task-scope').disabled === false`,
+        );
+        if (offered) throw new Error("the scope chooser still offers to narrow a list it lost");
+
+        // And out, by the button that has moved into the seat the note list's own Tasks
+        // button sits in — the pair being one control pressed twice is the point of it.
+        await click(".task-list .pane-footer .task-exit");
+        await settle(600);
+        const gone = await open.library!.evaluate<boolean>(
+          `document.querySelector('.task-list') === null`,
+        );
+        if (!gone) throw new Error("Exit tasks left the view on screen");
+
+        return `${before.length} tasks → ${after.length} in ${[...notes][0]}, then out by the footer`;
       },
     },
     {

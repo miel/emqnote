@@ -4187,3 +4187,88 @@ wat de melding in één regel is.
 Van de vijf is er één die nergens automatisch heen kan: welk venster na Ctrl+Enter de focus
 heeft, is vensterstaat van Electron en geen van beide drivers kan het vragen.
 `TEST-PROTOCOL.md` §52 heeft het, op beide platforms.
+
+---
+
+## B99 — De uitgang van Taken zit waar de ingang zat, en er komt een derde filter bij
+
+**Genomen** op 2 september 2026, uit dagelijks gebruik. Twee meldingen over hetzelfde
+scherm, en ze horen bij elkaar: de eerste maakt een plek in de kopbalk vrij die de tweede
+nodig heeft.
+
+### "Taken sluiten" verhuist naar de voetbalk, in de stoel van "Taken"
+
+De knop die de Takenlijst *opent* staat in de voetbalk van de notitielijst (B92 zette hem
+daar, met de teller en de sorteerkiezer). De knop die hem weer *sluit* stond in de kopbalk.
+Twee knoppen die precies elkaars handeling doen, twee banden uit elkaar: je drukt ergens en
+de knop springt naar de andere kant van het paneel.
+
+Dus gaat "Taken sluiten" naar de voetbalk, op dezelfde plek, in dezelfde maat (`small`) en
+met hetzelfde pictogram (`tasksGlyph`) als "Taken". Het paar leest daarmee als één knop die
+twee keer ingedrukt wordt, wat het ook is.
+
+Hij is nu voor de derde keer verhuisd — kop van de werkbalk, tellerrij, kopbalk, voetbalk —
+en wat elke keer overeind bleef staat er nog steeds: het is een *woord*, geen ×.
+`--click-button="Taken sluiten"` is hoe de zelftest van de verpakte app deze weergave
+verlaat, en `library-window.ts` zoekt een knop op zijn `textContent`. Een pictogram geeft
+daar niets om op te matchen.
+
+**`offTabOrder`, en dat is dezelfde ruil als B94.** Deze voetbalk zit tussen de lijst en de
+notitie: een Tab-halte erin landt midden in de volgorde die het oog leest. De regel uit B94
+staat: een knop mag alleen uit de Tab-volgorde als er een toets naast staat. Die zijn er
+twee — Escape, en de Mod+T die de weergave opende (B95) — dus de knop is niet de enige route.
+
+**Verworpen:** hem in de kopbalk laten staan én er een tweede in de voetbalk zetten. Twee
+uitgangen op één scherm is geen keuze die iemand wil maken, en `exitTasks` is met opzet één
+functie (B95).
+
+### "Alleen deze notitie", en waarom hij de scope overrúlet
+
+De Takenlijst had twee filters: een map (`scope`) en "alleen openstaand". Wat ontbrak is de
+smalste vraag van de drie, en de vraag die je stelt terwijl je iets aan het lezen bent: *wat
+staat er in déze notitie nog open?* Dat is nu een vinkje, en het staat in de kopbalk — de
+plek die "Taken sluiten" hierboven vrijmaakte, en de juiste plek omdat dit als enige van de
+drie over de notitie in de lezer gaat en niet over de kluis.
+
+Het is een `<input type="checkbox">` met een woord ernaast en geen `ChromeButton`: het is
+een stand waaronder de lijst getoond wordt, geen handeling, en een knop die "ingedrukt"
+staat is een toestand die je al moet kunnen lezen — B78's argument, van de andere kant.
+Dezelfde opmaak als "alleen openstaand" eronder, want het is hetzelfde soort ding.
+
+**Het vinkje overrúlet de map, hij versmalt hem niet.** De notitie die je leest kan overal
+staan: je bladert in `01 Projecten`, drukt Mod+T, en de lezer houdt een notitie uit
+`00 Inbox` vast. Een filter dat alleen de al opgehaalde rijen zou zeven, antwoordt dan "geen
+taken" voor een notitie die er zichtbaar wel heeft. Dus wordt de map van de notitie zélf
+bevraagd — `folderOf(path)`, want `tasksIn` scopet op padvoorvoegsel, en dat is de smalste
+vraag die de notitie gegarandeerd bevat — en de rijen worden daarna op dat ene pad gehouden.
+
+De mapkiezer gaat op `disabled` zolang het vinkje staat. Een kiezer die aanbiedt te
+versmallen wat hij niet meer bepaalt, zegt iets dat niet waar is. Zijn waarde blijft staan
+en komt terug zodra het vinkje weggaat.
+
+**Zonder open notitie is het vinkje uitgeschakeld.** Dat is een echte toestand en geen
+verdediging: de weergave is vanuit de zijbalk te bereiken met een lege lezer. De titel van
+het vinkje zegt dan waarom.
+
+**`noteOnly` woont in `Selection`**, naast `scope` en `openOnly`, en niet als `useState` in
+`TaskList`. De drie filters van deze weergave worden op één plek gelezen; twee daarvan in de
+selectie en één erbuiten is de soort splitsing die je een keer moet uitzoeken en daarna
+verkeerd onthoudt.
+
+**Verworpen:** "deze notitie" als waarde in de mapkiezer. Een notitie is geen map, en
+`foldersWithTasks` (de regel die bepaalt welke mappen überhaupt aangeboden worden) is een
+uitspraak over mappen — er zou een tweede soort waarde doorheen lopen die geen van zijn drie
+regels kan beantwoorden.
+
+**Verworpen:** een eigen IPC-vraag "taken van dit pad". `tasksIn` scopet al op voorvoegsel,
+en de map van één notitie is een lijst die je in de vinger kunt houden; een tweede query
+naast de bestaande is een tweede plek waar "openstaand" en "alle" uit elkaar kunnen lopen.
+
+### Wat het bewijst
+
+`test/tasks-note-only.test.ts` monteert het echte venster en houdt drie dingen vast: dat de
+uitgang in `.pane-footer` zit en niet in `.pane-header` en nog steeds "Exit tasks" heet, dat
+het vinkje geweigerd wordt zolang er geen notitie open is, en — de kern — dat een gezette
+map *en* een notitie uit een andere map samen tot `tasks("00 Inbox", true)` leiden met één
+rij op het scherm. Dat laatste is precies de zeef-over-de-opgehaalde-rijen die niet werkt,
+dus wordt op de aanroep geasserteerd en niet alleen op wat er te zien is.
