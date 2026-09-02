@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 2 September 2026, **unreleased** — one nitpick from daily use (**B94**'s
+Last updated 2 September 2026, released as `v0.12.12` — one nitpick from daily use (**B94**'s
 addendum): **the capture window can be picked up by its title band**, the way the library's
 reader has been able to since B94.
 
