@@ -3,8 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 2 September 2026 — **the settings panel is a rail of six groups beside one
-scrolling pane, with a search field** (**B100**).
+Last updated 2 September 2026, released as `v0.13.0` — **the settings panel is a rail of
+six groups beside one scrolling pane, with a search field** (**B100**).
 
 It was ten controls in one column with no headings, and the stylesheet beside it had written
 the complaint down already: the `max-height` on `.settings` carries a paragraph saying it
