@@ -47,9 +47,9 @@ npm run drive:capture -- --screenshot=/tmp/capture.png
 
 Drives the **capture window** in the real app, under its own `Xvfb`, over CDP. Scaffolds a
 throwaway vault, raises the window with the real global hotkey, hands it a note holding a
-picture, a table, a three-page PDF, a `#tag` and a two-state task list, and checks the ten
+picture, a table, a three-page PDF, a `#tag` and a two-state task list, and checks the eleven
 things only a real renderer can answer — most of all `naturalWidth`, which is whether the
-picture actually *decoded* rather than whether an `<img>` reached the DOM. Five of those ten
+picture actually *decoded* rather than whether an `<img>` reached the DOM. Six of those eleven
 are the ones jsdom is barred from by definition: a rectangle of table cells dragged out with
 a **real pointer** (B49), whether B51's sixteen-row `/` panel **fits on screen** when the
 caret is near the foot of the window, a **real PDF page rendered by pdf.js** into this window
@@ -57,7 +57,9 @@ caret is near the foot of the window, a **real PDF page rendered by pdf.js** int
 off a canvas, because a changed `src` is not a changed page — and **a real Ctrl+C landing on
 the real system clipboard** (B96), read back by `--dump-clipboard` in a second process,
 because a checkbox is a widget decoration and no serializer, in any test environment, can be
-asked what a decoration puts on a clipboard. That last step is also the one place in either
+asked what a decoration puts on a clipboard, and **the window being picked up by its subject
+field** (B94) — `-webkit-app-region` does not exist in jsdom and neither does a window
+position, so this is the only place the drag can be seen to move anything. That last step is also the one place in either
 driver that needs the window to hold **X focus**: both windows are called "emqnote", so the
 capture one stamps its own `document.title` and is found by that. Exits non-zero on the first failed step and names it. Needs a display,
 so deliberately not part of `npm test`. See `scripts/drive-capture.ts`.

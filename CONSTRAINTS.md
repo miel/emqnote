@@ -2301,8 +2301,25 @@ window/pointer offset once, on `"start"`, and every later message restores it; f
 pointer's delta accumulates every rounding error and every dropped message into a window
 that slides out of the grip. And **a click does arrive after a drag** — the window moved
 with the pointer, so press and release land on the same element — so it is suppressed, or
-letting go of a dragged title opens the rename every time. jsdom has no app-region and no
-window position, so `npm run drive:library` is the only place either half is visible.
+letting go of a dragged title opens the rename every time.
+
+**The capture window's title band is the same rule, for one of its two states** (B94,
+2 September 2026). A handed-over note's title is a plain `<h2>` in the band and Chromium
+moves the window itself; a brand-new note's is the subject `<input>`, which must be
+`no-drag` to be typed into — and since it is the only thing in the 40px band, that left the
+whole strip ungrabbable. The same `dragWindowFrom`, with nothing to suppress on the way out
+(the click after a drag lands on a text field and only puts the caret where the press
+already put it), which is why `onEnd` is optional rather than required. The trade is inside
+the field: dragging a range out of the subject line moves the window instead, and
+double-click, triple-click, Mod+A and Shift+arrows are what still select there. Not the
+reader's "only while unfocused" split — `Capture.tsx` puts the caret in that field on every
+hotkey, so the gesture would exist only while the window was not in use.
+
+jsdom has no app-region and no window position, so the two drivers are the only place any
+of this is visible: `npm run drive:library` for the reader's title,
+`npm run drive:capture` for the subject field. `test/capture-title-drag.test.ts` and
+`test/library-title-edit.test.ts` pin the half that *is* visible there — which messages a
+press sends.
 
 **Only the library gets its focus back, and the capture window remembers who asked** (B98).
 `hideCaptureWindow` hands the foreground to the library window when — and only when —
