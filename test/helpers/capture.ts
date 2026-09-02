@@ -95,7 +95,7 @@ export function openedNote(overrides: Partial<OpenedNote> = {}): OpenedNote {
 /**
  * The spies a test asserts against.
  *
- * Only the twelve members `Capture.tsx` actually reaches for, plus the three
+ * Only the members `Capture.tsx` actually reaches for, plus the three
  * `useBootstrap.ts` and `Editor.tsx` need on mount. Naming them individually rather than
  * handing back the whole stub keeps a test's expectations readable — and keeps it honest
  * about which of them the window is supposed to have called.
@@ -122,6 +122,13 @@ export interface CaptureSpies {
   reloadNote: ReturnType<typeof vi.fn>;
   /** The footer's "copy path" beside a save that would not land (B93). */
   copyText: ReturnType<typeof vi.fn>;
+  /**
+   * Main being asked to move the window, from a press on the subject field that travelled
+   * (B94). jsdom has no `-webkit-app-region` and no window position, so what a test here
+   * can see is exactly this: which messages the press sent. Whether the window then
+   * *moves* is `scripts/drive-capture.ts`'s question.
+   */
+  dragWindow: ReturnType<typeof vi.fn>;
 }
 
 export interface MountedCapture {
@@ -208,6 +215,7 @@ export async function mountCapture(
     pickAttachment: vi.fn(async () => null),
     reloadNote: vi.fn(async () => {}),
     copyText: vi.fn(async () => {}),
+    dragWindow: vi.fn(),
   };
 
   let showHandler: ((payload: ShowPayload) => void) | null = null;

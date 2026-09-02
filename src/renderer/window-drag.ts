@@ -23,7 +23,9 @@ const DRAG_THRESHOLD_PX = 4;
 
 /**
  * Watches one press. `onEnd` is told whether the window was actually moved, which is how
- * the caller knows to suppress the `click` that follows.
+ * the caller knows to suppress the `click` that follows. It is optional because not every
+ * caller has one to suppress: the capture window's subject field is a text field, and the
+ * click that lands on it after a drag only puts the caret where the press was.
  *
  * A click *does* follow a drag here, and that is the part worth knowing: the window moves
  * with the pointer, so the press and the release land on the same element and Chromium
@@ -36,7 +38,7 @@ const DRAG_THRESHOLD_PX = 4;
  */
 export function dragWindowFrom(
   event: { button: number; screenX: number; screenY: number },
-  onEnd: (moved: boolean) => void,
+  onEnd?: (moved: boolean) => void,
 ): void {
   // Left button only. A right-click is a context menu and a middle click is nothing here;
   // neither should pick the window up.
@@ -66,7 +68,7 @@ export function dragWindowFrom(
   const onUp = (): void => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
-    onEnd(moved);
+    onEnd?.(moved);
   };
 
   window.addEventListener("mousemove", onMove);

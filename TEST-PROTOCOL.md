@@ -1848,6 +1848,29 @@ into a band this change put something new into.
 
 ---
 
+## §54 — Picking the capture window up by its title (B94's addendum)
+
+Confirmed on Linux by `drive:capture`'s thirteenth step, with a real pointer: the window
+moved 120px and a press that did not travel still put the caret in the field. What is left
+here is the two platforms that driver does not run on, and the one thing no script can
+judge — how the gesture feels under a hand, on a window smaller than the library's and with
+a band that is one field wide.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 54a | Raise the capture window with the hotkey and drag it by the **subject field** | The window follows the pointer, and keeps the grip it was picked up by — it must not jump on the first move |  |
+| 54b | Let go, then click the subject field once | The caret lands where you clicked, and nothing else happens. A drag must not have cost the field its click |  |
+| 54c | Type a subject, then click into the middle of it | The caret goes where the pointer is. This is the gesture the trade below was made to keep |  |
+| 54d | With a subject typed, try to drag a range out inside the field | The window moves instead, and **no stray highlight is left behind**. Double-click, triple-click, Mod+A and Shift+arrows still select — that is the trade, deliberately |  |
+| 54e | Open a note from the library into this window (it has no subject field then), and drag it by its title | The same movement, from Chromium's own drag region rather than from this code |  |
+| 54f | On **Windows 11**, 54a–54e, and once with the window maximised | The same, and a maximised window restores under the pointer rather than refusing to move. The caption buttons sit at the right of the same band — dragging must start left of them |  |
+| 54g | On **macOS**, the same | The same. The traffic lights are at the left of the band, and the field starts to the right of them |  |
+
+54d is the row to be honest on: it is the one behaviour this change takes away, and the
+question is whether it is ever missed.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top

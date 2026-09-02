@@ -3,6 +3,30 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 2 September 2026, released as `v0.12.12` — one nitpick from daily use (**B94**'s
+addendum): **the capture window can be picked up by its title band**, the way the library's
+reader has been able to since B94.
+
+Only one of that window's two title states needed anything. A handed-over note's title is a
+plain `<h2>` in a band that *is* `-webkit-app-region: drag`, so Chromium already moved the
+window from it; a brand-new note's title is the subject `<input>`, which has to be `no-drag`
+to be typed into — and since it is the only thing in that 40px band, the whole strip had no
+grip in it. Same `dragWindowFrom`, with nothing to suppress on the way out: the click after a
+drag lands on a text field and only puts the caret where the press already put it, so `onEnd`
+is optional now rather than required. **The trade is inside the field** — dragging a range out
+of the subject line moves the window instead, with double-click, triple-click, Mod+A and
+Shift+arrows left to select with. The reader's "only while unfocused" split was rejected here:
+`Capture.tsx` puts the caret in that field on every hotkey, so the gesture would exist only
+while the window was not in use.
+
+**What is open on it.** `TEST-PROTOCOL.md` §54, and 54d in particular — it is the one
+behaviour this takes away, and the question is whether it is ever missed. `drive:capture` has
+a thirteenth step that picks the window up with a real pointer (`window moved 120px, a click
+still focuses the field`); left for a person is the same on Windows and macOS, where the OS
+draws its own controls into that same band, and how the 4px threshold feels under a hand.
+
+---
+
 Last updated 2 September 2026, released as `v0.12.11` — two nitpicks from daily use (B99),
 both about the Tasks view, and connected: the first frees the seat the second needs.
 

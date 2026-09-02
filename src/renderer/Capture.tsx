@@ -23,6 +23,7 @@ import { ContextMenu } from "./library/ContextMenu.js";
 // into `styles.css`, the only stylesheet this window loads.
 import { NotePicker } from "./library/NotePicker.js";
 import { TableGrid } from "./TableGrid.js";
+import { dragWindowFrom } from "./window-drag.js";
 
 const LATENCY_BUDGET_MS = 80;
 const CHANGE_DEBOUNCE_MS = 300;
@@ -540,6 +541,29 @@ export function Capture(): React.ReactElement {
               placeholder={app.t("capture.title")}
               value={header.subject}
               onChange={(event) => onHeaderChange({ ...header, subject: event.target.value })}
+              // **Press and travel moves the window; press and release puts the caret in
+              // the field** (B94) — the reader's `<h1>` in the library window, for the one
+              // state this window has that is not already a plain heading.
+              //
+              // The band around it is the frameless window's grab area, and this field is
+              // `no-drag` inside it or it could not be clicked into at all — which for a
+              // brand-new note left the whole 40px band ungrabbable, because the field is
+              // the only thing in it. The handed-over note's title is a `<h2>` with
+              // nothing on it and drags natively; this is the other half of that.
+              //
+              // No `preventDefault`, and nothing to suppress on the way out: a press that
+              // does not travel focuses the field and puts the caret where it landed,
+              // exactly as before, which is how a typo in a subject gets fixed.
+              //
+              // The trade is the other mouse gesture — dragging a range out inside the
+              // subject line moves the window instead. One line of text against the only
+              // grip this window has, with double-click, triple-click, Mod+A and
+              // Shift+arrows left to select with. The browser does begin a selection at
+              // the press point, but the window travels *with* the pointer, so the client
+              // coordinates it is measured in barely move: no stray highlight is left.
+              onMouseDown={(event) => {
+                dragWindowFrom(event.nativeEvent);
+              }}
               // Enter moves on into the note; the title should never be a place you get
               // stuck when all you want is to type. `HeaderBlock` still does this for the
               // four fields below, and this is the same rule for the one above them.

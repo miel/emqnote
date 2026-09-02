@@ -3715,6 +3715,35 @@ onderdrukt, anders opent het loslaten van een gesleepte titel elke keer de herno
 halen. Dan is er geen klik: het element krijgt de druk niet te zien, wat precies de fout is
 die `TODO.md` twee keer op rij vastlegt.
 
+**Aangevuld** op 2 september 2026, uit dagelijks gebruik: **hetzelfde gebaar hoort ook in het
+opnamevenster, en maar één van zijn twee titelstaten had er iets voor nodig.** Een
+overgedragen notitie draagt haar titel daar als een kale `<h2>` in de sleepstrook — Chromium
+verplaatst het venster zelf, er valt niets te regelen. Een verse notitie draagt er het
+onderwerpveld, en dat moet `no-drag` zijn om er überhaupt in te kunnen typen. Omdat dat veld
+het enige is dat in die balk van 40px staat, was daarmee de hele strook ongrijpbaar: het
+venster dat het meest op een notitieblaadje lijkt was juist het venster dat je niet kon
+verleggen. Dus dezelfde `dragWindowFrom`, met één verschil — er valt niets te onderdrukken.
+De klik na een sleep landt hier op een tekstveld en zet alleen de cursor waar de druk hem al
+zette, dus `onEnd` is optioneel geworden in plaats van verplicht.
+
+**De ruil zit in het veld zelf.** Een reeks tekst uitslepen binnen de onderwerpregel
+verplaatst voortaan het venster. Dat is één regel tekst tegenover de enige greep die dit
+venster heeft, en dubbelklik, drieklik, Mod+A en Shift+pijltjes selecteren er alle vier nog.
+De browser begint wél een selectie bij de druk, maar het venster reist mee met de aanwijzer,
+dus de cliëntcoördinaten waarin die selectie gemeten wordt bewegen nauwelijks en hij blijft
+samengevouwen staan waar hij begon: een sleep laat geen streep achter.
+
+**Verworpen:** het gebaar alleen aanzetten zolang het veld nog geen focus heeft, wat precies
+de tweedeling van de lezer zou zijn — druk-en-loslaten opent daar de hernoeming,
+druk-en-reizen verplaatst. Hier zou dat het gebaar wegnemen op het moment dat je het wilt:
+`Capture.tsx` zet bij elke hotkey de cursor juist in dat veld, dus de enige staat waarin de
+sleep dan nog bestond was de staat waarin het venster nog niet in gebruik was. En de sleep is
+gemeten in plaats van beredeneerd: `npm run drive:capture` heeft er een dertiende stap bij die
+het venster met een echte aanwijzer aan het onderwerpveld oppakt (120px opgeschoven) en daarna
+nagaat dat een klik die niet reist nog steeds de cursor in dat veld zet — jsdom kent
+`-webkit-app-region` niet en heeft geen vensterpositie, dus dit is dezelfde grens die
+`drive-library.ts` voor de lezer bewaakt.
+
 ### Het sneltoetsenblad is doorzoekbaar, en de kolommen zijn gepakt in plaats van geknipt
 
 Het blad is vierentwintig regels in twee kolommen: precies de lengte waarop lezen beter gaat

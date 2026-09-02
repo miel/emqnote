@@ -2322,3 +2322,37 @@ fails that one.
 run on, and one thing it cannot judge — whether the header and footer bands still read as one
 line each with a control in them. §53f is the row that matters, being the only place the OS
 draws its own window controls into a band this change put something new into.
+
+
+**The capture window can be picked up by its title band, 2 September 2026** (**B94**'s
+addendum). Reported from daily use in one sentence: the library's title moves the window when
+a press travels, and the capture window's did not.
+
+Only one of that window's two title states needed anything. A handed-over note's title is a
+plain `<h2>` sitting in the band, and the band *is* `-webkit-app-region: drag`, so Chromium
+has always moved the window from it. A brand-new note's title is the subject `<input>`, and a
+field has to be `no-drag` or the press goes to the window move instead of into the field —
+which, since that field is the only thing in the 40px band, left the whole strip ungrabbable.
+So the same `dragWindowFrom` the reader's `<h1>` uses, with one difference: there is nothing
+to suppress afterwards. The click that follows a drag lands on a text field and only puts the
+caret where the press already put it, so `onEnd` became optional rather than required.
+
+The trade is inside the field, and it is deliberate: dragging a range out of the subject line
+moves the window now. One line of text against the only grip this window has, with
+double-click, triple-click, Mod+A and Shift+arrows all still selecting in it. The reader's own
+split — press-and-release renames, press-and-travel moves — has no equivalent here, because
+the obvious version of it (only drag while the field is unfocused) would remove the gesture
+exactly when it is wanted: `Capture.tsx` puts the caret in that field on every hotkey.
+
+Confirmed under `Xvfb`, driven over CDP: `drive:capture` has a thirteenth step that picks the
+window up by the subject field **with a real pointer** — measured `window moved 120px, a click
+still focuses the field`, the window being put away and raised again first because every step
+before it hands this window a note and a note has no subject field (B20). `-webkit-app-region`
+and a window position are both absent from jsdom, so that step is the only place the move is
+visible at all; `test/capture-title-drag.test.ts` holds the half that is visible there — which
+messages a press sends, that two pixels are not a drag, and that a right-click never picks the
+window up.
+
+**What is left for a person**: how the gesture *feels* on a real trackpad, on both platforms —
+the 4px threshold is the same one the reader has carried since B94, but the capture window is
+smaller and its band is one field wide.
