@@ -747,16 +747,41 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* `.task-exit` has no rule of its own any more: "Exit tasks" is a `ChromeButton` in the
-   view's header band, wearing the same shape as every other button in either window's
-   chrome. The class stays on the element as a handle for `--click-button` and the tests.
+/* `.task-exit` has no rule of its own: "Exit tasks" is a `ChromeButton` like every other
+   button in either window's chrome. The class stays on the element as a handle for
+   `--click-button` and the tests.
 
-   It has moved twice and the reason has held both times. It began at the head of the
+   It has moved three times and the reason has held every time. It began at the head of the
    toolbar, in front of the scope chooser, where it read as the first step of setting the
-   view up rather than as the way out of it; then it sat beside the count. Now it is where
-   the tree's and the note list's own actions are. What matters is unchanged: it is a
-   *word*, not an ×, because `--click-button="Exit tasks"` is how the packaged self-test
-   leaves this view. */
+   view up rather than as the way out of it; then it sat beside the count; then in the
+   header band, where the tree's and the note list's own actions are. It is in the *footer*
+   band now, at `small`, in the exact seat the note list's own Tasks button occupies —
+   because that is the button this one undoes, and a pair that swap places when pressed
+   read as two controls rather than one. What matters is unchanged: it is a *word*, not an
+   ×, because `--click-button="Exit tasks"` is how the packaged self-test leaves this view.
+
+   `.task-note-only` is what took its place in the header: the third filter, and the only
+   one of the three that is about the note being read rather than about the vault. Same
+   markup and same size as `.task-open-only` below — they are the same kind of control and
+   would read as two different ones if they were drawn differently — but `--text` rather
+   than `--muted`, because a header band is the loud one of the two and 12px muted text
+   disappears in it. `-webkit-app-region` needs no rule here: `.pane-actions` already says
+   `no-drag`, and a press on a checkbox inside a drag region goes to the window move (B94).
+   `.task-note-only-off` is the no-note-open state; the `<input>`'s own `disabled` is what
+   actually refuses the click, this only greys the word beside it. */
+.task-note-only {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.task-note-only-off {
+  color: var(--muted);
+}
 
 .task-scope {
   flex: 1;

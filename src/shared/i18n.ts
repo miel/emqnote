@@ -488,6 +488,8 @@ const DUTCH: Record<string, string> = {
 
   // Aggregated Tasks view
   "tasks.openOnly": "Alleen openstaand",
+  "tasks.noteOnly": "Alleen deze notitie",
+  "tasks.noteOnlyNone": "Geen notitie geopend",
   "tasks.exit": "Taken sluiten",
   "tasks.none": "Geen taken gevonden",
   "tasks.one": "taak",
@@ -982,6 +984,8 @@ const ENGLISH: Record<string, string> = {
 
   // Aggregated Tasks view
   "tasks.openOnly": "Open only",
+  "tasks.noteOnly": "This note only",
+  "tasks.noteOnlyNone": "No note open",
   "tasks.exit": "Exit tasks",
   "tasks.none": "No tasks found",
   "tasks.one": "task",

@@ -2751,7 +2751,7 @@ export function Library(): React.ReactElement {
    * what is now showing.
    */
   const openTasks = (): void => {
-    setSelection({ kind: "tasks", scope: lastFolder, openOnly: true });
+    setSelection({ kind: "tasks", scope: lastFolder, openOnly: true, noteOnly: false });
     if (searchQuery !== "") {
       if (searchTimer.current !== null) clearTimeout(searchTimer.current);
       setSearchQuery("");
@@ -3019,12 +3019,16 @@ export function Library(): React.ReactElement {
           <TaskList
             scope={selection.scope}
             openOnly={selection.openOnly}
+            // The reader's own note is what "this note only" means, so the filter follows
+            // it: open another note from a task row and the list narrows to that one,
+            // which is the same thing the tick already said.
+            noteOnly={selection.noteOnly}
+            notePath={open?.path ?? null}
             folders={taskFolders}
             onExit={exitTasks}
-            onScopeChange={(scope) => setSelection({ kind: "tasks", scope, openOnly: selection.openOnly })}
-            onOpenOnlyChange={(openOnly) =>
-              setSelection({ kind: "tasks", scope: selection.scope, openOnly })
-            }
+            onScopeChange={(scope) => setSelection({ ...selection, scope })}
+            onOpenOnlyChange={(openOnly) => setSelection({ ...selection, openOnly })}
+            onNoteOnlyChange={(noteOnly) => setSelection({ ...selection, noteOnly })}
             onOpenNote={(path, ordinal) => void openNote(path, ordinal)}
             onToggle={toggleTask}
             t={app.t}
