@@ -1063,6 +1063,65 @@ async function main(): Promise<number> {
         return `${html.length} chars of HTML, both boxes present`;
       },
     },
+    {
+      // After the clipboard step, because it moves the window: every step above measures
+      // client coordinates, but a window that has walked 200px to the right is not what
+      // the next reader of a `--screenshot` expects, and nothing follows this one.
+      name: "dragging the subject field moves the window; a click still lands in it (B94)",
+      run: async () => {
+        // **This window has two title states and only one of them needs the handler.** A
+        // handed-over note's title is a plain `<h2>` inside the drag band and Chromium
+        // moves the window itself; a brand-new note's is an `<input>`, which has to be
+        // `no-drag` to be typed into and so swallows the press. Every step above handed
+        // this window a note, so the window is put away and raised again — the everyday
+        // route back to a blank one, and the only way to get the field on screen here.
+        await open.capture!.evaluate(`window.emqnote.close()`);
+        await new Promise((done) => setTimeout(done, 600));
+        pressHotkey(display);
+        await new Promise((done) => setTimeout(done, 1_200));
+
+        const at = await open.capture!.evaluate<{ x: number; y: number } | null>(
+          `(() => {
+             const field = document.querySelector('input.subject');
+             if (field === null) return null;
+             const box = field.getBoundingClientRect();
+             return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+           })()`,
+        );
+        if (at === null) throw new Error("no subject field — the window did not come back blank");
+
+        const before = await open.capture!.evaluate<number>(`window.screenX`);
+        await open.capture!.mouse("mousePressed", at.x, at.y);
+        for (const step of [20, 40, 60]) {
+          // eslint-disable-next-line no-await-in-loop
+          await open.capture!.mouse("mouseMoved", at.x + step, at.y);
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((done) => setTimeout(done, 80));
+        }
+        await open.capture!.mouse("mouseReleased", at.x + 60, at.y);
+        await new Promise((done) => setTimeout(done, 600));
+
+        // **The window moves further than the pointer did, and that is the harness rather
+        // than the app** — `drive-library.ts`'s own drag step says the same thing at
+        // length: CDP dispatches at *client* coordinates, so each move lands at a fixed
+        // point inside a window that is itself travelling right. That it moved at all is
+        // the question; the distance is not.
+        const after = await open.capture!.evaluate<number>(`window.screenX`);
+        if (after - before < 40) throw new Error(`the window moved ${after - before}px`);
+
+        // And the press that does not travel is still a press on a text field: it focuses
+        // it, which is what `no-drag` is there for and what a drag must not have cost.
+        await open.capture!.mouse("mousePressed", at.x, at.y);
+        await open.capture!.mouse("mouseReleased", at.x, at.y);
+        await new Promise((done) => setTimeout(done, 300));
+        const focused = await open.capture!.evaluate<boolean>(
+          `document.activeElement === document.querySelector('input.subject')`,
+        );
+        if (!focused) throw new Error("a click on the subject field did not put the caret in it");
+
+        return `window moved ${after - before}px, a click still focuses the field`;
+      },
+    },
   ];
 
   for (const step of steps) {
