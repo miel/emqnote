@@ -663,6 +663,9 @@ async function main(): Promise<void> {
       list: () => listVaults(knownVaults(), findOneDriveCandidates(), loadSettings().vaultPath),
       choose: askForVault,
       switchTo: switchVaultTo,
+      // "Start at login" is in the Settings panel too now (B100), so a click here has to
+      // reach an open one.
+      notifyChanged: notifySettingsChanged,
     });
     registerHotkeysAndWarn();
   }
@@ -1318,6 +1321,8 @@ function registerAppIpc(): void {
       keepPinnedInView: settings.keepPinnedInView,
       editorFontSize: settings.editorFontSize,
       theme: settings.theme,
+      openAtLogin: settings.openAtLogin,
+      appVersion: app.getVersion(),
     };
   });
 
@@ -1358,6 +1363,27 @@ function registerAppIpc(): void {
    */
   ipcMain.handle(IPC.setTheme, (_event, theme: Theme) => {
     saveSettings({ theme: applyTheme(theme) });
+  });
+
+  /**
+   * B61's login item, now asked from the Settings panel as well as from the tray.
+   *
+   * **One route to `setLoginItemSettings`, and it is `applyLoginItem`.** That is the whole
+   * point of B61: the tray used to call Electron directly with `{ openAtLogin }` alone,
+   * which silently dropped the `--login` argument that tells the next startup to stay
+   * quiet. Two callers into one function cannot disagree about that; two callers into
+   * Electron would, on the first click.
+   *
+   * `buildTrayMenu` afterwards so the tray's own checkbox follows the panel — the two are
+   * showing one value and it would be a poor kind of setting that needed the app restarted
+   * before its other control agreed. `notifySettingsChanged` for the same reason in the
+   * other direction: the tray's click lands here too, and an open panel has to hear it.
+   */
+  ipcMain.handle(IPC.setOpenAtLogin, (_event, open: boolean) => {
+    saveSettings({ openAtLogin: open });
+    applyLoginItem(open);
+    buildTrayMenu();
+    notifySettingsChanged();
   });
 
   /**

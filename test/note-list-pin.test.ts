@@ -149,6 +149,7 @@ function buildFake(
     setKeepPinnedInView: async () => {},
     setEditorFontSize: async () => {},
     setTheme: async () => {},
+    setOpenAtLogin: async () => {},
     checkForUpdates: async () => {},
     onUpdateCheckState: () => () => {},
     setHotkey: async () => true,

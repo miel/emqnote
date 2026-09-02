@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("emqnote", {
   setKeepPinnedInView: (keep: boolean) => ipcRenderer.invoke(IPC.setKeepPinnedInView, keep),
   setEditorFontSize: (px: number) => ipcRenderer.invoke(IPC.setEditorFontSize, px),
   setTheme: (theme: string) => ipcRenderer.invoke(IPC.setTheme, theme),
+  setOpenAtLogin: (open: boolean) => ipcRenderer.invoke(IPC.setOpenAtLogin, open),
   checkForUpdates: () => ipcRenderer.invoke(IPC.checkForUpdates),
   onUpdateCheckState: (handler: (checking: boolean) => void) =>
     subscribe<boolean>(IPC.updateCheckState, handler),

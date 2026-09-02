@@ -110,18 +110,36 @@ describe("the stylesheets: the undimmed overlays out-rank the dimmed one", () =>
  *
  * The settings sheet is a flex child of `.overlay`, which is `position: fixed` — so it is
  * not in the page's own flow and the window's scrollbar has nothing to do with it. On a
- * short screen the vault list and the Close button below it were off the bottom edge with
+ * short screen the vault list and the dismiss button below it were off the bottom edge with
  * no way to reach either, which is a dialog you cannot dismiss with the mouse.
  *
  * Both halves are checked because either alone is useless: a `max-height` with no
  * `overflow-y` clips the rows instead of scrolling to them.
+ *
+ * **The two halves are on two different rules now** (B100), and the split is the point.
+ * The cap stays on `.settings`, because the overlay is what it is measured against; the
+ * scrolling moved to `.settings-pane`, because the head band with the search in it and the
+ * rail saying which group you are standing on both have to stand still while the rows move
+ * under them. A panel that still scrolled as a whole would carry both off the top of the
+ * screen on the way to the row it was opened for. Asserting `overflow-y` on `.settings`
+ * would now pin a rule doing nothing, which is worse than pinning no rule at all.
  */
 describe("the stylesheets: the settings panel fits the screen", () => {
   it("caps .settings against the height the overlay leaves it", () => {
     expect(rule(".settings")).toMatch(/max-height:\s*calc\(100% - \d+px\);/);
   });
 
-  it("scrolls what does not fit rather than clipping it", () => {
-    expect(rule(".settings")).toMatch(/overflow-y:\s*auto;/);
+  it("scrolls the pane rather than clipping what does not fit", () => {
+    expect(rule(".settings-pane")).toMatch(/overflow-y:\s*auto;/);
+  });
+
+  it("keeps the head band and the rail out of that scroll", () => {
+    // `flex: none` on the band, and the pane is the only child of `.settings-body` that
+    // scrolls. Without the `min-height: 0` a flex item refuses to shrink below its content,
+    // the pane's `overflow-y` never engages, and the panel grows straight past the cap
+    // above — which is the exact failure that cap was added to prevent.
+    expect(rule(".settings-head")).toMatch(/flex:\s*none;/);
+    expect(rule(".settings-body")).toMatch(/min-height:\s*0;/);
+    expect(rule(".settings-pane")).toMatch(/min-height:\s*0;/);
   });
 });

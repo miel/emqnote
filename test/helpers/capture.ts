@@ -295,6 +295,8 @@ export async function mountCapture(
       keepPinnedInView: false,
       editorFontSize: 16,
       theme: "system" as const,
+      openAtLogin: true,
+      appVersion: "0.0.0-test",
     }),
     ...spies,
   };

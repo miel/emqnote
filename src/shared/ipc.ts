@@ -237,6 +237,19 @@ export const IPC = {
    */
   setTheme: "app:set-theme",
   /**
+   * renderer → main: whether emqnote starts with the machine (B61's `openAtLogin`).
+   *
+   * It has been a setting since B61 and a *tray checkbox* for just as long, which is the
+   * one place in this app nobody looks — the same complaint that moved the update check
+   * into the Settings panel. So the panel asks it too, and both routes land here rather
+   * than each calling `setLoginItemSettings` for itself: B61 exists precisely because the
+   * tray set it directly and dropped the `--login` argument doing so.
+   *
+   * Awaited, so the panel can refresh the bootstrap behind it and the tray menu it now
+   * shares a value with is rebuilt before the answer comes back.
+   */
+  setOpenAtLogin: "app:set-open-at-login",
+  /**
    * renderer → main: the user asked whether there is a new version (B22's check, from the
    * Settings panel as well as from the tray).
    *
@@ -486,6 +499,22 @@ export interface Bootstrap {
    * `prefers-color-scheme` exactly as they did when the OS was the only voice in it.
    */
   theme: Theme;
+  /**
+   * Whether emqnote starts with the machine (B61) — for the Settings row, and for nothing
+   * else. Main is what actually applies it, through `applyLoginItem`.
+   *
+   * It rides the bootstrap rather than being asked for on mount because the tray can change
+   * it too, and `settingsChanged` is what tells an open panel that happened.
+   */
+  openAtLogin: boolean;
+  /**
+   * What `app.getVersion()` says, for the About group.
+   *
+   * Read-only and therefore the one bootstrap field with no setter beside it. It was in the
+   * tray menu and nowhere else; a version you cannot read without opening a menu is a
+   * version you cannot quote in a bug report.
+   */
+  appVersion: string;
 }
 
 /**
@@ -878,6 +907,8 @@ export interface CaptureApi {
   setEditorFontSize: (px: number) => Promise<void>;
   /** B90's theme. Awaited for the same reason `setEditorFontSize` is. */
   setTheme: (theme: Theme) => Promise<void>;
+  /** B61's login item, from the Settings panel as well as the tray. See `IPC.setOpenAtLogin`. */
+  setOpenAtLogin: (open: boolean) => Promise<void>;
   /**
    * Asks main to check GitHub for a newer release, the same check the tray item runs.
    * Resolves when the check has been started; what it found is a native dialog.

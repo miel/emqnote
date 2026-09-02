@@ -161,6 +161,15 @@ undo by accident and expensive to rediscover:
   takes the window move away. The note's title needs both, so `window-drag.ts` watches the
   press and main moves the window — and the click that Chromium fires *after* a drag has to
   be suppressed, or letting go of a dragged title opens the rename.
+- **Settings is six groups beside one pane, and its rows are data** (B100). `Settings.tsx`
+  declares a registry — group, label key, the key of the sentence underneath, what it draws
+  — and the JSX maps over it, the same relationship `shortcuts.ts` has with `Help.tsx`: the
+  head band's search can only find what it knows is there. A row is *absent* while its group
+  is not showing, not hidden, so every test reaching for one stands the rail on its group
+  first. The panel prints the platform's chord (`formatAccelerator`) and saves Electron's —
+  format on the way out too and the global hotkey silently stops working on one platform.
+  The cap is on `.settings` and the scrolling on `.settings-pane`, or the search field goes
+  off the top of the screen on the way to the row it was opened for.
 - **A diagnosis that survives its own bug report is incomplete, not wrong.** Reach for one of the diagnostic helpers above before shipping a second fix for the same complaint.
 
 ## Tests

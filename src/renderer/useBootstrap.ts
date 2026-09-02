@@ -36,6 +36,11 @@ const FALLBACK: Bootstrap = {
   keepPinnedInView: false,
   editorFontSize: 13,
   theme: "system",
+  openAtLogin: true,
+  // Empty rather than a guess: this is the one field with no sensible fallback, and the
+  // About row draws it. A number invented here would be a wrong version number on screen
+  // for the length of a round trip, which is worse than a blank one.
+  appVersion: "",
 };
 
 /**

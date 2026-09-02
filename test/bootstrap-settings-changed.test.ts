@@ -41,6 +41,8 @@ const SETTINGS: Bootstrap = {
   keepPinnedInView: false,
   editorFontSize: 16,
   theme: "system" as const,
+  openAtLogin: true,
+  appVersion: "0.0.0-test",
 };
 
 let current: Bootstrap = SETTINGS;

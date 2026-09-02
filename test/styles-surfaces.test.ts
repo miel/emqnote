@@ -117,6 +117,12 @@ describe("styles: hover and selection come from two tokens, not from literals", 
     [library, "\\.task-row:hover"],
     [shared, "\\.chrome-button:hover:not\\(:disabled\\)"],
     [shared, "\\.find-button:hover"],
+    // B100 brought the settings panel onto the roles. The rail is a list of rows beside a
+    // pane, like the tree beside the note list, and it is drawn like one; the vault list
+    // below it used to change a *border* colour on hover, which made these two the odd
+    // pair out in the window.
+    [library, "\\.settings-category:hover"],
+    [library, "\\.vault:hover:not\\(:disabled\\)"],
   ] as const;
 
   const selected = [
@@ -127,6 +133,10 @@ describe("styles: hover and selection come from two tokens, not from literals", 
     [shared, "\\.palette-on"],
     [shared, "\\.header \\.tag-suggest button\\.tag-suggest-on"],
     [shared, "\\.context-menu-active:not\\(:disabled\\)"],
+    [library, "\\.settings-category-on"],
+    // Was `border-color: var(--accent) !important`, which is the one thing B87 says a
+    // selected row must not be: "selected" is the fill, and the chosen row wears no accent.
+    [library, "\\.vault-on"],
   ] as const;
 
   it("draws every hover with var(--hover)", () => {

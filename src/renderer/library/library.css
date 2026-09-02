@@ -1101,13 +1101,21 @@
    selector here naming `.ask` would put a rule for the capture window in the stylesheet
    that window does not load. */
 .settings {
-  width: min(420px, 80vw);
-  /* **The panel scrolls rather than running off the bottom of the screen.** It has grown
-     a row at a time — two hotkeys, pictures, pinned rows, text size, theme, the vault
-     list, and now the update check — and on a laptop panel in a window that is not full
+  /* Wider than the 420px it was, because there is a rail beside the pane now (B100). The
+     panel used to be a single column and the width was `.ask`'s; a column of names and a
+     column of rows at 420px leaves neither of them room. */
+  width: min(720px, 92vw);
+  /* **The panel still caps its own height, and the pane inside it is what scrolls.** It
+     had grown a row at a time — two hotkeys, pictures, pinned rows, text size, theme, the
+     vault list, the update check — and on a laptop panel in a window that is not full
      height the vault list and the Close button were simply below the edge, with no way to
      reach them: an `.overlay` child is centred by flex, not laid out in the page, so the
      window's own scrollbar never appears for it.
+
+     The cap stays here and the `overflow-y` moved to `.settings-pane`. It has to be that
+     way round: the head band and the rail are meant to stand still while the rows move
+     under them, and a panel that scrolled as a whole would carry the search field and the
+     group you are standing on off the top of the screen.
 
      `100%` and not a `vh` figure copied from `.overlay`: this is a flex item in a
      container that is `inset: 0` with `padding-top: 12vh`, so a percentage resolves
@@ -1115,26 +1123,231 @@
      of step with it. The 12px is the gap kept at the bottom, so a panel at its full height
      still reads as a panel rather than as something cut off. */
   max-height: calc(100% - 12px);
-  overflow-y: auto;
-  /* The library behind this must not scroll when the panel reaches its end. */
-  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  /* No padding of its own any more: the head band, the rail and the pane each carry their
+     own, because the two rules between them have to reach the panel's edges. */
+  min-height: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 16px 18px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+  /* The head band's rule and the rail's have square corners; this rounds them back. */
+  overflow: hidden;
 }
 
+/* ---- the head band: title, search, dismiss ---- */
+
+/* Deliberately not a `.pane-header`. That component is 40px and a drag region, both of
+   which are wrong here: this panel is not chrome the window is moved by, and
+   `styles-pane-bands.test.ts` counts that `height: 40px` is stated exactly once in the
+   whole app. The height comes from the padding, the same way `.help-head`'s does. */
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-head h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* The search sits *in* the head band between the heading and the ×, which is the one part
+   of this panel that is not the thing being searched — the same arrangement the shortcut
+   sheet's field has, and the note list's.
+
+   `flex: 1` with a `min-width: 0`, so it takes what the heading and the × leave and no
+   more: at the narrow end this panel is 92vw of a 520px window, and a fixed width here
+   would push the × off the edge before it pushed anything else. */
+.settings-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.settings-search:focus {
+  border-color: var(--accent);
+}
+
+.settings-search::placeholder {
+  color: var(--muted);
+}
+
+.settings-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.settings-close:hover {
+  color: var(--text);
+}
+
+/* ---- the rail and the pane ---- */
+
+.settings-body {
+  display: flex;
+  /* `min-height: 0` on both, or a flex item refuses to shrink below its content and the
+     pane's own `overflow-y` never engages — the panel grows past its `max-height` instead,
+     which is the exact failure the cap was added to prevent. */
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.settings-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 150px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+/* A row in the rail, drawn like a row in the tree beside it: the states are the roles and
+   nothing else (B87). Hover fills, chosen fills harder, and the chosen one wears no accent
+   colour — "selected" is the fill in this app, in all four places it now happens. */
+.settings-category {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: default;
+}
+
+.settings-category:hover {
+  background: var(--hover);
+}
+
+.settings-category-on {
+  background: var(--selected);
+  font-weight: 600;
+}
+
+/* The same ring the three panes wear, and for the reason B91 gives: take it away and the
+   UA draws its own, in the platform's accent colour rather than the app's. */
+.settings-category:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* This is what scrolls — see `.settings`' own note on why the cap is up there and the
+   overflow is down here. */
+.settings-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* The library behind this must not scroll when the pane reaches its end. */
+  overscroll-behavior: contain;
+  padding: 14px 18px 16px;
+}
+
+/* A heading per group, drawn like the shortcut sheet's. It is still there when the rail
+   has narrowed the pane to one group, and that is deliberate: with the search filtering,
+   the pane shows rows from several groups at once and the heading is the only thing saying
+   which is which — a heading that came and went with the search would leave the panel
+   looking like two different screens. */
+.settings-group h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* Groups after the first only appear while searching; this is the air between them. */
+.settings-group + .settings-group {
+  margin-top: 18px;
+}
+
+/* One row and the sentence that belongs to it, kept together so the search can drop either
+   without leaving the other stranded under the wrong label. */
+.settings-item:last-child > .settings-row:last-child {
+  margin-bottom: 0;
+}
+
+/* A search that found nothing says so. Without it the pane simply empties, which reads as
+   the panel having broken rather than as an answer. */
+.settings-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The one value in this panel that is shown rather than set. Muted, because it is not a
+   control and should not look like one that has been disabled. */
+.settings-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Below this the panel is too narrow for two columns — 92vw of a 520px window is 478px,
+   and a 150px rail would leave the rows fighting for what is left. The rail becomes a
+   strip above the pane that scrolls sideways instead. */
+@media (max-width: 600px) {
+  .settings-body {
+    flex-direction: column;
+  }
+
+  .settings-rail {
+    flex: none;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    gap: 2px;
+    overflow-x: auto;
+  }
+
+  .settings-category {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+/* **The border is `--border` at rest and `--accent` on focus** (B100), which is the other
+   way round from how this rule was written. It was copied from `.ask input`, where a
+   permanent accent border is right: that dialog has one field, the caret is put in it on
+   opening, and the border is saying so. Here there are two dropdowns among a dozen rows and
+   nothing is focused, so an accent outline on both was a resting control drawn as if it
+   were being typed in — the one thing in either window that did that, which is why
+   `styles.css` calls it out beside `.chrome-button`. Now it matches `.settings-search` and
+   every other field in the app: quiet until it is the one you are on. */
 .settings select {
   width: 100%;
   font: inherit;
   font-size: 14px;
   color: inherit;
   background: var(--field);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 9px;
   outline: none;
+}
+
+.settings select:focus {
+  border-color: var(--accent);
 }
 
 .settings-buttons {
@@ -1158,11 +1371,6 @@
 .settings-buttons .primary {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.settings h2 {
-  margin: 0 0 14px;
-  font-size: 15px;
 }
 
 .settings-row {
@@ -1246,12 +1454,17 @@
   cursor: default;
 }
 
+/* On the roles rather than on a border colour (B87), which is what these two were and what
+   made them the odd pair out in this window: everywhere else a row under the pointer fills
+   with `--hover` and the chosen one fills with `--selected`, and the chosen one wears no
+   accent. The `!important` went with the border it was defending — the fill and the
+   transparent border in `.vault` no longer collide. */
 .vault:hover:not(:disabled) {
-  border-color: var(--border);
+  background: var(--hover);
 }
 
 .vault-on {
-  border-color: var(--accent) !important;
+  background: var(--selected);
 }
 
 /* Shown rather than hidden. Just after logging in, before OneDrive has mounted its

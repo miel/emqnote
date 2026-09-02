@@ -3,6 +3,43 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 2 September 2026 — **the settings panel is a rail of six groups beside one
+scrolling pane, with a search field** (**B100**).
+
+It was ten controls in one column with no headings, and the stylesheet beside it had written
+the complaint down already: the `max-height` on `.settings` carries a paragraph saying it
+exists *because* the panel kept growing a row at a time, and `drive-library.ts` has a step
+proving the Close button had once fallen below the bottom edge of a short window. General,
+Appearance, Shortcuts, Notes, Vault, About — eight settings in six groups, which is
+deliberately more structure than today needs: the point of doing it now is that the next
+setting has a home rather than being wedged in wherever the column ended.
+
+The build detail worth carrying: **the rows are declared as data**, group and label key and
+the key of the sentence underneath, and the JSX maps over that — the same relationship
+`shortcuts.ts` has with `Help.tsx`, because a filter can only find what it knows is there. A
+search written against the markup would be a second list of the panel's contents, and the
+first row added without an entry in it would go silently unfindable.
+
+Three gaps closed with it. **The two chords are printed in the platform's notation** —
+`formatAccelerator` existed, documented and tested, since the help sheet needed it and was
+called from nowhere in `src/`, so the sheet that lists the shortcut and the panel that sets it
+disagreed about how to spell it; what is *saved* is still Electron's accelerator, and must
+stay so. **"Start at login" has a second entry point**, the tray checkbox being the one place
+nobody looks — both routes now land on one handler that calls `applyLoginItem`, rebuilds the
+tray menu and broadcasts. **The version is on screen**, having been in the tray menu and
+nowhere else. Two alignments went in while the file was open: the vault list came onto the six
+roles (B87), and the dropdowns stopped wearing an accent border at rest, which drew a resting
+control as a focused one.
+
+**What is open on it.** `TEST-PROTOCOL.md` §55, and 55a in particular: whether the six group
+names are the six a hand reaches for is the judgement this design rests on and the one no test
+can make. Also both chord rows on both machines — `drive:library` proves the notation changes,
+but only a Mac and a Windows box can prove it changes to the *right* thing on each. The two
+new drive steps confirm the rest under `Xvfb`: six groups, one Tab stop, and a real Tab from
+the rail landing in the pane.
+
+---
+
 Last updated 2 September 2026, released as `v0.12.12` — one nitpick from daily use (**B94**'s
 addendum): **the capture window can be picked up by its title band**, the way the library's
 reader has been able to since B94.
