@@ -23,19 +23,29 @@ let tray: Tray | null = null;
 /**
  * What the tray needs from `index.ts` to open another vault, handed in rather than
  * imported: `askForVault` and `switchVaultTo` live there, and there is where the tray
- * itself is created — importing back would be a cycle. Three functions, all of which
- * already existed for the settings panel.
+ * itself is created — importing back would be a cycle. The first three already existed
+ * for the settings panel.
  */
-export interface VaultActions {
+export interface TrayActions {
   /** Every vault this machine knows about, current one first. */
   list: () => VaultLocation[];
   /** The folder picker, with the tenant question in front of it where that applies. */
   choose: () => Promise<string | null>;
   /** Flushes everything in flight, points the app at `path` and restarts (B21). */
   switchTo: (path: string) => Promise<void>;
+  /**
+   * `notifySettingsChanged` from `index.ts` — raised when the tray changes a value a
+   * window is drawing (B100).
+   *
+   * "Start at login" is in the Settings panel now as well as here, and the two are showing
+   * one value. Without this the tray's click saved it, applied it and redrew its own
+   * checkbox while an open panel went on showing the old answer until it was closed and
+   * reopened.
+   */
+  notifyChanged: () => void;
 }
 
-let vaultActions: VaultActions | null = null;
+let vaultActions: TrayActions | null = null;
 
 /**
  * The tray icon is computed rather than loaded from a file. See `src/shared/glyph.ts`
@@ -164,6 +174,8 @@ export function buildTrayMenu(): void {
           // from a double-click (B61).
           applyLoginItem(item.checked);
           buildTrayMenu();
+          // The Settings panel shows this too now (B100), and it is one value.
+          vaultActions?.notifyChanged();
         },
       },
       {
@@ -183,7 +195,7 @@ export function buildTrayMenu(): void {
   );
 }
 
-export function createTray(actions: VaultActions): Tray {
+export function createTray(actions: TrayActions): Tray {
   vaultActions = actions;
   tray = new Tray(trayIcon());
   tray.setToolTip("emqnote");

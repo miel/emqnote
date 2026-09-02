@@ -81,6 +81,9 @@ describe("the settings panel's theme row", () => {
           keepPinnedInView: false,
           editorFontSize: 16,
           theme,
+          isMac: false,
+          openAtLogin: true,
+          appVersion: "0.0.0-test",
           vaultPath: "/vault",
           // The real keys, so a renamed one fails here rather than drawing a row labelled
           // "settings.theme" with three options called "settings.themeSystem".
@@ -90,6 +93,7 @@ describe("the settings panel's theme row", () => {
               "settings.themeSystem": "System",
               "settings.themeLight": "Light",
               "settings.themeDark": "Dark",
+              "settings.group.appearance": "Appearance",
             };
             return (table as Record<string, string>)[key] ?? key;
           },
@@ -100,6 +104,23 @@ describe("the settings panel's theme row", () => {
       );
     });
     await flush();
+    stand("Appearance");
+  }
+
+  /**
+   * Stands the rail on a group, by the name it draws (B100).
+   *
+   * The panel is six groups beside one pane now, and a row is only in the DOM while its own
+   * group is showing. By label rather than by `data-group`, for the reason the `t` table
+   * above is the real one: a group renamed out from under this file should fail it.
+   */
+  function stand(label: string): void {
+    const tab = Array.from(container.querySelectorAll<HTMLElement>(".settings-category")).find(
+      (node) => node.textContent === label,
+    )!;
+    act(() => {
+      tab.click();
+    });
   }
 
   /** The `<select>` on the row labelled "Theme", found the way a reader finds it. */

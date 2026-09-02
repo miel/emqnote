@@ -3840,10 +3840,13 @@ export function Library(): React.ReactElement {
           locale={app.locale}
           hotkey={app.hotkey}
           libraryHotkey={app.libraryHotkey}
+          isMac={app.isMac}
           loadRemoteImages={app.loadRemoteImages}
           keepPinnedInView={app.keepPinnedInView}
           editorFontSize={app.editorFontSize}
           theme={app.theme}
+          openAtLogin={app.openAtLogin}
+          appVersion={app.appVersion}
           vaultPath={app.vaultPath}
           t={app.t}
           onChanged={() => void app.reload()}

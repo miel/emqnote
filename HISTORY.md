@@ -2356,3 +2356,79 @@ window up.
 **What is left for a person**: how the gesture *feels* on a real trackpad, on both platforms —
 the 4px threshold is the same one the reader has carried since B94, but the capture window is
 smaller and its band is one field wide.
+
+---
+
+## Settings becomes six groups beside one pane (2 September 2026)
+
+`Settings.tsx` was ten controls in one column, and the stylesheet next to it had already
+written the complaint down: beside `.settings`' `max-height` stood a paragraph explaining that
+the cap existed *because* the panel kept growing — two hotkeys, pictures, pinned rows, text
+size, theme, the update check, the vault list, one row at a time — and `drive-library.ts` had a
+step proving the Close button had once been below the bottom edge of a short window. A column
+answers "where do I change the theme" by making you read all of it.
+
+It is now a rail of six groups — General, Appearance, Shortcuts, Notes, Vault, About — beside
+one scrolling pane, with a search field in the head band. Eight settings in six groups is
+deliberately more structure than today needs: the point of doing it now is that the next
+setting has an obvious home rather than being wedged in wherever the column ended. B100 has the
+reasoning, including why a rail rather than tabs (a tab strip breaks at group seven, in a panel
+that is already tight on a short window) or a longer column (which is the thing that broke).
+
+Three things came in with it, and each was a gap rather than a decoration:
+
+**The chords are printed in the platform's own notation.** `formatAccelerator` in
+`src/shared/shortcuts.ts` turns `CommandOrControl+Shift+Y` into `⇧⌘Y` or `Ctrl+Shift+Y`. It has
+existed, documented and unit-tested, since the help sheet needed it — and was called from
+nowhere in `src/`, so the sheet that lists the shortcut and the panel that sets it disagreed
+about how to spell it, on both platforms. What is *saved* is unchanged and must stay unchanged:
+`globalShortcut` accepts no `⇧⌘Y`, so formatting on the way out too would give a global hotkey
+that silently stops working after a settings change, on one platform only. That is what
+`settings-hotkey-format.test.ts` asserts on — the argument, not just the label.
+
+**"Start at login" gained a second entry point.** It has been a real setting since B61 and a
+tray checkbox for exactly as long, which is the place `HISTORY.md` already recorded as the one
+nobody looks in — the same sentence that moved the update check into this panel. The tray item
+stays; both routes now land on one handler which calls `applyLoginItem` (never
+`setLoginItemSettings`, which is the whole of B61), rebuilds the tray menu and broadcasts, so
+the two controls cannot show different answers. `TrayActions` grew a `notifyChanged` for the
+half that goes the other way.
+
+**The version is on screen.** It was in the tray menu and nowhere else, which is a poor place
+for the first number anyone is asked for when something goes wrong.
+
+The piece worth remembering about the build is that **the rows are data**. `Settings.tsx` holds
+a registry — group, label key, the key of the sentence underneath, what it draws — and the JSX
+maps over it, which is the same relationship `shortcuts.ts` has with `Help.tsx` and exists for
+the same reason: the head band's filter can only find what it knows is there. A search written
+against the markup would be a second list of the panel's contents, and the first row added
+without a matching entry would become silently unfindable in the one control whose job is
+finding things. The filter reads the label *and* the sentence, because "Load images from the
+web" never says the word "internet" and that is exactly what someone would search for.
+
+Two smaller alignments went in while the file was open. The vault list came onto the six roles
+(B87) — `.vault:hover` and `.vault-on` were changing a *border* colour, with an `!important`,
+and were the last pair in this window not doing what every other row does. And the head band is
+deliberately **not** a `PaneHeader`: that component is 40px and a drag region, both wrong here,
+and `styles-pane-bands.test.ts` counts that `height: 40px` is stated exactly once in the whole
+app. The band takes its height from padding, as `.help-head` does. For the same reason the rows
+did not become `ChromeButton`s — `.settings-row button` is a hotkey recorder and a folder
+picker, and neither is chrome. `.settings-row`, `.settings select`, `.settings-note` and
+`.settings-warning` kept their names and their shape; the new work is the shell around them,
+which is also why the three settings tests that predate this needed one line each rather than
+a rewrite.
+
+Confirmed under `Xvfb`, driven over CDP: `drive:library` has two settings steps now. The first
+is the old one, rewritten — the panel fits a 520px window and the rail holds six groups — and
+the second is new and asks the two questions jsdom cannot: that exactly one rail button is in
+the Tab order, and that a **real Tab** from the rail lands in the pane rather than walking six
+names first. Under `test/`: `settings-categories`, `settings-search`, `settings-hotkey-format`,
+`settings-start-at-login` and `styles-settings` are new; `styles-overlay` had its
+`.settings` `overflow-y` assertion moved to `.settings-pane`, because the cap and the scroll are
+now on two different rules on purpose and pinning a rule that does nothing is worse than
+pinning none.
+
+**What is left for a person**: whether the six group names are the six a hand reaches for — the
+one judgement this design rests on, and the one no test can make — and both chord rows on both
+machines, which is the half of the shortcut change that only shows up where the platform
+differs. `TEST-PROTOCOL.md` §55.

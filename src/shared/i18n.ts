@@ -402,7 +402,26 @@ const DUTCH: Record<string, string> = {
 
   // Settings
   "settings.title": "Instellingen",
+  // B100. De namen van de zes groepen in de linkerkolom. Zelfstandige naamwoorden van één
+  // woord: ze staan onder elkaar in een smalle kolom en moeten van elkaar te onderscheiden
+  // zijn met een blik, niet met een zin.
+  "settings.group.general": "Algemeen",
+  "settings.group.appearance": "Weergave",
+  "settings.group.shortcuts": "Sneltoetsen",
+  "settings.group.notes": "Notities",
+  "settings.group.vault": "Vault",
+  "settings.group.about": "Over",
+  // Zoeken door alle groepen heen (B100), net als in het sneltoetsoverzicht. "Zoeken in
+  // instellingen" en niet alleen "Zoeken": in een venster met drie zoekvelden zegt het
+  // korte woord niet welk je voor je hebt.
+  "settings.search": "Zoeken in instellingen",
+  "settings.noMatch": "Geen instelling gevonden.",
   "settings.language": "Taal",
+  // B61 zat alleen in het menu van het systeemvakpictogram, dezelfde plek waar niemand
+  // "Controleren op updates…" vond. Hij staat er nog steeds óók.
+  "settings.startAtLogin": "Starten bij aanmelden",
+  "settings.startAtLoginWhy":
+    "emqnote start mee met de computer en blijft stil op de achtergrond wachten, zodat de sneltoets meteen werkt. Zonder dit moet je de app eerst zelf openen.",
   "settings.hotkey": "Sneltoets voor een nieuwe notitie",
   "settings.libraryHotkey": "Sneltoets voor de bibliotheek",
   "settings.hotkeyHint": "Klik en druk de toetsencombinatie in.",
@@ -441,6 +460,10 @@ const DUTCH: Record<string, string> = {
   // dat is precies de plek waar niemand hem zoekt — op Windows kan dat pictogram
   // bovendien onder het pijltje zijn opgeborgen.
   "settings.updates": "Updates",
+  // De versie stond in het menu van het systeemvakpictogram en nergens anders. Een versie
+  // die je niet kunt aflezen zonder een menu open te klappen, is er één die niet in een
+  // foutmelding terechtkomt.
+  "settings.version": "Versie",
   "settings.updatesCheck": "Controleren op updates…",
   // Wat de knop zegt terwijl hij bezig is (B98). GitHub kan er even over doen, en tot nu
   // toe veranderde er in die tijd niets op het scherm.
@@ -898,7 +921,25 @@ const ENGLISH: Record<string, string> = {
   "folder.moveFailed": "The folder could not be moved.",
 
   "settings.title": "Settings",
+  // B100. The six group names in the rail. One-word nouns: they stand under each other in
+  // a narrow column and have to be told apart at a glance rather than read.
+  "settings.group.general": "General",
+  "settings.group.appearance": "Appearance",
+  "settings.group.shortcuts": "Shortcuts",
+  "settings.group.notes": "Notes",
+  "settings.group.vault": "Vault",
+  "settings.group.about": "About",
+  // Search across every group (B100), the same as the shortcut sheet's. "Search settings"
+  // rather than plain "Search": in a window with three search fields the short word does
+  // not say which one you are looking at.
+  "settings.search": "Search settings",
+  "settings.noMatch": "No setting matches that.",
   "settings.language": "Language",
+  // B61 lived only in the tray menu, the same place nobody found "Check for updates…" in.
+  // It is still there as well.
+  "settings.startAtLogin": "Start at login",
+  "settings.startAtLoginWhy":
+    "emqnote starts with the computer and waits quietly in the background, so the shortcut works straight away. Without it you have to open the app yourself first.",
   "settings.hotkey": "Shortcut for a new note",
   "settings.libraryHotkey": "Shortcut for the library",
   "settings.hotkeyHint": "Click, then press the key combination.",
@@ -937,6 +978,9 @@ const ENGLISH: Record<string, string> = {
   // where nobody looks for it — and on Windows that icon may be folded away under the
   // overflow chevron.
   "settings.updates": "Updates",
+  // The version was in the tray menu and nowhere else. A version you cannot read without
+  // opening a menu is one that never makes it into a bug report.
+  "settings.version": "Version",
   "settings.updatesCheck": "Check for updates…",
   // What the button says while it is busy (B98). GitHub can take a moment, and until now
   // nothing on screen changed while it did.

@@ -50,6 +50,7 @@ describe("the settings panel's update check", () => {
       setLoadRemoteImages: async () => {},
       setEditorFontSize: async () => {},
       setTheme: async () => {},
+      setOpenAtLogin: async () => {},
       setLocale: async () => {},
       chooseVault: async () => null,
       switchVault: async () => {},
@@ -79,6 +80,9 @@ describe("the settings panel's update check", () => {
           keepPinnedInView: false,
           editorFontSize: 16,
           theme: "system",
+          isMac: false,
+          openAtLogin: true,
+          appVersion: "0.0.0-test",
           vaultPath: "/vault",
           // The real keys, so a renamed one fails here rather than drawing a button
           // labelled "settings.updatesCheck".
@@ -87,6 +91,7 @@ describe("the settings panel's update check", () => {
               "settings.updates": "Updates",
               "settings.updatesCheck": "Check for updates…",
               "settings.updatesChecking": "Checking for updates…",
+              "settings.group.about": "About",
             })[key] ?? key,
           onChanged: () => {},
           onBeforeSwitch: async () => {},
@@ -95,6 +100,16 @@ describe("the settings panel's update check", () => {
       );
     });
     await flush();
+
+    // The update check is in the About group now (B100), and a row is only in the DOM
+    // while its own group is showing — so the rail has to be stood on it first. By the
+    // name it draws, for the reason the `t` table above is the real one.
+    const tab = Array.from(container.querySelectorAll<HTMLElement>(".settings-category")).find(
+      (node) => node.textContent === "About",
+    )!;
+    act(() => {
+      tab.click();
+    });
   });
 
   afterEach(() => {

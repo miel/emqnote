@@ -4301,3 +4301,130 @@ het vinkje geweigerd wordt zolang er geen notitie open is, en — de kern — da
 map *en* een notitie uit een andere map samen tot `tasks("00 Inbox", true)` leiden met één
 rij op het scherm. Dat laatste is precies de zeef-over-de-opgehaalde-rijen die niet werkt,
 dus wordt op de aanroep geasserteerd en niet alleen op wat er te zien is.
+
+---
+
+## B100 — Instellingen is een lijst met groepen naast één paneel, met een zoekveld erboven
+
+**Genomen** op 2 september 2026, uit dagelijks gebruik. Instellingen was tien besturings-
+elementen onder elkaar in één kolom, zonder kopjes en met één `<h2>` erboven. Het is er zo
+één rij per keer bij gekomen — twee sneltoetsen, plaatjes, vastgeprikte rijen, tekstgrootte,
+thema, de updatecontrole, de vaultlijst — en de stylesheet schreef dat zelf al op: naast de
+`max-height` van `.settings` staat een alinea die uitlegt dat die er is *omdat* het paneel
+bleef groeien, en `scripts/drive-library.ts` heeft een stap die bewijst dat de Sluiten-knop
+onder de onderrand van een kort venster was verdwenen.
+
+**Het besluit.** Zes groepen in een kolom links, één paneel rechts, en een zoekveld in de
+kopstrook. Algemeen, Weergave, Sneltoetsen, Notities, Vault, Over. Acht instellingen in zes
+groepen is ruim bemeten en dat is de bedoeling: de indeling hoort er te staan vóórdat ze
+nodig is, want een groep die pas wordt bedacht als er tien rijen liggen, wordt bedacht om die
+tien rijen heen.
+
+**Een lijst en geen tabbladen, en geen langere kolom.** Alle drie lossen ze het kopjesprobleem
+op; ze verschillen in wat er gebeurt als er iets bij komt. Een kolom met kopjes wordt langer —
+dat is precies wat hier al misging, en het is het enige van de drie waarbij scrollen de manier
+blijft om iets te vinden. Een tabbladenrij wordt breder, en breekt bij groep zeven of acht om,
+in een paneel dat op een kort venster toch al krap staat. Een lijst links wordt langer in de
+richting waar de ruimte zit, en het paneel ernaast verandert niet van maat. Dat is dezelfde
+afweging die macOS, Windows en VS Code alle drie hebben gemaakt, en om dezelfde reden.
+
+**Het zoekveld is wat het geheel houdbaar maakt, niet een extraatje.** Een lijst beantwoordt
+"waar zet ik het thema" met een naam — maar alleen als je al raadt dat een thema onder
+Weergave valt en niet onder Algemeen, en het aantal instellingen waarbij dat raden nog lukt is
+precies het aantal waar dit paneel overheen aan het groeien was. Het veld staat in de
+kopstrook tussen de titel en de ×, dezelfde plek en dezelfde vorm als in het
+sneltoetsoverzicht: één begrip voor twee vensters.
+
+**De rijen zijn gegevens, en dat is de kern van de bouw.** `Settings.tsx` heeft nu een
+register — groep, sleutel van het label, sleutel van de zin eronder, en wat het tekent — en de
+JSX loopt daar overheen. Dat is dezelfde verhouding als `src/shared/shortcuts.ts` met
+`Help.tsx` heeft, en om dezelfde reden: een filter kan alleen vinden wat het weet dat er is,
+dus moet dat gegevens zijn. Een zoekfunctie tegen de JSX geschreven zou een tweede lijst zijn
+van wat het paneel bevat, en de eerste rij die er zonder bijbehorende regel bij kwam zou
+stilletjes onvindbaar worden — in het ene besturingselement dat er is om dingen te vinden.
+
+**Er wordt op het label én op de zin eronder gezocht.** De helft van deze rijen heet naar wat
+ze doen en wordt uitgelegd met wat ze kosten: "Afbeeldingen van het web laden" zegt het woord
+"internet" nergens, en "Andere map kiezen…" zegt niets over opnieuw opstarten. Alleen op de
+naam zoeken zou de zoekfunctie slechter maken dan de lijst zelf lezen.
+
+**Tijdens het zoeken is geen enkele groep de gekozene**, en de kopjes blijven staan. Het
+paneel toont dan rijen uit meerdere groepen tegelijk, dus zou één opgelichte groep in de lijst
+een onwaarheid zijn tegen alles wat de rollen leest — `aria-selected` staat op alle zes uit.
+De kopjes blijven omdat de groep is wat je vertelt *waar* de rij die je zocht woont; een platte
+lijst met treffers beantwoordt de vraag en vergeet het antwoord te leren. Op een groep klikken
+wist de zoekopdracht, want het zijn twee antwoorden op dezelfde vraag en er kan er maar één
+staan.
+
+**De getoonde toetsencombinatie en de opgeslagen zijn twee verschillende teksten.** De twee
+knoppen tekenden de accelerator zoals Electron hem spelt — `CommandOrControl+Shift+Y`, op
+beide platforms, in de enige plek waar je hem gaat veranderen. `formatAccelerator` in
+`src/shared/shortcuts.ts` maakt daar `⌘⇧Y` of `Ctrl+Shift+Y` van, bestaat en wordt getest
+sinds het sneltoetsoverzicht hem nodig had, en werd nergens in `src/` aangeroepen: het
+overzicht dat de sneltoets *opsomt* en het paneel dat hem *instelt* waren het oneens over hoe
+je hem schrijft. Wat er *weggaat* verandert niet en mag niet veranderen — `globalShortcut`
+kent geen "⌘⇧Y", en meeformatteren op de terugweg zou een sneltoets opleveren die na een
+instellingswijziging stilletjes stopt met werken, op één platform.
+
+**"Starten bij aanmelden" krijgt een tweede ingang en verhuist niet.** Het is een echte
+instelling sinds B61 en al even lang uitsluitend een vinkje in het menu van het
+systeemvakpictogram — dezelfde klacht waarmee "Controleren op updates…" naar dit paneel is
+gehaald. Het menu-item blijft: op Windows kan dat pictogram onder het pijltje zijn opgeborgen,
+en op macOS is het paneel twee vensters verderop. Beide routes komen uit bij één handler, die
+`applyLoginItem` aanroept — nooit `setLoginItemSettings` rechtstreeks, want dat is precies wat
+B61 heeft rechtgezet — het menu opnieuw opbouwt en `settingsChanged` uitzendt. Twee ingangen
+met één bron, dezelfde regel die de vaultlijst al volgt (B21's aanvulling).
+
+**De versie staat erbij, en het is de enige rij zonder instelling erachter.** Hij stond in het
+menu van het systeemvakpictogram en nergens anders, en dat is een slechte plek voor het getal
+waar als eerste om gevraagd wordt als er iets misgaat.
+
+**De × vervangt de Sluiten-knop onderaan.** Alles in dit paneel werkt meteen — er is geen
+OK/Annuleren en dat blijft zo — dus is er niets om te bevestigen op de weg naar buiten. Eén
+weg naar buiten in de kopstrook, waar het sneltoetsoverzicht hem ook heeft, plus Escape en de
+achtergrond. De knoppenrij onderaan blijft bestaan voor het enige wat hier wél bevestigd
+wordt: het opnieuw opstarten voor een andere vault.
+
+**De vaultlijst gaat mee op de zes rollen** (B87). `.vault:hover` en `.vault-on` veranderden
+een *randkleur*, met `!important` erbij, en waren daarmee het laatste paar in dit venster dat
+niet deed wat elke andere rij doet. Nu vult de rij onder de muis met `--hover` en de gekozene
+met `--selected`, zonder accentkleur — want "gekozen" is de vulling, in alle vier de plekken
+waar dat nu gebeurt.
+
+**De kopstrook is geen `PaneHeader`.** Die is 40 px en een sleepgebied, en allebei is hier
+verkeerd: dit paneel is geen vensterchroom waaraan het venster verplaatst wordt, en
+`styles-pane-bands.test.ts` telt dat `height: 40px` in de hele app precies één keer wordt
+uitgesproken. De hoogte komt uit de padding, zoals bij `.help-head`.
+
+**De hoogtebegrenzing blijft op het paneel en het scrollen verhuist naar het middenstuk.** Dat
+moet die kant op: de kopstrook met het zoekveld en de lijst die zegt waar je staat, moeten
+blijven staan terwijl de rijen eronder bewegen. Een paneel dat als geheel scrolt, draagt ze
+allebei van het scherm af op weg naar de rij waarvoor het werd geopend.
+
+**Verworpen:** een eigen venster voor Instellingen. Dat is wat een `BrowserWindow` erbij kost
+— een tweede venster om te positioneren, te onthouden en weer op te ruimen — voor een paneel
+dat één keer per maand open gaat, in een app waarvan de hele opzet is dat er precies twee
+vensters zijn (B2/B3).
+
+**Verworpen:** de rijen door `ChromeButton` laten tekenen. Verleidelijk, want dit paneel is het
+laatste vlak dat de chroomronde van B92 niet heeft gehad. Maar `.settings-row button` is de
+opnameknop van een sneltoets en de knop die een map kiest, en geen van beide is chroom: de een
+toont een waarde met een vaste breedte zodat hij niet springt als de combinatie langer wordt,
+de ander is een knop in een formulier. `.settings-row`, `.settings-row button`, `.settings
+select`, `.settings-note` en `.settings-warning` houden hun naam en hun vorm; het nieuwe zit
+er *omheen*.
+
+### Wat het bewijst
+
+`test/settings-categories.test.ts` (de zes groepen, in volgorde; dat alleen de groep waar je
+staat in de DOM zit; dat er precies één knop in de Tab-volgorde staat; de pijltjes, Home en
+End), `test/settings-search.test.ts` (een rij uit een groep waar je *niet* staat is te vinden;
+de kopjes blijven; de zin eronder telt mee; geen groep licht op; Escape wist eerst de vraag en
+sluit pas daarna), `test/settings-hotkey-format.test.ts` (beide combinaties in beide notaties,
+en — de kern — dat er nog steeds `CommandOrControl+Shift+K` wegg**aat**),
+`test/settings-start-at-login.test.ts`, en `test/styles-settings.test.ts` voor het chroom dat
+jsdom niet kan zien.
+
+Twee dingen kan geen van die bestanden bereiken en die staan in `scripts/drive-library.ts`:
+wat Tab vanuit de lijst *doet* — jsdom heeft geen focusnavigatie, dus alleen daar is een echte
+Tab in te drukken — en dat het paneel in een venster van 520 px past.

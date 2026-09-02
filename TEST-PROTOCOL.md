@@ -1689,7 +1689,7 @@ green on this machine and is here for a second pair of eyes on real hardware.
 | 48y | Open the shortcut sheet (⌘/ / Ctrl+/) and read it without scrolling | Two columns of roughly equal height, and no scrollbar. Both new chords are listed, and so are both global hotkeys |  |
 | 48z | Press `/`, type `ctrl alt t` | One row: "Insert a table". Now type `/` into the box — it should type a slash, not re-trigger the search |  |
 | 48aa | Press Escape once, then again | The query clears; the sheet stays. The second press closes it |  |
-| 48ab | Open Settings on a short window (drag the window's bottom edge up first) | The panel scrolls inside the window: the Close button is reachable without the panel running off the bottom edge |  |
+| 48ab | Open Settings on a short window (drag the window's bottom edge up first) | The **rows** scroll inside the panel while the title, the search field and the group list stay put. The × in the top right is reachable without the panel running off the bottom edge. Since B100 the panel is wider, so this is worth a look on a **narrow** window too — below about 600px the group list moves above the rows as a strip |  |
 | 48ac | Press "Check for updates…" in Settings | The same answer the tray item gives — a dialog either way, including "you are up to date" |  |
 | 48ad | Type `- [ ]` in a note, leave it empty, and save | The note's task badge does not count it, the folder badge above does not count it, and the Tasks view does not list it. Write something after the box: all three count it now |  |
 
@@ -1868,6 +1868,42 @@ a band that is one field wide.
 
 54d is the row to be honest on: it is the one behaviour this change takes away, and the
 question is whether it is ever missed.
+
+---
+
+## §55 — The settings panel: groups, search, and the chord it prints (B100)
+
+Confirmed on Linux by `drive:library`'s two settings steps: the panel fits a 520px window,
+the rail holds six groups with exactly one of them in the Tab order, a real Tab from the rail
+lands in the pane, and About holds the update check. What is left here is everything those two
+steps cannot judge — whether the six group names are the right six, whether the search finds
+what you actually go looking for, and the whole point of the chord row, which is that it reads
+differently on the two machines this app runs on.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 55a | Open Settings (`⌘,` / `Ctrl+,`) and read the six group names without clicking | General, Appearance, Shortcuts, Notes, Vault, About. Say if any row you go looking for is under a name you would not have guessed — that is the one judgement this design rests on and no test can make it |  |
+| 55b | Walk the group list with ↑/↓, then Home and End | Each group shows as you land on it; no key needed to confirm. Home reaches General, End reaches About |  |
+| 55c | From a group, press **Tab** | Focus leaves the list and lands on the first control in the pane, not on the next group. Shift+Tab comes back to the group you were on |  |
+| 55d | Type `theme` in the search field while standing on General | The Theme row appears, under an "Appearance" heading, without your having gone there. No group in the list is highlighted while the search is filtering |  |
+| 55e | Search for `internet` | "Load images from the web" — the word appears only in the sentence under it, never in its label. This is the row that proves the search reads both halves |  |
+| 55f | Search for something that matches nothing | "No setting matches that." The pane must not simply empty |  |
+| 55g | With a search showing, press **Escape** once, then again | The first clears the query and leaves the panel open; the second closes it. One press undoes one thing |  |
+| 55h | With a search showing, click a group in the list | The query clears and that group shows. The list and the search must never be lit at once |  |
+| 55i | **On macOS**: Settings → Shortcuts | Both chords read as symbols — `⇧⌘Y` and `⇧⌘B`, or whatever you have set. The words "CommandOrControl" must appear nowhere |  |
+| 55j | **On Windows**: the same | `Ctrl+Shift+Y` and `Ctrl+Shift+B`. Compare against the same two rows in the shortcut sheet (`⌘/` / `Ctrl+/`) — they used to disagree and must now match exactly |  |
+| 55k | Record a new chord for either shortcut, then **use it** | It works. This is the row that matters most: what is drawn is the platform's notation and what is *saved* is Electron's, and a mix-up leaves a hotkey that silently stops working after a settings change |  |
+| 55l | Settings → General → tick/untick **Start at login**, then open the tray menu | The tray's own "Start at login" checkbox agrees, without restarting the app |  |
+| 55m | The reverse: change it from the **tray** while Settings is open | The panel's checkbox follows. Two controls, one value |  |
+| 55n | Sign out and back in, with it ticked | emqnote is running and silent — no window opens (B61). The hotkey works straight away |  |
+| 55o | Settings → About | The version matches the one at the bottom of the tray menu, and matches the release you installed |  |
+| 55p | Settings → Vault, pick another vault, then **Cancel** the restart question, then click a different group | The question goes away with the group. Nothing is switched |  |
+| 55q | Open Settings in **both** themes, and on a narrow window | The group list is a panel edge like the tree's, the chosen group is a filled row with no coloured text, and the row under the pointer fills the same way. Below about 600px wide the list becomes a strip above the rows |  |
+| 55r | Change the **language** with Settings open | Every group name and every label follows, including the six in the list |  |
+
+55a is the row to be honest on. Six groups for eight settings is deliberately more structure
+than is needed today — the point is that the next setting has an obvious home — but if a name
+sends you to the wrong pane twice, it is the wrong name.
 
 ---
 

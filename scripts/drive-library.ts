@@ -830,18 +830,19 @@ async function main(): Promise<number> {
         });
         await settle(600);
         const seen = await open.library!.evaluate<{
-          panel: number; content: number; bottom: number; window: number; updates: boolean;
+          panel: number; content: number; bottom: number; window: number; groups: number;
         } | null>(
           `(() => {
              const panel = document.querySelector('.settings');
              if (panel === null) return null;
              const box = panel.getBoundingClientRect();
+             const pane = panel.querySelector('.settings-pane');
              return {
                panel: Math.round(box.height),
-               content: panel.scrollHeight,
+               content: pane === null ? 0 : pane.scrollHeight,
                bottom: Math.round(box.bottom),
                window: window.innerHeight,
-               updates: [...panel.querySelectorAll('button')].some((b) => /update/i.test(b.textContent)),
+               groups: panel.querySelectorAll('.settings-category').length,
              };
            })()`,
         );
@@ -849,10 +850,67 @@ async function main(): Promise<number> {
         if (seen.bottom > seen.window) {
           throw new Error(`the panel ends ${seen.bottom - seen.window}px below the window`);
         }
-        if (!seen.updates) throw new Error("no update check in the panel");
+        if (seen.groups !== 6) throw new Error(`${seen.groups} groups in the rail, expected 6`);
         await open.library!.key("Escape");
         await settle();
         return `${seen.content}px of rows scrolling inside ${seen.panel}px, in a ${seen.window}px window`;
+      },
+    },
+    /**
+     * B100's rail, and the two questions about it jsdom cannot be asked.
+     *
+     * `settings-categories.test.ts` beside this one can see the roving `tabIndex` — that
+     * exactly one rail button is a Tab stop — but not what Tab then *does*, because jsdom
+     * implements no focus navigation at all. That is the whole reason the rail carries a
+     * roving stop rather than six: Tab has to leave it for the pane, not walk six names
+     * first. Pressing a real Tab is only possible here.
+     *
+     * The other half is that a row moved into a group is a row nothing draws until that
+     * group is stood on, so the update check — which lived in the step above's assertions
+     * before the redesign and is now in About — is looked for after clicking a category
+     * rather than in the panel as it opens.
+     */
+    {
+      name: "the settings rail is one Tab stop, and a group shows what it holds",
+      run: async () => {
+        await open.library!.key(",", {
+          windowsVirtualKeyCode: 188, nativeVirtualKeyCode: 188, modifiers: 2,
+        });
+        await settle(600);
+
+        const stops = await open.library!.evaluate<number>(
+          `document.querySelectorAll('.settings-category[tabindex="0"]').length`,
+        );
+        if (stops !== 1) throw new Error(`${stops} rail buttons in the Tab order, expected 1`);
+
+        await click('.settings-category[data-group="about"]');
+        await settle();
+        const updates = await open.library!.evaluate<boolean>(
+          `[...document.querySelectorAll('.settings-pane button')]
+             .some((b) => /update/i.test(b.textContent))`,
+        );
+        if (!updates) throw new Error("no update check in the About group");
+
+        // A real Tab, from the rail. It has to land in the pane and not on the next group
+        // along — which is the whole reason the rail carries a roving tab stop.
+        await click('.settings-category[data-group="general"]');
+        await settle();
+        await open.library!.key("Tab", { windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+        await settle();
+        const landed = await open.library!.evaluate<string>(
+          `(() => {
+             const node = document.activeElement;
+             if (node === null) return "nothing";
+             if (node.closest('.settings-rail') !== null) return "still in the rail";
+             if (node.closest('.settings-pane') !== null) return "the pane";
+             return node.className || node.tagName;
+           })()`,
+        );
+        if (landed !== "the pane") throw new Error(`Tab from the rail reached ${landed}`);
+
+        await open.library!.key("Escape");
+        await settle();
+        return "one Tab stop, Tab reaches the pane, About holds the update check";
       },
     },
     /**

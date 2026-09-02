@@ -4,23 +4,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * B76's checkbox in the settings panel: that it reports the switch to main, and that it
- * draws the answer main already gave.
+ * B61's login item, in the settings panel at last (B100): that it reports the switch to
+ * main, and that it draws the answer main already gave.
  *
- * The panel is mounted on its own rather than through a whole `Library`, unlike
- * `test/note-list-pin.test.ts` beside it. The questions there were about DOM order and
- * which dialog ended up on screen, which only the real thing can answer; the question here
- * is one control's wiring, and a fake vault, tree and index would be scenery around it.
+ * It has been a persisted setting since B61 and a tray checkbox for just as long — which
+ * is the one place in this app nobody looks, the same complaint that moved "Check for
+ * updates…" into this panel. The tray item stays; main's handler rebuilds that menu and
+ * broadcasts `settingsChanged`, so the two cannot disagree.
  *
- * The row deliberately holds its own state rather than re-reading the bootstrap on every
- * render — the round trip that refreshes it happens on `onChanged`, and a checkbox that
- * flicked back to its old value for a frame while that landed would read as the switch not
- * having taken. That is what the last test here pins.
+ * **What this file cannot reach is either half of the thing that actually happens.**
+ * `applyLoginItem` is main's, and whether Windows or macOS really starts the app at sign-in
+ * is `TEST-PROTOCOL.md`'s question; so is whether the tray checkbox followed. What is
+ * pinned here is that the choice leaves this panel at all.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const setKeepPinnedInView = vi.fn(async () => {});
+const setOpenAtLogin = vi.fn(async () => {});
 const onChanged = vi.fn();
 
 async function flush(rounds = 4): Promise<void> {
@@ -32,7 +32,7 @@ async function flush(rounds = 4): Promise<void> {
   }
 }
 
-describe("the settings panel's pinned-notes switch", () => {
+describe("the settings panel's start-at-login switch", () => {
   let SettingsComponent: typeof import("../src/renderer/library/Settings.js").Settings;
   let container: HTMLDivElement;
   let root: Root;
@@ -40,19 +40,21 @@ describe("the settings panel's pinned-notes switch", () => {
   beforeAll(async () => {
     (window as unknown as { emqnote: unknown }).emqnote = {
       listVaults: async () => [],
-      setKeepPinnedInView,
+      setKeepPinnedInView: async () => {},
       setLoadRemoteImages: async () => {},
+      setEditorFontSize: async () => {},
+      setTheme: async () => {},
+      setOpenAtLogin,
       setLocale: async () => {},
       chooseVault: async () => null,
       switchVault: async () => {},
-      // B98: the panel subscribes on mount; the row this file is about is not it.
       onUpdateCheckState: () => () => {},
     };
     ({ Settings: SettingsComponent } = await import("../src/renderer/library/Settings.js"));
   });
 
   beforeEach(() => {
-    setKeepPinnedInView.mockClear();
+    setOpenAtLogin.mockClear();
     onChanged.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -65,7 +67,7 @@ describe("the settings panel's pinned-notes switch", () => {
     container.remove();
   });
 
-  async function mount(keepPinnedInView: boolean): Promise<void> {
+  async function mount(openAtLogin: boolean): Promise<void> {
     root = createRoot(container);
     await act(async () => {
       root.render(
@@ -73,22 +75,20 @@ describe("the settings panel's pinned-notes switch", () => {
           locale: "en-US",
           hotkey: "CommandOrControl+Shift+Y",
           libraryHotkey: "CommandOrControl+Shift+B",
+          isMac: false,
           loadRemoteImages: true,
-          keepPinnedInView,
+          keepPinnedInView: false,
           editorFontSize: 16,
           theme: "system" as const,
-          isMac: false,
-          openAtLogin: true,
-          appVersion: "0.0.0-test",
+          openAtLogin,
+          appVersion: "0.12.12",
           vaultPath: "/vault",
           // The real table, so a renamed key fails here rather than drawing an empty label.
-          t: (key: string) => {
-            const table = {
-              "settings.keepPinned": "Keep pinned notes in view while scrolling",
-              "settings.group.notes": "Notes",
-            };
-            return (table as Record<string, string>)[key] ?? key;
-          },
+          t: (key: string) =>
+            ({
+              "settings.group.general": "General",
+              "settings.startAtLogin": "Start at login",
+            })[key] ?? key,
           onChanged,
           onBeforeSwitch: async () => {},
           onClose: () => {},
@@ -96,31 +96,20 @@ describe("the settings panel's pinned-notes switch", () => {
       );
     });
     await flush();
-    stand("Notes");
-  }
-
-  /**
-   * Stands the rail on a group, by the name it draws (B100).
-   *
-   * The panel is six groups beside one pane now, and a row is only in the DOM while its own
-   * group is showing — so every lookup below needs the rail put somewhere first. By label
-   * rather than by `data-group`, for the reason the `t` table above is the real one: a group
-   * renamed out from under this file should fail it.
-   */
-  function stand(label: string): void {
+    // General is where the rail opens, which is where this row is — but say so, so that
+    // moving the row to another group fails here rather than passing by luck.
     const tab = Array.from(container.querySelectorAll<HTMLElement>(".settings-category")).find(
-      (node) => node.textContent === label,
+      (node) => node.textContent === "General",
     )!;
     act(() => {
       tab.click();
     });
   }
 
-  /** The checkbox on the row whose label is B76's, found the way a reader finds it. */
+  /** The checkbox on B61's row, found the way a reader finds it. */
   function checkbox(): HTMLInputElement {
     const row = Array.from(container.querySelectorAll<HTMLElement>(".settings-row")).find(
-      (node) =>
-        node.querySelector("span")?.textContent === "Keep pinned notes in view while scrolling",
+      (node) => node.querySelector("span")?.textContent === "Start at login",
     )!;
     return row.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
   }
@@ -130,7 +119,7 @@ describe("the settings panel's pinned-notes switch", () => {
     expect(checkbox().checked).toBe(true);
   });
 
-  it("starts unticked, which is what a vault that has never been asked gets", async () => {
+  it("starts unticked when the machine has said no", async () => {
     await mount(false);
     expect(checkbox().checked).toBe(false);
   });
@@ -144,9 +133,7 @@ describe("the settings panel's pinned-notes switch", () => {
     });
     await flush();
 
-    expect(setKeepPinnedInView).toHaveBeenCalledWith(true);
-    // The refresh is what redraws the note list — without it the setting is saved and
-    // nothing on screen moves until the window is reopened.
+    expect(setOpenAtLogin).toHaveBeenCalledWith(true);
     expect(onChanged).toHaveBeenCalled();
   });
 
@@ -158,6 +145,9 @@ describe("the settings panel's pinned-notes switch", () => {
       box.click();
     });
 
+    // Its own state, like every other switch here: a checkbox that snapped back to its old
+    // value for a frame while the round trip landed would read as the switch not having
+    // taken.
     expect(checkbox().checked).toBe(true);
   });
 });

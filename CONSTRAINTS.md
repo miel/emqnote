@@ -2364,3 +2364,64 @@ same check** — a flag set in `Settings.tsx` on click would describe only half 
 go on reading "Checking for updates…" through a download and a restart prompt. A modal
 "checking…" was the obvious alternative and does not work: `dialog.showMessageBox` cannot be
 closed from code, and it would stack in front of the outcome it announced.
+
+**The settings panel's rows are declared as data, and the search reads that declaration**
+(B100). `Settings.tsx` holds a registry of groups and rows — group, label key, the key of
+the sentence underneath, and what the row draws — and the JSX maps over it. That is the same
+relationship `src/shared/shortcuts.ts` has with `Help.tsx` and it exists for the same reason:
+a filter can only find what it knows is there, so what is there has to be data. A search
+written against the markup instead would be a second list of what the panel contains, and the
+first row added without a matching entry in it would become silently unfindable — in the one
+control whose entire job is to find things. The filter matches the label **and** the sentence,
+because half of these rows are named for what they do and explained for what they cost:
+"Load images from the web" never says the word "internet", and "Choose another folder…" says
+nothing about restarting. `test/settings-search.test.ts` pins both halves, and pins that a row
+in a group the rail is *not* standing on is still reachable — which is the assertion that
+fails if the filter ever starts reading the DOM.
+
+**A row is only in the DOM while its own group is showing** (B100). Not hidden — absent. Any
+test reaching for a settings row has to stand the rail on its group first, and the three that
+predate the redesign (`settings-theme`, `settings-keep-pinned`, `settings-updates`) each gained
+that one step. They still find the control by its visible label rather than by `data-group`,
+which is the point of them: a group or a row renamed out from under those files should fail
+them.
+
+**The settings panel prints the platform's chord and saves Electron's** (B100). Two different
+strings, and only the second one may ever reach `setHotkey`. `HotkeyRow` keeps the accelerator
+— `CommandOrControl+Shift+Y` — because that is what `globalShortcut` is handed, and renders it
+through `formatAccelerator` (`src/shared/shortcuts.ts`), which is `⇧⌘Y` on a Mac and
+`Ctrl+Shift+Y` elsewhere. Before this the panel drew the raw setting, so the shortcut sheet
+that *lists* the chord and the panel that *sets* it disagreed about how to spell it, on every
+platform. `formatAccelerator` had existed and been unit-tested since the help sheet needed it
+and was called from nowhere in `src/`. **Formatting on the way out as well is the failure to
+watch for**: `globalShortcut` accepts no `⇧⌘Y`, so the symptom would be a global hotkey that
+silently stops working after a settings change, on one platform only.
+`test/settings-hotkey-format.test.ts` asserts on the argument `setHotkey` receives, not only
+on what the button reads.
+
+**The settings panel caps its own height and its middle scrolls** (B100). The `max-height` is
+on `.settings`, because `.overlay` is what it is measured against; `overflow-y` is on
+`.settings-pane`. It has to be that way round: the head band carries the search field and the
+rail says which group you are standing on, and a panel that scrolled as a whole would carry
+both off the top of the screen on the way to the row it was opened for. Both flex parents need
+`min-height: 0` or the pane refuses to shrink below its content, its `overflow-y` never
+engages, and the panel grows straight past the cap — the exact failure the cap was added to
+prevent. `styles-overlay.test.ts` owns the cap, `styles-settings.test.ts` the rest; the 520px
+window is `npm run drive:library`'s.
+
+**The settings head band is not a `PaneHeader`** (B100). That component is 40px and a drag
+region, and both are wrong here — this panel is not chrome the window is moved by, and
+`styles-pane-bands.test.ts` counts that `height: 40px` and `height: 28px` are each stated
+exactly once in the whole app, in `styles.css`, with zero occurrences in `library.css`. The
+band takes its height from its padding, as `.help-head` does. For the same reason the rows are
+not `ChromeButton`s: `.settings-row button` is a hotkey recorder and a folder picker, neither
+of which is chrome.
+
+**"Start at login" has two entry points and one handler** (B100, B61). The tray checkbox stays
+— on Windows the tray icon can be folded into the overflow chevron, and on macOS the settings
+panel is two windows away — and both routes land on `IPC.setOpenAtLogin`, which calls
+`applyLoginItem` and never `setLoginItemSettings` directly. That is what B61 is: the tray used
+to call Electron itself and dropped the `--login` argument doing so, which is the only thing
+telling a sign-in start apart from a double-click. Main rebuilds the tray menu and broadcasts
+`settingsChanged` on both routes, so an open panel and the menu cannot show different answers
+for the same value. Same shape as the vault list, which B21's addendum settled the same way.
