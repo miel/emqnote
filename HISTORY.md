@@ -2276,3 +2276,49 @@ on both platforms — 52c and 52d especially, being what stops the fix from bein
 bug. The update check's three outcomes are §52 too, the Windows download path in particular.
 And 52k walks the two chords on Windows, which is where Ctrl+Tab has a history of being eaten
 by something nobody has ever identified (B32, §22b).
+
+
+**Two nitpicks from daily use landed on 2 September 2026** (**B99**), both about the Tasks
+view and connected: the first frees the seat the second needs.
+
+*"Exit tasks" moved to the footer.* The button that **opens** the Tasks view sits in the note
+list's footer (B92 put it there, beside the count and the sort chooser); the button that
+**closes** it sat in the header. Two buttons that undo each other, two bands apart, so
+pressing one made the control jump to the other side of the pane. It is a `small`
+`ChromeButton` in `TaskList`'s own `PaneFooter` now, in the same seat, at the same size, with
+the same `tasksGlyph` — the pair reads as one control pressed twice, which is what it is. It
+is `offTabOrder` on B94's trade and keeps two keys, Escape and the `Mod+T` that opened it, so
+the rule that a button may only leave the Tab order when a chord replaces it still holds.
+That is its third move — head of the toolbar, count row, header band, footer — and the thing
+that has survived all three is that it is a *word* and not an ×, because
+`--click-button="Exit tasks"` is how the packaged self-test leaves this view.
+
+*A third filter: "this note only".* The view could be narrowed to a folder and to open items,
+and not to the note you were reading — which is the narrowest and commonest question of the
+three. It is a checkbox in the header, in the seat "Exit tasks" gave up, and it is a checkbox
+rather than a `ChromeButton` because it is a state the list is showing under, not an action.
+**It overrules the scope rather than narrowing it**, and that is the part worth remembering:
+the note in the reader can be filed anywhere — stand in `01 Projecten`, press Mod+T, and the
+reader may still hold something from `00 Inbox` — so a filter that only sieved the rows
+already fetched would answer "no tasks" for a note that visibly has some. It asks
+`folderOf(notePath)` (`tasksIn` scopes by path prefix, so that is the narrowest query certain
+to contain the note) and keeps that one note's rows. The scope `<select>` greys out while the
+tick is on, because a chooser offering to narrow a list it no longer decides is saying
+something untrue, and the checkbox itself is disabled with no note open — a real state, the
+view being reachable from the sidebar with an empty reader. `noteOnly` lives in `Selection`
+beside `scope` and `openOnly`, so all three filters are read from one place.
+
+Confirmed under `Xvfb`, driven over CDP: `drive:library` has a nineteenth step that presses
+the checkbox **with a real pointer** — it lives in a header band, which is
+`-webkit-app-region: drag`, and a press inside one goes to the window move rather than to the
+element under it (B94); `.pane-actions` is what gives it back and no test under `test/` can
+see whether that worked. Measured there: three tasks in `00 Inbox` became one in
+`00 Inbox/Alfa.md`, and the footer button then left the view. `test/tasks-note-only.test.ts`
+holds the rest in jsdom, and asserts on the *call* to `library.tasks` rather than only on
+what ends up on screen — the sieve-over-fetched-rows version passes a screen assertion and
+fails that one.
+
+**What is left for a person** (`TEST-PROTOCOL.md` §53): the two platforms the driver does not
+run on, and one thing it cannot judge — whether the header and footer bands still read as one
+line each with a control in them. §53f is the row that matters, being the only place the OS
+draws its own window controls into a band this change put something new into.

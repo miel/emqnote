@@ -1821,6 +1821,33 @@ than the one it fixes, and neither is visible from inside the app.
 
 ---
 
+## §53 — The Tasks view's way out, and its narrowest filter (B99)
+
+Two nitpicks from daily use, and both are confirmed on Linux by one `drive:library` step
+before this list starts — a real pointer press on the header checkbox (which sits in a
+`-webkit-app-region: drag` band, the class of bug jsdom cannot see at all) and a real press
+on the footer button. What is left here is the two platforms that driver does not run on,
+and the one thing it cannot judge: whether the pair of bands still reads as one line with a
+control in each of them.
+
+Stand in a folder that holds tasks in more than one note, and have a note from a *different*
+folder open in the reader before you start — that combination is the whole point of 53d.
+
+| # | Step | Expected | Feedback |
+|---|---|---|---|
+| 53a | Press the note list's **Tasks** button, then look at where the way out is | "Exit tasks" is in the **footer**, in the seat the Tasks button itself occupies — same size, same glyph. Nothing has moved in the header line |  |
+| 53b | Click it | Back to the note list, on the folder you were standing in. The same place Escape and a second Mod+T land |  |
+| 53c | Open the view with no note in the reader | **This note only** is in the header, greyed, and refuses the click. Its tooltip says why |  |
+| 53d | Open a note from a *different* folder than the view is scoped to, then tick **This note only** | Only that note's tasks are listed — not an empty pane. The folder chooser greys out while the tick is on |  |
+| 53e | Untick it | The folder chooser comes back on the folder it was set to, and its own list of tasks with it |  |
+| 53f | On **Windows 11**, 53a–53e with the window maximised | The same. The caption buttons are drawn over the *reader's* band, not this one — the checkbox must not end up underneath them |  |
+| 53g | On **macOS**, the same | The same. The traffic lights are over the folder tree's band |  |
+
+53f is the row worth walking slowly: it is the only one where the OS draws its own controls
+into a band this change put something new into.
+
+---
+
 ## Reporting
 
 For anything that fails, capture: the platform and OS version, the app version — the top
