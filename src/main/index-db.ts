@@ -230,12 +230,13 @@ function reclaimFreeSpace(db: IndexDb): void {
   }
 }
 
-/** Below this the whole file is smaller than the rewrite is worth. 2000 pages of 4 KB is
- *  about 8 MB — several times what a healthy index for a personal vault weighs, and well
- *  under the 25 MB that was reported, so the floor is a guard against pointless work
- *  rather than a second opinion about whether the file is bloated. The *fraction* below
- *  is what actually decides that. */
-const MIN_PAGES_TO_RECLAIM = 2000;
+/** Below this the whole file is small enough that neither the waste nor the rewrite is
+ *  worth thinking about: 512 pages of 4 KB is about 2 MB, and compacting 2 MB costs
+ *  milliseconds. **The fraction below is the gate, not this.** A floor high enough to be a
+ *  second opinion about whether a file is bloated would exclude exactly the middling cases
+ *  this is for — an index that grew to 8 MB and is now 90% holes is as worth reclaiming as
+ *  one that grew to 25 MB. */
+const MIN_PAGES_TO_RECLAIM = 512;
 /** A quarter free is well past anything ordinary use produces, and well short of the 89%
  *  the measurement above found. */
 const RECLAIM_AT_FREE_FRACTION = 0.25;
