@@ -53,6 +53,7 @@ function openedNote(path: string, title: string): OpenedNote {
 interface Fake {
   emqnote: CaptureApi;
   openNoteMock: ReturnType<typeof vi.fn>;
+  saveNoteMock: ReturnType<typeof vi.fn>;
   /** Simulates main pushing an event, the way `IPC.vaultFileChanged` really arrives. */
   fireFileChanged: (event: VaultFileEvent) => void;
 }
@@ -67,6 +68,14 @@ function buildFake(initial: OpenedNote): Fake {
   };
 
   const notesByPath = new Map<string, OpenedNote>([[initial.path, initial]]);
+
+  const saveNoteMock = vi.fn(async (request: { path: string }) => ({
+
+    written: true,
+
+    path: request.path,
+
+  }));
 
   const openNoteMock = vi.fn(async (path: string): Promise<OpenedNote | null> => {
     return notesByPath.get(path) ?? null;
@@ -83,7 +92,7 @@ function buildFake(initial: OpenedNote): Fake {
     search: async () => [],
     facets: async () => ({ tags: [], people: [], available: true }),
     openNote: openNoteMock,
-    saveNote: async (request) => ({ written: false, path: request.path }),
+    saveNote: saveNoteMock,
     moveNotes: async (paths: string[]) => ({
       moved: paths.map((path) => ({ from: path, to: path })),
       locked: [],
@@ -196,6 +205,7 @@ function buildFake(initial: OpenedNote): Fake {
   return {
     emqnote,
     openNoteMock,
+    saveNoteMock,
     fireFileChanged: (event) => fileChangedHandler?.(event),
   };
 }
@@ -340,7 +350,43 @@ describe("the library reacts to a note changing on disk (Package C)", () => {
     expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
   });
 
-  it("shows Close/Keep mine for a removed note, and Close clears the reader", async () => {
+  /**
+   * B101. "Keep mine" used to be the second button here too, and it only dismissed the
+   * bar — on the reasoning that the next debounced autosave would recreate the file. That
+   * holds only if you then type: the debounce is armed by an edit, so on a note nobody had
+   * touched nothing was ever written, and the reader was left holding a document with no
+   * file behind it. Reveal found nothing and neither did the Inbox.
+   */
+  it("'Restore' writes the note back to the path it was deleted from", async () => {
+    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
+    await mount(fake);
+    await openTheNote();
+    // Deliberately *not* dirty: nothing has been typed, which is the case that was broken.
+    fake.saveNoteMock.mockClear();
+
+    act(() => {
+      fake.fireFileChanged({ path: NOTE_PATH, kind: "removed" });
+    });
+    await flush();
+
+    const restore = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".disk-change-bar button"),
+    ).find((button) => button.textContent === "Restore")!;
+    await act(async () => {
+      restore.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    // Written back, at its own path, with what the reader holds.
+    expect(fake.saveNoteMock).toHaveBeenCalledTimes(1);
+    expect(fake.saveNoteMock.mock.calls[0]![0].path).toBe(NOTE_PATH);
+    // And the bar goes, while the note stays open — a press that left "this note was
+    // deleted" on screen would read as having done nothing.
+    expect(container.querySelector(".disk-change-bar")).toBeNull();
+    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
+  });
+
+  it("shows Close/Restore for a removed note, and Close clears the reader", async () => {
     const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
     await mount(fake);
     await openTheNote();
@@ -355,7 +401,7 @@ describe("the library reacts to a note changing on disk (Package C)", () => {
     expect(bar!.textContent).toContain("deleted outside emqnote");
 
     const buttons = Array.from(bar!.querySelectorAll("button"));
-    expect(buttons.map((button) => button.textContent)).toEqual(["Close", "Keep mine"]);
+    expect(buttons.map((button) => button.textContent)).toEqual(["Close", "Restore"]);
 
     const close = buttons.find((button) => button.textContent === "Close")!;
     await act(async () => {

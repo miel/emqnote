@@ -8,10 +8,12 @@ interface Props {
   /** Puts the note away. Only offered for "removed" — see the module comment for why
    *  there is no automatic equivalent. */
   onClose: () => void;
-  /** Dismisses the bar without touching the reader. The next debounced autosave writes
-   *  (or, for "removed", recreates) the file exactly as the reader currently has it —
-   *  which is what "keep mine" means, and needs no code of its own beyond this. */
+  /** Dismisses the bar without touching the reader, for "changed": the note stays as the
+   *  reader has it, and the next debounced autosave writes it over what is on disk. */
   onDismiss: () => void;
+  /** Writes the note back to the path it was deleted from. Only offered for "removed" —
+   *  see the module comment. */
+  onRestore: () => void;
 }
 
 /**
@@ -31,8 +33,18 @@ interface Props {
  *    must not be able to yank the whole window out from under someone reading it. The
  *    user has to choose that.
  *
- * "Keep mine" is the same button in both shapes and needs no write of its own: the next
- * debounced autosave already does exactly what that means, on disk, on its own.
+ * The second button is not the same in both shapes, and used to be (B101). It was "Keep
+ * mine" either way, on the reasoning that the next debounced autosave would write — or,
+ * for "removed", recreate — the file on its own, so the button needed no code beyond
+ * dismissing the bar. That reasoning holds only if you then *type*: the debounce is armed
+ * by an edit, so on a note nobody had touched there was no pending save, no write ever
+ * came, and "Keep mine" left the reader holding a document with no file behind it. Reveal
+ * found nothing, and neither did the Inbox.
+ *
+ * So the two shapes have two buttons. "Keep mine" still means "do not reload, my version
+ * stands" for a note that *changed* — the file is still there and the next save overwrites
+ * it. "Restore" is what a *deleted* note needs, and it writes, now: `writeAtomic` even
+ * recreates the folder on the way, so it works when the whole folder went.
  */
 export function DiskChangeBar({
   event,
@@ -40,6 +52,7 @@ export function DiskChangeBar({
   onReload,
   onClose,
   onDismiss,
+  onRestore,
 }: Props): React.ReactElement | null {
   if (event === null) return null;
 
@@ -48,17 +61,24 @@ export function DiskChangeBar({
       <span>{t(event.kind === "changed" ? "diskChange.changed" : "diskChange.removed")}</span>
       <div className="disk-change-actions">
         {event.kind === "changed" ? (
-          <button type="button" className="primary" onClick={onReload}>
-            {t("diskChange.reload")}
-          </button>
+          <>
+            <button type="button" className="primary" onClick={onReload}>
+              {t("diskChange.reload")}
+            </button>
+            <button type="button" onClick={onDismiss}>
+              {t("diskChange.keepMine")}
+            </button>
+          </>
         ) : (
-          <button type="button" className="danger" onClick={onClose}>
-            {t("diskChange.close")}
-          </button>
+          <>
+            <button type="button" className="danger" onClick={onClose}>
+              {t("diskChange.close")}
+            </button>
+            <button type="button" onClick={onRestore}>
+              {t("diskChange.restore")}
+            </button>
+          </>
         )}
-        <button type="button" onClick={onDismiss}>
-          {t("diskChange.keepMine")}
-        </button>
       </div>
     </div>
   );

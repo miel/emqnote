@@ -2877,6 +2877,24 @@ export function Library(): React.ReactElement {
           openRef.current = null;
         }}
         onDismiss={() => setDiskEvent(null)}
+        /**
+         * Writes the note back to the path it was deleted from (B101).
+         *
+         * Through `save()` rather than a write of its own: it already posts exactly what
+         * the reader holds — the header fields and the editor's document — and
+         * `saveNote` reads the file first only to keep the frontmatter it cannot see, so
+         * a missing file simply means there is nothing to keep. `writeAtomic`'s
+         * `mkdirSync` recreates the folder on the way, which matters because the usual
+         * way a note disappears is that the folder around it did.
+         *
+         * The bar goes first. `save()` is a round trip, and leaving "this note was
+         * deleted" on screen while the note is being written back reads as the press
+         * having done nothing — which is the report this whole button comes from.
+         */
+        onRestore={() => {
+          setDiskEvent(null);
+          void save();
+        }}
       />
 
       <div
