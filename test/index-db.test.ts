@@ -747,6 +747,15 @@ describe("the SQLite index", () => {
    * filesystem on an explicit `VACUUM`, so an index that once covered far more than it
    * covers now sits at its high-water mark for ever.
    */
+  /**
+   * These three write a few megabytes through FTS5 and then rewrite the file, which is
+   * comfortably under a second here and several times that on the Windows CI runner. An
+   * explicit ceiling rather than vitest's 5 s default, for `index-watch.test.ts`'s reason:
+   * a wrong red is worse than a slow red, and the first cut of these did fail a release
+   * that way — not on an assertion, but on the clock.
+   */
+  const SLOW_SQLITE_MS = 30_000;
+
   describe("reclaiming space an index no longer needs", () => {
     let directory: string;
     let path: string;
@@ -769,11 +778,11 @@ describe("the SQLite index", () => {
      *  removed — the shape a vault that shrank leaves behind. */
     const buildAndEmpty = (): void => {
       const db = openIndex(path);
-      const body = "Tekst ".repeat(2000);
-      for (let n = 0; n < 900; n += 1) {
+      const body = "Tekst ".repeat(900);
+      for (let n = 0; n < 420; n += 1) {
         upsertNote(db, record({ path: `00 Inbox/n-${n}.md`, body, excerpt: body.slice(0, 80) }));
       }
-      for (let n = 20; n < 900; n += 1) deleteNote(db, `00 Inbox/n-${n}.md`);
+      for (let n = 20; n < 420; n += 1) deleteNote(db, `00 Inbox/n-${n}.md`);
       closeIndex(db);
     };
 
@@ -788,7 +797,7 @@ describe("the SQLite index", () => {
       })();
       // The state this exists for: a big file that is mostly holes. Without it the rest of
       // the test would pass on a database that never needed compacting.
-      expect(before.total).toBeGreaterThan(2000);
+      expect(before.total).toBeGreaterThan(512);
       expect(before.free / before.total).toBeGreaterThan(0.25);
 
       const db = openIndex(path, { reclaim: true });
@@ -801,12 +810,12 @@ describe("the SQLite index", () => {
 
       expect(after.total).toBeLessThan(before.total);
       expect(after.free).toBeLessThan(before.free);
-    });
+    }, SLOW_SQLITE_MS);
 
     it("leaves a database alone when it is not mostly holes", () => {
       const db = openIndex(path);
-      const body = "Tekst ".repeat(2000);
-      for (let n = 0; n < 900; n += 1) {
+      const body = "Tekst ".repeat(900);
+      for (let n = 0; n < 420; n += 1) {
         upsertNote(db, record({ path: `00 Inbox/n-${n}.md`, body, excerpt: body.slice(0, 80) }));
       }
       closeIndex(db);
@@ -825,7 +834,7 @@ describe("the SQLite index", () => {
       // An index in ordinary use is not rewritten on every launch, which is what would
       // make this a cost rather than a repair.
       expect(after.total).toBe(before.total);
-    });
+    }, SLOW_SQLITE_MS);
 
     it("does not compact unless the caller says it owns the file", () => {
       buildAndEmpty();
@@ -844,6 +853,6 @@ describe("the SQLite index", () => {
       closeIndex(db);
 
       expect(after.total).toBe(before.total);
-    });
+    }, SLOW_SQLITE_MS);
   });
 });
