@@ -3,8 +3,8 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 3 September 2026, **unreleased** — **four reports from the first look B95 got
-on a Mac** (B101), two of which were questions.
+Last updated 3 September 2026, released as `v0.13.2` — **four reports from the first look
+B95 got on a Mac** (B101), two of which were questions.
 
 The one that was a plain miss: B95 reserved the right-hand edge of the window's top band for
 Windows' caption buttons and never did the left, so the same three bars went on running under
