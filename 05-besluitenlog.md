@@ -4264,6 +4264,33 @@ een stand waaronder de lijst getoond wordt, geen handeling, en een knop die "ing
 staat is een toestand die je al moet kunnen lezen — B78's argument, van de andere kant.
 Dezelfde opmaak als "alleen openstaand" eronder, want het is hetzelfde soort ding.
 
+**Herzien op 3 september 2026, uit dagelijks gebruik: het vinkje staat in de voetbalk, naast
+"Taken sluiten".** De ruil hierboven is aan de verkeerde kant gemaakt. Deze weergave heeft
+drie filters, en die stonden na B99 over twee banden verdeeld: twee in de werkbalk en de
+derde alleen in de kopbalk — de band waarin de twee andere panelen niets dan een titel
+dragen. In de voetbalk staat het paar dat er hoort te staan, de *stand* en de *uitgang*, één
+rij onder de twee andere filters, en de kopbalk houdt de titel alleen. Het argument dat de
+kopbalk vrijkwam blijft waar: het is alleen geen reden om er iets in te zetten.
+
+Twee dingen die eraan vastzitten. Het vinkje houdt een Tab-halte waar de knop ernaast er
+geen heeft — die ruil geldt een *knop* met twee toetsen erachter, en een vinkje heeft er
+geen — maar alleen op de weg terug: `paneOf` claimt hem niet, dus Shift+Tab vanaf de titel
+van de notitie landt erop, terwijl een Tab vooruit vanaf een taakrij van `tabStep` is en in
+de notitie landt (B98). En hij krijgt 6px eigen rechtermarge, want een zin en een knop met
+een woord erop lezen bij de 4px van `.pane-actions` als één string ("Alleen deze notitie
+Taken sluiten") — dezelfde uitzondering die `.reader-back` één voetbalk verderop al maakt.
+
+**En de voetbalk zelf bleef niet staan waar hij hoort.** `.task-rows` was geschreven zonder
+de `flex: 1 1 auto; min-height: 0` die `.notes-list` ernaast wél draagt, dus een lijst die
+korter is dan het paneel liet de overgebleven hoogte *onder* de band vallen: teller, vinkje
+en uitgang kwamen tegen de laatste taak aan staan en verschoven daarna met elke wijziging van
+de lijstlengte. Precies dezelfde fout als bij de notitielijst, waar het commentaar erboven al
+uitlegt waarom de groei er staat — de tweede scroller in dezelfde kolom is geschreven zonder
+dat commentaar te lezen. `styles-scroller-grow.test.ts` leest nu beide regels, want jsdom
+maakt geen opmaak, en de Takenstap van `drive:library` meet de echte afstand tussen de voet
+van het paneel en die van de balk. Die meting viel om vóórdat de fix er was, wat is waar zo'n
+stap voor bedoeld is.
+
 **Het vinkje overrúlet de map, hij versmalt hem niet.** De notitie die je leest kan overal
 staan: je bladert in `01 Projecten`, drukt Mod+T, en de lezer houdt een notitie uit
 `00 Inbox` vast. Een filter dat alleen de al opgehaalde rijen zou zeven, antwoordt dan "geen
@@ -4300,7 +4327,10 @@ uitgang in `.pane-footer` zit en niet in `.pane-header` en nog steeds "Exit task
 het vinkje geweigerd wordt zolang er geen notitie open is, en — de kern — dat een gezette
 map *en* een notitie uit een andere map samen tot `tasks("00 Inbox", true)` leiden met één
 rij op het scherm. Dat laatste is precies de zeef-over-de-opgehaalde-rijen die niet werkt,
-dus wordt op de aanroep geasserteerd en niet alleen op wat er te zien is.
+dus wordt op de aanroep geasserteerd en niet alleen op wat er te zien is. Sinds de herziening
+hierboven houdt hetzelfde bestand ook vast dat het vinkje in `.pane-footer` zit en niet meer
+in `.pane-header`, en leest `test/styles-scroller-grow.test.ts` de groeiregel van beide
+scrollers in die kolom.
 
 ---
 

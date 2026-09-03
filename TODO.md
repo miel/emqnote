@@ -3,6 +3,34 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 3 September 2026, unreleased — two bugs from daily use, both in the Tasks view
+and both about the same band (**B99**'s addendum).
+
+**"This note only" moved down into the footer, beside "Exit tasks".** The tick and the way out
+had swapped bands the wrong way round in B99: it left a view with three filters showing two of
+them in the toolbar and the third alone up in the header, which is the band the other two panes
+keep a title in. In the footer the pair reads as the setting and the way out, one row under the
+other two filters. It keeps a Tab stop where "Exit tasks" beside it has none, though only
+on the backward walk — Shift+Tab from the note's title reaches it, while a forward Tab off a task
+row is B98's and goes to the note — and 6px of margin, because "This note only" and "Exit tasks"
+at `.pane-actions`' shared gap run together into one string.
+
+**The footer stopped walking up to sit against the last task.** `.task-rows` was written without
+the `flex: 1 1 auto; min-height: 0` that `.notes-list` beside it carries, so a list shorter than
+the pane left the leftover height *below* the band — count, tick and exit button all moving with
+the number of rows. `.notes-list`'s own comment already said why it needed the grow; the second
+scroller in the same column was written without reading it. `styles-scroller-grow.test.ts` now
+reads both rules, jsdom laying nothing out, and `drive:library`'s Tasks step measures the real
+distance between the pane's foot and the footer's — it caught this before the fix was built,
+which is what that step is for.
+
+**What is open on it.** `TEST-PROTOCOL.md` §53 again, since the control it asks about has moved
+band: 53f in particular, that being the row about Windows and macOS drawing their own window
+controls — which now applies *less*, the footer being no drag region at all. Left for a person:
+whether the tick is still findable where it now sits.
+
+---
+
 Last updated 2 September 2026, released as `v0.13.0` — **the settings panel is a rail of
 six groups beside one scrolling pane, with a search field** (**B100**).
 
