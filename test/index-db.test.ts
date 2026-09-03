@@ -740,4 +740,110 @@ describe("the SQLite index", () => {
       }
     });
   });
+
+  /**
+   * B101. A 25 MB index rebuilt to 550 KB when it was deleted by hand, which reads as data
+   * being thrown away and is not: SQLite re-uses freed pages but only returns them to the
+   * filesystem on an explicit `VACUUM`, so an index that once covered far more than it
+   * covers now sits at its high-water mark for ever.
+   */
+  describe("reclaiming space an index no longer needs", () => {
+    let directory: string;
+    let path: string;
+
+    beforeEach(() => {
+      directory = mkdtempSync(join(tmpdir(), "emqnote-vacuum-"));
+      path = join(directory, "index.sqlite");
+    });
+
+    afterEach(() => {
+      rmSync(directory, { recursive: true, force: true });
+    });
+
+    const sizeOf = (db: IndexDb): { free: number; total: number } => ({
+      free: db.pragma("freelist_count", { simple: true }) as number,
+      total: db.pragma("page_count", { simple: true }) as number,
+    });
+
+    /** Enough rows to push the file past `MIN_PAGES_TO_RECLAIM`, then almost all of them
+     *  removed — the shape a vault that shrank leaves behind. */
+    const buildAndEmpty = (): void => {
+      const db = openIndex(path);
+      const body = "Tekst ".repeat(2000);
+      for (let n = 0; n < 900; n += 1) {
+        upsertNote(db, record({ path: `00 Inbox/n-${n}.md`, body, excerpt: body.slice(0, 80) }));
+      }
+      for (let n = 20; n < 900; n += 1) deleteNote(db, `00 Inbox/n-${n}.md`);
+      closeIndex(db);
+    };
+
+    it("hands the free pages back when most of the file has become waste", () => {
+      buildAndEmpty();
+
+      const before = (() => {
+        const db = openIndex(path);
+        const seen = sizeOf(db);
+        closeIndex(db);
+        return seen;
+      })();
+      // The state this exists for: a big file that is mostly holes. Without it the rest of
+      // the test would pass on a database that never needed compacting.
+      expect(before.total).toBeGreaterThan(2000);
+      expect(before.free / before.total).toBeGreaterThan(0.25);
+
+      const db = openIndex(path, { reclaim: true });
+      const after = sizeOf(db);
+      // Nothing was pruned — the rows that are supposed to be there still are. That is the
+      // half of this the report was actually asking about.
+      expect(allNotes(db).length).toBe(20);
+      expect(search(db, "Tekst").length).toBe(20);
+      closeIndex(db);
+
+      expect(after.total).toBeLessThan(before.total);
+      expect(after.free).toBeLessThan(before.free);
+    });
+
+    it("leaves a database alone when it is not mostly holes", () => {
+      const db = openIndex(path);
+      const body = "Tekst ".repeat(2000);
+      for (let n = 0; n < 900; n += 1) {
+        upsertNote(db, record({ path: `00 Inbox/n-${n}.md`, body, excerpt: body.slice(0, 80) }));
+      }
+      closeIndex(db);
+
+      const before = (() => {
+        const one = openIndex(path);
+        const seen = sizeOf(one);
+        closeIndex(one);
+        return seen;
+      })();
+
+      const two = openIndex(path, { reclaim: true });
+      const after = sizeOf(two);
+      closeIndex(two);
+
+      // An index in ordinary use is not rewritten on every launch, which is what would
+      // make this a cost rather than a repair.
+      expect(after.total).toBe(before.total);
+    });
+
+    it("does not compact unless the caller says it owns the file", () => {
+      buildAndEmpty();
+
+      const before = (() => {
+        const db = openIndex(path);
+        const seen = sizeOf(db);
+        closeIndex(db);
+        return seen;
+      })();
+
+      // `scan-worker.ts` opens this same database a second time and passes nothing, so two
+      // VACUUMs can never race over one file.
+      const db = openIndex(path);
+      const after = sizeOf(db);
+      closeIndex(db);
+
+      expect(after.total).toBe(before.total);
+    });
+  });
 });
