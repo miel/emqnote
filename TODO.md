@@ -3,6 +3,33 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 3 September 2026, released as `v0.13.2` — **four reports from the first look
+B95 got on a Mac** (B101), two of which were questions.
+
+The one that was a plain miss: B95 reserved the right-hand edge of the window's top band for
+Windows' caption buttons and never did the left, so the same three bars went on running under
+macOS's traffic lights. `--lights-inset` sits beside `--caption-inset` now, written from
+`isMac` because there is no `env()` that answers for the traffic lights. §49 had four Windows
+rows and none for the Mac, which is why nothing here saw it.
+
+Two buttons stopped lying. "Keep mine" on a *deleted* note only dismissed the bar — the next
+autosave was supposed to recreate the file, and the debounce is armed by an edit, so on a
+note nobody had touched nothing was ever written. It is **Restore** now, and it writes. And
+resolving a conflict reopens the note: main's refresh reloads everything except the document
+on screen, so "Keep that one" left the losing version visible.
+
+The fourth was a question — a 25 MB index rebuilding to 550 KB — and the answer is that
+nothing was pruned. Two likelier explanations were measured and both were wrong; it is the
+file's high-water mark, and `VACUUM` is what returns it. The app runs one now when a quarter
+of the pages are free.
+
+**What is open on it.** `TEST-PROTOCOL.md` §50 has eight rows: three are macOS, one is
+Windows, and the rest can be walked anywhere. §49c was rewritten rather than answered — it
+asked for the scan bar by deleting `index.sqlite`, and that cannot show it: the startup scan
+runs before the library window exists.
+
+---
+
 Last updated 3 September 2026, released as `v0.13.1` — two bugs from daily use, both in the Tasks view
 and both about the same band (**B99**'s addendum).
 

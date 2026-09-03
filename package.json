@@ -1,6 +1,6 @@
 {
   "name": "emqnote",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "private": true,
   "type": "module",
   "description": "Snelle notitie-app voor werk, met markdown-bestanden op OneDrive",

@@ -196,9 +196,59 @@ function migrate(db: IndexDb): void {
   `);
 }
 
-export function openIndex(path: string): IndexDb {
+/**
+ * A page freed inside this file is not a byte given back to the disk (B101).
+ *
+ * SQLite keeps freed pages on an internal free list and re-uses them; it only returns
+ * them to the filesystem on an explicit `VACUUM`, which this app never ran. So an index
+ * that once covered far more than it covers now — a larger folder chosen as the vault, a
+ * corpus since trimmed — stays at its high-water mark for ever. Measured on a 3000-note
+ * vault cut down to 60: 18.3 MB, still 14.1 MB afterwards with 89% of its pages free, and
+ * 1.6 MB after a `VACUUM`. That is the shape of the 25 MB index that rebuilt to 550 KB
+ * when it was deleted by hand, and the reason to delete it by hand is what this removes.
+ *
+ * Three things keep it from being a cost anywhere it is not a gain. It runs **only when
+ * most of the file is genuinely waste** — a quarter of the pages free *and* enough of them
+ * to be worth the rewrite, so an index in ordinary daily use never qualifies: churn alone
+ * reaches a steady state and stays there (120 rounds of rewriting every note in a vault
+ * moved a 4.59 MB index by 0.03 MB). It runs **only in the main process**, never in the
+ * scan worker, which opens this same file a second time — two `VACUUM`s racing over one
+ * database is a lock fight over work only one of them needs to do. And it **never
+ * propagates a failure**: reclaiming disk space is a courtesy, and an index that could not
+ * be compacted is an index that still answers every question correctly.
+ */
+function reclaimFreeSpace(db: IndexDb): void {
+  try {
+    const free = db.pragma("freelist_count", { simple: true }) as number;
+    const total = db.pragma("page_count", { simple: true }) as number;
+    if (total < MIN_PAGES_TO_RECLAIM) return;
+    if (free / total < RECLAIM_AT_FREE_FRACTION) return;
+    db.exec("VACUUM");
+  } catch {
+    // Locked by the other connection, out of temp space, read-only volume. None of them
+    // is a reason to fail opening the index.
+  }
+}
+
+/** Below this the whole file is smaller than the rewrite is worth. 2000 pages of 4 KB is
+ *  about 8 MB — several times what a healthy index for a personal vault weighs, and well
+ *  under the 25 MB that was reported, so the floor is a guard against pointless work
+ *  rather than a second opinion about whether the file is bloated. The *fraction* below
+ *  is what actually decides that. */
+const MIN_PAGES_TO_RECLAIM = 2000;
+/** A quarter free is well past anything ordinary use produces, and well short of the 89%
+ *  the measurement above found. */
+const RECLAIM_AT_FREE_FRACTION = 0.25;
+
+/**
+ * `reclaim` is the main process saying it is the one connection allowed to compact this
+ * file. `scan-worker.ts` opens the same database and passes nothing, for the reason
+ * `reclaimFreeSpace` gives.
+ */
+export function openIndex(path: string, options: { reclaim?: boolean } = {}): IndexDb {
   const db = new Database(path);
   migrate(db);
+  if (options.reclaim === true) reclaimFreeSpace(db);
   return db;
 }
 

@@ -3,20 +3,39 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureApi, LibraryApi } from "../src/shared/ipc.js";
-import type { FolderNode, NoteSummary, OpenedNote, VaultFileEvent } from "../src/shared/vault-types.js";
+import type {
+  ConflictPair,
+  FolderNode,
+  NoteSummary,
+  OpenedNote,
+  VaultFileEvent,
+} from "../src/shared/vault-types.js";
 
 /**
- * Package C: the library reader's reaction to a note changing or disappearing on disk
- * from outside the app. A real `Library` mounted with a stubbed `window.emqnote`, the
- * same pattern `test/library-title-edit.test.ts` uses, and for the same reason — the
- * interesting bugs here are about state timing (is `dirty` read at the right instant,
- * does the bar apply to the right note) that a shallow render would not catch.
+ * What the reader shows after a OneDrive conflict has been resolved (B101).
+ *
+ * `resolveConflict` was fired from inside `ConflictBanner`, and main answers it with
+ * `notifyLibrary()` — which reloads the tree, the list, the facets and the conflict list,
+ * and never the note actually on screen. So "Keep that one" replaced the original's bytes
+ * on disk and the reader went on showing the losing version until something else happened
+ * to reopen it.
+ *
+ * Deliberately not left to the watcher, which does raise an `unlink`/`add` pair for the
+ * trash-and-rename underneath: whether that arrives as one event or two, and in which
+ * order, is chokidar's business, and the reader agreeing with the disk after a button the
+ * user just pressed is not a thing to leave to a race.
+ *
+ * A real `Library` with a stubbed `window.emqnote`, the same pattern
+ * `library-disk-change.test.ts` uses next door and for its reason: the question is which
+ * path the reader reopens, which a shallow render cannot answer.
  */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const NOTE_PATH = "00 Inbox/2026-08-06 1200 Test note.md";
 const OTHER_PATH = "00 Inbox/2026-08-06 1300 Other note.md";
+const CONFLICT_PATH = "00 Inbox/2026-08-06 1200 Test note-LAPTOP-ABC123.md";
+const PAIR: ConflictPair = { original: NOTE_PATH, conflict: CONFLICT_PATH };
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -54,6 +73,7 @@ interface Fake {
   emqnote: CaptureApi;
   openNoteMock: ReturnType<typeof vi.fn>;
   saveNoteMock: ReturnType<typeof vi.fn>;
+  resolveConflictMock: ReturnType<typeof vi.fn>;
   /** Simulates main pushing an event, the way `IPC.vaultFileChanged` really arrives. */
   fireFileChanged: (event: VaultFileEvent) => void;
 }
@@ -69,6 +89,7 @@ function buildFake(initial: OpenedNote): Fake {
 
   const notesByPath = new Map<string, OpenedNote>([[initial.path, initial]]);
 
+  const resolveConflictMock = vi.fn(async () => {});
   const saveNoteMock = vi.fn(async (request: { path: string }) => ({
 
     written: true,
@@ -85,7 +106,13 @@ function buildFake(initial: OpenedNote): Fake {
 
   const library: LibraryApi = {
     tree: async () => tree,
-    notes: async () => [noteSummary(initial.path, initial.title)],
+    // All three rows: the note, the conflict copy beside it (a row like any other, which
+    // is how the reader can be standing on the losing file), and one unrelated note.
+    notes: async () => [
+      noteSummary(NOTE_PATH, "Test note"),
+      noteSummary(CONFLICT_PATH, "Test note"),
+      noteSummary(OTHER_PATH, "Other note"),
+    ],
     folderFiles: async () => [],
     folderTaskCounts: async () => ({}),
     noteTaskCounts: async () => ({}),
@@ -118,9 +145,9 @@ function buildFake(initial: OpenedNote): Fake {
     scanState: async () => null,
     onScanProgress: () => () => {},
     onFlushSaves: () => () => {},
-    conflicts: async () => [],
+    conflicts: async () => [PAIR],
     conflictDiff: async () => [],
-    resolveConflict: async () => {},
+    resolveConflict: resolveConflictMock,
     unlinkedAttachments: async () => [],
     trashAttachment: async () => "",
     linkingNotes: async () => [],
@@ -201,11 +228,13 @@ function buildFake(initial: OpenedNote): Fake {
   };
 
   notesByPath.set(OTHER_PATH, openedNote(OTHER_PATH, "Other note"));
+  notesByPath.set(CONFLICT_PATH, openedNote(CONFLICT_PATH, "Test note"));
 
   return {
     emqnote,
     openNoteMock,
     saveNoteMock,
+    resolveConflictMock,
     fireFileChanged: (event) => fileChangedHandler?.(event),
   };
 }
@@ -228,7 +257,7 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-describe("the library reacts to a note changing on disk (Package C)", () => {
+describe("resolving a conflict, and what the reader shows afterwards", () => {
   let LibraryComponent: typeof import("../src/renderer/library/Library.js").Library;
   let container: HTMLDivElement;
   let root: Root;
@@ -246,9 +275,7 @@ describe("the library reacts to a note changing on disk (Package C)", () => {
   });
 
   afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
+    act(() => root.unmount());
     container.remove();
   });
 
@@ -261,196 +288,87 @@ describe("the library reacts to a note changing on disk (Package C)", () => {
     await flush();
   }
 
-  async function openTheNote(): Promise<void> {
-    const row = container.querySelector(".notes-list .note");
-    expect(row).not.toBeNull();
+  /** Opens the note by clicking its row, the way a hand would. */
+  async function openTheNote(path: string): Promise<void> {
+    const row = Array.from(container.querySelectorAll<HTMLElement>(".notes-list .note")).find(
+      (node) => node.getAttribute("data-path") === path,
+    )!;
     await act(async () => {
-      row!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
-    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
   }
 
-  /** Dirties the open note without touching ProseMirror: the header's plain `location`
-   *  input already runs through `onHeaderChange`, which is all `dirty` needs. */
-  function makeDirty(): void {
-    const location = container.querySelector<HTMLInputElement>(".header input.location")!;
-    setInputValue(location, "Somewhere");
+  /** The banner, then the choice inside its dialog. */
+  async function resolve(label: string): Promise<void> {
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".conflict-banner")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    const button = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".conflict-dialog button"),
+    ).find((node) => node.textContent === label)!;
+    expect(button, `no ${label} button in the conflict dialog`).not.toBeUndefined();
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
   }
 
-  it("reloads automatically for a clean note, with no bar shown", async () => {
+  it("reopens the note it was reading after 'Keep that one' rewrites it", async () => {
     const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
     await mount(fake);
-    await openTheNote();
+    await openTheNote(NOTE_PATH);
     fake.openNoteMock.mockClear();
 
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "changed" });
-    });
-    await flush();
+    await resolve("Keep that one");
+
+    expect(fake.resolveConflictMock).toHaveBeenCalledTimes(1);
+    // The whole report: the bytes at this path changed, so the reader has to read them.
+    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
+  });
+
+  it("follows the conflict copy onto the original it was renamed over", async () => {
+    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
+    await mount(fake);
+    // Standing on the losing copy rather than the original — it is a row in the list like
+    // any other, and "Keep that one" renames it over the original's path.
+    await openTheNote(CONFLICT_PATH);
+    fake.openNoteMock.mockClear();
+
+    await resolve("Keep that one");
 
     expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
   });
 
-  it("shows Reload/Keep mine for a dirty note, and Reload reloads it", async () => {
+  it("puts the reader away when the copy it was reading is the one that goes", async () => {
     const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
     await mount(fake);
-    await openTheNote();
-    act(() => makeDirty());
-    await flush();
+    await openTheNote(CONFLICT_PATH);
     fake.openNoteMock.mockClear();
 
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "changed" });
-    });
-    await flush();
+    await resolve("Keep this one");
 
-    // Not auto-reloaded — there is something of the user's own on screen.
+    // The file is in the trash; there is nothing left at that path to show.
     expect(fake.openNoteMock).not.toHaveBeenCalled();
-    const bar = container.querySelector(".disk-change-bar");
-    expect(bar).not.toBeNull();
-    expect(bar!.textContent).toContain("changed outside emqnote");
-
-    const buttons = Array.from(bar!.querySelectorAll("button"));
-    const reload = buttons.find((button) => button.textContent === "Reload")!;
-    await act(async () => {
-      reload.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
-    expect(fake.openNoteMock).toHaveBeenCalledWith(NOTE_PATH);
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
-  });
-
-  it("'Keep mine' dismisses the bar without reloading", async () => {
-    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
-    await mount(fake);
-    await openTheNote();
-    act(() => makeDirty());
-    await flush();
-    fake.openNoteMock.mockClear();
-
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "changed" });
-    });
-    await flush();
-
-    const bar = container.querySelector(".disk-change-bar")!;
-    const buttons = Array.from(bar.querySelectorAll("button"));
-    const keepMine = buttons.find((button) => button.textContent === "Keep mine")!;
-    await act(async () => {
-      keepMine.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
-    expect(fake.openNoteMock).not.toHaveBeenCalled();
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
-    // The note stays open and dirty — "keep mine" touched nothing.
-    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
-  });
-
-  /**
-   * B101. "Keep mine" used to be the second button here too, and it only dismissed the
-   * bar — on the reasoning that the next debounced autosave would recreate the file. That
-   * holds only if you then type: the debounce is armed by an edit, so on a note nobody had
-   * touched nothing was ever written, and the reader was left holding a document with no
-   * file behind it. Reveal found nothing and neither did the Inbox.
-   */
-  it("'Restore' writes the note back to the path it was deleted from", async () => {
-    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
-    await mount(fake);
-    await openTheNote();
-    // Deliberately *not* dirty: nothing has been typed, which is the case that was broken.
-    fake.saveNoteMock.mockClear();
-
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "removed" });
-    });
-    await flush();
-
-    const restore = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".disk-change-bar button"),
-    ).find((button) => button.textContent === "Restore")!;
-    await act(async () => {
-      restore.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
-    // Written back, at its own path, with what the reader holds.
-    expect(fake.saveNoteMock).toHaveBeenCalledTimes(1);
-    expect(fake.saveNoteMock.mock.calls[0]![0].path).toBe(NOTE_PATH);
-    // And the bar goes, while the note stays open — a press that left "this note was
-    // deleted" on screen would read as having done nothing.
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
-    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
-  });
-
-  it("shows Close/Restore for a removed note, and Close clears the reader", async () => {
-    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
-    await mount(fake);
-    await openTheNote();
-
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "removed" });
-    });
-    await flush();
-
-    const bar = container.querySelector(".disk-change-bar");
-    expect(bar).not.toBeNull();
-    expect(bar!.textContent).toContain("deleted outside emqnote");
-
-    const buttons = Array.from(bar!.querySelectorAll("button"));
-    expect(buttons.map((button) => button.textContent)).toEqual(["Close", "Restore"]);
-
-    const close = buttons.find((button) => button.textContent === "Close")!;
-    await act(async () => {
-      close.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flush();
-
     expect(container.querySelector(".reader-empty")).not.toBeNull();
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
-
-    // B95. The pane is empty; its two bands are not gone. A reader that dropped its
-    // header and footer when it had nothing to show broke the 40px line across the top of
-    // the window and the 28px one across the bottom a third of the way along, which reads
-    // as chrome that has been cut off rather than as a pane with nothing in it.
-    const reader = container.querySelector(".reader")!;
-    expect(reader.querySelector(".pane-header")).not.toBeNull();
-    expect(reader.querySelector(".pane-footer")).not.toBeNull();
-    // And nothing *in* the header: an empty `.pane-title` is a real element, and
-    // `focusPane("title")` would find it and hand Tab out of the note list to a heading in
-    // a pane with no note.
-    expect(reader.querySelector(".pane-title")).toBeNull();
   });
 
-  it("a 'removed' event never auto-closes a clean note on its own", async () => {
+  it("leaves a note that has nothing to do with the conflict alone", async () => {
     const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
     await mount(fake);
-    await openTheNote();
+    await openTheNote(OTHER_PATH);
+    fake.openNoteMock.mockClear();
 
-    act(() => {
-      fake.fireFileChanged({ path: NOTE_PATH, kind: "removed" });
-    });
-    await flush();
+    await resolve("Keep that one");
 
-    // The bar is offered, but nothing closed itself.
-    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
-  });
-
-  it("does nothing for an event about a note that is not the one open", async () => {
-    const fake = buildFake(openedNote(NOTE_PATH, "Test note"));
-    await mount(fake);
-    await openTheNote();
-
-    act(() => {
-      fake.fireFileChanged({ path: OTHER_PATH, kind: "changed" });
-    });
-    await flush();
-
-    expect(fake.openNoteMock).not.toHaveBeenCalledWith(OTHER_PATH);
-    expect(container.querySelector(".disk-change-bar")).toBeNull();
-    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Test note");
+    expect(fake.resolveConflictMock).toHaveBeenCalledTimes(1);
+    // Reopening it would throw away a caret the user had put somewhere, over a decision
+    // about two other files.
+    expect(fake.openNoteMock).not.toHaveBeenCalled();
+    expect(container.querySelector(".reader-header h1")?.textContent).toBe("Other note");
   });
 });

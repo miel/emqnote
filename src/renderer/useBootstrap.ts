@@ -93,6 +93,28 @@ export function useBootstrap(): Bootstrapped {
     );
   }, [state.editorFontSize]);
 
+  /**
+   * How far the left edge of the window's top band has to stand clear of macOS's traffic
+   * lights (B101), as `--lights-inset` in `styles.css`.
+   *
+   * Written from here for `--editor-font-size`'s reason — both windows have a top band and
+   * both already call this hook — and *from the renderer at all* for `PaneHeader`'s
+   * `trafficLights` reason: there is no `env()` that answers this. `env(titlebar-area-x)`
+   * exists only where there is a Window Controls Overlay, which is Windows, so CSS alone
+   * cannot tell macOS's inset title bar from Linux's ordinary frame. The caller knows
+   * which platform it is; the stylesheet does not.
+   *
+   * 92px is `.pane-header-lights`' own clearance, and the same number for the same reason:
+   * the lights sit at `trafficLightPosition: { x: 12 }` and run about 52px, so they end
+   * near 64 and this leaves a good 28.
+   */
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--lights-inset",
+      state.platform === "darwin" ? "92px" : "0px",
+    );
+  }, [state.platform]);
+
   return {
     ...state,
     t: (key: string) => translate(state.locale as Locale, key),

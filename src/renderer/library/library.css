@@ -1527,11 +1527,12 @@
 .scan-bar {
   position: relative;
   width: 100%;
-  /* `--caption-inset` on all three of these bars, for the reason `styles.css` gives at
-     `.pane-header-caption`: they are drawn *above* the pane grid, so on Windows 11 it is
-     these — not the reader's header — that the caption buttons are painted over, and the
-     right-hand end of this one is where the count sits. */
-  padding: 5px calc(14px + var(--caption-inset)) 5px 14px;
+  /* Both insets on all three of these bars, for the reason `styles.css` gives at
+     `.pane-header-caption`: they are drawn *above* the pane grid, so it is these — not the
+     pane headers — that the OS's own controls are painted over. Windows' caption buttons
+     on the right, where this bar's count sits, and macOS's traffic lights on the left,
+     where its text starts (B101). */
+  padding: 5px calc(14px + var(--caption-inset)) 5px calc(14px + var(--lights-inset));
   font-size: 11px;
   color: var(--muted);
   background: var(--surface);
@@ -1564,10 +1565,11 @@
   gap: 12px;
   width: 100%;
   font-size: 12px;
-  /* The bar this rule was written for: `space-between` puts Reload / Close / Keep mine
-     flush against the right edge, which on Windows 11 is exactly where the caption buttons
-     are drawn. See `.scan-bar` above. */
-  padding: 7px calc(14px + var(--caption-inset)) 7px 14px;
+  /* The bar both of these rules were written for: `space-between` puts Reload / Close /
+     Restore flush against the right edge, which on Windows 11 is exactly where the caption
+     buttons are drawn — and its sentence starts at the left edge, which on macOS is
+     exactly where the traffic lights are. See `.scan-bar` above. */
+  padding: 7px calc(14px + var(--caption-inset)) 7px calc(14px + var(--lights-inset));
   color: #7a4a00;
   background: #ffe6b3;
   border-bottom: 1px solid var(--border);
@@ -1585,10 +1587,10 @@
   font: inherit;
   font-size: 12px;
   text-align: left;
-  /* See `.scan-bar`. This one is a full-width button, so the inset keeps its *text* clear
-     of the controls; the last stretch of the button box still sits under them and is not
-     clickable there, which is the platform's own rule and not something CSS can undo. */
-  padding: 7px calc(14px + var(--caption-inset)) 7px 14px;
+  /* See `.scan-bar`. This one is a full-width button, so the insets keep its *text* clear
+     of the controls; the stretch of button box under them is still not clickable, which is
+     the platform's own rule and not something CSS can undo. */
+  padding: 7px calc(14px + var(--caption-inset)) 7px calc(14px + var(--lights-inset));
   color: #7a4a00;
   background: #ffd875;
   border: 0;

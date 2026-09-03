@@ -2105,6 +2105,63 @@ can be seen on any machine but Windows, `env(titlebar-area-width)` being absent 
 else and every one of these rules evaluating to zero, so `styles-pane-bands.test.ts` counts
 them by hand and `TEST-PROTOCOL.md` §45 carries the rows a person has to look at.
 
+**The window's top band has two edges, and both of them belong to the OS** (B101).
+`--caption-inset` was added for Windows' caption buttons on the right and applied to the
+three bars `.library-shell` stacks above the pane grid. The same bars run under macOS's
+traffic lights on the *left*, at the other end of the same 40px strip, and that was neither
+fixed nor asked about — the reasoning was written about Windows, `TEST-PROTOCOL.md` §49 had
+four Windows rows and none for the Mac, and it was reported by the first person to look at
+it on one. `--lights-inset` sits beside it now. **The two tokens are deliberately not
+symmetrical, and making them so would break one of them**: `--caption-inset` is derived from
+`env(titlebar-area-width)` and self-zeroes where there is no overlay, while there is no
+`env()` for the traffic lights at all — `env(titlebar-area-x)` exists only where a Window
+Controls Overlay does, which is Windows, so CSS cannot tell macOS's inset title bar from
+Linux's ordinary frame. `useBootstrap` writes the value from `isMac`, the same flag
+`PaneHeader`'s `trafficLights` prop runs on. `.pane-header-lights` goes on stating its own
+92px rather than reading the token: that class is only ever *applied* on macOS, so it needs
+no platform question, and a token that is 0 everywhere else would make the rule silently do
+nothing if the flag were ever passed elsewhere.
+
+**A button that says it will keep something has to write it** (B101). The disk-change bar
+offered "Keep mine" in both of its shapes, and for a *deleted* note it only dismissed the
+bar — on the reasoning, written above it, that the next debounced autosave would recreate
+the file. That holds only if you then type: the debounce is armed by an edit, so on a note
+nobody had touched no write was ever queued, and the press left the reader holding a
+document with no file behind it. Reveal found nothing and neither did the Inbox. The two
+shapes have two buttons now: "Keep mine" still means "do not reload, my version stands" for
+a note that changed, and a deleted note gets **Restore**, which writes immediately through
+the reader's own `save()`. `writeAtomic`'s `mkdirSync` recreates the folder on the way,
+which matters because the usual way a note disappears is that its folder did.
+
+**Resolving a conflict reopens the note, rather than hoping an event does** (B101).
+`resolveConflict` renames the winning copy over the original, and main answers with
+`notifyLibrary()` — which reloads the tree, the list, the facets and the conflict list, and
+never the note on screen. So "Keep that one" left the reader showing the losing version
+until something else happened to reopen it. The IPC call moved out of `ConflictBanner` and
+into `Library.tsx`, which owns the open note and therefore owns both halves. The watcher
+*does* raise an `unlink`/`add` pair underneath, and `onFileChanged` would reload a clean note
+off the back of it — but whether that arrives as one event or two, and in which order, is
+chokidar's business, and the reader agreeing with the disk after a button the user just
+pressed is not a thing to leave to a race. B31's rule read the other way round: the app
+knows what it did, so it should not have to be told.
+
+**A freed page is not a returned byte** (B101). SQLite keeps freed pages on an internal free
+list and re-uses them; it hands them back to the filesystem only on an explicit `VACUUM`,
+which this app never ran — so an index that once covered far more than it covers now sits at
+its high-water mark for ever. That is what a 25 MB index rebuilding to 550 KB when it was
+deleted by hand actually was, and **nothing was being pruned**: in every measurement the row
+counts and the search hits came back identical. Two likelier-sounding explanations were
+measured and are both wrong, which is why they are written down here — daily churn reaches a
+steady state (120 rounds of rewriting every note moved a 4.59 MB index by 0.03 MB), and a
+schema bump drops every table but SQLite re-uses those pages (flat at 1.91 MB across all
+five versions). The mechanism is a vault that shrank: 3000 notes indexed at 18.3 MB, still
+14.1 MB at 60 notes with 89% of its pages free, 1.6 MB after a `VACUUM`. `reclaimFreeSpace`
+runs on open, and its three guards are the whole of why it is safe — only past a quarter free
+*and* a floor worth the rewrite, only in the main process (the scan worker opens the same
+file and deliberately does not ask, or two `VACUUM`s would fight over one database), and
+never propagating a failure, because an index that could not be compacted still answers
+every question correctly.
+
 **An icon-only button still has a name, and `--click-button` falls back to it** (B92).
 `ChromeButton` makes `label` mandatory and puts it on `aria-label` whenever `iconOnly` is
 set; `captureWindowTo` in `library-window.ts` reads `textContent` first and only then

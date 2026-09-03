@@ -620,7 +620,9 @@ async function main(): Promise<void> {
   // that opens the same file itself, which is why the path is handed over rather than
   // the handle (`scan-host.ts`).
   const indexPath = join(app.getPath("userData"), "index.sqlite");
-  indexDb = openIndex(indexPath);
+  // The one connection that may compact this file — see `reclaimFreeSpace`. The scan
+  // worker opens it too and deliberately does not ask.
+  indexDb = openIndex(indexPath, { reclaim: true });
   setScanRunner(workerScanRunner(indexPath));
 
   // Where a note goes when the vault will not take it. Under `userData` and never inside

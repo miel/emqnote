@@ -525,6 +525,7 @@ const DUTCH: Record<string, string> = {
   "diskChange.reload": "Herladen",
   "diskChange.close": "Sluiten",
   "diskChange.keepMine": "Mijn versie houden",
+  "diskChange.restore": "Terugzetten",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
   "library.saveFailed": "Niet bewaard ({code})",
   "library.saveRecovered": "Tekst veiliggesteld — pad kopiëren",
@@ -1042,6 +1043,7 @@ const ENGLISH: Record<string, string> = {
   "diskChange.reload": "Reload",
   "diskChange.close": "Close",
   "diskChange.keepMine": "Keep mine",
+  "diskChange.restore": "Restore",
   // Capture window's status-bar equivalent — no buttons, see CLAUDE.md.
   "library.saveFailed": "Not saved ({code})",
   "library.saveRecovered": "Text preserved — copy path",
