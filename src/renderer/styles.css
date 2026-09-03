@@ -53,6 +53,22 @@
      forgotten, which is exactly how the disk-change bar came to have its buttons drawn
      underneath Close. */
   --caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
+
+  /* The same question on the other side of the window, and it cannot be asked the same
+     way (B101). macOS draws its traffic lights into the top-*left* of the band, and there
+     is no `env()` for them: `env(titlebar-area-x)` exists only where Chromium has a Window
+     Controls Overlay, which is Windows — so on macOS a CSS fallback cannot tell an inset
+     title bar from Linux's ordinary frame. `useBootstrap` writes the real value here from
+     `isMac`, the same flag `PaneHeader`'s `trafficLights` prop already runs on; 0 is what
+     every other platform keeps, and what the frames before the bootstrap round trip
+     resolves are drawn with.
+
+     `.pane-header-lights` below states its own 92px rather than reading this, deliberately:
+     that class is only ever *applied* on macOS, so it needs no platform question, and a
+     token whose value is 0 off macOS would make that rule silently do nothing if the flag
+     were ever passed elsewhere. This token is for the bands that have no such flag — the
+     three bars `.library-shell` stacks above the pane grid. */
+  --lights-inset: 0px;
 }
 
 /* The light theme's polarity used to be upside down: `--surface` was `#ffffff` and
@@ -2333,7 +2349,13 @@ body {
  * tall and the overlay is 40, so the top half of this header is still inside it. The cost
  * of being unconditional is a right-hand gap beside a title that is left-aligned anyway;
  * the cost of being clever would be a title under Close whenever the thinnest of the three
- * bars is up. Those bars take the same inset themselves, in `library.css`. */
+ * bars is up. Those bars take the same inset themselves, in `library.css`.
+ *
+ * **And so does the left** (B101). Everything above was written about Windows and applied
+ * to Windows only, and the same three bars run under macOS's traffic lights at the other
+ * end of the same 40px strip — reported from the one machine this sandbox is not. The
+ * bars carry `--lights-inset` as well as `--caption-inset`; the asymmetry between the two
+ * tokens is real and is explained where they are declared. */
 .pane-header-lights {
   padding-left: 92px;
 }

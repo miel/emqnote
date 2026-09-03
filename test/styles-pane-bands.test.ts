@@ -144,6 +144,43 @@ describe("styles: the panes share one header and one footer geometry", () => {
   });
 
   /**
+   * B101, and the same bug at the other end of the same strip. Everything above was
+   * reasoned about Windows and applied to Windows only, so the three bars went on running
+   * under macOS's traffic lights — reported from the one machine this sandbox is not, on
+   * the first look anybody gave it there.
+   *
+   * The two tokens are deliberately not symmetrical, and that is the thing to keep:
+   * `--caption-inset` is `env()`-derived and self-zeroing off Windows, while there is no
+   * `env()` for the traffic lights at all — `env(titlebar-area-x)` exists only where a
+   * Window Controls Overlay does, which is Windows, so CSS cannot tell macOS's inset title
+   * bar from Linux's plain frame. `useBootstrap` writes the real value from `isMac`.
+   */
+  it("keeps the same bands clear of macOS's traffic lights", () => {
+    expect(shared.split("\n").filter((line) => line.trim().startsWith("--lights-inset:")))
+      .toHaveLength(1);
+    // Zero in the sheet, and only the renderer ever makes it anything else.
+    expect(rule(shared, ":root")).toMatch(/--lights-inset:\s*0px;/);
+
+    const bootstrap = readFileSync(
+      new URL("../src/renderer/useBootstrap.ts", import.meta.url),
+      "utf8",
+    );
+    expect(bootstrap).toContain("--lights-inset");
+    expect(bootstrap).toMatch(/darwin.*92px|92px.*darwin/s);
+
+    for (const selector of ["\\.scan-bar", "\\.disk-change-bar", "\\.conflict-banner"]) {
+      expect(rule(library, selector), `${selector} does not reserve the lights inset`).toMatch(
+        /var\(--lights-inset\)/,
+      );
+    }
+
+    // The leftmost pane header keeps stating its own 92px: that class is only ever applied
+    // on macOS, so it needs no platform question and must not be made to depend on a token
+    // that is 0 everywhere else.
+    expect(rule(shared, "\\.pane-header-lights")).toMatch(/padding-left:\s*92px;/);
+  });
+
+  /**
    * The fourth band, and the one that was not a band at all: the file preview drew its own
    * bar with its own padding and no footer, so the third column broke the line across the
    * top of the window whenever a file was being looked at rather than a note (B95).
