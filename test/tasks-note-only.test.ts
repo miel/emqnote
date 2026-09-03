@@ -306,12 +306,15 @@ describe("the Tasks view's 'this note only' filter, and where its way out lives"
     expect(container.querySelector(".task-list")).toBeNull();
   });
 
-  it("offers the filter in the header, refused while no note is open", async () => {
+  it("offers the filter in the footer, refused while no note is open", async () => {
     await openTasks();
 
     const box = noteOnlyBox();
     expect(box).not.toBeNull();
-    expect(container.querySelector(".task-list .pane-header .task-note-only")).not.toBeNull();
+    // Beside the way out, not up in the header band: the three filters read as a set, and
+    // the header is left holding the title alone like the other two panes'.
+    expect(container.querySelector(".task-list .pane-header .task-note-only")).toBeNull();
+    expect(container.querySelector(".task-list .pane-footer .task-note-only")).not.toBeNull();
     // The view is reachable from the sidebar with the reader empty, so this is a real
     // state rather than a defensive one.
     expect(box.disabled).toBe(true);
