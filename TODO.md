@@ -3,7 +3,7 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 3 September 2026, unreleased — two bugs from daily use, both in the Tasks view
+Last updated 3 September 2026, released as `v0.13.1` — two bugs from daily use, both in the Tasks view
 and both about the same band (**B99**'s addendum).
 
 **"This note only" moved down into the footer, beside "Exit tasks".** The tick and the way out
