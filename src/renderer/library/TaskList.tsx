@@ -178,35 +178,10 @@ export function TaskList({
     // `Library.tsx`'s window listener owns the key instead, which sees it from anywhere.
     <div className="notes task-list">
       {/* The same 40px band the folder tree and the note list wear, so this view does not
-          break the line across the top of the window when it replaces the note list.
-
-          What is in it is the *narrowest* of the three filters, and it is here rather than
-          in the toolbar below because it is the one that answers a question about the note
-          you are already reading: "what is still open in this one". It is a checkbox and
-          not a `ChromeButton` for the same reason "open only" is — the two are settings the
-          list is showing under, not actions, and a pressed-looking button is a state you
-          have to already know how to read (B78's argument, from the other side).
-
-          Disabled with no note open, which is a real state here: the view can be reached
-          from the sidebar with the reader empty. Its title says so, rather than leaving a
-          greyed control with nothing explaining itself. */}
-      <PaneHeader
-        title={t("library.tasks")}
-        actions={
-          <label
-            className={`task-note-only${notePath === null ? " task-note-only-off" : ""}`}
-            title={notePath ?? t("tasks.noteOnlyNone")}
-          >
-            <input
-              type="checkbox"
-              checked={onlyNote !== null}
-              disabled={notePath === null}
-              onChange={(event) => onNoteOnlyChange(event.target.checked)}
-            />
-            {t("tasks.noteOnly")}
-          </label>
-        }
-      />
+          break the line across the top of the window when it replaces the note list. It
+          carries the title alone: the three filters are the toolbar's and the footer's,
+          and the one that was up here moved down beside the way out — see below. */}
+      <PaneHeader title={t("library.tasks")} />
 
       {/* Below the band rather than inside it, which is where the note's own
           When/Where/Tags/Who block sits for the same reason: these two are what the view
@@ -303,7 +278,25 @@ export function TaskList({
           `offTabOrder` for the same trade B94 made for the button it mirrors: this footer
           sits between the list and the note, so a Tab stop in it lands in the middle of
           the order the eye reads. Both of this view's other ways out are keys — Escape,
-          and the `Mod+T` that opened it — so the control is not the only route. */}
+          and the `Mod+T` that opened it — so the control is not the only route.
+
+          Beside it, and *before* it, is the narrowest of the three filters: the one that
+          answers a question about the note you are already reading — "what is still open
+          in this one". It sat in the header band, where it was the only filter standing
+          away from the other two; here it shares a band with them — the toolbar's pair
+          directly above — and the band it left keeps the title alone, which is what the
+          other two panes' headers hold. It stays a checkbox rather than a `ChromeButton`
+          for the reason "open only" is one: the two are settings the list is showing
+          under, not actions, and a pressed-looking button is a state you have to already
+          know how to read (B78's argument, from the other side). It keeps a Tab
+          stop where the button beside it has none — that trade is about a *button* with
+          two keys behind it — but only on the backward walk: `paneOf` does not claim it,
+          so Shift+Tab from the note's title lands here, while a forward Tab off a task row
+          is `tabStep`'s and goes to the note (B98).
+
+          Disabled with no note open, which is a real state here: the view can be reached
+          from the sidebar with the reader empty. Its title says so, rather than leaving a
+          greyed control with nothing explaining itself. */}
       <PaneFooter
         status={
           <span className="notes-count">
@@ -313,14 +306,28 @@ export function TaskList({
           </span>
         }
         actions={
-          <ChromeButton
-            label={t("tasks.exit")}
-            className="task-exit"
-            icon={tasksGlyph}
-            small
-            offTabOrder
-            onClick={onExit}
-          />
+          <>
+            <label
+              className={`task-note-only${notePath === null ? " task-note-only-off" : ""}`}
+              title={notePath ?? t("tasks.noteOnlyNone")}
+            >
+              <input
+                type="checkbox"
+                checked={onlyNote !== null}
+                disabled={notePath === null}
+                onChange={(event) => onNoteOnlyChange(event.target.checked)}
+              />
+              {t("tasks.noteOnly")}
+            </label>
+            <ChromeButton
+              label={t("tasks.exit")}
+              className="task-exit"
+              icon={tasksGlyph}
+              small
+              offTabOrder
+              onClick={onExit}
+            />
+          </>
         }
       />
     </div>

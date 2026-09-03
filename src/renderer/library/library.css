@@ -760,19 +760,30 @@
    read as two controls rather than one. What matters is unchanged: it is a *word*, not an
    ×, because `--click-button="Exit tasks"` is how the packaged self-test leaves this view.
 
-   `.task-note-only` is what took its place in the header: the third filter, and the only
-   one of the three that is about the note being read rather than about the vault. Same
-   markup and same size as `.task-open-only` below — they are the same kind of control and
-   would read as two different ones if they were drawn differently — but `--text` rather
-   than `--muted`, because a header band is the loud one of the two and 12px muted text
-   disappears in it. `-webkit-app-region` needs no rule here: `.pane-actions` already says
-   `no-drag`, and a press on a checkbox inside a drag region goes to the window move (B94).
-   `.task-note-only-off` is the no-note-open state; the `<input>`'s own `disabled` is what
-   actually refuses the click, this only greys the word beside it. */
+   `.task-note-only` stands beside it, in the same footer band: the third filter, and the
+   only one of the three that is about the note being read rather than about the vault. It
+   spent a while in the header band, where it was the one filter standing apart from the
+   other two; a footer holding the way out and the narrowest filter is the same band the
+   toolbar's pair sits one row above, and the header is left with the title alone the way
+   the other two panes' are. Same markup and same size as `.task-open-only` below — they
+   are the same kind of control and would read as two different ones if they were drawn
+   differently — but `--text` rather than the band's own `--muted`, because it neighbours a
+   `ChromeButton`, which names itself in `--text` for that reason too. `-webkit-app-region`
+   needs no rule: `.pane-footer` is not a drag region at all (it holds controls at both
+   ends), unlike the header band it came from, where `.pane-actions` had to say `no-drag`
+   or the press went to the window move (B94). `.task-note-only-off` is the no-note-open
+   state; the `<input>`'s own `disabled` is what actually refuses the click, this only
+   greys the word beside it. */
 .task-note-only {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Its own item rather than `.pane-actions`' 4px `gap`, for `.reader-back`'s reason one
+     footer over: this is the only place in either window's chrome where a *phrase* stands
+     next to a labelled button, and at the shared gap "This note only" and "Exit tasks"
+     run together into one string. The gap everything else in a footer is measured by is
+     left alone. */
+  margin-right: 6px;
   font-size: 12px;
   color: var(--text);
   white-space: nowrap;
@@ -805,11 +816,18 @@
   cursor: default;
 }
 
+/* `flex: 1 1 auto` and `min-height: 0`, for exactly `.notes-list`'s reason and against
+   exactly its bug: without the grow, a list shorter than the pane left the leftover height
+   *under* it, and the footer — the count, the way out, the "this note only" tick — came up
+   to sit against the last task instead of staying at the bottom of the window. The band
+   the eye finds by its edge cannot move with the length of the list. */
 .task-rows {
   margin: 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .task-row {

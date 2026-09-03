@@ -2218,19 +2218,44 @@ times and the same thing has held every time: it is a *word*, not an ×, because
 `--click-button="Exit tasks"` is how the packaged self-test leaves this view and
 `library-window.ts` matches a control by its `textContent`.
 
-The seat it left in the header holds `.task-note-only`, the "this note only" tick — a
+Beside it in that same footer stands `.task-note-only`, the "this note only" tick — a
 checkbox and not a `ChromeButton`, since it is a state the list is showing under rather than
-an action (B78, from the other side). **It queries `folderOf(notePath)` and keeps that one
-note's rows, never `scope`.** The note in the reader can be filed anywhere — stand in one
+an action (B78, from the other side). It spent a release in the header seat "Exit tasks" had
+just given up, which was the wrong half of the trade: it left the three filters of one view
+split across two bands, with the odd one out up in the band the other two panes keep a title
+alone in. In the footer the pair is the *setting* and the *way out*, and the toolbar's other
+two filters are one row above it. It keeps a Tab stop where "Exit tasks" beside it does not
+— that `offTabOrder` is a trade made for a button with two keys behind it, and a checkbox
+has neither key — but only on the **backward** walk: `paneOf` answers `null` for it, so the
+press is the browser's, and a forward Tab off a task row is claimed by `tabStep` and lands
+in the note (B98). Shift+Tab from the note's title is what reaches it, which is where
+`drive:library` presses it from. It carries 6px of right margin of its own, because a phrase
+and a labelled button at `.pane-actions`' shared 4px gap read as one string ("This note only
+Exit tasks").
+
+**It queries `folderOf(notePath)` and keeps that one note's rows, never `scope`.** The note in the reader can be filed anywhere — stand in one
 folder, read a note from another, press `Mod+T` — so a filter that only sieved the rows
 already fetched would answer "no tasks" for a note that plainly has some. While it is ticked
 the scope `<select>` is `disabled`, because a chooser offering to narrow a list it no longer
 decides is saying something untrue; with no note open the checkbox is `disabled` too, which
 is a real state and not a defensive one, the view being reachable from the sidebar with an
 empty reader. `noteOnly` lives in `Selection` beside `scope` and `openOnly` so all three
-filters are read from one place. jsdom cannot see the half that matters most here: the
-checkbox sits in a header band, which is `-webkit-app-region: drag`, and only
-`npm run drive:library` can press it for real.
+filters are read from one place. jsdom cannot see either half that matters most here: where
+the band it sits in *ends up* (below), and whether a press lands at all — the band it came
+from is `-webkit-app-region: drag`, and only `npm run drive:library` can press it for real.
+
+**A scroller in a pane's column grows, or the footer under it walks** (B99). `.task-rows` and
+`.notes-list` are both `flex: 1 1 auto; min-height: 0`, and the grow is the load-bearing
+half: at the default `flex: 0 1 auto` a scroller is only as tall as its rows, so a list
+shorter than the pane leaves the leftover height *below* the footer band — which comes up to
+sit against the last row and then moves again with every change of length. `.notes-list`
+learned it first (a note list read as cut off halfway, with the file list below it stranded);
+`.task-rows` was written without it and shipped the same bug a second time, where the tell
+was that "Exit tasks" and the task count appeared to travel with the list. A band the eye
+finds by the window's edge cannot move with the length of what is above it.
+`styles-scroller-grow.test.ts` reads both rules, since jsdom lays nothing out, and
+`drive:library`'s Tasks step measures the real gap between `.task-list`'s foot and its
+footer's.
 
 **The pane ring is four stops forward and three back, and the asymmetry is deliberate**
 (B94, B98). Forward: tree → notes → the note's *title* → the note → tree. Backward: the note

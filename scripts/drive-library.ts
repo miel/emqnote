@@ -648,7 +648,9 @@ async function main(): Promise<number> {
       },
     },
     {
-      name: "the Tasks view narrows to the open note, and leaves by its footer button (B99)",
+      name:
+        "the Tasks view narrows to the open note from the footer, and leaves by the " +
+        "button beside it (B99)",
       run: async () => {
         await open.library!.key("t", {
           windowsVirtualKeyCode: 84, nativeVirtualKeyCode: 84, modifiers: 2,
@@ -663,12 +665,27 @@ async function main(): Promise<number> {
         await click(".task-list .task-row:nth-of-type(1) .task-row-text");
         await settle(600);
 
-        // **The press jsdom cannot make.** This checkbox lives in a header band, which is
-        // `-webkit-app-region: drag` — a press inside one goes to the window move, not to
-        // the element under the pointer (B94). `.pane-actions` is what gives it back, and
-        // no test under `test/` can tell whether that worked.
+        // **The press jsdom cannot make.** The checkbox sits in the footer band beside
+        // "Exit tasks" now; the band it came from is `-webkit-app-region: drag`, where a
+        // press goes to the window move rather than to the element under the pointer
+        // (B94). Nothing under `test/` can tell a press that landed from one that was
+        // eaten, in either band.
         await click(".task-note-only input");
         await settle(600);
+
+        // **The measurement jsdom cannot make either.** A short list used to leave the
+        // leftover height under the footer, which walked up to sit against the last task
+        // and took this checkbox and the exit button with it. jsdom lays nothing out, so
+        // the only place the band's seat can be checked is here.
+        const footerGap = await open.library!.evaluate<number>(
+          `Math.round(
+             document.querySelector('.task-list').getBoundingClientRect().bottom -
+             document.querySelector('.task-list .pane-footer').getBoundingClientRect().bottom
+           )`,
+        );
+        if (Math.abs(footerGap) > 1) {
+          throw new Error(`the footer sits ${footerGap}px above the foot of the pane`);
+        }
 
         const after = await taskNotes();
         const notes = new Set(after);
@@ -684,8 +701,8 @@ async function main(): Promise<number> {
         );
         if (offered) throw new Error("the scope chooser still offers to narrow a list it lost");
 
-        // And out, by the button that has moved into the seat the note list's own Tasks
-        // button sits in — the pair being one control pressed twice is the point of it.
+        // And out, by the button in the seat the note list's own Tasks button sits in —
+        // the pair being one control pressed twice is the point of it.
         await click(".task-list .pane-footer .task-exit");
         await settle(600);
         const gone = await open.library!.evaluate<boolean>(
