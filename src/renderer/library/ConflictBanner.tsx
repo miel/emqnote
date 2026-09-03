@@ -12,6 +12,13 @@ interface Props {
    * is for the user to reconcile and clean up by hand, in their own time.
    */
   onMerge: (path: string) => void;
+  /**
+   * Carries out the choice. The IPC call used to be made here, and the reader was then
+   * left showing whatever it had (B101) — "Keep that one" replaces the original's bytes,
+   * and nothing told the note pane to read them. `Library.tsx` owns the open note, so it
+   * owns both halves: the resolve and the reopen.
+   */
+  onResolve: (pair: ConflictPair, choice: ConflictChoice) => void;
 }
 
 /** The last segment of a vault-relative path — same trick as `FilePreview.tsx`. */
@@ -27,7 +34,12 @@ function basename(path: string): string {
  * consequential — trashing a note either way, keep-this or keep-that — should never
  * happen back to back without the user choosing to look again.
  */
-export function ConflictBanner({ pairs, t, onMerge }: Props): React.ReactElement | null {
+export function ConflictBanner({
+  pairs,
+  t,
+  onMerge,
+  onResolve,
+}: Props): React.ReactElement | null {
   const [active, setActive] = useState<ConflictPair | null>(null);
   const [diff, setDiff] = useState<DiffLine[] | null>(null);
   const [diffError, setDiffError] = useState(false);
@@ -60,7 +72,7 @@ export function ConflictBanner({ pairs, t, onMerge }: Props): React.ReactElement
     if (active === null) return;
     const pair = active;
     setActive(null);
-    void window.emqnote.library.resolveConflict(pair, choice);
+    onResolve(pair, choice);
   };
 
   const bannerText =

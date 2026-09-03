@@ -14,6 +14,7 @@ import {
   NATURAL_SORT_DIRECTION,
   selectionKey,
   TRASH_FOLDER,
+  type ConflictChoice,
   type ConflictPair,
   type Facets,
   type FolderNode,
@@ -2573,6 +2574,45 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Carries out a conflict choice, and then makes the reader agree with the disk (B101).
+   *
+   * The reopen is the whole of this function's reason to exist. `resolveConflict` answers
+   * with `notifyLibrary()`, and that refresh reloads the tree, the list, the facets and
+   * the conflict list — everything except the note actually on screen, which for
+   * "keep that one" is precisely the file whose bytes just changed. So the reader went on
+   * showing the losing version until something else happened to reopen it.
+   *
+   * Not left to the watcher, deliberately. An `unlink`/`add` pair does arrive — the
+   * resolve trashes one file and renames the other over its path — and `onFileChanged`
+   * would reload a clean note off the back of it. But whether it arrives as one event or
+   * two, and in which order, is chokidar's business and the filesystem's; the reader
+   * agreeing with the disk after a button press the user just made is not a thing to
+   * leave to a race. This is B31's rule read the other way round: the app knows what it
+   * did, so it should not have to be told.
+   *
+   * Both paths are asked about, because either can be the one being read. "Keep that one"
+   * renames the conflict copy over the original, so a reader standing on *either* path
+   * wants the original's new bytes; "keep this one" trashes the conflict copy, so a reader
+   * standing on that copy has nothing left to show and is put away — the same handling
+   * `trashNotesAt` gives a note it deletes.
+   */
+  const resolveConflictAt = async (pair: ConflictPair, choice: ConflictChoice): Promise<void> => {
+    await window.emqnote.library.resolveConflict(pair, choice);
+
+    const current = openRef.current;
+    if (current === null) return;
+
+    if (choice === "keepOriginal" && current.path === pair.conflict) {
+      setOpen(null);
+      openRef.current = null;
+      return;
+    }
+    if (current.path === pair.original || current.path === pair.conflict) {
+      await openNote(pair.original);
+    }
+  };
+
+  /**
    * Puts a trashed note or folder back somewhere real.
    *
    * Deliberately the ordinary move on both halves — `IPC.libraryMoveNotes` never had a
@@ -2861,6 +2901,7 @@ export function Library(): React.ReactElement {
         pairs={conflicts}
         t={app.t}
         onMerge={(path) => void openNote(path)}
+        onResolve={(pair, choice) => void resolveConflictAt(pair, choice)}
       />
 
       <DiskChangeBar
