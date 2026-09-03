@@ -4458,3 +4458,107 @@ jsdom niet kan zien.
 Twee dingen kan geen van die bestanden bereiken en die staan in `scripts/drive-library.ts`:
 wat Tab vanuit de lijst *doet* — jsdom heeft geen focusnavigatie, dus alleen daar is een echte
 Tab in te drukken — en dat het paneel in een venster van 520 px past.
+
+## B101 — De bovenste band houdt aan béide kanten afstand, en drie knoppen doen wat ze zeggen
+
+**Genomen** op 3 september 2026, na de eerste keer dat B95 op een Mac is bekeken. Vier
+meldingen, waarvan er twee een vraag waren.
+
+### De vensterknoppen zitten links zo goed als rechts
+
+B95 heeft `--caption-inset` bedacht voor de knoppen die Windows 11 rechtsboven in de band
+tekent, en drie balken boven het raster laten inspringen. Diezelfde drie balken lopen aan de
+andere kant van diezelfde 40 px onder de stoplichten van macOS door. Dat stond er niet in —
+de redenering ging over Windows en is op Windows toegepast — en `.pane-header-lights`, de
+regel die precies dit aan de linkerkant al oploste, staat drie regels boven
+`.pane-header-caption` in hetzelfde blok. Het is opgevallen bij de eerste blik op een Mac,
+en `TEST-PROTOCOL.md` §49 vroeg alleen naar Windows, dus er was ook geen rij die ernaar keek.
+
+`--lights-inset` staat er nu naast, en **de twee zijn met opzet niet symmetrisch**.
+`--caption-inset` komt uit `env(titlebar-area-width)` en maakt zichzelf 0 waar dat er niet
+is. Voor de stoplichten bestaat zo'n `env()` niet: `env(titlebar-area-x)` bestaat alleen
+waar er een Window Controls Overlay is, en dat is Windows — dus op macOS kan CSS een
+ingelaten titelbalk niet onderscheiden van het gewone kader van Linux. `useBootstrap`
+schrijft de waarde uit `isMac`, dezelfde vlag waar `PaneHeader`'s `trafficLights` al op
+loopt.
+
+`.pane-header-lights` blijft zijn eigen 92 px noemen en leest het token niet. Die klasse
+wordt alleen op macOS *toegepast*, dus hij hoeft niets over platforms te weten — en een
+token dat overal elders 0 is, zou die regel stilletjes niets laten doen als de vlag ooit
+ergens anders werd meegegeven.
+
+**Verworpen:** de inspringing weglaten zodra er een balk boven de kop hangt. Dezelfde
+afweging als aan de rechterkant, en met dezelfde uitkomst: de scanbalk is zo'n 22 px en de
+overlay 40, dus de bovenste helft van die kop zit er nog steeds onder.
+
+### "Mijn versie houden" hield niets
+
+Bij een notitie die buiten de app was verwijderd stond er Sluiten en Mijn versie houden, en
+die tweede knop maakte alleen de balk weg. De redenering stond erboven en klopte bijna: de
+eerstvolgende debounced opslag zou het bestand toch terugschrijven. Dat geldt alleen als je
+daarna *typt* — de debounce wordt door een bewerking gestart, dus bij een notitie die
+niemand had aangeraakt kwam er nooit een schrijfactie. Je hield een document zonder bestand
+eronder: Tonen in Finder vond niets en de Inbox ook niet.
+
+De twee vormen van de balk hebben nu twee knoppen. Bij *gewijzigd* betekent Mijn versie
+houden nog steeds "niet herladen, mijn versie staat" — het bestand is er nog en de volgende
+opslag schrijft eroverheen. Bij *verwijderd* staat er **Terugzetten**, en dat schrijft, nu.
+`writeAtomic` maakt de map onderweg opnieuw aan, wat uitmaakt omdat een notitie meestal
+verdwijnt doordat de map om haar heen verdween.
+
+**Verworpen:** één etiket voor beide vormen houden. Dat scheelt twee teksten en het is
+precies wat de melding veroorzaakte: één woord dat in de ene stand "niet herladen" betekent
+en in de andere "schrijf het bestand terug".
+
+### Een conflictkeuze laat de lezer meelezen
+
+"Die daar houden" hernoemt de conflictkopie over het origineel heen. Main antwoordt met
+`notifyLibrary()`, en die verversing herlaadt de boom, de lijst, de facetten en de
+conflictlijst — alles behalve de notitie die op dat moment op het scherm staat. Dus de lezer
+bleef de verliezende versie tonen tot er iets anders langskwam dat haar opnieuw opende.
+
+De aanroep is uit `ConflictBanner` gehaald: `Library.tsx` bezit de geopende notitie, dus het
+bezit beide helften. Beide paden worden nagevraagd, want op allebei kun je staan — na "die
+daar houden" wil een lezer op *elk* van de twee de nieuwe bytes van het origineel, en na
+"deze houden" is de kopie naar de prullenbak en is er niets meer om te tonen.
+
+**Verworpen:** het aan de watcher overlaten. Er komt wel degelijk een `unlink`/`add`-paar
+langs, en `onFileChanged` zou een schone notitie daarop herladen. Maar of dat als één
+gebeurtenis of als twee aankomt, en in welke volgorde, is de zaak van chokidar en het
+bestandssysteem. Dat de lezer klopt na een knop die de gebruiker net heeft ingedrukt, is
+niets om aan een race over te laten — B31's regel andersom gelezen: de app weet wat ze zelf
+gedaan heeft.
+
+### Een index van 25 MB die tot 550 KB herbouwt, gooit niets weg
+
+Dit was een vraag, en het antwoord is gemeten in plaats van beredeneerd — twee keer mis,
+voordat het klopte. Het is **geen** slijtage door dagelijks gebruik: 120 rondes waarin elke
+notitie opnieuw werd geschreven lieten het bestand op 4,59 MB staan met gelijkblijvende
+rijaantallen. Het is ook **geen** schemamigratie: een versiesprong laat elke tabel vallen en
+bouwt hem opnieuw op, maar SQLite hergebruikt die pagina's en het bestand bleef over alle
+vijf versies op 1,91 MB.
+
+Wat het wél is: de hoogwatermerk van het bestand. Gemeten op een kluis van 3000 notities die
+tot 60 werd teruggebracht — 18,3 MB, daarna nog 14,1 MB met **89% van de pagina's vrij**, en
+1,6 MB na een `VACUUM`. Vrijgegeven pagina's blijven op een interne vrije lijst; ze gaan pas
+terug naar de schijf bij een expliciete `VACUUM`, en die heeft deze app nooit gedraaid. De
+inhoud was identiek: in elke meting kwamen de rijaantallen en de zoektreffers precies uit.
+
+`reclaimFreeSpace` draait dat nu bij het openen, en drie dingen houden het weg waar het geen
+winst is. Alleen als een kwart van de pagina's vrij is **en** het bestand groot genoeg is dat
+de herschrijving iets oplevert — dagelijks gebruik komt daar nooit in de buurt. Alleen in het
+hoofdproces, nooit in de scanworker, die hetzelfde bestand een tweede keer opent. En een
+mislukking gaat nergens heen: schijfruimte teruggeven is een beleefdheid, en een index die
+niet ingedikt kon worden beantwoordt nog steeds elke vraag goed.
+
+**Verworpen:** `auto_vacuum` aanzetten. Dat moet vóór het aanmaken van de tabellen worden
+gezet om iets te doen, en het omzetten op een bestaand bestand vraagt zelf om een `VACUUM` —
+dus het zou hetzelfde werk zijn, alleen op elke commit een beetje in plaats van één keer.
+
+### En één ding dat een instructie was, geen fout
+
+De scanbalk verscheen niet na het weggooien van `index.sqlite`, en dat hoort zo: de
+startscan draait in `main()`, vóórdat het bibliotheekvenster bestaat, en dat venster vraagt
+bij het opengaan `scanState()` — die dan `null` antwoordt omdat de scan al klaar is. Op een
+kluis die in 550 KB herbouwt is dat vrijwel meteen. §49c vroeg iets wat op die manier niet
+te zien is; de rij is herschreven.

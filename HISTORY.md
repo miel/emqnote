@@ -2432,3 +2432,49 @@ pinning none.
 one judgement this design rests on, and the one no test can make — and both chord rows on both
 machines, which is the half of the shortcut change that only shows up where the platform
 differs. `TEST-PROTOCOL.md` §55.
+
+**Four reports from the first look B95 got on a Mac landed on 3 September 2026 (B101).**
+Two were bugs, one was a plain miss of mine, and two were questions whose answers turned out
+to be measurements rather than opinions.
+
+The miss first. B95 reserved the right-hand edge of the window's top band for the caption
+buttons Windows 11 draws there, and applied the same reasoning nowhere else — so the three
+bars `.library-shell` stacks above the pane grid went on running under macOS's traffic lights
+at the other end of the same 40px strip. `.pane-header-lights`, the rule that already solves
+exactly this for the leftmost pane header, sits three lines above `.pane-header-caption` in
+the block that was edited. `TEST-PROTOCOL.md` §49 asked four Windows questions and no Mac
+ones, so nothing in the protocol looked either. `--lights-inset` is beside `--caption-inset`
+now, and the two are deliberately asymmetric: the caption one is `env()`-derived and
+self-zeroing, while there is no `env()` for the traffic lights at all, so `useBootstrap`
+writes that one from `isMac`.
+
+Then two buttons that did not do what they said. "Keep mine" on a note deleted outside the
+app only dismissed the bar, on the reasoning — written above it — that the next debounced
+autosave would recreate the file. That holds only if you then type: the debounce is armed by
+an edit, so on a note nobody had touched no write was ever queued and the press left a
+document with no file behind it. It is **Restore** for the deleted case now, and it writes
+immediately. And resolving a OneDrive conflict never reopened the note: main answers with
+`notifyLibrary()`, which reloads the tree, the list, the facets and the conflict list and
+nothing else, so "Keep that one" replaced the original's bytes on disk while the reader went
+on showing the losing version. The IPC call moved out of `ConflictBanner` into `Library.tsx`,
+which owns the open note.
+
+**The index question is the one worth keeping.** A 25 MB `index.sqlite` rebuilt to 550 KB
+when it was deleted by hand, which reads as data being thrown away. Two explanations were
+measured and both were wrong: daily churn reaches a steady state (120 rounds of rewriting
+every note in a vault moved a 4.59 MB index by 0.03 MB, with constant row counts), and a
+schema bump drops every table but SQLite re-uses the pages (flat at 1.91 MB across all five
+versions). What reproduces it is the file's high-water mark — 3000 notes indexed at 18.3 MB,
+still 14.1 MB once cut to 60 with 89% of its pages free, and 1.6 MB after a `VACUUM`. Nothing
+was pruned: row counts and search hits came back identical in every run. `reclaimFreeSpace`
+runs a `VACUUM` on open past a quarter free, in the main process only, and swallows its own
+failures.
+
+And one thing that was a bad instruction rather than a bug: deleting `index.sqlite` does not
+show the scan bar, because the startup scan runs in `main()` before the library window
+exists. §49c said to do that and has been rewritten.
+
+Verified on this machine as far as it can be: the full suite, and the disk-change bar
+measured through the real renderer with `--lights-inset` toggled — its text starts at x=14
+with the token at 0 and at x=106 with the macOS value, clear of lights that end near 64.
+Everything genuinely about macOS is `TEST-PROTOCOL.md` §50, for a person on a Mac.

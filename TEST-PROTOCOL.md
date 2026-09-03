@@ -1714,7 +1714,7 @@ new empty bands read.
 |---|---|---|---|
 | 49a | **On Windows 11**, open a note in the library and edit the file underneath it from another editor, so the disk-change bar appears | The bar's buttons — Reload / Keep mine — are fully visible and clickable, clear of Minimise/Maximise/Close. This is the reported bug: they were drawn underneath them |  |
 | 49b | **On Windows 11**, with that bar showing, look at the note's title in the header below it | The title is still clear of the caption buttons. The inset stays on deliberately even when a bar is above the header, because the overlay is 40px and the bar is thinner than that |  |
-| 49c | **On Windows 11**, start the app on a vault it has not indexed, so the scan bar appears | The "Indexing n / m" text ends clear of the caption buttons |  |
+| 49c | **On Windows 11**, start the app on a vault it has not indexed, so the scan bar appears | The "Indexing n / m" text ends clear of the caption buttons. **Deleting `index.sqlite` will not show you this bar** — the startup scan runs before the library window exists, so on a vault that rebuilds quickly the window opens to a finished scan. It takes a vault slow enough that the scan outlives the window opening |  |
 | 49d | **On Windows 11**, click a file (not a note) in a folder that has one | The file preview's Open and Reveal buttons are clear of the caption buttons — this band was not a `PaneHeader` at all before and reserved nothing |  |
 | 49e | On a real vault, mark six notes and drag them onto a folder | They move, and the wait after letting go is short. Say roughly how long it takes — this is the report, and the sandbox figure is worthless for it |  |
 | 49f | Do the same with the note you are *reading* among the six | The reader lands on a note that stayed put, and **no bar appears saying the note was deleted outside emqnote**. That sentence over the app's own move is the second report |  |
@@ -1907,6 +1907,30 @@ differently on the two machines this app runs on.
 55a is the row to be honest on. Six groups for eight settings is deliberately more structure
 than is needed today — the point is that the next setting has an obvious home — but if a name
 sends you to the wrong pane twice, it is the wrong name.
+
+---
+
+## §50 — The other edge of the same band, and three buttons that do what they say (B101)
+
+Four reports from the first look B95 got on a Mac. Two of them were questions, answered by
+measurement in `05-besluitenlog.md` rather than by a row here; the rows below are what is
+left for a person.
+
+**§50a–§50c are macOS**, which is the platform §49 forgot to ask about and where the
+traffic-light half of this only exists. **§50d–§50f are the two buttons**, which can be
+walked anywhere. §50g is Windows, checking that the left-hand fix did not disturb the
+right-hand one.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 50a | **On macOS**, open a note and delete its `.md` from Finder, so the disk-change bar appears | The bar's sentence starts to the *right* of the traffic lights, not underneath them. This is the report: it ran the full width and the text sat under the three buttons |  |
+| 50b | **On macOS**, put a conflict copy in the vault (`<note>-LAPTOP-ABC123.md` beside `<note>.md`) so the conflict banner appears | Same: its text clears the traffic lights. The banner is one wide button, so the strip under the lights is still not clickable — that is the platform's rule, not a defect |  |
+| 50c | **On macOS**, look at the folder tree's own header with no bar showing | Unchanged from before — "Vault" still starts clear of the lights. The header states its own clearance and must not have been disturbed by the token |  |
+| 50d | Open a note, delete its file from outside the app, and press **Restore** | The file is back at its old path with what the reader was showing. Reveal finds it, and it is in the folder's list again. This is the report — the button was "Keep mine" and wrote nothing |  |
+| 50e | Do that again, but type a word into the note *first* | Same, and the word is in the restored file |  |
+| 50f | Open a note that has a conflict copy, click the banner, and choose **Keep that one** | The reader shows the *other* version immediately, without a reload. Then check the trash holds the version you did not keep |  |
+| 50g | **On Windows 11**, repeat 50a | The bar's buttons are still clear of Minimise/Maximise/Close — §49a's fix, re-checked now that the other edge moved too |  |
+| 50h | Open Settings → the index, or just look at `index.sqlite`, after a vault has shrunk a lot | Nothing to do; this is a note. A large index compacts itself on the next launch now. If a 20 MB+ index does *not* shrink after restarting, say so — the guard may be reading the wrong file |  |
 
 ---
 
