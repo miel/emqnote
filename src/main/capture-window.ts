@@ -286,6 +286,28 @@ export function hideCaptureWindow(): void {
   const returnToLibrary = raisedByLibrary;
   raisedByLibrary = false;
 
+  // **Before the hide, and only for the hotkey's own route**: hand the foreground back to
+  // whatever had it (`TEST-PROTOCOL.md` §52c, and the Alt+F4 half of the same report;
+  // §59 records the pass both came out of).
+  //
+  // B98 answered this for the library's two routes and left the hotkey's alone on the
+  // reasoning that the OS decides — which it does, and on Windows it decided nothing at
+  // all. Filing a note from Outlook left the foreground on no window: Tab did nothing,
+  // and an Alt+Tab was needed to get back to the application the note had just been
+  // written about. `reveal` is why: this window takes the foreground from a background
+  // process by raising itself always-on-top, and a window that took the foreground that
+  // way leaves it nowhere when it goes.
+  //
+  // `blur()` is `HWNDMessageHandler::Deactivate()` on Windows, which walks the Z-order
+  // and hands the foreground to the next visible window — which is the one the hotkey was
+  // pressed over. It costs a `blur` event, and that event's handler is `writer.flush()`:
+  // a save that was about to happen a line later through `onHide()` anyway.
+  //
+  // Windows only. macOS returns to the previous application on its own when a window is
+  // ordered out, and Linux is the window manager's business; `blur()` on either is at
+  // best a no-op and at worst an argument with a policy that already works.
+  if (!returnToLibrary && process.platform === "win32") target.blur();
+
   target.hide();
   onHide();
   target.webContents.send(IPC.captureReset);
