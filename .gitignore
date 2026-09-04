@@ -26,6 +26,12 @@ build
 /design/*
 !/design/design-handoff-pane-consistency/
 
+# A rendered copy of a document whose source is checked in beside it. `ROADMAP.md` is the
+# thing to read and to review a diff of; the PDF is one export of it, goes stale the moment
+# the markdown is edited, and is a binary this repo's history has no use for. Same rule as
+# `design/` above: the source is versioned, the artefact is not.
+ROADMAP.pdf
+
 # The venv `scripts/build-ui-deck.py` asks for. python-pptx is deliberately not a project
 # dependency: it is needed to build a design asset, never to build or run the app.
 /.venv/
