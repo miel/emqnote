@@ -232,5 +232,6 @@ Read these before making structural changes; they carry the reasoning that the c
 | `TEST-PROTOCOL.md` | Manual test pass for a human, per platform — what automation cannot reach |
 | `TODO.md` | What is open right now |
 | `TODO-BEFORE-RELEASE.md` | The release gate for a public 1.0 — only what must be true before `v1.0.0` is tagged |
+| `PRIVATE-REPO-UPDATES.md` | How upgrades keep working if the repo goes private. A proposal, not yet a decision: B22 made the repo public *for* the updater, and this is the way back |
 
 Acceptance criteria in `04-bouwplan.md` are the definition of a phase being done — not "the code exists". When a decision in `05-besluitenlog.md` is revisited, that log is where the change belongs.
