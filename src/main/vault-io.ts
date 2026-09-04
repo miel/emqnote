@@ -1149,11 +1149,28 @@ export function resolveConflict(
   renameSync(join(vault, pair.conflict), join(vault, pair.original));
 }
 
+/**
+ * Creates one folder, and refuses rather than absorbs.
+ *
+ * `mkdirSync`'s `recursive` flag makes creating a folder that is already there a silent
+ * success, and that is what this used to be: typing a name that sanitises onto an
+ * existing one — `***` and `???` both arrive as the same string — created nothing, said
+ * nothing, and left the tree looking exactly as it had (§57h). `renameFolder` below
+ * already refuses the same collision for the reason its own comment gives: for a
+ * container an error is the kinder answer, since two folders someone believes are one is
+ * how notes end up split across them.
+ *
+ * `recursive` stays on for the *parent*, which the tree guarantees exists but which a
+ * vault edited underneath us may not.
+ */
 export function createFolder(vault: string, parent: string, name: string): string {
   const clean = sanitiseFolderName(name);
   if (clean === "") throw new Error(FOLDER_ERROR.empty);
+  if (isHidden(clean) || clean === TRASH_FOLDER) throw new Error(FOLDER_ERROR.reserved);
 
   const path = parent === "" ? clean : `${parent}/${clean}`;
+  if (existsSync(join(vault, path))) throw new Error(FOLDER_ERROR.exists);
+
   mkdirSync(join(vault, path), { recursive: true });
   return path;
 }

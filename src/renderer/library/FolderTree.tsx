@@ -119,6 +119,12 @@ interface Props {
   notesHereLabel: string;
   /** "Open tasks" — the second half, named only once the index has counted them. */
   openTasksLabel: string;
+  /**
+   * A folder to unfold the tree to, and nothing else — the app's own answer to "did that
+   * work", set when a folder is created and cleared once it has been shown. See `Branch`'s
+   * own prop for why the question travels down rather than the fold state coming up.
+   */
+  revealPath?: string | null;
 }
 
 /**
@@ -291,6 +297,7 @@ function Branch({
   onOpenMenu,
   isMac,
   badgeTitle,
+  revealPath,
 }: {
   node: FolderNode;
   depth: number;
@@ -365,6 +372,18 @@ function Branch({
    * instead of two — every row draws its own badge, so this reaches every depth.
    */
   badgeTitle: (node: FolderNode) => string;
+  /**
+   * A folder that has to be *visible*, whatever this row was folded to — the one the app
+   * just created, which is the only thing that sets it.
+   *
+   * Fold state is per-row `useState` and deliberately stays that way: it is the row's own
+   * business, and lifting the whole of it into `Library.tsx` to answer one question would
+   * make every twisty a round trip through the window's state. So the question is passed
+   * down instead of the answer, and each row on the way opens itself for it. Reaching a
+   * folder three levels down needs all three ancestors open, which is exactly what the
+   * recursion does.
+   */
+  revealPath?: string | null;
 }): React.ReactElement {
   // Open by default near the root, closed deeper down: a project tree several levels
   // deep is unreadable if it all unfolds at once.
@@ -377,6 +396,21 @@ function Branch({
   const [open, setOpen] = useState(depth < 1 && trashRoot !== true);
   const [over, setOver] = useState(false);
   const hasChildren = node.children.length > 0;
+
+  /**
+   * Unfold for a folder that has to be seen (§57's closing note). A newly created folder
+   * three levels down was created correctly, selected correctly, and drawn inside a
+   * branch that was still folded — so the one thing the gesture had to show was the one
+   * thing it did not, and the only way to tell a refused name from an accepted one was to
+   * go looking in Explorer.
+   *
+   * Only ever opens. A row that is folded on purpose stays folded for every path this is
+   * not about, and nothing here folds a row the user has opened.
+   */
+  useEffect(() => {
+    if (revealPath === undefined || revealPath === null) return;
+    if (revealPath === node.path || revealPath.startsWith(`${node.path}/`)) setOpen(true);
+  }, [revealPath, node.path]);
 
   const accepts =
     onDropNote !== undefined && dragging !== null && canDropNotes(dragging, node.path);
@@ -576,6 +610,7 @@ function Branch({
               onOpenMenu={onOpenMenu}
               isMac={isMac}
               badgeTitle={badgeTitle}
+              revealPath={revealPath}
             />
           ))}
         </ul>
@@ -635,6 +670,7 @@ export function FolderTree({
   filterLabel,
   notesHereLabel,
   openTasksLabel,
+  revealPath,
 }: Props): React.ReactElement {
   // The badge is two bare numbers with a slash between them; this is where they are said
   // out loud. Built here rather than per row so the two label props stop at this
@@ -822,6 +858,7 @@ export function FolderTree({
           onOpenMenu={(path, x, y) => setMenu({ path, x, y })}
           isMac={isMac}
           badgeTitle={badgeTitle}
+          revealPath={revealPath}
         />
       </ul>
 

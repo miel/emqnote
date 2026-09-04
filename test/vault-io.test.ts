@@ -591,6 +591,28 @@ describe("moving and renaming", () => {
     // Went through unchanged before `createFolder` shared the title rules.
     expect(createFolder(vault, "", "CON")).toBe("CON_");
   });
+
+  it("refuses a name that is already taken, rather than quietly doing nothing", () => {
+    // `mkdirSync`'s `recursive` flag makes this a silent success, which is what it was
+    // (§57h): typing `***` after `???` created nothing, said nothing, and left the tree
+    // exactly as it was — the two names sanitise onto the same string. `renameFolder`
+    // has refused the same collision all along, for the reason its comment gives.
+    createFolder(vault, "", "Klant Q");
+    expect(() => createFolder(vault, "", "Klant Q")).toThrow(FOLDER_ERROR.exists);
+  });
+
+  it("refuses a name with nothing left in it", () => {
+    // Not "creates a folder called ---", which is what a name written entirely out of
+    // characters Windows forbids used to produce.
+    expect(() => createFolder(vault, "", "???")).toThrow(FOLDER_ERROR.empty);
+    expect(() => createFolder(vault, "", "   ")).toThrow(FOLDER_ERROR.empty);
+  });
+
+  it("refuses one of the app's own folder names", () => {
+    // A second `_trash` in the tree is not a folder, it is a trap: everything in it is
+    // treated as deleted by every walk in this file. `renameFolder` refuses it too.
+    expect(() => createFolder(vault, "", "_trash")).toThrow(FOLDER_ERROR.reserved);
+  });
 });
 
 describe("renaming a folder", () => {

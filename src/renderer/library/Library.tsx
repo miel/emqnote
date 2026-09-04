@@ -614,6 +614,15 @@ export function Library(): React.ReactElement {
   const [scan, setScan] = useState<ScanProgress | null>(null);
 
   /**
+   * The folder the tree has to unfold to, set by `createFolderIn` and by nothing else.
+   *
+   * Not cleared afterwards, and it does not need to be: every row's effect is keyed on
+   * this value, so it fires once when it changes and never again — a branch the user
+   * folds back stays folded. A path that is already visible costs nothing either.
+   */
+  const [reveal, setReveal] = useState<string | null>(null);
+
+  /**
    * The tree/notes pane widths, dragged live by `Splitter.tsx` and persisted through
    * `IPC.setPaneWidths` only once a drag ends — see `onPaneDragEnd` below.
    *
@@ -2278,6 +2287,43 @@ export function Library(): React.ReactElement {
   };
 
   /**
+   * Creates a folder, says so when it cannot, and shows the one it made.
+   *
+   * Both halves are §57's closing note. The call was `void`ed, so a refusal — a name that
+   * sanitises to nothing (`???`), one that is already taken, the app's own folder names —
+   * went nowhere at all: the dialog closed on a folder that had not been created and the
+   * tree looked exactly as it had. And the folder that *was* created could be inside a
+   * branch that is folded, which is the same picture. Selecting it is what unfolds the
+   * tree to it, through `reveal` — the tree's rows own their fold state, so the path is
+   * handed down rather than the state lifted up.
+   *
+   * `folder.createFailed` for a rejection carrying no code of its own, in the shape
+   * `renameFolderAt` and `deleteFolderAt` both use: the three verbs fail differently and
+   * a folder that "could not be renamed" is the wrong sentence over a create.
+   */
+  const createFolderIn = async (parent: string, name: string): Promise<void> => {
+    let created: string;
+    try {
+      created = await window.emqnote.library.createFolder(parent, name);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.createFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    await loadTree();
+
+    setReveal(created);
+    const target: Selection = { kind: "folder", path: created };
+    setSelection(target);
+    selectionRef.current = target;
+    setLastFolder(created);
+  };
+
+  /**
    * Renames a folder and moves everything that pointed into it.
    *
    * The order of the first two steps is the whole trick. `save()` posts the note's path
@@ -2988,6 +3034,7 @@ export function Library(): React.ReactElement {
             }
           }}
           onExpandFilters={() => void loadFacets()}
+          revealPath={reveal}
           onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
           onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
           onRenameFolder={(path) =>
@@ -3841,9 +3888,7 @@ export function Library(): React.ReactElement {
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();
-            if (current.kind === "newFolder") {
-              void window.emqnote.library.createFolder(current.parent, value);
-            }
+            if (current.kind === "newFolder") void createFolderIn(current.parent, value);
             if (current.kind === "renameFolder") void renameFolderAt(current.path, value);
             if (current.kind === "relink") void runRelinkable(current.action, true);
             if (current.kind === "duplicateTitle") {
