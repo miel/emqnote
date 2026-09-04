@@ -38,6 +38,25 @@ function stripControlCharacters(value: string): string {
   return result;
 }
 
+/**
+ * Whether what survived sanitising says nothing at all.
+ *
+ * `ILLEGAL` replaces every forbidden character with a hyphen, so a name written entirely
+ * out of them — `***`, `???`, a Windows path typed into the box — comes through as a run
+ * of hyphens rather than as an empty string, and both callers below then treat it as a
+ * perfectly good name. A folder called `---` was created without a word (§57h), and a
+ * note titled `***` landed on disk as `--- .md` instead of reaching `Untitled`.
+ *
+ * Dots and spaces join the hyphen because the two strips above already treat them as
+ * nothing: a trailing one is removed outright, and `"..."` was answering `Untitled`
+ * before this existed. A name is only "nothing" here if *every* character in it is one of
+ * the three — `!!!` is a legal Windows filename that nobody's rules destroyed, so it is
+ * still a name, and `"a-b"` obviously is.
+ */
+function saysNothing(value: string): boolean {
+  return /^[-. ]*$/.test(value);
+}
+
 export function sanitiseTitle(title: string): string {
   let clean = stripControlCharacters(title)
     .replace(ILLEGAL, "-")
@@ -51,6 +70,8 @@ export function sanitiseTitle(title: string): string {
   // Windows drops a trailing dot or space without saying anything, after which the
   // file can no longer be found under the name we think we used.
   clean = clean.replace(/[. ]+$/, "");
+
+  if (saysNothing(clean)) clean = "";
 
   if (RESERVED.has(clean.toLowerCase())) clean = `${clean}_`;
 
@@ -81,6 +102,8 @@ export function sanitiseFolderName(name: string): string {
   }
 
   clean = clean.replace(/[. ]+$/, "");
+
+  if (saysNothing(clean)) return "";
 
   if (RESERVED.has(clean.toLowerCase())) clean = `${clean}_`;
 
