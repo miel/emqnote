@@ -3,10 +3,10 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
-Last updated 4 September 2026 — **a full Windows pass, and the six things it found**
-(**B102**). Ten items walked plus `TEST-PROTOCOL.md` §57 in its entirety; §59 records the
-whole of it. Seven came back clean, and two of those are worth naming because they had never
-been seen at all: **B93's save path rode out a real OneDrive sync** (a dozen notes filed
+Last updated 4 September 2026, released as `v0.13.3` — **a full Windows pass, and the six
+things it found** (**B102**). Ten items walked plus `TEST-PROTOCOL.md` §57 in its entirety;
+§59 records the whole of it. Seven came back clean, and two of those are worth naming
+because they had never been seen at all: **B93's save path rode out a real OneDrive sync** (a dozen notes filed
 against an actively syncing vault, none lost, a read-only file saved anyway), and **the
 `v0.3.3` Files-On-Demand bug is gone on a brand-new empty vault** — the last row still marked
 OPEN against it.
