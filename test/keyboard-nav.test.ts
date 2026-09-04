@@ -103,6 +103,7 @@ function buildFake(): CaptureApi {
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
+    contentsAt: async () => ({ notes: 0, folders: 0, files: 0 }),
     trashFolder: async () => ({ trashed: true }),
     moveFolder: async (path) => path,
     deleteFromTrash: async () => ({ deleted: true }),
@@ -529,7 +530,7 @@ describe("keyboard navigation across the library's panes", () => {
     expect(document.activeElement?.className).toContain("editor-content");
   });
 
-  it("Ctrl-Shift-Tab out of the editor lands on the note list, one stop back", async () => {
+  it("Ctrl-Shift-Tab out of the editor lands on Who, and again on the note list", async () => {
     await mount();
     await openTheNote();
 
@@ -539,10 +540,18 @@ describe("keyboard navigation across the library's panes", () => {
     cycle(true);
     await flush();
 
-    // Backward is three stops (B98) — the title is a forward stop only, because going
-    // back out of the note means going back to the list you came from. The header block
-    // was a stop in both directions for one release and every press that had nothing to
-    // do with those fields paid for it; `focusFields` reaches them in one chord instead.
+    // **The last of the four header fields, not the note list** (§52k's note, §59). Backward
+    // used to be three stops, on the reasoning that going back out of the note means
+    // going back to the list you came from — which skipped the one region the forward
+    // walk goes through on its way in. Who is where the DOM puts the block's end: right
+    // above the note's text, so Shift+Tab from here walks Where → Tags → When → title.
+    expect(document.activeElement?.className).toContain("attendees");
+
+    cycle(true);
+    await flush();
+
+    // And the list is still one press further, through `inNoteFields` — what used to
+    // take one press takes two, and neither of them lands on nothing.
     const activeNote = noteRows().find((node) => node.tabIndex === 0)!;
     expect(document.activeElement).toBe(activeNote);
   });

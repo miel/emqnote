@@ -1090,6 +1090,14 @@ async function main(): Promise<number> {
         );
         if (at === null) throw new Error("no subject field — the window did not come back blank");
 
+        // **Focus is put in the note's body first, and that is the whole of the second
+        // assertion below.** A window raised by the hotkey already has the caret in the
+        // subject field, so a drag that leaves it there proves nothing; the reported case
+        // is a drag made while the caret was somewhere else, which used to move it into
+        // the field and cost the body its place.
+        await open.capture!.evaluate(`document.querySelector('.editor-content').focus()`);
+        await new Promise((done) => setTimeout(done, 200));
+
         const before = await open.capture!.evaluate<number>(`window.screenX`);
         await open.capture!.mouse("mousePressed", at.x, at.y);
         for (const step of [20, 40, 60]) {
@@ -1109,6 +1117,17 @@ async function main(): Promise<number> {
         const after = await open.capture!.evaluate<number>(`window.screenX`);
         if (after - before < 40) throw new Error(`the window moved ${after - before}px`);
 
+        // **And the drag did not leave the caret in the field** (B102). The click Chromium
+        // fires after a drag lands on the field like any other, so picking the window up
+        // by it used to end with the caret sitting in it — which the reader's `<h1>` never
+        // does, being a heading rather than a text field, so one gesture had two answers.
+        const back = await open.capture!.evaluate<string>(
+          `document.activeElement === null ? "nothing" : document.activeElement.className`,
+        );
+        if (!back.includes("editor-content")) {
+          throw new Error(`after the drag the caret was on ${back}, not back in the note`);
+        }
+
         // And the press that does not travel is still a press on a text field: it focuses
         // it, which is what `no-drag` is there for and what a drag must not have cost.
         await open.capture!.mouse("mousePressed", at.x, at.y);
@@ -1119,7 +1138,10 @@ async function main(): Promise<number> {
         );
         if (!focused) throw new Error("a click on the subject field did not put the caret in it");
 
-        return `window moved ${after - before}px, a click still focuses the field`;
+        return (
+          `window moved ${after - before}px, the caret went back to the note, ` +
+          `a click still focuses it`
+        );
       },
     },
   ];

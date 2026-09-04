@@ -60,6 +60,27 @@ describe("sanitiseTitle", () => {
     expect(sanitiseTitle("   ")).toBe("Untitled");
     expect(sanitiseTitle("...")).toBe("Untitled");
   });
+
+  it("counts a name made only of forbidden characters as nothing at all", () => {
+    // Reported from a Windows pass (§57g): a note titled `***` landed on disk as
+    // `--- .md`. Every one of those characters is illegal on Windows, so all three were
+    // replaced by the hyphen — and a run of hyphens is not empty, so the fallback below
+    // it never ran. The replacement is what made the name; nothing of it survived.
+    expect(sanitiseTitle("***")).toBe("Untitled");
+    expect(sanitiseTitle("???")).toBe("Untitled");
+    expect(sanitiseTitle("* ? *")).toBe("Untitled");
+    expect(sanitiseTitle("---")).toBe("Untitled");
+  });
+
+  it("leaves a name alone when the rules did not destroy it", () => {
+    // The other side of the rule above, and the reason it is written as "only hyphens,
+    // dots and spaces" rather than "no letters": `!` and `#` are perfectly legal in a
+    // Windows filename, so a title made of them is a title, however odd. Only what
+    // sanitising itself reduced to nothing is nothing.
+    expect(sanitiseTitle("!!!")).toBe("!!!");
+    expect(sanitiseTitle("#")).toBe("#");
+    expect(sanitiseTitle("a/b")).toBe("a-b");
+  });
 });
 
 describe("sanitiseFolderName", () => {
@@ -102,6 +123,13 @@ describe("sanitiseFolderName", () => {
     expect(sanitiseFolderName("   ")).toBe("");
     expect(sanitiseFolderName("...")).toBe("");
     expect(sanitiseTitle("...")).toBe("Untitled");
+
+    // Which is the sentence above finally being true (§57h). A folder named `???` was
+    // created as `---`, without a word, and a second one named `***` then silently did
+    // nothing at all because that name was already taken.
+    expect(sanitiseFolderName("???")).toBe("");
+    expect(sanitiseFolderName("***")).toBe("");
+    expect(sanitiseFolderName("****")).toBe("");
   });
 });
 

@@ -22,10 +22,13 @@
 const DRAG_THRESHOLD_PX = 4;
 
 /**
- * Watches one press. `onEnd` is told whether the window was actually moved, which is how
- * the caller knows to suppress the `click` that follows. It is optional because not every
- * caller has one to suppress: the capture window's subject field is a text field, and the
- * click that lands on it after a drag only puts the caret where the press was.
+ * Watches one press. `onEnd` is told whether the window was actually moved, which is what
+ * both callers use to undo what the release would otherwise do.
+ *
+ * It is optional in the type and no caller omits it any more. The capture window's subject
+ * field did, on the reasoning that a click on a text field "only" puts the caret in it —
+ * which is a change of focus, and not one anybody asked for by picking the window up
+ * (§54b, §59). It puts focus back where it was instead.
  *
  * A click *does* follow a drag here, and that is the part worth knowing: the window moves
  * with the pointer, so the press and the release land on the same element and Chromium

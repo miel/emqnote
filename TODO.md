@@ -3,6 +3,54 @@
 Working list. The phase plan lives in `04-bouwplan.md` and the decisions in
 `05-besluitenlog.md`; this file is only what is open right now.
 
+Last updated 4 September 2026, released as `v0.13.3` — **a full Windows pass, and the six
+things it found** (**B102**). Ten items walked plus `TEST-PROTOCOL.md` §57 in its entirety;
+§59 records the whole of it. Seven came back clean, and two of those are worth naming
+because they had never been seen at all: **B93's save path rode out a real OneDrive sync** (a dozen notes filed
+against an actively syncing vault, none lost, a read-only file saved anyway), and **the
+`v0.3.3` Files-On-Demand bug is gone on a brand-new empty vault** — the last row still marked
+OPEN against it.
+
+What it found, all fixed:
+
+- **The foreground went nowhere.** Filing a note from Outlook with the hotkey left no window
+  in front; an Alt+Tab was needed to get back. B98 fixed this for the library's two routes
+  and left the hotkey's to the OS, which on Windows decided nothing. `hideCaptureWindow` now
+  calls `blur()` before hiding, on Windows only — that is `Deactivate()` there, which walks
+  the Z-order and hands the foreground to the next visible window.
+- **Dragging the capture window by its subject field left the caret in the field.** The
+  reader's title never does that, being a heading rather than a text field. Focus goes back
+  where it was now.
+- **`Ctrl+Shift+Tab` out of the note skipped the header fields**, which the forward walk goes
+  through. It lands on Who now, and the note list is one press further.
+- **A name made only of forbidden characters became a row of hyphens.** `***` and `???` both
+  arrive as `---`, which is not empty, so the `Untitled` fallback never ran — and a second
+  folder with the same sanitised name was silently not created at all. `saysNothing` decides
+  that a name of nothing but hyphens, dots and spaces is nothing; `createFolder` refuses a
+  name that is taken, as `renameFolder` beside it always has.
+- **Creating a folder gave no sign either way** — no message when refused, and the new folder
+  could be inside a folded branch. It reports, selects and unfolds the tree to it now.
+- **"Delete permanently" named no counts.** The reversible delete has named both since B27;
+  the one with no way back named the folder alone. `contentsAt` is `trashContents`
+  generalised to one path, and counts files too.
+
+Two measurement fixes came with the latency run. The selftest was **measuring its own
+warm-up** — fifty rounds reported over fifty-one samples, `max` and `p99` both the warm-up
+itself, and a `worst` naming a round the loop never ran — and it reported `missed: 0` beside
+a 169 ms sample, `missed` being a count of appearances that never painted at all.
+`resetMeasurements()` and an `overBudget` count fix both. **The first Windows latency figure
+is now in `CLAUDE.md`**: p50 36 ms, p95 53 ms, inside the budget.
+
+**What is open on it.** One report is fixed nowhere, because it is not diagnosed: a note
+deleted from Explorer while it is *not* the note in the reader stayed visible in the note
+list. Every piece of that path exists and the Windows watcher polls at two seconds, so the
+next step is a measurement — how long was it left, and does it clear on a refresh — not a
+guess. §59 says what to note. `TEST-PROTOCOL.md` §52c and §54b want re-walking, both being
+rows whose fix cannot be seen from Linux; §58 (the two-machine sync pass) is written and
+untested, needing a Mac; §57m is the same section's one row that needs the other machine.
+
+---
+
 Last updated 3 September 2026, released as `v0.13.2` — **four reports from the first look
 B95 got on a Mac** (B101), two of which were questions.
 
@@ -23,8 +71,8 @@ nothing was pruned. Two likelier explanations were measured and both were wrong;
 file's high-water mark, and `VACUUM` is what returns it. The app runs one now when a quarter
 of the pages are free.
 
-**What is open on it.** `TEST-PROTOCOL.md` §50 has eight rows: three are macOS, one is
-Windows, and the rest can be walked anywhere. §49c was rewritten rather than answered — it
+**What is open on it.** `TEST-PROTOCOL.md` §56 (renumbered from a second §50) has eight
+rows: three are macOS, one is Windows, and the rest can be walked anywhere. §49c was rewritten rather than answered — it
 asked for the scan bar by deleting `index.sqlite`, and that cannot show it: the startup scan
 runs before the library window exists.
 

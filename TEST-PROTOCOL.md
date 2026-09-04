@@ -62,7 +62,10 @@ The index gained a schema version (B26), so the first start after this version r
 **Windows only, and the point of this whole section:** 1.2 on a **brand-new empty vault**.
 Point `--vault` at a folder that does not exist yet, let the app create it, and open the
 library before adding any notes. Tags and People must be empty and *available* — not
-"the vault is on Files On-Demand". That message on an empty vault was the `v0.3.3` bug. -> OPEN
+"the vault is on Files On-Demand". That message on an empty vault was the `v0.3.3` bug.
+-> **Answered 4 September 2026: clear.** A vault created from `--vault` on a path that did
+not exist, opened before a single note was in it, showed Tags and People empty and
+available. See §59.
 
 ---
 
@@ -98,7 +101,11 @@ Destructive by design. Scratch vault only.
 | 3.9 | Open a note in the **capture window** (from the library, *Open for editing*), then try to delete the folder that note is in | Refused, with a message. Not silently done, and not done anyway | OK |
 
 **Both platforms**, and 3.5 matters more on Windows: a folder rename across a OneDrive
-boundary behaves differently there than on macOS. -> See note at 3.5
+boundary behaves differently there than on macOS. -> See note at 3.5. **The Windows half was
+walked again on 4 September 2026 and came back clean** — a trashed folder holding a note and
+a subfolder deleted permanently without complaint (§24, §59). Two changes stand between the
+two answers: B57 took this app's own directory handles off the vault, and `trash-delete.ts`
+retries rather than giving up once.
 
 ---
 
@@ -326,7 +333,7 @@ Small, easily missed, each one a bug that actually happened.
 |---|---|---|---|
 | 7.1 | **macOS:** click the red traffic light on the capture window. Then press the hotkey | The window comes back. If the hotkey is dead, the window was destroyed instead of hidden — a regression of the 3 August fix |  |
 | 7.2 | **macOS:** press Cmd+Q in the library | The window closes; the app keeps running; the hotkey still works (B25) |  |
-| 7.3 | **Windows:** indent inside a list with Ctrl+M | It indents. It must not minimise the window |  |
+| 7.3 | **Windows:** indent inside a list with Ctrl+M | It indents. It must not minimise the window | pass, 4 Sep 2026 |
 | 7.4 | Open the keyboard-shortcut sheet | Says Cmd on macOS and Ctrl on Windows — **on the first paint**, not after a flicker |  |
 | 7.5 | Open a note, change nothing, click away | The file's modified timestamp on disk is unchanged (B10) |  |
 | 7.6 | Create a note titled `CON` or `PRN`, with `: * ?` in the title | Windows: a sane filename, no crash. Check both machines can open it |  |
@@ -817,7 +824,7 @@ did not work is what justifies it.
 
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
-| 25a | **Windows.** In a new note, type a line and press **Ctrl+Shift+T** | The line becomes a task with a checkbox. Try it in the library's reader too. If it still does nothing, say so plainly — that is the answer this exists to get |  |
+| 25a | **Windows.** In a new note, type a line and press **Ctrl+Shift+T** | The line becomes a task with a checkbox. Try it in the library's reader too. If it still does nothing, say so plainly — that is the answer this exists to get | **pass, 4 Sep 2026.** Dead twice before; the `before-input-event` claim holds |
 | 25b | **Windows.** Same chord with the caret in the *subject* field, and again with a note row selected in the list | Nothing happens, in both places. It is an editor command and always was; this is only here so "it does nothing" can be told apart from "it does nothing *there*" |  |
 | 25c | **Windows.** Sign out and back in, with *Start at login* ticked | emqnote is running — the tray icon is there — and **no window appeared**. That is the whole point of the silent path |  |
 | 25d | **Windows.** Now start emqnote from its Start-menu or desktop shortcut | The library window opens. Do it again while it is still running: the library comes to the front, not the note window |  |
@@ -1624,7 +1631,8 @@ The 31 August 2026 data loss: OneDrive held a just-created note in `00 Inbox` op
 saying so. Two notes were lost outright and a third was frozen at the third of it that had
 already been written.
 
-**Every row here is a first sighting, and §47a–§47c are Windows-only.** The automated tests
+**§47a–§47c were walked on 4 September 2026 and came back clean** — see §59; the rest of
+this section is still a first sighting. §47a–§47c are Windows-only. The automated tests
 provoke the failure with a vault path that cannot be written to, which is a faithful stand-in
 for the *shape* of the failure and not for OneDrive's timing. Whether the retry rides out a
 real OneDrive lock — and whether it is `clearReadOnly` that clears it — has never been seen.
@@ -1664,7 +1672,7 @@ green on this machine and is here for a second pair of eyes on real hardware.
 |---|---|---|---|
 | 48a | **On macOS**, in the library, press ⇧⌘W with a note open | The caret lands in **When**, the first of the four header fields. It must *not* close the window — ⌘W is close and ⇧⌘W is "close all windows" in most Mac apps, which this one has no menu item for. If the window closes, the chord has to move |  |
 | 48b | **On macOS**, press ⌘T and then ⌘S in the library | The Tasks view, and the sort chooser's menu. ⌘T is "Show Fonts" in a Mac text view and ⌘S is Save everywhere; neither should reach past this app |  |
-| 48c | **On Windows**, press Ctrl+T in the library | The Tasks view. If nothing happens, Chromium has claimed it for "new tab" in a window with no tabs, and the chord has to move |  |
+| 48c | **On Windows**, press Ctrl+T in the library | The Tasks view. If nothing happens, Chromium has claimed it for "new tab" in a window with no tabs, and the chord has to move | pass, 4 Sep 2026 |
 | 48d | From the folder tree, press Tab repeatedly and watch where the focus ring goes | Folder row → note row → the note's **title** → When → Tags → Where → Who → the note's text. Eight stops, and **nothing else**: no pane splitter, no sort chooser, no Tasks button on the way |  |
 | 48e | From Who, press Shift-Tab four times | Where, Tags, When, the title. The order runs both ways |  |
 | 48f | With the caret in the note, press Ctrl+Tab, and then Ctrl+Shift+Tab | The folder tree, then back to the note. Three stops, and the header fields are not among them any more — §46f–§46h describe the behaviour this replaces |  |
@@ -1702,7 +1710,8 @@ sixteen steps now and covers what it can: the Mod+T toggle, and a marked set mov
 the Move to… picker with the reader ending on a row that is not itself moving and no
 disk-change bar appearing afterwards.
 
-**What is left for a person is three kinds of thing.** §49a–§49d are Windows 11, the one
+**§49a–§49d were walked on 4 September 2026 and came back clean** (§59). What was left for
+a person is three kinds of thing. §49a–§49d are Windows 11, the one
 platform the caption-button overlay exists on — `env(titlebar-area-width)` is absent
 everywhere else, so every rule added for it evaluates to zero on this machine and no
 screenshot from here could tell a correct one from a missing one. §49e–§49g are the latency
@@ -1797,9 +1806,9 @@ Better still, paste a real picture out of a real message and read the size off t
 
 | # | Step | Expected | Feedback |
 |---|---|---|---|
-| 52a | In the library, Mod+N → type a line → Ctrl+Enter | Focus is back in the **library**, caret in the note list or wherever it was. No Alt+Tab, no click |  |
+| 52a | In the library, Mod+N → type a line → Ctrl+Enter | Focus is back in the **library**, caret in the note list or wherever it was. No Alt+Tab, no click | pass, 4 Sep 2026 |
 | 52b | Double-click a note row to open it in capture, then Ctrl+Enter | The same. It is the same IPC route |  |
-| 52c | From **Outlook** (or any other app), press the global hotkey → type → Ctrl+Enter | Focus goes back to **Outlook**, or wherever the OS puts it. The library is *not* pulled to the front |  |
+| 52c | From **Outlook** (or any other app), press the global hotkey → type → Ctrl+Enter | Focus goes back to **Outlook**, or wherever the OS puts it. The library is *not* pulled to the front | **failed, 4 Sep 2026** — it went to no window at all; an Alt+Tab was needed. Same for Alt+F4 on a hotkey-raised window, and *not* for one raised by Ctrl+N, which is the line `raisedByLibrary` already drew. Fixed in B102: `blur()` before `hide()` on Windows hands the foreground to the next window in the Z-order. **Re-walk this row and 52d first on the next pass** |
 | 52d | 52a, then quit nothing and repeat 52c an hour later | Still 52c's answer. The flag is consumed, not sticky |  |
 | 52e | Close the library window entirely, then hotkey → type → Ctrl+Enter | Nothing is raised and nothing is created. Filing a note is not a request to open the browser |  |
 | 52f | In the library, focus a note row and press **Tab** | The caret lands in the note's text |  |
@@ -1807,7 +1816,7 @@ Better still, paste a real picture out of a real message and read the size off t
 | 52h | From inside the note press **Ctrl+Tab**, then **Ctrl+Shift+Tab** twice | Folders, then the note, then the note list. Four stops forward, three back |  |
 | 52i | In the folder tree press **Ctrl+Shift+Tab** with a note open | The caret lands in the note's text |  |
 | 52j | The same with **no** note open (click an empty folder first) | Nothing moves. Focus stays on the folder row |  |
-| 52k | 52f–52j again on **Windows** | The same. This chord has a history of being eaten there (B32, §22b), which is why it is claimed in `before-input-event` |  |
+| 52k | 52f–52j again on **Windows** | The same. This chord has a history of being eaten there (B32, §22b), which is why it is claimed in `before-input-event` | pass, 4 Sep 2026 — with one change asked for and made: `Ctrl+Shift+Tab` out of the note now lands on Who rather than on the list (B102) |
 | 52l | Settings → **Check for updates…** | The button greys out and reads "Checking for updates…" *before* any dialog appears, and comes back when it does |  |
 | 52m | The same with the network off | The button comes back, and the failure dialog says so. It must not stay disabled |  |
 | 52n | On **Windows**, take an update that really downloads | The button comes back when the *check* ends — at the "Update available" dialog — not when the download does |  |
@@ -1859,10 +1868,17 @@ here is the two platforms that driver does not run on, and the one thing no scri
 judge — how the gesture feels under a hand, on a window smaller than the library's and with
 a band that is one field wide.
 
+**Walked on Windows, 4 September 2026.** The drag itself is right. What it left behind was
+not: the caret stayed in the subject field afterwards, which the reader's title never does —
+54b's "nothing else happens" read as being about the click, and the row this really belonged
+to did not exist. It does now (B102), and 54b covers both halves. `drive:capture`'s drag step
+asks it since: it puts the caret in the note's body first, because a window raised by the
+hotkey already has the caret in that field and a drag that leaves it there proves nothing.
+
 | # | Step | Expected | Feedback |
 |---|---|---|---|
 | 54a | Raise the capture window with the hotkey and drag it by the **subject field** | The window follows the pointer, and keeps the grip it was picked up by — it must not jump on the first move |  |
-| 54b | Let go, then click the subject field once | The caret lands where you clicked, and nothing else happens. A drag must not have cost the field its click |  |
+| 54b | Let go, then click the subject field once | The caret lands where you clicked, and nothing else happens. A drag must not have cost the field its click | **half failed, 4 Sep 2026** — the click is fine; the *drag* was leaving the caret in the field. Fixed in B102: focus goes back where it was, and a press made while the field already had it keeps its selection. Re-walk this and 54d |
 | 54c | Type a subject, then click into the middle of it | The caret goes where the pointer is. This is the gesture the trade below was made to keep |  |
 | 54d | With a subject typed, try to drag a range out inside the field | The window moves instead, and **no stray highlight is left behind**. Double-click, triple-click, Mod+A and Shift+arrows still select — that is the trade, deliberately |  |
 | 54e | Open a note from the library into this window (it has no subject field then), and drag it by its title | The same movement, from Chromium's own drag region rather than from this code |  |
@@ -1894,8 +1910,8 @@ differently on the two machines this app runs on.
 | 55g | With a search showing, press **Escape** once, then again | The first clears the query and leaves the panel open; the second closes it. One press undoes one thing |  |
 | 55h | With a search showing, click a group in the list | The query clears and that group shows. The list and the search must never be lit at once |  |
 | 55i | **On macOS**: Settings → Shortcuts | Both chords read as symbols — `⇧⌘Y` and `⇧⌘B`, or whatever you have set. The words "CommandOrControl" must appear nowhere |  |
-| 55j | **On Windows**: the same | `Ctrl+Shift+Y` and `Ctrl+Shift+B`. Compare against the same two rows in the shortcut sheet (`⌘/` / `Ctrl+/`) — they used to disagree and must now match exactly |  |
-| 55k | Record a new chord for either shortcut, then **use it** | It works. This is the row that matters most: what is drawn is the platform's notation and what is *saved* is Electron's, and a mix-up leaves a hotkey that silently stops working after a settings change |  |
+| 55j | **On Windows**: the same | `Ctrl+Shift+Y` and `Ctrl+Shift+B`. Compare against the same two rows in the shortcut sheet (`⌘/` / `Ctrl+/`) — they used to disagree and must now match exactly | pass, 4 Sep 2026 |
+| 55k | Record a new chord for either shortcut, then **use it** | It works. This is the row that matters most: what is drawn is the platform's notation and what is *saved* is Electron's, and a mix-up leaves a hotkey that silently stops working after a settings change | pass, 4 Sep 2026 |
 | 55l | Settings → General → tick/untick **Start at login**, then open the tray menu | The tray's own "Start at login" checkbox agrees, without restarting the app |  |
 | 55m | The reverse: change it from the **tray** while Settings is open | The panel's checkbox follows. Two controls, one value |  |
 | 55n | Sign out and back in, with it ticked | emqnote is running and silent — no window opens (B61). The hotkey works straight away |  |
@@ -1910,7 +1926,7 @@ sends you to the wrong pane twice, it is the wrong name.
 
 ---
 
-## §50 — The other edge of the same band, and three buttons that do what they say (B101)
+## §56 — The other edge of the same band, and three buttons that do what they say (B101)
 
 Four reports from the first look B95 got on a Mac. Two of them were questions, answered by
 measurement in `05-besluitenlog.md` rather than by a row here; the rows below are what is
@@ -1923,14 +1939,138 @@ right-hand one.
 
 | # | Do this | Expect | Feedback |
 |---|---|---|---|
-| 50a | **On macOS**, open a note and delete its `.md` from Finder, so the disk-change bar appears | The bar's sentence starts to the *right* of the traffic lights, not underneath them. This is the report: it ran the full width and the text sat under the three buttons |  |
-| 50b | **On macOS**, put a conflict copy in the vault (`<note>-LAPTOP-ABC123.md` beside `<note>.md`) so the conflict banner appears | Same: its text clears the traffic lights. The banner is one wide button, so the strip under the lights is still not clickable — that is the platform's rule, not a defect |  |
-| 50c | **On macOS**, look at the folder tree's own header with no bar showing | Unchanged from before — "Vault" still starts clear of the lights. The header states its own clearance and must not have been disturbed by the token |  |
-| 50d | Open a note, delete its file from outside the app, and press **Restore** | The file is back at its old path with what the reader was showing. Reveal finds it, and it is in the folder's list again. This is the report — the button was "Keep mine" and wrote nothing |  |
-| 50e | Do that again, but type a word into the note *first* | Same, and the word is in the restored file |  |
-| 50f | Open a note that has a conflict copy, click the banner, and choose **Keep that one** | The reader shows the *other* version immediately, without a reload. Then check the trash holds the version you did not keep |  |
-| 50g | **On Windows 11**, repeat 50a | The bar's buttons are still clear of Minimise/Maximise/Close — §49a's fix, re-checked now that the other edge moved too |  |
-| 50h | Open Settings → the index, or just look at `index.sqlite`, after a vault has shrunk a lot | Nothing to do; this is a note. A large index compacts itself on the next launch now. If a 20 MB+ index does *not* shrink after restarting, say so — the guard may be reading the wrong file |  |
+| 56a | **On macOS**, open a note and delete its `.md` from Finder, so the disk-change bar appears | The bar's sentence starts to the *right* of the traffic lights, not underneath them. This is the report: it ran the full width and the text sat under the three buttons |  |
+| 56b | **On macOS**, put a conflict copy in the vault (`<note>-LAPTOP-ABC123.md` beside `<note>.md`) so the conflict banner appears | Same: its text clears the traffic lights. The banner is one wide button, so the strip under the lights is still not clickable — that is the platform's rule, not a defect |  |
+| 56c | **On macOS**, look at the folder tree's own header with no bar showing | Unchanged from before — "Vault" still starts clear of the lights. The header states its own clearance and must not have been disturbed by the token |  |
+| 56d | Open a note, delete its file from outside the app, and press **Restore** | The file is back at its old path with what the reader was showing. Reveal finds it, and it is in the folder's list again. This is the report — the button was "Keep mine" and wrote nothing |  |
+| 56e | Do that again, but type a word into the note *first* | Same, and the word is in the restored file |  |
+| 56f | Open a note that has a conflict copy, click the banner, and choose **Keep that one** | The reader shows the *other* version immediately, without a reload. Then check the trash holds the version you did not keep |  |
+| 56g | **On Windows 11**, repeat 50a | The bar's buttons are still clear of Minimise/Maximise/Close — §49a's fix, re-checked now that the other edge moved too |  |
+| 56h | Open Settings → the index, or just look at `index.sqlite`, after a vault has shrunk a lot | Nothing to do; this is a note. A large index compacts itself on the next launch now. If a 20 MB+ index does *not* shrink after restarting, say so — the guard may be reading the wrong file |  |
+
+---
+
+## §57 — Windows-hostile names, in a real filesystem (§7.6 in full)
+
+Walked on Windows, 4 September 2026, on `v0.13.2`. `test/filename.test.ts` covers
+`sanitiseTitle` and `sanitiseFolderName` as functions and nothing below repeats that. What
+it cannot ask is whether **Windows, Explorer and OneDrive actually accept what those
+functions produce**, and whether the Mac then opens it — which is the point, since the rules
+exist because `CONSTRAINTS.md` line 79 says Windows enforces them and macOS does not.
+
+Two things make several rows look wrong otherwise. **The title and the filename are two
+different strings**: `renameNote` writes the title as typed into the frontmatter and
+sanitises only the filename, and `summarise`'s `titleOf` reads the frontmatter first — so the
+app shows `CON` while the file is `CON_`. And **the timestamp prefix is always there**, so no
+filename below is bare.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 57a | New note, title it `CON`, `Ctrl+Enter` | On disk `2026-09-04 1432 CON_.md`; in the list `CON`; in the file `title: CON` | pass |
+| 57b | The same for `PRN`, `AUX`, `NUL`, `COM1`, `LPT1` | All five gain `_` | pass |
+| 57c | Now title one `con` and one `Com1` | Both gain `_` — the check is `toLowerCase()`d | pass |
+| 57d | Title a note `Offerte: klant * 3? "grote" <A\|B> \ /` | Every one of `\ / : * ? " < > \|` is a `-` in the filename; the title keeps them all; Explorer opens the file | pass |
+| 57e | Title one `Klant X.` and another `Klant X ` | No trailing dot or space on either filename | pass — and the second landed as `Klant 1 (2).md`, which is `uniquePath` doing its job: both titles sanitise to the same name, so they are two notes with one filename between them |
+| 57f | Title a note with 120 characters | Filename truncated at 80, not ending in a space; frontmatter carries all 120 | pass |
+| 57g | Title a note `***` | Falls back to `Untitled` | **failed** — the file was `---.md`. Every one of those characters is illegal, so all three became the hyphen, and a run of hyphens is not empty, so the fallback never ran. Fixed in B102 |
+| 57h | Create a **folder** named `CON`, then one named `???` | `CON_`; the second **refused with a message** | **half failed** — `CON_` right, but `???` created a folder called `---` without a word, and a second folder named `***` then silently did nothing at all (`mkdirSync` calls an existing folder a success). `****` made `----`. Fixed in B102 |
+| 57i | Drag in attachments named `CON.png` and `foto: 2*.png` | Sanitised, lowercased, and **both images draw** | pass — with the note that Windows will not let you *create* the second filename in the first place |
+| 57j | Rename the 57a note to `PRN` from the reader's title | One file, `PRN_`, original timestamp prefix, no ` (2)` | pass |
+| 57k | Put a `[[…]]` link to it in another note first, then rename again | The link still resolves and still opens it | pass |
+| 57l | Search for `CON`, and for a word from 57d's title | Both found; still found after a restart | pass |
+| 57m | **On the Mac**, after OneDrive has carried all of it across | Every one opens, every title reads as typed | not tested — no Mac to hand |
+| 57n | Trash one of them, then *Delete permanently* | It goes | pass |
+| 57o | **Nothing in this codebase handles this one.** Push a path past 260 characters | Unknown. Find out | pass, and the answer is that Windows does it for us: a 265-character path saved and reopened, and `dir` shows it as 8.3 short names (`EVENLO~1.THE\2026-0~1.MD`). Nothing in `src/` mentions `MAX_PATH` and nothing needs to yet |
+| 57p | Restart with all of §57 in the vault | Every note still listed, once, in the right folder | pass |
+
+Two more things came out of this pass and are recorded where they belong rather than as rows:
+leaving the subject blank takes the title from the note's first line (by design), and
+**creating a folder gave no sign either way** — no message when it was refused, and no
+unfolding of the tree to the folder when it worked. That is the last item in B102.
+
+---
+
+## §58 — Two machines, OneDrive, and which conflicts get noticed (§5 in full)
+
+**Not walked on 4 September 2026 — no Mac available.** It is written out here for the next
+pass with both machines, because the last one left a specific question open rather than a
+gap.
+
+§5.1–§5.3 came back OK and are not repeated. §5.4's feedback was: *"After reload, I have a
+copy of the note (with -iMac2020 appended); in the new note modal, there is only a mention
+that the note has changed outside emqnote."* That is `conflicts.ts` behaving exactly as
+written, and not a bug in the ordinary sense: `looksLikeMachineSuffix` requires at least one
+stripped segment to be short, all-uppercase-or-digit and to contain a letter — `LAPTOP` and
+`ABC123` qualify, `iMac2020` is mixed case and does not. The module comment states the cost
+in advance: *"a Mac whose computer name is mixed-case with no digits … produces a real
+conflict copy this rule will now miss. That is the right way round to be wrong."* A missed
+banner leaves both files in the note list where they can be merged by hand; a false banner
+offers a one-click way to throw away a note nobody lost, which is what `Weekly Report.md`
+beside `Weekly Report-Draft.md` used to do.
+
+**So this section is not "does the banner work". It is "in which direction does it work, and
+is the missing direction acceptable".** That second half is a decision, not a pass or a fail.
+
+| # | Do this | Expect | Feedback |
+|---|---|---|---|
+| 58a | Write both computer names down. Windows: `$env:COMPUTERNAME`. Mac: `scutil --get ComputerName` **and** `--get LocalHostName` | Two strings. A Windows name is almost always all-caps with digits and passes the rule; whether the Mac's does is this section's question |  |
+| 58b | Force a conflict with the **Windows** edit as the losing copy: pause syncing from the OneDrive tray, edit the same note on both, resume | A second file named with the Windows machine's name, **and the conflict banner** |  |
+| 58c | Click the banner | "This note was changed on two machines", **This one:** / **That one:**, a line diff, four buttons — Keep this one, Keep that one, Merge in the editor, Close |  |
+| 58d | Choose **Keep that one** | The reader shows the other version **immediately, without a reload** (B101). The original's path holds the copy's bytes; the version you did not keep is in `_trash` |  |
+| 58e | Another conflict, choose **Keep this one** | The copy goes to `_trash`; the original's `LastWriteTime` is unchanged |  |
+| 58f | A third, choose **Merge in the editor** | The original opens for editing and **neither file moves**. `resolveConflict` has no branch for merge |  |
+| 58g | Now make the **Mac** the losing copy | A copy named after the Mac, **no banner**, and a second note in the list. Confirm that is what happens |  |
+| 58h | The judgement: is that acceptable? | Two notes side by side and nothing lost, against teaching `looksLikeMachineSuffix` mixed-case names and reopening the false positive. A third option is free: rename the Mac to something all-caps with digits |  |
+| 58i | Two conflicts at once, resolve one | The banner stays with a smaller count and does **not** auto-advance into the next dialog |  |
+| 58j | Open a note on Windows, edit it on the Mac | "This note changed outside emqnote." with Reload / Keep mine |  |
+| 58k | The same, but press **Keep mine** and type a word | Your version stands and the next save overwrites. Watch what OneDrive does a minute later — this is how a real conflict copy gets made |  |
+| 58l | **Delete** the note on the Mac while it is open on Windows | "This note was deleted outside emqnote." with Close / **Restore** |  |
+| 58m | Press **Restore** without typing first | The file is written back at its old path, folder recreated if the whole folder went. This is the case that failed before B101 |  |
+| 58n | List timestamps, open twenty notes changing nothing, list again | **Not one moved.** B10, and the cheapest conflict prevention this app has |  |
+| 58o | The same twenty on the Mac, then back on Windows a day later | Still none |  |
+| 58p | After a few days of ordinary use, hunt for copies matching either machine name | Only from notes genuinely edited on both. One from a note that was *only opened* is B10 broken, and the filename says which machine did it |  |
+| 58q | Mark the vault *Free up space*, then search and open Tags and People | Both work; neither says the vault is on Files On-Demand |  |
+| 58r | Move six notes on Windows with the Tasks view open on the Mac | They arrive in the new folder. A "deleted outside emqnote" bar **there** is correct — B95 suppresses that only for the machine that made the move |  |
+
+58p is the row to leave running. Conflict copies show up under sync pressure, not on a quiet
+afternoon, which is why the last pass could not settle §5.5 in one sitting.
+
+---
+
+## §59 — What the 4 September 2026 Windows pass answered
+
+The record of one pass, on `v0.13.2`, on a Snapdragon X machine running Windows 11 with the
+vault on business OneDrive. It is here because most of what it settled was spread across ten
+sections, and because **seven of the ten came back clean** — which is worth writing down as
+plainly as the three that did not.
+
+| Item | Sections | Answer |
+|---|---|---|
+| Saving under a real OneDrive sync | §47a–c | **Clear.** A dozen notes filed against an actively syncing OneDrive, none missing, no visible stall; a read-only `.md` saved anyway and lost its tick. This is the batch B93 exists for and it had never been seen against real sync timing |
+| Caption-button clearance | §49a–d, §56g | **Clear**, all four bands |
+| The chord Settings prints and the one it saves | §55i–k | **Clear.** Both chords read `Ctrl+Shift+…`, matched the shortcut sheet, and a re-recorded chord worked |
+| The four chords Windows or Chromium may eat | §48c, §52k, §7.3, §25a | **Clear.** Ctrl+T, Ctrl+Tab, Ctrl+M and Ctrl+Shift+T all do their own job. §25a in particular — dead twice before, and not dead now |
+| Deleting a folder permanently out of the trash | §24a–e | **Clear.** The `v0.3.3`-era failure did not reproduce |
+| A brand-new empty vault | §1.2 | **Clear.** Tags and People empty and available. The `v0.3.3` bug is gone; this row was the last thing still marked OPEN against it |
+| The two buttons that used to lie | §56d–f | **Clear** |
+| Latency, packaged | §8 | **Within budget**, and the first Windows figure ever recorded: p50 36 ms, p95 53 ms on a 60 Hz panel. Two things beside the number — the samples are bimodal one refresh interval apart, and the *first* press after an idle costs far more (169 ms here, a 200–520 ms tail in `latency.log`). See `CLAUDE.md` |
+| Where the focus goes after Ctrl+Enter | §52a–e | **Failed.** The foreground went to no window at all; an Alt+Tab was needed to get back to Outlook. Same cause as Alt+F4 on a hotkey-raised window. Fixed in B102 |
+| Picking the window up by its subject field | §54a–f | **Half.** The drag works; the caret was left sitting in the subject field afterwards, which the reader's title never does. Fixed in B102 |
+
+Five more things came out of the notes beside those rows, and four of them are fixed in B102:
+the permanent-delete question named no counts (§57 item 5); `Ctrl+Shift+Tab` out of the note
+skipped the header fields; a name made only of forbidden characters became a row of hyphens
+rather than nothing (§57g, §57h); and creating a folder gave no sign either way.
+
+**The fifth is not fixed and is not diagnosed.** A note deleted from Explorer while it is
+*not* the note in the reader was still visible in the note list. Everything that path needs
+is in place — chokidar's `unlink` deletes it from the index and raises `library:refresh`,
+which reloads the list — so what is missing is a measurement, not a fix. On Windows the
+watcher polls at `POLL_INTERVAL_MS` (2 s) with a 300 ms settle on top (B57), so the row
+should go within about three seconds. **Next time it happens, note how long you waited**, and
+whether the note reappears in the list after Ctrl+Tab-ing away and back, or after restarting
+the library. A second fix shipped without knowing which of those is true is exactly the
+pattern this file exists to stop.
 
 ---
 

@@ -398,6 +398,7 @@ const DUTCH: Record<string, string> = {
   "folder.folder-into-itself": "Een map kan niet in zichzelf gezet worden.",
   "folder.failed": "De map kon niet hernoemd worden.",
   "folder.deleteFailed": "De map kon niet verwijderd worden.",
+  "folder.createFailed": "De map kon niet aangemaakt worden.",
   "folder.moveFailed": "De map kon niet verplaatst worden.",
 
   // Settings
@@ -919,6 +920,7 @@ const ENGLISH: Record<string, string> = {
   "folder.folder-into-itself": "A folder cannot be moved inside itself.",
   "folder.failed": "The folder could not be renamed.",
   "folder.deleteFailed": "The folder could not be deleted.",
+  "folder.createFailed": "The folder could not be created.",
   "folder.moveFailed": "The folder could not be moved.",
 
   "settings.title": "Settings",

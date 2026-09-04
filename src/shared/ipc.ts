@@ -112,6 +112,12 @@ export const IPC = {
   libraryRenameFolder: "library:rename-folder",
   /** How many notes and subfolders a folder holds, for the delete confirmation to name. */
   libraryFolderContents: "library:folder-contents",
+  /**
+   * How many notes, subfolders and other files are under *any* path — the permanent
+   * delete's own count, which walks the app's own folder names too because everything
+   * under the path is going. See `contentsAt`.
+   */
+  libraryContentsAt: "library:contents-at",
   /** Moves a folder into `_trash`, along with everything inside it — never a permanent delete (B24). */
   libraryTrashFolder: "library:trash-folder",
   /**
@@ -765,6 +771,11 @@ export interface LibraryApi {
   renameFolder: (path: string, name: string) => Promise<string>;
   /** Notes and subfolders anywhere inside a folder, for a delete confirmation to name. */
   folderContents: (path: string) => Promise<{ notes: number; folders: number }>;
+  /**
+   * The same for a path whose whole contents are about to be destroyed — files and the
+   * app's own folder names included, which `folderContents` deliberately leaves out.
+   */
+  contentsAt: (path: string) => Promise<{ notes: number; folders: number; files: number }>;
   /**
    * Moves a folder into `_trash`. `locked` when a note somewhere inside it is claimed
    * by the capture window — the same hazard `moveNote` guards against, extended to a

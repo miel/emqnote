@@ -4562,3 +4562,125 @@ startscan draait in `main()`, vóórdat het bibliotheekvenster bestaat, en dat v
 bij het opengaan `scanState()` — die dan `null` antwoordt omdat de scan al klaar is. Op een
 kluis die in 550 KB herbouwt is dat vrijwel meteen. §49c vroeg iets wat op die manier niet
 te zien is; de rij is herschreven.
+
+---
+
+## B102 — Wat een Windows-ronde terugbracht: de voorgrond, een naam die niets meer is, en een meting die haar eigen opwarming meetelde
+
+**Genomen** op 4 september 2026, na de eerste volledige ronde op de Windows-machine sinds
+B93. Tien punten gelopen, plus `TEST-PROTOCOL.md` §57 in zijn geheel. Zeven kwamen schoon
+terug — het opslaan onder een echt draaiende OneDrive (§47), de vrije ruimte naast de
+vensterknoppen (§49/§50g), de vier akkoorden die Windows of Chromium zou kunnen opeten
+(§48c, §52k, §7.3, §25a), het definitief verwijderen van een map uit de prullenbak (§24),
+een gloednieuwe lege kluis (§1.2) en de twee knoppen die eerder logen (§50d–f). Wat
+hieronder staat is de rest.
+
+### De voorgrond gaat terug naar waar hij vandaan kwam
+
+B98 heeft dit voor de twee routes van de bibliotheek opgelost en die van de sneltoets met
+rust gelaten, met als redenering dat het besturingssysteem het dan zelf wel weet. Op Windows
+wist het niets: een notitie vanuit Outlook wegschrijven liet de voorgrond op geen enkel
+venster staan. Tab deed niets, en er was een Alt+Tab nodig om terug te komen in de
+toepassing waar de notitie net over ging. Hetzelfde bij Alt+F4 op het invoervenster — en
+*niet* bij Alt+F4 op een venster dat met Ctrl+N vanuit de bibliotheek was geopend, wat
+precies de scheidslijn is die `raisedByLibrary` al trok.
+
+De oorzaak staat in `reveal()`: dit venster pakt de voorgrond af vanuit een
+achtergrondproces door zichzelf always-on-top te tonen, en een venster dat de voorgrond zó
+neemt, laat hem nergens achter als het weggaat. `hideCaptureWindow` roept nu `blur()` aan
+vóór het verbergen, en alleen op Windows: dat is daar `HWNDMessageHandler::Deactivate()`,
+dat de z-volgorde afloopt en de voorgrond aan het eerstvolgende zichtbare venster geeft —
+het venster waar de sneltoets boven is ingedrukt. Het kost één `blur`-gebeurtenis, en die
+handler is `writer.flush()`: een opslag die een regel later via `onHide()` toch zou komen.
+
+**Verworpen:** `minimize()` vóór `hide()`, het gangbare recept. Dat werkt ook, maar het laat
+een venster achter dat geminimaliseerd én verborgen is, en de eerstvolgende `show()` moet
+dat terugzetten — op het ene pad in deze app waar 80 ms de bovengrens is. **Verworpen:**
+hetzelfde op macOS doen, waar het ordenen van een venster de vorige toepassing al
+terugbrengt, en op Linux, waar het de zaak van de vensterbeheerder is.
+
+### Een venster oppakken is geen verzoek om erin te gaan typen
+
+Het onderwerpveld van het invoervenster is tegelijk de enige greep die dat venster heeft
+(B94), en na het slepen bleef de cursor erin staan. De klik die Chromium ná een sleep
+afvuurt landt op het veld als elke andere; bij de `<h1>` van de lezer viel dat nooit op,
+omdat een kop geen tekstveld is — dus dezelfde beweging gaf in de twee vensters een ander
+antwoord. `dragWindowFrom` krijgt nu ook hier een `onEnd`, en die zet de aandacht terug waar
+hij stond: had het veld hem al, dan wordt de selectie hersteld, anders gaat hij terug naar
+het element ervoor — meestal de notitietekst, waar de cursor anders zijn plaats kwijt was.
+
+### Ctrl+Shift+Tab uit de notitie komt uit bij Wie
+
+B98's ring was vier haltes heen en drie terug, met opzet: de titel is een bestemming waar je
+om vraagt, de notitie is waar je toch al heen ging. Maar heen loopt hij door de vier
+kopvelden — die staan in de DOM tussen de titel en de tekst — en terug sloeg hij precies dat
+gebied over. Nu landt hij op **Wie**, het laatste veld en het veld waar de notitietekst
+onder staat, zodat Shift+Tab van daaraf Waar → Labels → Wanneer → titel loopt zoals het al
+deed. Nog één keer Ctrl+Shift+Tab bereikt de lijst, via `inNoteFields`: wat één druk was,
+zijn er twee, en geen van beide landt op niets.
+
+### Een naam die alleen uit verboden tekens bestaat, is geen naam
+
+`ILLEGAL` vervangt elk verboden teken door een koppelteken, dus `***` en `???` kwamen als
+`---` uit `sanitiseTitle` en `sanitiseFolderName` — en een rij koppeltekens is niet leeg, dus
+de terugval eronder liep nooit. Een notitie heette `---.md` en een map heette `---`. De
+tweede map die zo genoemd werd deed vervolgens helemaal niets, want `mkdirSync`
+(`recursive: true`) noemt een map die er al is een succes.
+
+Drie regels erbij. `saysNothing` beslist dat een naam die alleen uit koppeltekens, punten en
+spaties bestaat leeg is — precies wat de twee strips erboven al van punten en spaties
+vonden. `!!!` blijft een naam, want dat is een geldige Windows-bestandsnaam die door niets
+van deze regels is stukgemaakt. En `createFolder` weigert nu een naam die al bezet is en de
+mapnamen van de app zelf, zoals `renameFolder` naast hem dat al deed, met de redenering die
+daar al staat: bij een houder is een foutmelding het vriendelijkere antwoord.
+
+**Verworpen:** "geen letters of cijfers" als regel. Dat maakt van `!!!` en `#` ook niets, en
+die heeft niemand kapotgemaakt.
+
+### Een map aanmaken laat zien dat er een map is aangemaakt
+
+De aanroep was ge`void`d, dus een weigering ging nergens heen: het venster sloot over een map
+die niet bestond. En de map die er wél kwam kon in een dichtgevouwen tak zitten, want alles
+onder het eerste niveau begint dicht — dus het enige zichtbare resultaat van die handeling
+was soms niets. `createFolderIn` meldt de weigering nu in dezelfde vorm als hernoemen en
+verwijderen (met een eigen zin, want "kon niet hernoemd worden" gaat over iets anders),
+selecteert de nieuwe map en vouwt de boom ernaartoe open.
+
+**De vouwstand blijft per rij.** Het is de zaak van die rij, en hem in `Library.tsx` tillen
+om één vraag te beantwoorden maakt van elk driehoekje een omweg door de vensterstatus. De
+*vraag* gaat naar beneden in plaats van het antwoord omhoog: elke rij onderweg opent zichzelf
+ervoor, wat ook meteen de reden is dat het werkt voor een map drie niveaus diep — alleen de
+recursie weet wie de voorouders zijn. En hij opent alleen; een rij die de gebruiker
+dichtklapt blijft dicht.
+
+### Het definitief verwijderen zegt nu ook wat er in zit
+
+"Definitief verwijderen" op een map in de prullenbak noemde de map en verder niets, terwijl
+het verwijderen dat *wel* terug te draaien is beide aantallen noemt sinds B27 — de
+gevaarlijkste van de twee zei het minst. `contentsAt` is `trashContents` gegeneraliseerd naar
+één pad, dezelfde stap die `openTasksAt` ooit vanaf `openTasksIn` maakte, en telt bestanden
+mee: onder een pad in de prullenbak gaat alles weg, dus een telling die `_attachments`
+oversloeg zou de knop kleiner maken dan hij is.
+
+### Een meting die haar eigen opwarming meetelde
+
+De selftest toont het venster één keer vóór de lus, met opzet, omdat de eerste verschijning
+het besturingssysteem iets kost dat niets zegt over dagelijks gebruik. Die opwarming werd
+vervolgens gewoon meegemeten: vijftig rondes gerapporteerd over eenenvijftig monsters, met
+`max` en `p99` op de opwarming zelf (169 ms tegen een p95 van 53) en een `worst` die een
+ronde 51 noemde die de lus nooit gedraaid heeft. `resetMeasurements()` gooit ze nu weg.
+
+En het rapport zei `missed: 0` naast die 169 ms, wat waar is en als onwaar leest: `missed`
+telt verschijningen die helemaal niet geverfd hebben. `overBudget` telt er nu naast wat er te
+laat was — het getal waar de `[latency]`-regel naast de run over gaat.
+
+**De eerste Windows-meting staat in `CLAUDE.md`**: p50 36 ms, p95 53 ms, binnen het budget,
+op een 60 Hz-paneel. Twee dingen eromheen zijn het bewaren waard. De monsters wisselen af
+tussen ~35 en ~52 ms, precies één beeldinterval uit elkaar — de kwantisering waar die
+paragraaf voor waarschuwt, zichtbaar in plaats van als ruis. En de **eerste** druk na een
+tijd niets doen kost veel meer dan alle vijftig: 169 ms in deze run, en `latency.log` laat
+over drie weken dezelfde vorm zien — het gros tussen 30 en 60 ms, met een staart van 200 tot
+520 ms die telkens de eerste sneltoets van een sessie is. Die staart zit niet in de p95,
+want `--selftest` drukt vijftig keer in negen seconden. **Waar die eerste druk voor betaalt,
+is niet gemeten** en er wordt hier dus niets over beweerd. Het is wel het enige getal dat
+een mens echt voelt, want de dagelijkse handeling *is* een eerste druk.

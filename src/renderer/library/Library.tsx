@@ -267,7 +267,17 @@ type Dialog =
    * note's title, a folder's name — and `path` is what actually goes, because the two are
    * not the same string and naming a path at someone is not asking them anything.
    */
-  | { kind: "deletePermanently"; path: string; label: string; openTasks: number }
+  | {
+      kind: "deletePermanently";
+      path: string;
+      label: string;
+      openTasks: number;
+      /**
+       * What is inside, when the thing being destroyed is a folder. Absent for a note
+       * row, which is one file and says so by being named.
+       */
+      inside?: { notes: number; folders: number; files: number };
+    }
   | { kind: "problem"; message: string };
 
 /** What Restore is currently asking for a destination for — a trashed note, or a trashed folder. */
@@ -612,6 +622,15 @@ export function Library(): React.ReactElement {
   // Null when nothing is scanning, which is the normal state — the bar only appears on a
   // cold start with a vault big enough for the walk to be worth mentioning.
   const [scan, setScan] = useState<ScanProgress | null>(null);
+
+  /**
+   * The folder the tree has to unfold to, set by `createFolderIn` and by nothing else.
+   *
+   * Not cleared afterwards, and it does not need to be: every row's effect is keyed on
+   * this value, so it fires once when it changes and never again — a branch the user
+   * folds back stays folded. A path that is already visible costs nothing either.
+   */
+  const [reveal, setReveal] = useState<string | null>(null);
 
   /**
    * The tree/notes pane widths, dragged live by `Splitter.tsx` and persisted through
@@ -1384,13 +1403,19 @@ export function Library(): React.ReactElement {
    * The macro keyboard cycle around the window:
    *
    *     forward   tree → notes → title → editor → tree
-   *     backward  tree → editor → notes → tree
+   *     backward  tree → editor → Who → notes → tree
    *
-   * **Four stops forward and three back, and the asymmetry is the point** (B98). The
-   * title is a destination you ask for; the note is where you were going anyway. So
-   * Ctrl+Tab out of the note list stops on the title — the fourth stop — while
-   * Ctrl+Shift+Tab out of the note goes straight back to the list, and Ctrl+Shift+Tab out
-   * of the tree reaches the note's text, which it declined to do at all before.
+   * **Four stops forward and four back, and they are not the same four** (B98, amended by
+   * §52k's note, recorded in §59). The title is a destination you ask for; the note is
+   * where you were going anyway. So Ctrl+Tab out of the note list stops on the title —
+   * the fourth stop —
+   * and Ctrl+Shift+Tab out of the tree reaches the note's text, which it declined to do at
+   * all before.
+   *
+   * Backward out of the *note* stops on Who, the last of the four header fields, which is
+   * where the DOM puts them: between the title and the note's text. It used to skip them
+   * entirely and land on the list, so the one region the forward walk passes through was
+   * unreachable from the side it sits on.
    *
    * This is not the fourth stop B94 removed. That one was the *header block*, entered at
    * whichever end you arrived at, and it was paid for by every press that had nothing to
@@ -1466,6 +1491,21 @@ export function Library(): React.ReactElement {
         // so enter the first one instead of doing nothing.
         return focusPane(backward ? "editor" : "tree");
       }
+
+      // **Backward out of the note lands on Who, the last of the four fields** (§52k's
+      // note, recorded in §59). It went straight to the note list, which made the backward
+      // walk skip the one region the forward walk had just gone through: forward is
+      // notes → title → *fields* → note, and the fields are where the DOM puts them,
+      // between the two. The ring passes through them going forward (`inNoteFields`
+      // above) precisely because plain Tab walks them one at a time from the title; going
+      // backward there was nothing between the note's text and the list at all.
+      //
+      // The last field rather than the first, because it is the one the note's text sits
+      // under: Shift+Tab from there walks Where → Tags → When → the title, which is the
+      // order it already had. A second Ctrl+Shift+Tab reaches the list, through
+      // `inNoteFields` — so the press that used to get there in one still gets there in
+      // two, and neither of them is a press with nowhere to land.
+      if (current === "editor" && backward) return focusPane("header", true);
 
       const next: "tree" | "notes" | "editor" | "title" =
         current === "tree"
@@ -2159,14 +2199,36 @@ export function Library(): React.ReactElement {
         return `${what}${tasks} — ${app.t("ask.confirmDelete")}`;
       }
       case "deletePermanently": {
-        // The open tasks in this one thing, counted when the dialog opens exactly as the
-        // whole trash's are. Silent when there are none, for the reason the zeroes are
-        // left out of the list above.
-        const tasks =
-          open.openTasks === 0
-            ? ""
-            : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
-        return `"${open.label}"${tasks} — ${app.t("ask.confirmDeletePermanently")}`;
+        // **What is inside, when there is an inside** (§59). This question was
+        // the folder's name and nothing else, while the *less* destructive delete beside
+        // it — the one that only moves a folder to the trash — has named both counts
+        // since B27. It is the same parenthetical in the same words as `deleteFolder`
+        // above, with files in it as well: everything under a path in the trash is
+        // going, which is why the count behind it (`contentsAt`) filters nothing.
+        //
+        // Zeroes are left out one by one, by the rule the whole file follows: "0 folders"
+        // is a warning about nothing. An empty folder shows no brackets at all, which is
+        // also the note row's case — it passes no counts and reads exactly as before.
+        const inside = open.inside;
+        const parts = [
+          ...(inside === undefined ||
+          (inside.notes === 0 && inside.folders === 0 && inside.files === 0)
+            ? []
+            : [
+                plural(inside.notes, "library.note", "library.notes"),
+                ...(inside.folders === 0
+                  ? []
+                  : [plural(inside.folders, "library.folder", "library.folders")]),
+                ...(inside.files === 0
+                  ? []
+                  : [plural(inside.files, "library.file", "library.files")]),
+              ]),
+          ...(open.openTasks === 0
+            ? []
+            : [plural(open.openTasks, "library.openTask", "library.openTasks")]),
+        ];
+        const contents = parts.length === 0 ? "" : ` (${parts.join(", ")})`;
+        return `"${open.label}"${contents} — ${app.t("ask.confirmDeletePermanently")}`;
       }
     }
   };
@@ -2275,6 +2337,43 @@ export function Library(): React.ReactElement {
       return;
     }
     await openNote(result.path);
+  };
+
+  /**
+   * Creates a folder, says so when it cannot, and shows the one it made.
+   *
+   * Both halves are §57's closing note. The call was `void`ed, so a refusal — a name that
+   * sanitises to nothing (`???`), one that is already taken, the app's own folder names —
+   * went nowhere at all: the dialog closed on a folder that had not been created and the
+   * tree looked exactly as it had. And the folder that *was* created could be inside a
+   * branch that is folded, which is the same picture. Selecting it is what unfolds the
+   * tree to it, through `reveal` — the tree's rows own their fold state, so the path is
+   * handed down rather than the state lifted up.
+   *
+   * `folder.createFailed` for a rejection carrying no code of its own, in the shape
+   * `renameFolderAt` and `deleteFolderAt` both use: the three verbs fail differently and
+   * a folder that "could not be renamed" is the wrong sentence over a create.
+   */
+  const createFolderIn = async (parent: string, name: string): Promise<void> => {
+    let created: string;
+    try {
+      created = await window.emqnote.library.createFolder(parent, name);
+    } catch (error) {
+      const code = folderErrorOf(error);
+      setDialog({
+        kind: "problem",
+        message: app.t(code === null ? "folder.createFailed" : `folder.${code}`),
+      });
+      return;
+    }
+
+    await loadTree();
+
+    setReveal(created);
+    const target: Selection = { kind: "folder", path: created };
+    setSelection(target);
+    selectionRef.current = target;
+    setLastFolder(created);
   };
 
   /**
@@ -2988,6 +3087,7 @@ export function Library(): React.ReactElement {
             }
           }}
           onExpandFilters={() => void loadFacets()}
+          revealPath={reveal}
           onCreateFolder={(parent) => setDialog({ kind: "newFolder", parent })}
           onNewFolder={() => setDialog({ kind: "newFolder", parent: lastFolder })}
           onRenameFolder={(path) =>
@@ -3018,7 +3118,13 @@ export function Library(): React.ReactElement {
           onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
           onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
           onDeleteFolderPermanently={(path) => {
-            void window.emqnote.library.openTasksAt(path).then((openTasks) => {
+            // Both answers before the question, exactly as `onDeleteFolder` above does it
+            // and for the same reason: a dialog that appeared on the first and grew a
+            // clause on the second would be a question that changes while it is read.
+            void Promise.all([
+              window.emqnote.library.contentsAt(path),
+              window.emqnote.library.openTasksAt(path),
+            ]).then(([inside, openTasks]) => {
               setDialog({
                 kind: "deletePermanently",
                 path,
@@ -3026,6 +3132,7 @@ export function Library(): React.ReactElement {
                 // a thing, and a path read back at someone is not a question.
                 label: path.split("/").pop() ?? path,
                 openTasks,
+                inside,
               });
             });
           }}
@@ -3841,9 +3948,7 @@ export function Library(): React.ReactElement {
             if (current.kind === "deleteFolder") void deleteFolderAt(current.path);
             if (current.kind === "deletePermanently") void deletePermanently(current.path);
             if (current.kind === "clearTrash") void clearTrash();
-            if (current.kind === "newFolder") {
-              void window.emqnote.library.createFolder(current.parent, value);
-            }
+            if (current.kind === "newFolder") void createFolderIn(current.parent, value);
             if (current.kind === "renameFolder") void renameFolderAt(current.path, value);
             if (current.kind === "relink") void runRelinkable(current.action, true);
             if (current.kind === "duplicateTitle") {

@@ -68,8 +68,23 @@ Latency budgets are hard, measured, and failing them is a bug not a wish: hotkey
 | unrecorded — not the Mac mini, which has no internal panel | unrecorded; the numbers fit a 120 Hz panel | 26 ms | 43 ms | phase 2 |
 | Mac mini M4 | external 2490W1, 1920×1080 @ 60 Hz | 60 ms | 62–68 ms | phase 3 |
 | Mac mini M4 | external 2490W1, 1920×1080 @ 60 Hz | 27–31 ms | 36–45 ms | 28 Jul 2026 |
+| Snapdragon X (Adreno X1-85), Windows 11 | external HP 734pm, 3440×1440 @ 60 Hz (panel does 48–120) | 36 ms | 53 ms | 4 Sep 2026 |
 
 Record the machine and refresh rate with any future figure. The first row cannot be reproduced because neither was written down. **The second and third rows disagree, on identical hardware, and that is not yet explained** — see `CONSTRAINTS.md` for the full measurement history before citing either. The conclusion that survives both: **the editor and the library cost nothing on this path**, as designed.
+
+**The fourth row is the first Windows figure**, and it is inside the budget at both p50 and
+p95 on the platform CLAUDE.md has been calling the tighter one. Two things about it are worth
+carrying rather than the number alone. The samples are bimodal — they alternate between about
+35 ms and about 52 ms, one refresh interval apart at 60 Hz, which is the quantization this
+section warns about showing up plainly rather than as noise. And the *first* appearance after
+the app has been sitting idle costs far more than any of the fifty: 169 ms in that run, and
+`latency.log` shows the same shape across three weeks of daily use — the great majority of
+entries between 30 and 60 ms, with a long tail (200–520 ms) that is always the first hotkey of
+a session. That tail is not in the p95 because `--selftest` presses the hotkey fifty times in
+nine seconds. **What is not yet known is what the first press is paying for** — Windows paging
+the process back in, the GPU waking, or something this app does — and nothing should be claimed
+about it until it is measured. It is the one number a person actually feels, since the everyday
+gesture *is* a first press.
 
 The capture window's bundle is kept deliberately small — it is the one that must appear instantly — so the library window is a separate rollup entry and its tree, list and dialogs are not loaded into it.
 

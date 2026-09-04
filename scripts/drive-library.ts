@@ -580,6 +580,25 @@ async function main(): Promise<number> {
       },
     },
     {
+      name: "and a real Ctrl+Shift+Tab out of the note lands on Who, then on the list",
+      run: async () => {
+        // The step B98 left out and B102 put back: forward, the ring passes *through* the
+        // four header fields on its way into the note, and backward it used to skip them
+        // entirely. Who is the end of the block in DOM order, right above the text.
+        await open.library!.evaluate(
+          `document.querySelector('.editor-content').focus()`,
+        );
+        await realChord("ctrl+shift+Tab");
+        const first = await focused();
+        if (!first.includes("attendees")) throw new Error(`first press landed on ${first}`);
+
+        await realChord("ctrl+shift+Tab");
+        const second = await focused();
+        if (!second.includes("note")) throw new Error(`second press landed on ${second}`);
+        return `${first} → ${second}`;
+      },
+    },
+    {
       name: "and Shift+Tab walks the note's own fields back down to the title",
       run: async () => {
         // Pure DOM order, and untouched by B98: once you are on one of the five controls

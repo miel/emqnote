@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { trashContents } from "../src/main/vault-io.js";
+import { contentsAt, trashContents } from "../src/main/vault-io.js";
 
 /**
  * The Empty-trash confirmation counts what is actually going.
@@ -114,5 +114,48 @@ describe("trashContents", () => {
     const counted = trashContents(vault);
     expect(counted.notes).toBe(1);
     expect(counted.folders).toBeLessThan(14);
+  });
+});
+
+/**
+ * The same walk asked about one thing rather than about the whole trash.
+ *
+ * "Delete permanently" is offered on a folder inside the trash as well as on the trash
+ * itself, and that question named the folder and nothing else (§59) — the more
+ * destructive of the two deletes, saying less than the reversible one beside it.
+ */
+describe("contentsAt", () => {
+  it("counts one trashed folder rather than the whole trash", () => {
+    put("_trash/02 Oud/a.md");
+    put("_trash/02 Oud/Sub/b.md");
+    put("_trash/02 Oud/Sub/foto.png");
+    put("_trash/elders.md");
+
+    expect(contentsAt(vault, "_trash/02 Oud")).toEqual({ notes: 2, folders: 1, files: 1 });
+  });
+
+  it("counts files and hidden names, exactly as the whole-trash walk does", () => {
+    // The reason this is not `folderContents`: everything under a path in the trash is
+    // going, so a count that skipped `_attachments` would understate the button.
+    put("_trash/02 Oud/_attachments/offerte.pdf");
+    put("_trash/02 Oud/.hidden/x.md");
+
+    expect(contentsAt(vault, "_trash/02 Oud")).toEqual({ notes: 1, folders: 2, files: 1 });
+  });
+
+  it("answers zero for a path that is not there", () => {
+    expect(contentsAt(vault, "_trash/gone")).toEqual({ notes: 0, folders: 0, files: 0 });
+  });
+
+  it("adds up to what trashContents says for the trash itself", () => {
+    put("_trash/02 Oud/a.md");
+    put("_trash/los.png");
+
+    const whole = trashContents(vault);
+    expect(contentsAt(vault, "_trash")).toEqual({
+      notes: whole.notes,
+      folders: whole.folders,
+      files: whole.files,
+    });
   });
 });

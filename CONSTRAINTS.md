@@ -76,7 +76,7 @@ nobody had measured, and the measurement took one log file.
 
 **A deliberate launch opens the library; a login start stays silent** (B61). `shouldOpenLibraryAtLaunch` in `launch-options.ts` is the whole rule, pure and separate from the launch that carries it out, because two entry points ask it: the first instance about its own argv, and `second-instance` about the argv the relaunch handed over — clicking the shortcut of a running app is the same gesture as clicking the shortcut of a stopped one. macOS asks a third time through `activate`, since an `LSUIElement` app with no dock icon never sees a second instance. **The signal is an argument on the login item**, written by `applyLoginItem` and nowhere else: `setLoginItemSettings` used to be called with `{ openAtLogin }` alone, so nothing distinguished the two launches, and the tray's own checkbox set it directly — a second call site that would have dropped the argument on the first toggle. macOS's `wasOpenedAtLogin` is read alongside the flag rather than instead of it, because an entry written by an older version carries no flag until it is rewritten.
 
-**Windows path limits and reserved names.** Filenames follow `YYYY-MM-DD HHmm Subject.md`, truncated at 80 chars, forbidden characters `\ / : * ? " < > |` replaced by `-`, reserved names (`CON`, `PRN`, `COM1`…) suffixed with `_`, no trailing dot or space. `src/main/filename.ts`, tested in `test/filename.test.ts`.
+**Windows path limits and reserved names.** Filenames follow `YYYY-MM-DD HHmm Subject.md`, truncated at 80 chars, forbidden characters `\ / : * ? " < > |` replaced by `-`, reserved names (`CON`, `PRN`, `COM1`…) suffixed with `_`, no trailing dot or space. `src/main/filename.ts`, tested in `test/filename.test.ts`. **A name is only a name if the rules left something of it** (B102): those characters are *replaced* rather than removed, so `***` and `???` both arrive as `---`, which is not the empty string — a note titled `***` was written as `---.md` and a folder named `???` was created as `---` without a word. `saysNothing` treats a result made only of hyphens, dots and spaces as empty, which is what finally makes the "returns `""` rather than inventing a name" in `sanitiseFolderName`'s own comment true. `!!!` is left alone: it is a legal Windows filename that none of these rules destroyed.
 
 **A `#` that opens a tag is not escaped at the start of a line** (B19). Everywhere else a line-initial `#` becomes `\#`, because it could begin a heading — but `\#klantx` is not a tag to Obsidian, and half the tags in the vault being silently inert is exactly what B7 forbids. The exception is narrow: `startsWithTag` in `src/markdown/tags.ts` requires a tag character immediately after the hash, so `\# Dit is geen kop` keeps its backslash. It is implemented as a custom `text` handler in `pipeline.ts` that cuts the value around the hash and runs the pieces through `state.safe` separately — never by unescaping the output afterwards, which would eat a literal backslash the user typed.
 
@@ -2507,3 +2507,42 @@ to call Electron itself and dropped the `--login` argument doing so, which is th
 telling a sign-in start apart from a double-click. Main rebuilds the tray menu and broadcasts
 `settingsChanged` on both routes, so an open panel and the menu cannot show different answers
 for the same value. Same shape as the vault list, which B21's addendum settled the same way.
+
+**A window that took the foreground by force has to give it back by hand** (B102). `reveal()`
+raises the capture window from a background process by making it always-on-top and focusing
+it, because Windows will not otherwise let a background process take the foreground — and a
+window that took it that way leaves it *nowhere* when it hides. Filing a note from Outlook
+therefore ended with no window in front at all: Tab did nothing, and an Alt+Tab was needed to
+get back. `hideCaptureWindow` calls `blur()` before `hide()`, on Windows only, which is
+`HWNDMessageHandler::Deactivate()` there — it walks the Z-order and hands the foreground to
+the next visible window. **The library's own route is the other branch and stays as it was**
+(B98's `raisedByLibrary`), which is also the line the report itself drew: Alt+F4 on a window
+raised by `Ctrl+N` returned focus correctly and the same key on a hotkey-raised one did not.
+macOS and Linux are left alone; both return the foreground on their own, and `blur()` there is
+an argument with a policy that already works.
+
+**A folder is created once, or refused** (B102). `createFolder` used `mkdirSync`'s
+`recursive` flag, which calls an existing directory a success — so a name that sanitised onto
+one already there created nothing and said nothing. It refuses now, exactly as `renameFolder`
+beside it always has and for the reason written there: for a container an error is the kinder
+answer, since two folders someone believes are one is how notes end up split between them.
+The renderer's half is the same shape: `createFolderIn` decodes the `FOLDER_ERROR` into a
+sentence of its own (`folder.createFailed`, not the rename's), then selects the new folder and
+**unfolds the tree to it** — a `void`ed call and a folded branch between them meant the one
+gesture whose whole result is a new row in that pane could show no new row at all.
+
+**Fold state belongs to the row, so the question travels down** (B102). `Branch`'s `open` is
+`useState` per row and stays that way; `revealPath` is passed through the recursion and each
+row opens itself for a path it is an ancestor of. Lifting the whole fold state into
+`Library.tsx` to answer one question would make every twisty a round trip through the window's
+state — and only the recursion knows who a folder three levels down has above it. It only ever
+opens: a row the user folded stays folded.
+
+**The warm-up is not part of the measurement** (B102). `selftest.ts` shows the window once
+before its loop, deliberately, because the first appearance costs the OS something that says
+nothing about a resident app — and then measured it, so fifty rounds were reported over
+fifty-one samples with `max`, `p99` and a nonexistent "round 51" all coming from the sample
+that was excluded from the reasoning. `resetMeasurements()` runs between the warm-up and the
+loop. Beside it, `stats()` now carries `overBudget`: `missed` counts appearances that never
+painted at all, so a summary saying `missed: 0` under a 169 ms `max` was answering a question
+nobody asked.
