@@ -2,7 +2,7 @@ import { app, dialog, type BrowserWindow } from "electron";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCaptureWindow, hideCaptureWindow, showCaptureWindow } from "./capture-window.js";
-import { LATENCY_BUDGET_MS, stats } from "./latency.js";
+import { LATENCY_BUDGET_MS, resetMeasurements, stats } from "./latency.js";
 import { loadSettings } from "./settings.js";
 import { INBOX } from "./vault.js";
 
@@ -66,6 +66,13 @@ export async function runSelfTest(rounds: number): Promise<void> {
   hideCaptureWindow();
   await sleep(200);
 
+  // ...and then leave it out of the arithmetic as well, which it was not. The sentence
+  // above was true of the *reasoning* and false of the report: the warm-up was sample one
+  // of fifty-one, and on Windows it is the slowest thing in the run by a factor of three —
+  // 169 ms against a p95 of 53 — so it was `max`, it was `p99`, and it put a round in
+  // `worst` that the loop below never ran. `resetMeasurements` is the whole fix.
+  resetMeasurements();
+
   let missed = 0;
   for (let round = 0; round < rounds; round += 1) {
     showCaptureWindow();
@@ -82,7 +89,13 @@ export async function runSelfTest(rounds: number): Promise<void> {
     when: new Date().toISOString(),
     budgetMs: LATENCY_BUDGET_MS,
     rounds,
+    // Two different failures, and the report named only one of them. `missed` counts
+    // rounds where no paint was reported at all inside five seconds — a window that never
+    // came up — while `overBudget` counts the ones that came up too slowly, which is what
+    // the `[latency]` line printed beside this run is about. A summary saying `missed: 0`
+    // under a `max` of 169 ms was answering a question nobody had asked.
     missed,
+    overBudget: result.overBudget,
     p50: Number(result.p50.toFixed(1)),
     p95: Number(result.p95.toFixed(1)),
     p99: Number(result.p99.toFixed(1)),
@@ -133,6 +146,7 @@ async function showSummary(
       `p95 ${result.p95.toFixed(0)} ms\n` +
       `p99 ${result.p99.toFixed(0)} ms\n` +
       `slowest: ${result.worst.map((o) => `round ${o.round} at ${o.ms} ms`).join(", ")}\n` +
+      `over budget ${result.overBudget} of ${rounds}\n` +
       `missed ${missed}\n` +
       `note written: ${saved ?? "no"}\n\n` +
       `Full result: ${resultFile}`,

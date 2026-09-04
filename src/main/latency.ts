@@ -24,6 +24,21 @@ const pending = new Map<number, Pending>();
 const samples: number[] = [];
 let nextToken = 1;
 
+/**
+ * Throws away every sample taken so far.
+ *
+ * One caller, `selftest.ts`, and one reason: that run shows the window once before the
+ * loop starts, deliberately, because the first appearance costs the OS something that
+ * says nothing about a resident app in daily use. That warm-up was then measured along
+ * with everything else, so a run of fifty rounds reported `rounds: 50` over fifty-one
+ * samples — `p99` and `max` were the warm-up itself (169 ms against a p95 of 53), and
+ * `worst` named a "round 51" that does not exist. A number that is deliberately excluded
+ * from the reasoning has to be excluded from the arithmetic too.
+ */
+export function resetMeasurements(): void {
+  samples.length = 0;
+}
+
 export function beginMeasurement(): number {
   const token = nextToken;
   nextToken += 1;
@@ -78,6 +93,14 @@ export interface LatencyStats {
   max: number;
   last: number | null;
   withinBudget: boolean;
+  /**
+   * How many samples were slower than the budget — which is not the same question as
+   * `withinBudget`, and the selftest's report needed both. That flag is about the *p95*,
+   * which is the acceptance criterion, so a run can be within budget and still have a
+   * handful of slow appearances in it; a summary that showed only the flag read as
+   * though there had been none.
+   */
+  overBudget: number;
   /** The slowest few, with their position — a stall in round 1 means something else than one in round 37. */
   worst: Outlier[];
 }
@@ -105,6 +128,7 @@ export function stats(): LatencyStats {
     max: sorted[sorted.length - 1] ?? 0,
     last: samples[samples.length - 1] ?? null,
     withinBudget: samples.length === 0 || p95 <= LATENCY_BUDGET_MS,
+    overBudget: samples.filter((ms) => ms > LATENCY_BUDGET_MS).length,
     worst,
   };
 }
