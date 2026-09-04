@@ -2477,4 +2477,70 @@ exists. §49c said to do that and has been rewritten.
 Verified on this machine as far as it can be: the full suite, and the disk-change bar
 measured through the real renderer with `--lights-inset` toggled — its text starts at x=14
 with the token at 0 and at x=106 with the macOS value, clear of lights that end near 64.
-Everything genuinely about macOS is `TEST-PROTOCOL.md` §50, for a person on a Mac.
+Everything genuinely about macOS is `TEST-PROTOCOL.md` §56, for a person on a Mac — that
+section carried a second `§50` heading until the next batch renumbered it.
+
+## A Windows pass, and the six things it found (4 September 2026)
+
+The first full pass on the Windows machine since B93. Ten items from `TEST-PROTOCOL.md`
+walked plus §57 in its entirety; §59 is the record of it and **B102** carries the reasoning.
+This entry is about what it means rather than what it says.
+
+**Seven of the ten came back clean, and two of those had never been seen at all.** B93's
+save path — the retry, `clearReadOnly`, the recovery copy — was written against a vault path
+that could not be written to, which is a faithful stand-in for the *shape* of an `EPERM` and
+says nothing about OneDrive's timing. A dozen notes filed into an actively syncing vault, none
+missing, plus a read-only `.md` that saved anyway and lost its tick, is the first evidence
+that the thing built for the 31 August data loss actually holds where the loss happened. And
+§1.2 — Tags and People on a brand-new empty vault — was the last row still marked OPEN
+against the `v0.3.3` Files On-Demand bug. It is closed.
+
+Two of the clean ones are worth naming for the opposite reason: they had failed before.
+Deleting a folder out of the trash on Windows was reported twice and is now fine, which is
+B57 (this app stopped holding directory handles) and `trash-delete.ts` (it retries) between
+them. `Ctrl+Shift+T` was dead twice and is not dead now, which is the `before-input-event`
+claim — a fix made at the earliest point in the window rather than at a known cause, and the
+kind that can only ever be confirmed on the machine it was made for.
+
+**What it found divides into two kinds, and the division is the lesson.** Three defects were
+things this sandbox cannot see at all: the foreground going nowhere when a hotkey-raised
+window hides (Windows only, and a consequence of how that window takes the foreground in the
+first place); the caret left in the subject field after a drag (`-webkit-app-region` exists
+in no test environment here); and `Ctrl+Shift+Tab` skipping the header fields (a judgement
+about a walk, not a failure of one — B98 made the ring deliberately asymmetric and daily use
+disagreed with the asymmetry).
+
+The other three were visible from anywhere and had simply never been looked at. A name made
+only of forbidden characters became a row of hyphens, because `ILLEGAL` replaces rather than
+removes and a run of hyphens is not empty — `filename.test.ts` has asserted `sanitiseTitle("...")`
+answers `Untitled` since phase 1 and nobody asked what `***` answers. Creating a folder
+reported nothing and revealed nothing, the call having been `void`ed. And "Delete
+permanently" named no counts while the *reversible* delete beside it has named both since
+B27 — the more destructive question saying less, which is the shape of mistake worth looking
+for elsewhere.
+
+**One report is fixed nowhere and that is deliberate.** A note deleted from Explorer while it
+is not the note in the reader stayed in the note list. Every piece of that path is in place
+and the Windows watcher polls at two seconds, so what is missing is a measurement — how long
+it was left, whether it clears on a refresh — not a fix. Shipping one on the strength of
+reading the code is how §23a became §24.
+
+**Both drivers gained a step, and one of them is the only place its fix can be seen.**
+`drive:library` presses a real `Ctrl+Shift+Tab` out of the note and reads Who off
+`document.activeElement`; `drive:capture` puts the caret in the note's body first and then
+drags the window by the subject field, which is the reported gesture rather than the one a
+freshly raised window makes — a hotkey-raised window already has the caret in that field, so
+a drag that leaves it there proves nothing. That step was run with the fix reverted as well
+as with it in place: without it the caret ends on `title-field subject`, with it back on
+`editor-content`.
+
+**And the measurement itself was wrong in two ways, found by reading a run rather than by a
+failure.** The selftest shows the window once before its loop, deliberately, and then measured
+that warm-up along with everything else: fifty rounds reported over fifty-one samples, `max`
+and `p99` both the warm-up (169 ms against a p95 of 53), and a `worst` naming a round the loop
+never ran. Beside it the summary said `missed: 0`, which counts appearances that never painted
+at all and reads as "nothing was slow". Both fixed. The figure that came out — p50 36 ms, p95
+53 ms — is the first Windows row `CLAUDE.md`'s table has ever had, and the interesting part is
+not in it: the first press after an idle costs 169 ms here, and `latency.log` shows a 200–520 ms
+tail across three weeks that is always the first hotkey of a session. Fifty presses in nine
+seconds cannot see that, and the everyday gesture *is* a first press.
