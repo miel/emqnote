@@ -68,6 +68,7 @@ import {
   duplicateNote,
   emptyTrash,
   folderContents,
+  contentsAt,
   openTasksAt,
   trashContents,
   renameFolder,
@@ -2382,6 +2383,15 @@ function registerLibraryIpc(): void {
   ipcMain.handle(IPC.libraryFolderContents, (_event, path: string) => {
     const vault = vaultPath();
     return vault === null ? { notes: 0, folders: 0 } : folderContents(vault, path);
+  });
+
+  // `folderContents`' other half, for the confirmation in front of a permanent delete:
+  // that walk skips the app's own folder names and counts only notes, which is right for
+  // a folder in the tree and wrong for one in the trash, where every file present is
+  // about to go. Same reasoning as `libraryTrashContents` below it, one path down.
+  ipcMain.handle(IPC.libraryContentsAt, (_event, path: string) => {
+    const vault = vaultPath();
+    return vault === null ? { notes: 0, folders: 0, files: 0 } : contentsAt(vault, path);
   });
 
   // `folderContents`' neighbour, and deliberately not that function called with `_trash`:

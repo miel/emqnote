@@ -856,14 +856,29 @@ export interface TrashContents {
   openTasks: number;
 }
 
-export function trashContents(vault: string): TrashContents {
-  const trashDirectory = join(vault, TRASH);
-  if (!existsSync(trashDirectory)) return { notes: 0, folders: 0, files: 0, openTasks: 0 };
-
+/**
+ * The same three counts for *one thing* rather than for the whole trash.
+ *
+ * The per-item half of the question `trashContents` answers, and it exists for the
+ * reason `openTasksAt` exists beside `openTasksIn`: "Delete permanently" is offered on a
+ * folder inside the trash as well as on the trash itself, and that question was asked
+ * with the folder's name and nothing else in it (§59) — the more destructive of the two
+ * deletes, carrying less about what it was destroying than the one that only moves a
+ * folder to the trash, which has named both counts since B27.
+ *
+ * Counts everything, `isHidden` filter and all, for `trashContents`' stated reason: this
+ * is asked about a path where everything present is about to go, not about the vault
+ * tree. Zero for a path that is not a directory or cannot be read — the counts are a
+ * warning in a sentence, and `removeFromTrash` reports what actually went.
+ */
+export function contentsAt(vault: string, path: string): {
+  notes: number;
+  folders: number;
+  files: number;
+} {
   let notes = 0;
   let folders = 0;
   let files = 0;
-  let openTasks = 0;
 
   const walk = (directory: string, depth: number): void => {
     if (depth >= 12) return;
@@ -880,16 +895,27 @@ export function trashContents(vault: string): TrashContents {
         folders += 1;
         walk(join(directory, entry.name), depth + 1);
       } else if (entry.isFile()) {
-        if (isNoteFile(entry.name)) {
-          notes += 1;
-          openTasks += openTasksIn(join(directory, entry.name));
-        } else files += 1;
+        if (isNoteFile(entry.name)) notes += 1;
+        else files += 1;
       }
     }
   };
 
-  walk(trashDirectory, 0);
-  return { notes, folders, files, openTasks };
+  walk(path === "" ? vault : join(vault, path), 0);
+  return { notes, folders, files };
+}
+
+/**
+ * `contentsAt` over the whole trash, plus the open tasks in it.
+ *
+ * Two walks where there used to be one, and the second is the cheap one: `openTasksAt`
+ * parses every note it finds and this adds a `readdir` sweep beside it. Worth it for
+ * having one definition of "what is inside this" that the two delete confirmations
+ * share — the alternative is a second copy of a walk whose one interesting line is the
+ * comment above about not filtering.
+ */
+export function trashContents(vault: string): TrashContents {
+  return { ...contentsAt(vault, TRASH), openTasks: openTasksAt(vault, TRASH) };
 }
 
 /**

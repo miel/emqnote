@@ -63,6 +63,7 @@ function buildFake(): { emqnote: CaptureApi; search: ReturnType<typeof vi.fn> } 
     createFolder: async (parent) => parent,
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: 0, folders: 0 }),
+    contentsAt: async () => ({ notes: 0, folders: 0, files: 0 }),
     trashFolder: async () => ({ trashed: true }),
     moveFolder: async (path) => path,
     deleteFromTrash: async () => ({ deleted: true }),

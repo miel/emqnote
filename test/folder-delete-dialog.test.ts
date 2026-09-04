@@ -40,6 +40,15 @@ function buildFake(contents: Contents, createFolder?: LibraryApi["createFolder"]
     children: [
       { path: "00 Inbox", name: "00 Inbox", noteCount: 0, children: [] },
       { path: "01 Werk", name: "01 Werk", noteCount: 3, children: [] },
+      // The same folder again, one level inside the trash: `Delete permanently` is only
+      // ever offered on a trashed path, and the second question below is about a folder
+      // rather than a note row.
+      {
+        path: "_trash",
+        name: "_trash",
+        noteCount: 0,
+        children: [{ path: "_trash/02 Oud", name: "02 Oud", noteCount: 2, children: [] }],
+      },
     ],
   };
 
@@ -63,9 +72,14 @@ function buildFake(contents: Contents, createFolder?: LibraryApi["createFolder"]
     trashContents: async () => contents,
     openTasksAt: async () => contents.openTasks,
     emptyTrash: async () => ({ removed: 0, failed: 0 }),
-    createFolder: async (parent) => parent,
+    createFolder: createFolder ?? (async (parent) => parent),
     renameFolder: async (path) => path,
     folderContents: async () => ({ notes: contents.notes, folders: contents.folders }),
+    contentsAt: async () => ({
+      notes: contents.notes,
+      folders: contents.folders,
+      files: contents.files,
+    }),
     trashFolder: async () => ({ trashed: true }),
     moveFolder: async (path) => path,
     deleteFromTrash: async () => ({ deleted: true }),

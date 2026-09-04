@@ -267,7 +267,17 @@ type Dialog =
    * note's title, a folder's name — and `path` is what actually goes, because the two are
    * not the same string and naming a path at someone is not asking them anything.
    */
-  | { kind: "deletePermanently"; path: string; label: string; openTasks: number }
+  | {
+      kind: "deletePermanently";
+      path: string;
+      label: string;
+      openTasks: number;
+      /**
+       * What is inside, when the thing being destroyed is a folder. Absent for a note
+       * row, which is one file and says so by being named.
+       */
+      inside?: { notes: number; folders: number; files: number };
+    }
   | { kind: "problem"; message: string };
 
 /** What Restore is currently asking for a destination for — a trashed note, or a trashed folder. */
@@ -2168,14 +2178,36 @@ export function Library(): React.ReactElement {
         return `${what}${tasks} — ${app.t("ask.confirmDelete")}`;
       }
       case "deletePermanently": {
-        // The open tasks in this one thing, counted when the dialog opens exactly as the
-        // whole trash's are. Silent when there are none, for the reason the zeroes are
-        // left out of the list above.
-        const tasks =
-          open.openTasks === 0
-            ? ""
-            : ` (${plural(open.openTasks, "library.openTask", "library.openTasks")})`;
-        return `"${open.label}"${tasks} — ${app.t("ask.confirmDeletePermanently")}`;
+        // **What is inside, when there is an inside** (§59). This question was
+        // the folder's name and nothing else, while the *less* destructive delete beside
+        // it — the one that only moves a folder to the trash — has named both counts
+        // since B27. It is the same parenthetical in the same words as `deleteFolder`
+        // above, with files in it as well: everything under a path in the trash is
+        // going, which is why the count behind it (`contentsAt`) filters nothing.
+        //
+        // Zeroes are left out one by one, by the rule the whole file follows: "0 folders"
+        // is a warning about nothing. An empty folder shows no brackets at all, which is
+        // also the note row's case — it passes no counts and reads exactly as before.
+        const inside = open.inside;
+        const parts = [
+          ...(inside === undefined ||
+          (inside.notes === 0 && inside.folders === 0 && inside.files === 0)
+            ? []
+            : [
+                plural(inside.notes, "library.note", "library.notes"),
+                ...(inside.folders === 0
+                  ? []
+                  : [plural(inside.folders, "library.folder", "library.folders")]),
+                ...(inside.files === 0
+                  ? []
+                  : [plural(inside.files, "library.file", "library.files")]),
+              ]),
+          ...(open.openTasks === 0
+            ? []
+            : [plural(open.openTasks, "library.openTask", "library.openTasks")]),
+        ];
+        const contents = parts.length === 0 ? "" : ` (${parts.join(", ")})`;
+        return `"${open.label}"${contents} — ${app.t("ask.confirmDeletePermanently")}`;
       }
     }
   };
@@ -3065,7 +3097,13 @@ export function Library(): React.ReactElement {
           onRevealFolder={(path) => window.emqnote.library.revealNote(path)}
           onRestoreFolder={(path) => setRestoring({ kind: "folder", path })}
           onDeleteFolderPermanently={(path) => {
-            void window.emqnote.library.openTasksAt(path).then((openTasks) => {
+            // Both answers before the question, exactly as `onDeleteFolder` above does it
+            // and for the same reason: a dialog that appeared on the first and grew a
+            // clause on the second would be a question that changes while it is read.
+            void Promise.all([
+              window.emqnote.library.contentsAt(path),
+              window.emqnote.library.openTasksAt(path),
+            ]).then(([inside, openTasks]) => {
               setDialog({
                 kind: "deletePermanently",
                 path,
