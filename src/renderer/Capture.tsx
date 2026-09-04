@@ -551,9 +551,22 @@ export function Capture(): React.ReactElement {
               // the only thing in it. The handed-over note's title is a `<h2>` with
               // nothing on it and drags natively; this is the other half of that.
               //
-              // No `preventDefault`, and nothing to suppress on the way out: a press that
-              // does not travel focuses the field and puts the caret where it landed,
-              // exactly as before, which is how a typo in a subject gets fixed.
+              // No `preventDefault`: a press that does not travel focuses the field and
+              // puts the caret where it landed, exactly as before, which is how a typo in
+              // a subject gets fixed.
+              //
+              // **A press that does travel puts focus back where it was** (§54b, §59).
+              // It used to leave the caret sitting in the subject field, because the click
+              // Chromium fires after a drag lands on the field like any other — which the
+              // reader's `<h1>` never showed, being a heading rather than a text field, so
+              // the two windows answered the same gesture differently. Picking a window up
+              // by its title is not a request to start typing in it.
+              //
+              // Where focus *was* rather than simply blurring: the press usually comes
+              // from the note body, and dropping focus on the floor there would cost the
+              // caret its place in the text. A press made while the field already had
+              // focus keeps its selection, which is what makes the drag invisible to
+              // someone halfway through typing a subject.
               //
               // The trade is the other mouse gesture — dragging a range out inside the
               // subject line moves the window instead. One line of text against the only
@@ -562,7 +575,21 @@ export function Capture(): React.ReactElement {
               // the press point, but the window travels *with* the pointer, so the client
               // coordinates it is measured in barely move: no stray highlight is left.
               onMouseDown={(event) => {
-                dragWindowFrom(event.nativeEvent);
+                const field = event.currentTarget;
+                const before = document.activeElement;
+                const hadFocus = before === field;
+                const start = hadFocus ? field.selectionStart : null;
+                const end = hadFocus ? field.selectionEnd : null;
+
+                dragWindowFrom(event.nativeEvent, (moved) => {
+                  if (!moved) return;
+                  if (hadFocus) {
+                    field.setSelectionRange(start, end);
+                    return;
+                  }
+                  if (before instanceof HTMLElement) before.focus();
+                  else field.blur();
+                });
               }}
               // Enter moves on into the note; the title should never be a place you get
               // stuck when all you want is to type. `HeaderBlock` still does this for the
