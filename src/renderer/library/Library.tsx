@@ -1403,13 +1403,19 @@ export function Library(): React.ReactElement {
    * The macro keyboard cycle around the window:
    *
    *     forward   tree → notes → title → editor → tree
-   *     backward  tree → editor → notes → tree
+   *     backward  tree → editor → Who → notes → tree
    *
-   * **Four stops forward and three back, and the asymmetry is the point** (B98). The
-   * title is a destination you ask for; the note is where you were going anyway. So
-   * Ctrl+Tab out of the note list stops on the title — the fourth stop — while
-   * Ctrl+Shift+Tab out of the note goes straight back to the list, and Ctrl+Shift+Tab out
-   * of the tree reaches the note's text, which it declined to do at all before.
+   * **Four stops forward and four back, and they are not the same four** (B98, amended by
+   * §52k's note, recorded in §59). The title is a destination you ask for; the note is
+   * where you were going anyway. So Ctrl+Tab out of the note list stops on the title —
+   * the fourth stop —
+   * and Ctrl+Shift+Tab out of the tree reaches the note's text, which it declined to do at
+   * all before.
+   *
+   * Backward out of the *note* stops on Who, the last of the four header fields, which is
+   * where the DOM puts them: between the title and the note's text. It used to skip them
+   * entirely and land on the list, so the one region the forward walk passes through was
+   * unreachable from the side it sits on.
    *
    * This is not the fourth stop B94 removed. That one was the *header block*, entered at
    * whichever end you arrived at, and it was paid for by every press that had nothing to
@@ -1485,6 +1491,21 @@ export function Library(): React.ReactElement {
         // so enter the first one instead of doing nothing.
         return focusPane(backward ? "editor" : "tree");
       }
+
+      // **Backward out of the note lands on Who, the last of the four fields** (§52k's
+      // note, recorded in §59). It went straight to the note list, which made the backward
+      // walk skip the one region the forward walk had just gone through: forward is
+      // notes → title → *fields* → note, and the fields are where the DOM puts them,
+      // between the two. The ring passes through them going forward (`inNoteFields`
+      // above) precisely because plain Tab walks them one at a time from the title; going
+      // backward there was nothing between the note's text and the list at all.
+      //
+      // The last field rather than the first, because it is the one the note's text sits
+      // under: Shift+Tab from there walks Where → Tags → When → the title, which is the
+      // order it already had. A second Ctrl+Shift+Tab reaches the list, through
+      // `inNoteFields` — so the press that used to get there in one still gets there in
+      // two, and neither of them is a press with nowhere to land.
+      if (current === "editor" && backward) return focusPane("header", true);
 
       const next: "tree" | "notes" | "editor" | "title" =
         current === "tree"
@@ -3111,6 +3132,7 @@ export function Library(): React.ReactElement {
                 // a thing, and a path read back at someone is not a question.
                 label: path.split("/").pop() ?? path,
                 openTasks,
+                inside,
               });
             });
           }}
